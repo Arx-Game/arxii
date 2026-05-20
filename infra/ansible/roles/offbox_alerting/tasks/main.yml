@@ -1,0 +1,53 @@
+---
+- name: Install curl + openssl (heartbeat + cert check)
+  ansible.builtin.apt:
+    name: [curl, openssl]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install heartbeat script
+  ansible.builtin.template:
+    src: arxii-heartbeat.sh.j2
+    dest: /usr/local/sbin/arxii-heartbeat
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install heartbeat service (token from the EnvironmentFile)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-heartbeat.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II off-box heartbeat + cert-expiry early warning
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arxii-heartbeat
+  notify: Reload systemd
+
+- name: Install heartbeat timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-heartbeat.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II heartbeat ({{ offbox_ping_interval }})
+      [Timer]
+      OnCalendar={{ offbox_ping_interval }}
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable heartbeat timer
+  ansible.builtin.systemd_service:
+    name: arxii-heartbeat.timer
+    enabled: true
+    state: started
+    daemon_reload: true

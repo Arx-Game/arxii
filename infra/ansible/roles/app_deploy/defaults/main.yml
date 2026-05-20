@@ -1,0 +1,13 @@
+---
+app_user: arxii
+app_group: arxii
+app_root: /opt/arxii
+app_releases_dir: /opt/arxii/releases
+app_current: /opt/arxii/current          # = the live Evennia game dir
+app_repo: "https://github.com/TehomCD/arxii.git"  # confirm; no secret (public)
+app_ref: main                            # release tag/ref to deploy
+app_service: arxii
+# Evennia run-under-systemd specifics (forking + pidfile) are an
+# IMPLEMENTATION-VERIFY item — confirm the exact evennia start/stop/reload
+# invocation + pidfile path against the deployed Evennia version in CI/runbook.
+app_pidfile: "/opt/arxii/current/server/server.pid"

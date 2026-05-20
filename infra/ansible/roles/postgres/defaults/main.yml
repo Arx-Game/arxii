@@ -1,0 +1,7 @@
+---
+postgres_version: 16            # Ubuntu 24.04 (noble). Confirm in CI/runbook.
+postgres_db_name: arxii
+postgres_db_user: arxii
+postgres_conf_dir: "/etc/postgresql/{{ postgres_version }}/main"
+# Password is NEVER stored here / in the repo. It is read at run time from
+# the gated-Environment-injected env (ARXII_PG_PASSWORD), no_log.

@@ -1,0 +1,48 @@
+---
+- name: Ensure service group exists
+  ansible.builtin.group:
+    name: "{{ base_service_group }}"
+    system: true
+
+- name: Ensure non-root service user exists (no login shell)
+  ansible.builtin.user:
+    name: "{{ base_service_user }}"
+    group: "{{ base_service_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ base_app_root }}"
+    create_home: true
+
+- name: Lock down the app root
+  ansible.builtin.file:
+    path: "{{ base_app_root }}"
+    state: directory
+    owner: "{{ base_service_user }}"
+    group: "{{ base_service_group }}"
+    mode: "0750"
+
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the game cgroup slice (MemoryMax isolates a leak from the box)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii.slice
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II game slice (memory-isolated from host and Postgres)
+      Before=slices.target
+
+      [Slice]
+      MemoryAccounting=yes
+      MemoryMax={{ base_game_memory_max }}
+  notify: Reload systemd
+
+- name: Flush handlers so the slice is active before later roles use it
+  ansible.builtin.meta: flush_handlers

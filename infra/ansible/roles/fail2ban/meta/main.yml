@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: fail2ban
+  author: Arx II
+  description: fail2ban with sshd jail; Evennia-auth jail is a flagged verify-don't-assume placeholder.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

@@ -1,0 +1,50 @@
+---
+- name: Ensure releases dir exists
+  ansible.builtin.file:
+    path: "{{ app_releases_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0750"
+
+- name: Check out the release at its ref (idempotent; no secrets — public repo)
+  ansible.builtin.git:
+    repo: "{{ app_repo }}"
+    version: "{{ app_ref }}"
+    dest: "{{ app_releases_dir }}/{{ app_ref }}"
+    depth: 1
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_checkout
+
+- name: Atomically point `current` at this release
+  ansible.builtin.file:
+    src: "{{ app_releases_dir }}/{{ app_ref }}"
+    dest: "{{ app_current }}"
+    state: link
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    force: true
+  register: app_symlink
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: arxii.service.j2
+    dest: "/etc/systemd/system/{{ app_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Ensure the game service is enabled and running
+  ansible.builtin.systemd_service:
+    name: "{{ app_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Reload Evennia on a code-only change (Portal keeps players connected)
+  ansible.builtin.systemd_service:
+    name: "{{ app_service }}"
+    state: reloaded
+  when: app_checkout is changed or app_symlink is changed

@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (GITIGNORED) and fill in. Secrets come from
+# TF_VAR_* env, NOT this file. This example is non-secret and tracked.
+cloudflare_account_id = "REPLACE_account_id"
+domain                = "arxii.example"
+authorized_keys       = ["ssh-ed25519 AAAA... you@host"]
+state_bucket_label    = "arxii-backups-REPLACE-unique"
+r2_bucket_name        = "arxii-offsite-REPLACE-unique"
+dmarc_rua             = "mailto:dmarc@arxii.example"
+# ssh_admin_cidrs    = ["203.0.113.10/32"]  # OPERATOR DECISION — narrow this
+# resend_records     = [{ type="TXT", name="...", value="..." }]  # from Resend dashboard

@@ -1,0 +1,16 @@
+# ansible-lint config for the infra/ansible deployment playbook.
+#
+# `var-naming[no-role-prefix]` requires every role-scoped variable to carry
+# its role name as a prefix. That rule exists to stop *independently
+# reusable / Galaxy-published* roles from silently clobbering each other's
+# unprefixed vars. infra/ansible is the opposite case: ONE cohesive,
+# single-run converge (site.yml) whose roles are deliberately coupled and
+# intentionally share variables across role boundaries via `default()`
+# (e.g. `secrets_env_file`, the `app_*` deploy paths, the `dh_*` Django
+# settings are produced by one role and consumed by several others).
+# Force-prefixing every var would break those intentional cross-role
+# references for zero real collision-safety gain here. Skipping only this
+# one sub-rule is the correct scope; every other ansible-lint rule (incl.
+# syntax-check, fqcn, risky-file-permissions, etc.) stays fully enforced.
+skip_list:
+  - var-naming[no-role-prefix]

@@ -1,0 +1,12 @@
+---
+# Path to the deployed Evennia game dir. Evennia's SSL-telnet reads HARDCODED
+# <game_dir>/server/ssl.cert and ssl.key (NOT settings-driven — verified
+# against evennia source). Confirm the deployed path in CI/runbook.
+ttc_game_dir: /opt/arxii/current
+ttc_web_fqdn: "play.example"           # the ACME cert domain
+# Caddy's on-disk cert store (default). Confirm the acme dir segment.
+ttc_caddy_cert_glob: "/var/lib/caddy/.local/share/caddy/certificates/*/{{ ttc_web_fqdn }}/{{ ttc_web_fqdn }}.crt"
+ttc_caddy_key_glob: "/var/lib/caddy/.local/share/caddy/certificates/*/{{ ttc_web_fqdn }}/{{ ttc_web_fqdn }}.key"
+ttc_reboot_window: "04:30"             # align with the unattended-upgrades window
+ttc_service_user: arxii
+ttc_service_group: arxii

@@ -1,0 +1,20 @@
+---
+- name: Assert no on-box MTA is installed (Resend relay only)
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Fail if a forbidden MTA package is present
+  ansible.builtin.assert:
+    that: "item not in ansible_facts.packages"
+    fail_msg: "On-box MTA '{{ item }}' is installed — Resend relay only; remove it."
+    quiet: true
+  loop: "{{ dh_forbidden_mta_packages }}"
+
+- name: Deploy the production hardening overlay (Evennia secret_settings.py)
+  ansible.builtin.template:
+    src: secret_settings.py.j2
+    dest: "{{ dh_settings_path }}"
+    owner: "{{ dh_service_user }}"
+    group: "{{ dh_service_group }}"
+    mode: "0640"
+  notify: Reload evennia

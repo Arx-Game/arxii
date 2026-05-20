@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: observability
+  author: Arx II
+  description: Records the present-but-off-by-default exporter contract. Deliberately minimal (Plan-1 T5-T10 deferred).
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

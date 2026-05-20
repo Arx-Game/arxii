@@ -1,0 +1,45 @@
+---
+- name: Install the cert-sync script
+  ansible.builtin.template:
+    src: sync-telnet-cert.sh.j2
+    dest: /usr/local/sbin/arxii-sync-telnet-cert
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the cert-sync systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-telnet-cert.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Sync Caddy ACME cert into Evennia SSL-telnet (reboot only if changed)
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/arxii-sync-telnet-cert
+  notify: Reload systemd
+
+- name: Install the cert-sync timer (runs in the maintenance window)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-telnet-cert.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Evennia SSL-telnet cert sync ({{ ttc_reboot_window }})
+      [Timer]
+      OnCalendar=*-*-* {{ ttc_reboot_window }}:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable the cert-sync timer
+  ansible.builtin.systemd_service:
+    name: arxii-telnet-cert.timer
+    enabled: true
+    state: started
+    daemon_reload: true

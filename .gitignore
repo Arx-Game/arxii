@@ -114,6 +114,10 @@ planning/
 docs/plans/
 frontend/install.cmd
 backups/
+# ...but the broad `backups/` rule above must NOT swallow the Ansible
+# infra role of the same name — it is part of the deployment deliverable.
+!infra/ansible/roles/backups/
+!infra/ansible/roles/backups/**
 
 # Generated OpenAPI schema (intermediate artifact for type generation)
 src/schema.json

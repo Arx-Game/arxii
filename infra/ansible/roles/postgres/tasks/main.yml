@@ -1,0 +1,57 @@
+---
+- name: Install PostgreSQL + psycopg2 (for the postgresql_* modules)
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - python3-psycopg2
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Harden postgresql.conf (localhost-only bind, scram)
+  ansible.builtin.template:
+    src: 10-arxii.conf.j2
+    dest: "{{ postgres_conf_dir }}/conf.d/10-arxii.conf"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Restart postgresql
+
+- name: Lock down pg_hba.conf (no trust; local/loopback scram only)
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgres_conf_dir }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Reload postgresql
+
+- name: Apply conf/hba before creating the DB
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure the application database exists (create-if-absent, NEVER drop)
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_db_name }}"
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Ensure the application role exists with the env-sourced password
+  community.postgresql.postgresql_user:
+    db: "{{ postgres_db_name }}"
+    name: "{{ postgres_db_user }}"
+    password: "{{ lookup('env', 'ARXII_PG_PASSWORD') }}"
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+
+- name: Grant the role privileges on its database (idempotent)
+  community.postgresql.postgresql_privs:
+    db: "{{ postgres_db_name }}"
+    role: "{{ postgres_db_user }}"
+    type: database
+    privs: ALL
+    state: present
+  become: true
+  become_user: postgres

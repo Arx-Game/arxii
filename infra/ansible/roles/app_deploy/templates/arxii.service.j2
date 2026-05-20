@@ -1,0 +1,24 @@
+[Unit]
+Description=Arx II (Evennia) game server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+# Non-root, memory-isolated slice, secrets via the 0600 EnvironmentFile.
+User={{ app_user }}
+Group={{ app_group }}
+Slice=arxii.slice
+WorkingDirectory={{ app_current }}
+EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+# Evennia is a Twisted app; forking start + pidfile. Reload is code-only
+# (Portal keeps players connected). Confirm invocation in CI/runbook.
+Type=forking
+PIDFile={{ app_pidfile }}
+ExecStart=/usr/bin/env evennia start
+ExecReload=/usr/bin/env evennia reload
+ExecStop=/usr/bin/env evennia stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

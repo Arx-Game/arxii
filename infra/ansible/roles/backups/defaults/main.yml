@@ -1,0 +1,12 @@
+---
+backups_db: arxii
+backups_db_user: arxii
+backups_staging: /var/backups/arxii          # latest dump kept here briefly
+backups_bucket: "arxii-backups-REPLACE"      # = tofu output backups_bucket
+backups_region: us-east
+backups_s3_endpoint: "https://us-east.linodeobjects.com"
+backups_window: "03:30"                      # before the patch/reboot window
+# Creds (BACKUP_WRITER_ACCESS_KEY/SECRET) come from the env-injected
+# EnvironmentFile — never in repo. Pruning is the bucket's server-side
+# Object-Lock/lifecycle, NOT this client (a stolen writer key still can't
+# delete in-retention objects — Object Lock is the backstop).

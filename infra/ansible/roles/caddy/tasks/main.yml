@@ -1,0 +1,28 @@
+---
+# NOTE (implementation-verify, not faked): the distro `caddy` package has no
+# plugins. DNS-01 needs caddy-dns/cloudflare → a custom build (xcaddy or
+# Caddy's "download with plugins"). This task installs the base package as a
+# placeholder; the plugin-enabled binary swap is a flagged build step
+# confirmed in CI/runbook before this is trusted.
+- name: Install Caddy (base; plugin-enabled binary is a flagged build step)
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Deploy Caddyfile (validated before reload)
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: caddy
+    mode: "0640"
+    validate: "caddy validate --adapter caddyfile --config %s"
+  notify: Reload caddy
+
+- name: Ensure caddy is enabled and running
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+    state: started

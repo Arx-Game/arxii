@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: offbox_alerting
+  author: Arx II
+  description: External dead-man's-switch heartbeat + cert-expiry early warning (alerts precisely when on-box monitoring can't).
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

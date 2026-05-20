@@ -1,0 +1,54 @@
+---
+- name: Ensure awscli present (also installed by backups; idempotent)
+  ansible.builtin.apt:
+    name: awscli
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the offsite-replication script
+  ansible.builtin.template:
+    src: arxii-offsite.sh.j2
+    dest: /usr/local/sbin/arxii-offsite
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install offsite service (separate R2 cred from the EnvironmentFile)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-offsite.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II offsite replicate latest dump -> Cloudflare R2 (3-2-1)
+      After=arxii-backup.service
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arxii-offsite
+  notify: Reload systemd
+
+- name: Install offsite timer (after the backup window)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-offsite.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Arx II offsite replication to R2 ({{ offsite_window }})
+      [Timer]
+      OnCalendar=*-*-* {{ offsite_window }}:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable offsite timer
+  ansible.builtin.systemd_service:
+    name: arxii-offsite.timer
+    enabled: true
+    state: started
+    daemon_reload: true

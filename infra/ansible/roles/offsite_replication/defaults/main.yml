@@ -1,0 +1,9 @@
+---
+offsite_staging_latest: /var/backups/arxii/latest.sql.gz   # produced by `backups`
+offsite_r2_bucket: "arxii-offsite-REPLACE"                 # = tofu output r2_offsite_bucket
+offsite_r2_endpoint: "https://REPLACE.r2.cloudflarestorage.com"  # = tofu output r2_s3_endpoint
+offsite_window: "03:50"   # shortly AFTER backups_window so the dump exists
+# Uses ONLY the SEPARATE R2 credential (R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY
+# from the EnvironmentFile) — distinct from Linode, which is what makes the
+# 3-2-1 genuinely independent. R2 Object Lock is the backstop; this client
+# never deletes remote objects.
