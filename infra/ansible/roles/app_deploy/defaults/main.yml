@@ -3,11 +3,23 @@ app_user: arxii
 app_group: arxii
 app_root: /opt/arxii
 app_releases_dir: /opt/arxii/releases
-app_current: /opt/arxii/current          # = the live Evennia game dir
+# `current` is the arxii PROJECT ROOT (where pyproject.toml + uv.lock live).
+# Evennia's actual gamedir is nested inside it under src/ (so server/conf/
+# settings.py is at app_gamedir/server/conf/settings.py).
+app_current: /opt/arxii/current
+app_gamedir: /opt/arxii/current/src
 app_repo: "https://github.com/TehomCD/arxii.git"  # confirm; no secret (public)
 app_ref: main                            # release tag/ref to deploy
 app_service: arxii
-# Evennia run-under-systemd specifics (forking + pidfile) are an
-# IMPLEMENTATION-VERIFY item — confirm the exact evennia start/stop/reload
-# invocation + pidfile path against the deployed Evennia version in CI/runbook.
-app_pidfile: "/opt/arxii/current/server/server.pid"
+# Evennia is a forking Twisted daemon; it writes its PID file relative to
+# the gamedir (server/server.pid), NOT relative to app_current.
+app_pidfile: /opt/arxii/current/src/server/server.pid
+
+# First-run Django/Evennia superuser. Username + email are operator choices
+# (set via Environment Variables on the workflow); the password comes from
+# the gated Environment Secret ARXII_DJANGO_SUPERUSER_PASSWORD and is
+# consumed by `evennia createsuperuser --noinput`. Creation is guarded by
+# an existence check, so re-runs are idempotent (a superuser already in
+# the DB means the task is skipped, not retried).
+app_superuser_username: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_USERNAME') | default('arxii_admin', true) }}"
+app_superuser_email: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_EMAIL') | default('admin@example.invalid', true) }}"

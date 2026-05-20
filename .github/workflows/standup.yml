@@ -88,3 +88,10 @@ jobs:
           ARXII_R2_SECRET_ACCESS_KEY: ${{ secrets.ARXII_R2_SECRET_ACCESS_KEY }}
           ARXII_OFFBOX_ALERT_TOKEN: ${{ secrets.ARXII_OFFBOX_ALERT_TOKEN }}
           ARXII_CADDY_CF_DNS_TOKEN: ${{ secrets.ARXII_CADDY_CF_DNS_TOKEN }}
+          # First-run Django superuser: password is a Secret (long-lived,
+          # rotate on suspicion); username + email are Variables (non-secret
+          # operator choices). Username/email default to arxii_admin /
+          # admin@example.invalid if the Variables are unset.
+          ARXII_DJANGO_SUPERUSER_PASSWORD: ${{ secrets.ARXII_DJANGO_SUPERUSER_PASSWORD }}
+          ARXII_DJANGO_SUPERUSER_USERNAME: ${{ vars.ARXII_DJANGO_SUPERUSER_USERNAME }}
+          ARXII_DJANGO_SUPERUSER_EMAIL: ${{ vars.ARXII_DJANGO_SUPERUSER_EMAIL }}

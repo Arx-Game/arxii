@@ -87,6 +87,12 @@ long-lived, rotate on suspicion):**
 - `ARXII_R2_ACCESS_KEY_ID`, `ARXII_R2_SECRET_ACCESS_KEY` — the SEPARATE,
   out-of-band R2 credential (distinct from Linode, scoped to the offsite
   bucket; this is what makes the 3-2-1 independent)
+- `ARXII_DJANGO_SUPERUSER_PASSWORD` — password for the first-run Django/Evennia
+  superuser; consumed once by `evennia createsuperuser --noinput`, then
+  long-lived (it's still the correct password if you ever delete/recreate the
+  superuser). Username + email are non-secret Variables (see below) so they
+  default sensibly without you touching the Environment Variables page; just
+  the password is a Secret.
 - `ANSIBLE_SSH_PRIVATE_KEY` — private half of the SSH admin keypair Ansible uses
   to reach the host. See **"Generating the SSH admin key"** below for one-time
   setup steps (this is a chicken-and-egg: you generate the key, Terraform tells
@@ -99,8 +105,44 @@ ansible step's env in-memory (masked, never to disk/log):**
   as sensitive `tofu output`s; the button wires output → ansible env)
 
 **Non-secret config** (domain, bucket labels, `cloudflare_account_id`,
-public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`)
-goes in repo/Environment **Variables**, not Secrets.
+public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`,
+`ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL`) goes in
+repo/Environment **Variables**, not Secrets. The superuser username/email
+default to `arxii_admin` / `admin@example.invalid` if you leave the
+Variables unset — fine for a private playtest box, override for prod.
+
+## What the button actually does to game state (first run vs. re-run)
+
+The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
+after the box itself is provisioned, the app_deploy role runs (in order):
+
+1. **Git checkout** the release ref into `/opt/arxii/releases/<ref>`.
+2. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>`.
+3. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
+   locked `uv.lock` (no implicit resolution drift). Idempotent: a no-op
+   if nothing changed.
+4. **`evennia migrate --noinput`** — apply Django/Evennia migrations.
+   Idempotent: a no-op once everything is applied.
+5. **`evennia collectstatic --noinput`** — gather admin/Evennia static
+   files for Caddy. Idempotent.
+6. **Superuser check + create**. If any superuser already exists in the DB
+   (the *common* case after the first run), the create step is **skipped
+   entirely** — your existing superuser is untouched, password unchanged.
+   Only on a truly first run (or after a manual delete) does it create
+   one from the `DJANGO_SUPERUSER_*` env vars.
+7. **systemd** brings the service up (`evennia start` under the gated
+   service user, in the `arxii.slice` cgroup with the memory cap from
+   `base_game_memory_max`). On subsequent deploys it `reloads` instead
+   of restarting, so the Portal keeps connected players online across
+   code/deps/migration changes.
+
+What the button **does not** do (deliberately, by-design):
+- It does not load any game-content fixtures. The plan is to load those
+  via the Django admin site once the superuser exists; that's an
+  application-layer concern, not the deploy's job.
+- It does not run `tofu destroy`, drop the database, reset the
+  superuser, or restore from backup. Disaster recovery is the separate,
+  `--i-understand-this-overwrites`-gated `scripts/restore.sh`.
 
 ## Generating the SSH admin key (one-time)
 

@@ -10,4 +10,14 @@ base_packages:
   - acl            # required for Ansible become-as-unprivileged-user (setfacl)
   - ca-certificates
   - curl
+  - git            # used by app_deploy to check out the release
   - python3
+
+# uv (Astral) is arxii's Python project + venv manager. We install the
+# upstream standalone binary at a pinned version with SHA verification
+# (the apt repos do not yet ship uv). To bump: change both values together;
+# the SHA is the x86_64-unknown-linux-gnu tarball SHA256 from the release's
+# published checksums.
+base_uv_version: "0.11.15"
+base_uv_sha256: "b03e572f010bea94a4a52d42671ba72981e12894f71576181a1d26ff68546da7"
+base_uv_bin: /usr/local/bin/uv
