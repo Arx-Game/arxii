@@ -251,14 +251,15 @@ class ApplyMissionRewardBatchPerRowAtomicityTests(TestCase):
         boom_pk = self.row_b.pk
         boom_msg = "boom-on-row-b"
 
-        def faulty(queue_row):  # type: ignore[no-untyped-def]
-            # ``queue_row`` is a MissionRewardQueue (the helper signature),
-            # not the deed reward line — ``queue_row.line_id`` is the FK to
-            # the underlying MissionDeedRewardLine row we want to target.
+        def faulty(row):  # type: ignore[no-untyped-def]
+            # ``row`` is a MissionRewardQueue (the helper parameter is now
+            # consistently named ``row`` across the cron helpers), not the
+            # deed reward line — ``row.line_id`` is the FK to the underlying
+            # MissionDeedRewardLine row we want to target.
             call_count["n"] += 1
-            if queue_row.line_id == self.line_b.pk:
+            if row.line_id == self.line_b.pk:
                 raise RuntimeError(boom_msg)
-            return original(queue_row)
+            return original(row)
 
         try:
             cron_module._grant_legend_points = faulty
