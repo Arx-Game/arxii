@@ -32,8 +32,12 @@ Environment secrets and invokes the exact same script below (one source of truth
 - [ ] API tokens placed in their documented secret locations — **never committed to the repo**.
 - [ ] **The Linode API token is used only operator/CI-side to run the button. It is NEVER placed
       on the production box.**
-- [ ] **The single Ansible Vault passphrase** stored in a password manager (never in the repo).
-      This is the only secret the operator types at button-time.
+- [ ] **SSH admin keypair generated and pasted into the gated `prod` Environment**
+      (see "Generating the SSH admin key" below). Keep the *private* key in your
+      password manager — it is your emergency break-glass into the host if Ansible
+      ever can't reach it. (The operator does not type any password at button-time;
+      the secrets below come from the gated GitHub Environment, gated on a
+      required-reviewer approval before the job starts.)
 - [ ] **DECISION — SSH admin source CIDR allowlist:** defaults to `0.0.0.0/0` (open to the
       internet, behind key-only auth + fail2ban). Consciously decide whether to restrict it to a
       known admin CIDR. This is a real decision, not a default to ignore.
@@ -49,10 +53,12 @@ Environment secrets and invokes the exact same script below (one source of truth
       short-expiry, scoped tokens next time you run the button. Stand-ups are rare and
       high-stakes; this removes the "powerful standing token sitting in GitHub forever"
       risk.
-- [ ] The **Ansible Vault passphrase stays** the single gated Environment secret
-      (GitHub-encrypted, exposed only to the approved job, never logged). Do **not** pass
-      it as a workflow input (dispatch inputs are unmasked). Rotate it only if GitHub is
-      ever suspected compromised.
+- [ ] The **runtime app secrets stay** (`ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
+      `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin private key, etc.).
+      Unlike the provisioning tokens above, these are long-lived: the running game needs
+      them every day. Rotate only on suspicion of compromise. Do **not** pass them as
+      workflow inputs (dispatch inputs are unmasked — they belong in Environment Secrets,
+      where they are GitHub-encrypted and exposed only to the approved job).
 - Note: fully keyless (GitHub OIDC, no stored token) is not cleanly available for Linode,
   so short-lived + revoke-after is the realistic best posture, not OIDC.
 
@@ -81,7 +87,10 @@ long-lived, rotate on suspicion):**
 - `ARXII_R2_ACCESS_KEY_ID`, `ARXII_R2_SECRET_ACCESS_KEY` — the SEPARATE,
   out-of-band R2 credential (distinct from Linode, scoped to the offsite
   bucket; this is what makes the 3-2-1 independent)
-- `ANSIBLE_SSH_PRIVATE_KEY` — key Ansible uses to reach the host
+- `ANSIBLE_SSH_PRIVATE_KEY` — private half of the SSH admin keypair Ansible uses
+  to reach the host. See **"Generating the SSH admin key"** below for one-time
+  setup steps (this is a chicken-and-egg: you generate the key, Terraform tells
+  Linode to inject the matching public half into the new instance at first boot)
 
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
@@ -93,13 +102,66 @@ ansible step's env in-memory (masked, never to disk/log):**
 public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`)
 goes in repo/Environment **Variables**, not Secrets.
 
+## Generating the SSH admin key (one-time)
+
+The button creates a brand-new Linode instance and Ansible needs to SSH into it
+to finish setting it up — but the instance does not exist yet, so there is no
+host to copy a key onto in advance. The way around the chicken-and-egg: **you
+generate the keypair yourself, give Terraform the *public* half, and Linode
+injects it into the new instance at first boot** (via cloud-init), so by the
+time Ansible tries to connect the matching public key is already in place.
+
+Do this once, on your own machine:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/arxii_admin -N '' -C 'arxii-admin'
+```
+
+That produces two files:
+
+- `~/.ssh/arxii_admin` — the **private** key (multi-line, starts with
+  `-----BEGIN OPENSSH PRIVATE KEY-----`). Never share this.
+- `~/.ssh/arxii_admin.pub` — the **public** key (single line, starts with
+  `ssh-ed25519 AAAA…`). This one is safe to publish; that is its job.
+
+`-N ''` makes the key passphrase-less. A CI runner can't unlock a
+passphrase-protected key, so for an automation key this is the right tradeoff;
+the *protection* of the key comes from where it is stored, not a passphrase
+on the file. (Do not reuse a personal SSH key for this — generate one
+dedicated to Arx II.)
+
+Then in GitHub: **repo → Settings → Environments → `prod`**:
+
+| Where it goes              | Name                       | What to paste                                                 |
+| -------------------------- | -------------------------- | ------------------------------------------------------------- |
+| **Secrets**                | `ANSIBLE_SSH_PRIVATE_KEY`  | the entire contents of `~/.ssh/arxii_admin`                   |
+| **Variables** (not secret) | `ARXII_AUTHORIZED_KEYS`    | a JSON array of one line: `["ssh-ed25519 AAAA… arxii-admin"]` |
+
+Two things that catch people out:
+
+- **Public keys go in Variables, not Secrets.** Public keys are not secret by
+  definition — that is the entire point of public-key crypto. Variables let
+  you see and audit the value in the UI. The Terraform variable is
+  `list(string)`, so the value MUST be a JSON array like `["…"]`, not a bare
+  line. To add more keys later (your laptop key for break-glass, another
+  admin's key), just extend the array:
+  `["ssh-ed25519 AAA… key1", "ssh-ed25519 BBB… key2"]`.
+- **Back up the private key to your password manager** (1Password, Bitwarden,
+  etc.) before you close the terminal. If the GitHub Secret is ever lost or
+  the runner can't reach the host for any reason, that file is your only
+  emergency way back in short of re-provisioning the box from a fresh
+  Terraform apply.
+
 ## Layout
 
 - `terraform/bootstrap/` — one-time, idempotent: creates the remote-state bucket (no Object Lock).
 - `terraform/modules/` — compute, linode_firewall, cloudflare_dns, object_storage, r2_offsite.
 - `terraform/prod/` — production composition; remote backend; full `prevent_destroy` set.
 - `terraform/ephemeral-stage/` — separate state + credential scope (blast-radius isolation).
-- `ansible/` — `site.yml`, roles, and `group_vars/secrets.vault.yml` (ansible-vault encrypted).
+- `ansible/` — `site.yml` and 16 roles. **No committed secret material**: the `secrets_vault`
+  role reads `ARXII_*` env vars (set on the ansible step by `standup.yml` from the gated
+  Environment) and renders a `0600` on-box `EnvironmentFile` in one `no_log` task.
+  `group_vars/secrets.env.example` is the names-only contract.
 - `scripts/standup.sh` — the button. `scripts/restore.sh` — separate gated disaster recovery.
 
 ## Status
