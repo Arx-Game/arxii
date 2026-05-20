@@ -30,14 +30,14 @@
 # Build the project venv from uv.lock so the `evennia` entrypoint exists
 # under the service user. --frozen ensures we install EXACTLY what the
 # lockfile says (no implicit resolution drift); --no-dev skips dev deps.
-- name: uv sync — rebuild the project venv from uv.lock (frozen, no dev deps)
+- name: Build the project venv from uv.lock (uv sync --frozen --no-dev)
   ansible.builtin.command:
     cmd: "{{ base_uv_bin }} sync --frozen --no-dev"
     chdir: "{{ app_current }}"
   become: true
   become_user: "{{ app_user }}"
   register: app_uv_sync
-  changed_when: app_uv_sync.rc == 0 and ('Installed' in app_uv_sync.stdout or 'Removed' in app_uv_sync.stdout or 'Updated' in app_uv_sync.stdout or 'Resolved' in app_uv_sync.stdout)
+  changed_when: app_uv_sync.rc == 0 and app_uv_sync.stdout is search('Installed|Removed|Updated|Resolved')
 
 # Django/Evennia migrations are idempotent: re-running when up-to-date is a
 # no-op (output contains no "Applying" lines). Sourcing the rendered
@@ -89,7 +89,10 @@
     . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
     set +a
     set -o pipefail
-    {{ base_uv_bin }} run evennia shell -c "from django.contrib.auth import get_user_model; print('YES' if get_user_model().objects.filter(is_superuser=True).exists() else 'NO')"
+    {{ base_uv_bin }} run evennia shell <<'PY'
+    from django.contrib.auth import get_user_model
+    print('YES' if get_user_model().objects.filter(is_superuser=True).exists() else 'NO')
+    PY
   args:
     chdir: "{{ app_gamedir }}"
     executable: /bin/bash
