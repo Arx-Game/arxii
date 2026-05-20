@@ -43,9 +43,9 @@ jobs:
           # Run `grep -rc "def test_" src/<app>/tests/ | awk -F: '{s+=$2} END {print s}'`
           # per app to refresh counts after adding significant test suites.
           #
-          # shard-1 (~1,215): world.magic (887) + world.combat (328)
+          # shard-1 (~1,461): world.magic (887) + world.combat (328) + world.missions (246)
           - name: shard-1
-            apps: "world.magic world.combat"
+            apps: "world.magic world.combat world.missions"
           # shard-2 (~1,405): world.stories (759) + world.mechanics (258)
           #                   + world.conditions (190) + world.items (198)
           - name: shard-2
