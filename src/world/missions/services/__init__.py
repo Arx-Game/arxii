@@ -18,10 +18,15 @@ Public surface:
   * :func:`apply_deed_rewards` (Phase 5b.1) — routes already-emitted reward
     lines downstream (queue rows for deferred payout, stub-seam calls for
     money/beat, and DESIGN-sealed raises for rumor/crime-watch).
+  * :func:`apply_mission_reward_batch` (Phase 5b.2) — cron batch that
+    walks ``applied=False`` :class:`MissionRewardQueue` rows. Both
+    LP/Resonance grant helpers are stub-sealed in 5b.2 pending
+    payload-enrichment work (DESIGN §13.3).
 """
 
 from world.missions.services.affordances import bindings_for_character
 from world.missions.services.availability import offer_missions
+from world.missions.services.cron import apply_mission_reward_batch
 from world.missions.services.journal import journal_for
 from world.missions.services.mission_graph import validate_mission_option
 from world.missions.services.multiplayer import (
@@ -46,6 +51,7 @@ __all__ = [
     "MissionRewardRoutingError",
     "accept_mission",
     "apply_deed_rewards",
+    "apply_mission_reward_batch",
     "bindings_for_character",
     "build_group_option_list",
     "build_option_list",

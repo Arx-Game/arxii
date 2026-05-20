@@ -190,6 +190,25 @@ class ApplyDeedRewardsResult:
 
 
 @dataclass(frozen=True)
+class RewardBatchResult:
+    """Typed return of :func:`world.missions.services.cron.apply_mission_reward_batch`.
+
+    ``applied`` carries the queue rows that were granted downstream and
+    flipped to ``applied=True`` during this batch; ``failed`` carries the
+    rows whose helper raised (each row's ``failure_reason`` was populated
+    in the row itself and the row stayed at ``applied=False``).
+
+    In Phase 5b.2 ``applied`` is always empty because both LP and Resonance
+    grant helpers are stub-sealed pending payload enrichment (see DESIGN
+    §13.3). The dataclass shape is final so 5b.3+ (which fills in real
+    grant helpers) does not need to change the public return type.
+    """
+
+    applied: tuple[MissionRewardQueue, ...] = ()
+    failed: tuple[MissionRewardQueue, ...] = ()
+
+
+@dataclass(frozen=True)
 class PresentedOption:
     """One player-facing option surfaced at a node for the acting participant.
 
