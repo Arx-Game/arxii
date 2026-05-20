@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, TypedDict, Union
 
 from django.db import models
 
@@ -138,3 +138,128 @@ class StoryLogEpisodeEntry:
 
     # Pre-filtered field: GM notes hidden from player viewers
     visible_internal_notes: str | None
+
+
+# ---------------------------------------------------------------------------
+# Dashboard / GM-queue wire shapes
+#
+# These TypedDicts pin the exact JSON object shapes the Wave 10 dashboard
+# APIViews (MyActiveStoriesView / GMQueueView / StaffWorkloadView) emit.
+# They are wire-serialisation records (the only sanctioned dict use per
+# CLAUDE.md "Avoid Dict Returns"), so the producing helpers return these
+# instead of ``dict[str, Any]``. Field types mirror the literals built in
+# ``views.py`` one-for-one; changing a literal must change the matching
+# TypedDict here.
+# ---------------------------------------------------------------------------
+
+
+class MyActiveStoryEntry(TypedDict):
+    """One active-story row in MyActiveStoriesView (any scope)."""
+
+    story_id: int
+    story_title: str
+    scope: str
+    current_episode_id: int | None
+    current_episode_title: str | None
+    chapter_title: str | None
+    status: str  # StoryEpisodeStatus value (frontier proxy)
+    status_label: str
+    progress_status: str  # ProgressStatus value (authoritative pointer state)
+    chapter_order: int | None
+    episode_order: int | None
+    open_session_request_id: int | None
+    scheduled_event_id: int | None
+    scheduled_real_time: datetime | None
+
+
+class EligibleTransitionEntry(TypedDict):
+    """A single eligible Transition surfaced in the GM queue."""
+
+    transition_id: int
+    mode: str
+
+
+class EpisodeReadyEntry(TypedDict):
+    """An episode ready to run in GMQueueView.episodes_ready_to_run."""
+
+    story_id: int
+    story_title: str
+    scope: str
+    episode_id: int
+    episode_title: str
+    progress_type: str
+    progress_id: int
+    eligible_transitions: list[EligibleTransitionEntry]
+    open_session_request_id: int | None
+
+
+class PendingClaimEntry(TypedDict):
+    """A pending Assistant-GM claim in GMQueueView.pending_agm_claims."""
+
+    claim_id: int
+    beat_id: int
+    beat_internal_description: str
+    story_title: str
+    assistant_gm_id: int
+    requested_at: datetime
+
+
+class AssignedRequestEntry(TypedDict):
+    """An assigned SessionRequest in GMQueueView.assigned_session_requests."""
+
+    session_request_id: int
+    episode_id: int
+    episode_title: str
+    story_title: str
+    status: str
+    event_id: int | None
+
+
+class WaitingForGMEntry(TypedDict):
+    """A WAITING_FOR_GM progress row in GMQueueView.waiting_for_gm."""
+
+    story_id: int
+    story_title: str
+    scope: str
+    progress_type: str
+    progress_id: int
+    episode_id: int | None
+    episode_title: str | None
+    last_advanced_at: datetime
+    days_waiting: int
+
+
+class PerGMQueueDepthEntry(TypedDict):
+    """One GM's queue depth in StaffWorkloadView.per_gm_queue_depth."""
+
+    gm_profile_id: int
+    gm_name: str
+    episodes_ready: int
+    pending_claims: int
+
+
+class StaleStoryEntry(TypedDict):
+    """A stale story row in StaffWorkloadView.stale_stories."""
+
+    story_id: int
+    story_title: str
+    last_advanced_at: datetime
+    days_stale: int
+
+
+class WaitingStoryEntry(TypedDict):
+    """A waiting-on-GM story row in StaffWorkloadView.stories_waiting_for_gm."""
+
+    story_id: int
+    story_title: str
+    scope: str
+    last_advanced_at: datetime
+    days_waiting: int
+
+
+class FrontierStoryEntry(TypedDict):
+    """A frontier story row in StaffWorkloadView.stories_at_frontier."""
+
+    story_id: int
+    story_title: str
+    scope: str

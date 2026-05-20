@@ -43,6 +43,20 @@ class ObjectParent:
         """Populate-once cache of active triggers for this object."""
         return TriggerHandler(owner=self)
 
+    @cached_property
+    def conditions(self: Union[Self, "DefaultObject"]):
+        """Populate-once cache of active ConditionInstance rows for this object.
+
+        Returns a ConditionHandler that loads the owner's active conditions on
+        first access and serves subsequent reads query-free.  Character overrides
+        this with CharacterConditionHandler (adds resistance_modifier).
+
+        Invalidated by condition mutation services (apply_condition, etc.).
+        """
+        from world.conditions.handlers import ConditionHandler
+
+        return ConditionHandler(self)
+
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):
         """Return the SceneDataManager from our containing location."""

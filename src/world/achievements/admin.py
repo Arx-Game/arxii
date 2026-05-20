@@ -7,6 +7,7 @@ from world.achievements.models import (
     AchievementRequirement,
     AchievementReward,
     CharacterAchievement,
+    ConditionStatRule,
     Discovery,
     RewardDefinition,
     StatDefinition,
@@ -91,3 +92,12 @@ class DiscoveryAdmin(admin.ModelAdmin):
     def discoverer_count(self, obj: Discovery) -> int:
         """Return the number of discoverers for this achievement."""
         return obj.discoverers.count()
+
+
+@admin.register(ConditionStatRule)
+class ConditionStatRuleAdmin(admin.ModelAdmin):
+    """Admin for ConditionStatRule bridge model."""
+
+    list_display = ["stat", "condition", "event_type", "increment_amount"]
+    list_filter = ["event_type"]
+    raw_id_fields = ["stat", "condition"]

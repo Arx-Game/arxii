@@ -1,5 +1,6 @@
 """Tests for seed_magic_config() — Task 1.1, seed_canonical_rituals() — Task 1.2,
-seed_thread_pull_catalog() — Task 1.3, and seed_cantrip_starter_catalog() — Task 1.8.
+seed_thread_pull_catalog() — Task 1.3, seed_cantrip_starter_catalog() — Task 1.8,
+and seed_starter_magic_story() — Task 13g.
 
 Verifies:
 1. All 5 singletons + IntensityTier rows + MishapPoolTier are created with
@@ -14,6 +15,9 @@ Verifies:
 9. Cantrip starter catalog creates 5 styles, 6 effect types, 25 cantrips (Task 1.8).
 10. Cantrip catalog seeding is idempotent (Task 1.8).
 11. Staff edits to Cantrip rows survive a re-run (Task 1.8).
+12. seed_starter_magic_story() composes all 8 phases in dependency order (Task 13g).
+13. Re-running the orchestrator produces no changes (idempotent at slice level) (Task 13g).
+14. Staff edits to seeded rows survive re-runs (Task 13g).
 """
 
 from django.test import TestCase
@@ -23,9 +27,15 @@ from integration_tests.game_content.magic import (
     MagicConfigResult,
     RitualSeedResult,
     ThreadPullCatalogResult,
+    _seed_affinity_interactions,
+    _seed_resonance_environment_config,
+    seed_canonical_affinities,
+    seed_canonical_resonances,
     seed_canonical_rituals,
     seed_cantrip_starter_catalog,
     seed_magic_config,
+    seed_magic_dev,
+    seed_starter_magic_story,
     seed_thread_pull_catalog,
 )
 
@@ -918,3 +928,944 @@ class TestSeedMagicDev(TestCase):
                     f"Technique '{technique_name}' (action_key={action_key!r}) must exist "
                     f"exactly once after two seed_magic_dev() calls",
                 )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.11 — seed_canonical_affinities()
+# ---------------------------------------------------------------------------
+
+
+class SeedCanonicalAffinitiesTests(TestCase):
+    """Task 1.11: seed_canonical_affinities() creates idempotent Affinity rows."""
+
+    def test_seeds_three_canonical_affinities(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        names = set(Affinity.objects.values_list("name", flat=True))
+        # Three canonical names must all exist after seeding.
+        self.assertGreaterEqual(names, {"Celestial", "Primal", "Abyssal"})
+
+    def test_idempotent(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        snapshot_a = sorted(Affinity.objects.values_list("name", flat=True))
+        seed_canonical_affinities()
+        snapshot_b = sorted(Affinity.objects.values_list("name", flat=True))
+        self.assertEqual(snapshot_a, snapshot_b)
+
+    def test_preserves_edits(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        celestial = Affinity.objects.get(name="Celestial")
+        # Affinity may or may not have a 'description' field — pick whatever
+        # editable text field exists. If only `name` is editable, skip this test.
+        editable_field = None
+        for candidate in ("description", "display_name", "flavor_text"):
+            if hasattr(celestial, candidate):
+                editable_field = candidate
+                break
+        if editable_field is None:
+            self.skipTest("Affinity has no editable text field to mutate")
+        setattr(celestial, editable_field, "edited by t11 test")
+        celestial.save()
+
+        seed_canonical_affinities()
+        celestial.refresh_from_db()
+        self.assertEqual(getattr(celestial, editable_field), "edited by t11 test")
+
+
+# ---------------------------------------------------------------------------
+# Task 1.12 — seed_canonical_resonances()
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Task 13a — _seed_endure_hallowed_ground_check()
+# ---------------------------------------------------------------------------
+
+
+class SeedEndureHallowedGroundCheckTests(TestCase):
+    def test_seeds_check_type(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.checks.models import CheckType
+
+        _seed_endure_hallowed_ground_check()
+        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+
+    def test_seeds_four_result_chart_outcomes(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.traits.models import ResultChart, ResultChartOutcome
+
+        _seed_endure_hallowed_ground_check()
+        # The slice seeds rank_difference=0 chart with 4 outcomes.
+        chart = ResultChart.objects.get(rank_difference=0)
+        outcomes_for_chart = ResultChartOutcome.objects.filter(chart=chart)
+        outcome_names = {ro.outcome.name for ro in outcomes_for_chart.select_related("outcome")}
+        expected = {"Critical Success", "Success", "Failure", "Critical Failure"}
+        self.assertGreaterEqual(outcome_names, expected)
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.checks.models import CheckType
+        from world.traits.models import ResultChart, ResultChartOutcome
+
+        _seed_endure_hallowed_ground_check()
+        ct_count_a = CheckType.objects.count()
+        rc_count_a = ResultChart.objects.count()
+        rco_count_a = ResultChartOutcome.objects.count()
+
+        _seed_endure_hallowed_ground_check()
+        self.assertEqual(CheckType.objects.count(), ct_count_a)
+        self.assertEqual(ResultChart.objects.count(), rc_count_a)
+        self.assertEqual(ResultChartOutcome.objects.count(), rco_count_a)
+
+
+class SeedCanonicalResonancesTests(TestCase):
+    """Task 1.12: seed_canonical_resonances() creates idempotent Celestial Resonance rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_canonical_affinities()
+
+    def test_seeds_three_celestial_resonances(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Affinity, Resonance
+
+        celestial = Affinity.objects.get(name="Celestial")
+        names = set(
+            Resonance.objects.filter(affinity=celestial).values_list("name", flat=True),
+        )
+        self.assertGreaterEqual(names, {"Light", "Sanctity", "Radiance"})
+
+    def test_idempotent(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Resonance
+
+        count_a = Resonance.objects.count()
+        seed_canonical_resonances()
+        count_b = Resonance.objects.count()
+        self.assertEqual(count_a, count_b)
+
+    def test_resonances_have_celestial_affinity(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Affinity, Resonance
+
+        celestial = Affinity.objects.get(name="Celestial")
+        for name in ("Light", "Sanctity", "Radiance"):
+            res = Resonance.objects.get(name=name)
+            self.assertEqual(res.affinity, celestial)
+
+
+# ---------------------------------------------------------------------------
+# Task 13b — _seed_hallowed_reaction_conditions()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedReactionConditionsTests(TestCase):
+    def test_seeds_five_reaction_conditions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_reaction_conditions()
+        names = set(ConditionTemplate.objects.values_list("name", flat=True))
+        expected = {
+            "Tempered Against Light",
+            "Singed",
+            "Burning",
+            "Hallowed Burn",
+            "Cast Disrupted",
+        }
+        self.assertGreaterEqual(names, expected)
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_reaction_conditions()
+        count_a = ConditionTemplate.objects.count()
+        _seed_hallowed_reaction_conditions()
+        count_b = ConditionTemplate.objects.count()
+        self.assertEqual(count_a, count_b)
+
+    def test_burning_reuses_existing_factory_template(self):
+        """If a Burning template already exists (factory-created), get_or_create reuses it."""
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionTemplate
+
+        # Pre-create a Burning template (mimics factory test setup).
+        pre_existing = ConditionTemplateFactory(name="Burning")
+
+        _seed_hallowed_reaction_conditions()
+
+        # Same row, not a duplicate.
+        self.assertEqual(
+            ConditionTemplate.objects.filter(name="Burning").count(),
+            1,
+        )
+        self.assertEqual(
+            ConditionTemplate.objects.get(name="Burning").pk,
+            pre_existing.pk,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 13c — _seed_hallowed_achievement_bridge()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedAchievementBridgeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+
+        _seed_hallowed_reaction_conditions()
+
+    def test_seeds_three_stat_definitions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import StatDefinition
+
+        _seed_hallowed_achievement_bridge()
+        keys = set(StatDefinition.objects.values_list("key", flat=True))
+        expected = {
+            "conditions.tempered_against_light.gained",
+            "conditions.singed.gained",
+            "conditions.hallowed_burn.gained",
+        }
+        self.assertGreaterEqual(keys, expected)
+
+    def test_seeds_three_condition_stat_rules(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.constants import ConditionEventType
+        from world.achievements.models import ConditionStatRule
+
+        _seed_hallowed_achievement_bridge()
+        # Each rule links one of the 3 reaction conditions to its corresponding stat.
+        rules = ConditionStatRule.objects.filter(event_type=ConditionEventType.GAINED)
+        rule_pairs = {
+            (r.condition.name, r.stat.key) for r in rules.select_related("condition", "stat")
+        }
+        expected = {
+            ("Tempered Against Light", "conditions.tempered_against_light.gained"),
+            ("Singed", "conditions.singed.gained"),
+            ("Hallowed Burn", "conditions.hallowed_burn.gained"),
+        }
+        self.assertGreaterEqual(rule_pairs, expected)
+
+    def test_seeds_three_achievements(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import Achievement
+
+        _seed_hallowed_achievement_bridge()
+        names = set(Achievement.objects.values_list("name", flat=True))
+        expected = {"Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"}
+        self.assertGreaterEqual(names, expected)
+
+    def test_seeds_three_achievement_requirements(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import Achievement, AchievementRequirement
+
+        _seed_hallowed_achievement_bridge()
+        for ach_name, stat_key in (
+            ("Hallowed-Hardened", "conditions.tempered_against_light.gained"),
+            ("Touched by Light", "conditions.singed.gained"),
+            ("Cast Out by the Light", "conditions.hallowed_burn.gained"),
+        ):
+            ach = Achievement.objects.get(name=ach_name)
+            reqs = AchievementRequirement.objects.filter(
+                achievement=ach,
+                stat__key=stat_key,
+            )
+            self.assertEqual(reqs.count(), 1)
+            self.assertEqual(reqs.first().threshold, 1)
+
+    def test_burning_has_no_stat_or_achievement(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import StatDefinition
+
+        _seed_hallowed_achievement_bridge()
+        self.assertFalse(
+            StatDefinition.objects.filter(key="conditions.burning.gained").exists(),
+        )
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import (
+            Achievement,
+            AchievementRequirement,
+            ConditionStatRule,
+            StatDefinition,
+        )
+
+        _seed_hallowed_achievement_bridge()
+        snapshot = (
+            StatDefinition.objects.count(),
+            ConditionStatRule.objects.count(),
+            Achievement.objects.count(),
+            AchievementRequirement.objects.count(),
+        )
+        _seed_hallowed_achievement_bridge()
+        self.assertEqual(
+            (
+                StatDefinition.objects.count(),
+                ConditionStatRule.objects.count(),
+                Achievement.objects.count(),
+                AchievementRequirement.objects.count(),
+            ),
+            snapshot,
+        )
+
+
+# ---------------------------------------------------------------------------
+# RC4 — _seed_resonance_environment_rooms()
+# ---------------------------------------------------------------------------
+
+
+class SeedResonanceEnvironmentRoomsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import (
+            _seed_endure_hallowed_ground_check,
+            _seed_hallowed_reaction_conditions,
+            seed_canonical_affinities,
+            seed_canonical_resonances,
+        )
+
+        seed_canonical_affinities()
+        seed_canonical_resonances()
+        _seed_hallowed_reaction_conditions()
+        _seed_endure_hallowed_ground_check()
+
+    def test_seeds_hallowed_rejection_flavor_condition(self):
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.conditions.models import ConditionTemplate
+
+        _seed_resonance_environment_rooms()
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
+        )
+
+    def test_seeds_three_rooms(self):
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+
+        _seed_resonance_environment_rooms()
+        self.assertTrue(
+            ObjectDB.objects.filter(db_key="The Hallowed Threshold (Low)").exists(),
+        )
+        self.assertTrue(
+            ObjectDB.objects.filter(db_key="The Hallowed Threshold (High)").exists(),
+        )
+        self.assertTrue(
+            ObjectDB.objects.filter(db_key="The Resonant Sanctum (Aligned)").exists(),
+        )
+
+    def test_low_room_cascade_magnitude(self):
+        """The Low celestial room resolves to magnitude 10 via effective_value."""
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+
+        _seed_resonance_environment_rooms()
+        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
+        light = Resonance.objects.get(name="Light")
+        self.assertEqual(effective_value(low, resonance=light), 10)
+
+    def test_high_room_cascade_magnitude(self):
+        """The High celestial room resolves to magnitude 80 via effective_value."""
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+
+        _seed_resonance_environment_rooms()
+        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
+        light = Resonance.objects.get(name="Light")
+        self.assertEqual(effective_value(high, resonance=light), 80)
+
+    def test_aligned_sanctum_cascade_magnitude(self):
+        """The Abyssal aligned room resolves to magnitude 60 via effective_value."""
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+
+        _seed_resonance_environment_rooms()
+        sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
+        dissolution = Resonance.objects.get(name="Dissolution")
+        self.assertEqual(effective_value(sanctum, resonance=dissolution), 60)
+
+    def test_idempotent(self):
+        """Re-running _seed_resonance_environment_rooms() produces stable counts/values."""
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.conditions.models import ConditionTemplate
+        from world.locations.models import LocationValueModifier
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+
+        _seed_resonance_environment_rooms()
+        light = Resonance.objects.get(name="Light")
+        dissolution = Resonance.objects.get(name="Dissolution")
+        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
+        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
+        sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
+        snapshot = {
+            "rooms": ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ]
+            ).count(),
+            "modifiers": LocationValueModifier.objects.count(),
+            "hallowed_rejection": ConditionTemplate.objects.filter(
+                name="Hallowed Rejection"
+            ).count(),
+            "low_magnitude": effective_value(low, resonance=light),
+            "high_magnitude": effective_value(high, resonance=light),
+            "sanctum_magnitude": effective_value(sanctum, resonance=dissolution),
+        }
+
+        _seed_resonance_environment_rooms()
+        post = {
+            "rooms": ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ]
+            ).count(),
+            "modifiers": LocationValueModifier.objects.count(),
+            "hallowed_rejection": ConditionTemplate.objects.filter(
+                name="Hallowed Rejection"
+            ).count(),
+            "low_magnitude": effective_value(low, resonance=light),
+            "high_magnitude": effective_value(high, resonance=light),
+            "sanctum_magnitude": effective_value(sanctum, resonance=dissolution),
+        }
+        self.assertEqual(snapshot, post)
+
+
+# ---------------------------------------------------------------------------
+# Task 13f — _seed_hallowed_threshold_story()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedThresholdStoryTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+
+        _seed_hallowed_reaction_conditions()
+
+    def test_seeds_story(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.constants import StoryScope
+        from world.stories.models import Story
+
+        _seed_hallowed_threshold_story()
+        story = Story.objects.get(title="The Hallowed Threshold")
+        self.assertEqual(story.scope, StoryScope.CHARACTER)
+        self.assertIsNone(story.character_sheet)  # template, not per-playthrough
+
+    def test_seeds_chapter_and_four_episodes(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Chapter, Episode
+
+        _seed_hallowed_threshold_story()
+        chapter = Chapter.objects.get(title="First Trial")
+        episode_titles = set(
+            Episode.objects.filter(chapter=chapter).values_list("title", flat=True),
+        )
+        self.assertEqual(
+            episode_titles,
+            {"Stepping Into Light", "Tempered Walk", "Marked Path", "Cast Out"},
+        )
+
+    def test_seeds_four_beats_on_source_episode(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.constants import BeatPredicateType
+        from world.stories.models import Beat, Episode
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        beats = Beat.objects.filter(
+            episode=source,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+        )
+        beat_condition_names = set(
+            beats.values_list("required_condition_template__name", flat=True),
+        )
+        self.assertEqual(
+            beat_condition_names,
+            {"Tempered Against Light", "Singed", "Burning", "Hallowed Burn"},
+        )
+
+    def test_seeds_four_transitions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Episode, Transition
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        transitions = Transition.objects.filter(source_episode=source)
+        self.assertEqual(transitions.count(), 4)
+        target_titles = {t.target_episode.title for t in transitions if t.target_episode}
+        self.assertEqual(target_titles, {"Tempered Walk", "Marked Path", "Cast Out"})
+        # Two transitions both target Marked Path (Singed + Burning routes).
+        marked_path_transitions = transitions.filter(target_episode__title="Marked Path")
+        self.assertEqual(marked_path_transitions.count(), 2)
+
+    def test_seeds_four_transition_required_outcomes(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import (
+            Episode,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        for transition in Transition.objects.filter(source_episode=source):
+            tros = TransitionRequiredOutcome.objects.filter(transition=transition)
+            self.assertEqual(
+                tros.count(),
+                1,
+                f"Transition {transition.target_episode} expects exactly 1 TRO",
+            )
+
+    def test_zero_episode_progression_requirements_on_source(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Episode, EpisodeProgressionRequirement
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        self.assertEqual(
+            EpisodeProgressionRequirement.objects.filter(episode=source).count(),
+            0,
+        )
+
+    def test_beats_have_authored_player_resolution_text(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Beat, Episode
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        for beat in Beat.objects.filter(episode=source):
+            self.assertTrue(
+                beat.player_resolution_text,
+                f"Beat for {beat.required_condition_template.name} missing player_resolution_text",
+            )
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import (
+            Beat,
+            Chapter,
+            Episode,
+            Story,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+
+        _seed_hallowed_threshold_story()
+        snapshot = (
+            Story.objects.count(),
+            Chapter.objects.count(),
+            Episode.objects.count(),
+            Beat.objects.count(),
+            Transition.objects.count(),
+            TransitionRequiredOutcome.objects.count(),
+        )
+        _seed_hallowed_threshold_story()
+        post = (
+            Story.objects.count(),
+            Chapter.objects.count(),
+            Episode.objects.count(),
+            Beat.objects.count(),
+            Transition.objects.count(),
+            TransitionRequiredOutcome.objects.count(),
+        )
+        self.assertEqual(snapshot, post)
+
+
+class SeedStarterMagicStoryOrchestratorTests(TestCase):
+    """Tests for seed_starter_magic_story() — Task 13g."""
+
+    def test_orchestrator_calls_all_phases(self) -> None:
+        """Verify all representative content from each phase is present after one call."""
+        from evennia.objects.models import ObjectDB
+
+        from world.achievements.models import Achievement
+        from world.checks.models import CheckType
+        from world.conditions.models import ConditionTemplate
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceAlignmentBoonTier,
+            ResonanceEnvironmentConfig,
+        )
+        from world.stories.models import Story
+
+        seed_starter_magic_story()
+
+        # Spot-check that representative content from each phase is present.
+        # Phase RC1: 9 directed AffinityInteraction rows + config singleton
+        self.assertEqual(AffinityInteraction.objects.count(), 9)
+        self.assertIsNotNone(ResonanceEnvironmentConfig.objects.filter(pk=1).first())
+        # Phase B: OPPOSED reaction conditions
+        self.assertTrue(ConditionTemplate.objects.filter(name="Hallowed Rejection").exists())
+        self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
+        # Phase C: achievement bridge
+        self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
+        # Phase A: endure_hallowed_ground check type
+        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+        # T12: OPPOSED pairs #4 and #7 have consequence pools wired
+        from world.magic.models.affinity import Affinity
+
+        abyssal = Affinity.objects.get(name="Abyssal")
+        celestial = Affinity.objects.get(name="Celestial")
+        primal = Affinity.objects.get(name="Primal")
+        pair4 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=celestial
+        )
+        pair7 = AffinityInteraction.objects.get(
+            source_affinity=primal, environment_affinity=celestial
+        )
+        self.assertIsNotNone(pair4.consequence_pool_id, "Pair #4 must have a consequence_pool")
+        self.assertIsNotNone(pair7.consequence_pool_id, "Pair #7 must have a consequence_pool")
+        # T13: ALIGNED pair #5 has ≥2 ResonanceAlignmentBoonTier rows
+        pair5 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=abyssal
+        )
+        self.assertGreaterEqual(
+            ResonanceAlignmentBoonTier.objects.filter(affinity_interaction=pair5).count(),
+            2,
+            "Pair #5 (ALIGNED Abyssal) must have ≥2 boon tiers",
+        )
+        # Removal assertions: old artifact templates must NOT exist
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Magically Attuned").exists(),
+            "Magically Attuned must not exist — removed in resonance core-service rework",
+        )
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists(),
+            "Empowered by Resonant Ground must not exist — removed in core-service rework",
+        )
+        # Phase RC4: 3 cascade rooms
+        self.assertEqual(
+            ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ],
+            ).count(),
+            3,
+        )
+        # Phase F: story
+        self.assertTrue(Story.objects.filter(title="The Hallowed Threshold").exists())
+
+    def test_no_universal_resonance_flow_or_trigger_seeded(self) -> None:
+        """After the master seed, no universal resonance FlowDefinition or TriggerDefinition
+        exists — those were removed by the core-service rework (T11)."""
+        from flows.models.flows import FlowDefinition
+        from flows.models.triggers import TriggerDefinition
+
+        seed_starter_magic_story()
+
+        self.assertFalse(
+            FlowDefinition.objects.filter(name__icontains="resonance environment").exists(),
+            "Universal resonance FlowDefinition must not exist after T11 removal",
+        )
+        self.assertFalse(
+            TriggerDefinition.objects.filter(name__icontains="resonance environment").exists(),
+            "Universal resonance TriggerDefinition must not exist after T11 removal",
+        )
+
+    def test_orchestrator_idempotent(self) -> None:
+        """Re-running on populated DB is a no-op for all relevant tables."""
+        from world.achievements.models import (
+            Achievement,
+            AchievementRequirement,
+            ConditionStatRule,
+            StatDefinition,
+        )
+        from world.checks.models import CheckType
+        from world.conditions.models import ConditionTemplate
+        from world.locations.models import LocationValueModifier
+        from world.magic.models.affinity import Affinity, Resonance
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceAlignmentBoonTier,
+            ResonanceEnvironmentConfig,
+        )
+        from world.stories.models import (
+            Beat,
+            Chapter,
+            Episode,
+            Story,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+        from world.traits.models import ResultChart
+
+        seed_starter_magic_story()
+        snapshot = {
+            "Affinity": Affinity.objects.count(),
+            "Resonance": Resonance.objects.count(),
+            "AffinityInteraction": AffinityInteraction.objects.count(),
+            "ResonanceEnvironmentConfig": ResonanceEnvironmentConfig.objects.count(),
+            "CheckType": CheckType.objects.count(),
+            "ResultChart": ResultChart.objects.count(),
+            "ConditionTemplate": ConditionTemplate.objects.count(),
+            "ConditionStatRule": ConditionStatRule.objects.count(),
+            "StatDefinition": StatDefinition.objects.count(),
+            "Achievement": Achievement.objects.count(),
+            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
+            "LocationValueModifier": LocationValueModifier.objects.count(),
+            "Story": Story.objects.count(),
+            "Chapter": Chapter.objects.count(),
+            "Episode": Episode.objects.count(),
+            "Beat": Beat.objects.count(),
+            "Transition": Transition.objects.count(),
+            "TransitionRequiredOutcome": TransitionRequiredOutcome.objects.count(),
+        }
+
+        seed_starter_magic_story()
+        # Recompute counts and compare
+        recount = {
+            "Affinity": Affinity.objects.count(),
+            "Resonance": Resonance.objects.count(),
+            "AffinityInteraction": AffinityInteraction.objects.count(),
+            "ResonanceEnvironmentConfig": ResonanceEnvironmentConfig.objects.count(),
+            "CheckType": CheckType.objects.count(),
+            "ResultChart": ResultChart.objects.count(),
+            "ConditionTemplate": ConditionTemplate.objects.count(),
+            "ConditionStatRule": ConditionStatRule.objects.count(),
+            "StatDefinition": StatDefinition.objects.count(),
+            "Achievement": Achievement.objects.count(),
+            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
+            "LocationValueModifier": LocationValueModifier.objects.count(),
+            "Story": Story.objects.count(),
+            "Chapter": Chapter.objects.count(),
+            "Episode": Episode.objects.count(),
+            "Beat": Beat.objects.count(),
+            "Transition": Transition.objects.count(),
+            "TransitionRequiredOutcome": TransitionRequiredOutcome.objects.count(),
+        }
+        self.assertEqual(snapshot, recount)
+
+    def test_orchestrator_preserves_edits(self) -> None:
+        """Editing a seeded row and re-running the orchestrator leaves the edit intact."""
+        from integration_tests.game_content.magic import seed_starter_magic_story
+        from world.conditions.models import ConditionTemplate
+
+        seed_starter_magic_story()
+        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
+        marker.description = "edited by orchestrator idempotency test"
+        marker.save()
+
+        seed_starter_magic_story()
+        marker.refresh_from_db()
+        self.assertEqual(marker.description, "edited by orchestrator idempotency test")
+
+
+class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
+    """Verify that seed_magic_dev() includes the magic-story slice content."""
+
+    def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
+        """seed_magic_dev() should seed Hallowed Rejection + Hallowed Threshold content."""
+        from world.conditions.models import ConditionTemplate
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceAlignmentBoonTier,
+        )
+        from world.stories.models import Story
+
+        seed_magic_dev()
+
+        # Spot-check that the magic-story slice content is now seeded too.
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
+            "seed_magic_dev() must include Hallowed Rejection condition",
+        )
+        self.assertTrue(
+            Story.objects.filter(title="The Hallowed Threshold").exists(),
+            "seed_magic_dev() must include Hallowed Threshold story",
+        )
+        # T12: OPPOSED consequence pools wired for pairs #4 and #7
+        from world.magic.models.affinity import Affinity
+
+        abyssal = Affinity.objects.get(name="Abyssal")
+        celestial = Affinity.objects.get(name="Celestial")
+        pair4 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=celestial
+        )
+        self.assertIsNotNone(
+            pair4.consequence_pool_id,
+            "seed_magic_dev() must wire consequence_pool for OPPOSED pair #4",
+        )
+        # T13: ALIGNED boon tiers seeded for pair #5
+        pair5 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=abyssal
+        )
+        self.assertGreaterEqual(
+            ResonanceAlignmentBoonTier.objects.filter(affinity_interaction=pair5).count(),
+            2,
+            "seed_magic_dev() must seed ≥2 boon tiers for ALIGNED Abyssal pair",
+        )
+
+    def test_seed_magic_dev_remains_idempotent_with_story_slice(self) -> None:
+        """Re-running seed_magic_dev() produces stable counts after wiring slice."""
+        from world.conditions.models import ConditionTemplate
+        from world.stories.models import Story
+
+        seed_magic_dev()
+        first_condition_count = ConditionTemplate.objects.count()
+        first_story_count = Story.objects.count()
+
+        seed_magic_dev()
+        second_condition_count = ConditionTemplate.objects.count()
+        second_story_count = Story.objects.count()
+
+        self.assertEqual(
+            first_condition_count,
+            second_condition_count,
+            "Condition counts must be stable across seed_magic_dev() runs",
+        )
+        self.assertEqual(
+            first_story_count,
+            second_story_count,
+            "Story counts must be stable across seed_magic_dev() runs",
+        )
+
+
+# ---------------------------------------------------------------------------
+# RC1 — _seed_affinity_interactions() + _seed_resonance_environment_config()
+# ---------------------------------------------------------------------------
+
+# The 9 directed pairs from the spec, keyed (source_name, env_name).
+_EXPECTED_INTERACTIONS: list[tuple[str, str, str, str, str, str]] = [
+    # (source_name, env_name, valence, kind, aggressor, severity_multiplier)
+    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00"),
+    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00"),
+    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30"),
+    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00"),
+    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00"),
+    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00"),
+    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00"),
+]
+
+
+class SeedAffinityInteractionsTests(TestCase):
+    """RC1: _seed_affinity_interactions() creates the 9 directed AffinityInteraction rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_canonical_affinities()
+        _seed_affinity_interactions()
+
+    def test_exactly_nine_rows_exist(self) -> None:
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        self.assertEqual(AffinityInteraction.objects.count(), 9)
+
+    def test_each_row_has_correct_valence_kind_aggressor_multiplier(self) -> None:
+        from decimal import Decimal
+
+        from world.magic.models.affinity import Affinity
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        for src_name, env_name, valence, kind, aggressor, mult_str in _EXPECTED_INTERACTIONS:
+            with self.subTest(source=src_name, env=env_name):
+                src = Affinity.objects.get(name=src_name)
+                env = Affinity.objects.get(name=env_name)
+                row = AffinityInteraction.objects.get(
+                    source_affinity=src,
+                    environment_affinity=env,
+                )
+                self.assertEqual(row.valence, valence, f"{src_name}->{env_name} valence")
+                self.assertEqual(row.kind, kind, f"{src_name}->{env_name} kind")
+                self.assertEqual(row.aggressor, aggressor, f"{src_name}->{env_name} aggressor")
+                self.assertEqual(
+                    row.severity_multiplier,
+                    Decimal(mult_str),
+                    f"{src_name}->{env_name} severity_multiplier",
+                )
+
+    def test_idempotent(self) -> None:
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        count_before = AffinityInteraction.objects.count()
+        _seed_affinity_interactions()
+        self.assertEqual(AffinityInteraction.objects.count(), count_before)
+
+    def test_idempotent_preserves_values(self) -> None:
+        """Second call must not overwrite existing rows (get_or_create semantics)."""
+        from decimal import Decimal
+
+        from world.magic.models.affinity import Affinity
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        # Simulate a staff edit via bulk update (bypasses identity map).
+        celestial = Affinity.objects.get(name="Celestial")
+        primal = Affinity.objects.get(name="Primal")
+        AffinityInteraction.objects.filter(
+            source_affinity=celestial,
+            environment_affinity=primal,
+        ).update(severity_multiplier=Decimal("0.99"))
+
+        _seed_affinity_interactions()
+
+        db_val = (
+            AffinityInteraction.objects.filter(
+                source_affinity=celestial,
+                environment_affinity=primal,
+            )
+            .values("severity_multiplier")
+            .get()
+        )
+        self.assertEqual(
+            db_val["severity_multiplier"],
+            Decimal("0.99"),
+            "_seed_affinity_interactions() must not overwrite existing rows",
+        )
+
+
+class SeedResonanceEnvironmentConfigTests(TestCase):
+    """RC1: _seed_resonance_environment_config() creates the pk=1 singleton."""
+
+    def test_creates_singleton(self) -> None:
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        _seed_resonance_environment_config()
+        self.assertEqual(ResonanceEnvironmentConfig.objects.count(), 1)
+        cfg = ResonanceEnvironmentConfig.objects.get(pk=1)
+        self.assertIsNotNone(cfg)
+
+    def test_idempotent(self) -> None:
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        _seed_resonance_environment_config()
+        _seed_resonance_environment_config()
+        self.assertEqual(ResonanceEnvironmentConfig.objects.count(), 1)
+
+    def test_singleton_pk_is_one(self) -> None:
+        _seed_resonance_environment_config()
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        cfg = ResonanceEnvironmentConfig.objects.get()
+        self.assertEqual(cfg.pk, 1)

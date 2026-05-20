@@ -3,11 +3,33 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import type { AvailableActionsResponse } from '../actionTypes';
+import type { PlayerActionsResponse } from '../actionTypes';
 
 vi.mock('../actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
   createActionRequest: vi.fn(),
+}));
+
+// Mock the roster query — component resolves active character → characterId
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({
+    data: [
+      {
+        id: 1,
+        name: 'TestChar',
+        character_id: 42,
+        profile_picture_url: null,
+        primary_persona_id: null,
+      },
+    ],
+  })),
+}));
+
+// Mock the Redux selector — return the active character name used above
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
+    selector({ game: { active: 'TestChar' }, auth: {} })
+  ),
 }));
 
 import { fetchAvailableActions } from '../actionQueries';
@@ -22,26 +44,55 @@ function createWrapper() {
   };
 }
 
-const MOCK_ACTIONS: AvailableActionsResponse = {
-  self_actions: [
-    {
-      key: 'perform',
-      name: 'Perform',
-      icon: 'drama',
-      category: 'self',
-      techniques: [],
+function makeAction(
+  overrides: Partial<PlayerActionsResponse['results'][0]> = {}
+): PlayerActionsResponse['results'][0] {
+  return {
+    backend: 'registry',
+    display_name: 'Test Action',
+    description: '',
+    difficulty: null,
+    prerequisite_met: true,
+    prerequisite_reasons: [],
+    check_type: { id: 1, name: 'Standard' },
+    action_template: null,
+    ref: {
+      backend: 'registry',
+      challenge_instance_id: null,
+      approach_id: null,
+      technique_id: null,
+      registry_key: 'test_action',
     },
+    ...overrides,
+  };
+}
+
+const MOCK_ACTIONS: PlayerActionsResponse = {
+  count: 2,
+  next: null,
+  previous: null,
+  results: [
+    makeAction({
+      display_name: 'Perform',
+      ref: {
+        backend: 'registry',
+        challenge_instance_id: null,
+        approach_id: null,
+        technique_id: null,
+        registry_key: 'perform',
+      },
+    }),
+    makeAction({
+      display_name: 'Intimidate',
+      ref: {
+        backend: 'registry',
+        challenge_instance_id: null,
+        approach_id: null,
+        technique_id: null,
+        registry_key: 'intimidate',
+      },
+    }),
   ],
-  targeted_actions: [
-    {
-      key: 'intimidate',
-      name: 'Intimidate',
-      icon: 'shield_alert',
-      category: 'social',
-      techniques: [],
-    },
-  ],
-  technique_actions: [],
 };
 
 describe('ActionAttachment', () => {
@@ -168,11 +219,12 @@ describe('ActionAttachment', () => {
     expect(onDetach).toHaveBeenCalled();
   });
 
-  it('shows "No actions available" when lists are empty', async () => {
+  it('shows "No actions available" when list is empty', async () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue({
-      self_actions: [],
-      targeted_actions: [],
-      technique_actions: [],
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
     });
     const user = userEvent.setup();
 

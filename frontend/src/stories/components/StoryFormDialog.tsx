@@ -1,7 +1,9 @@
 /**
  * StoryFormDialog — create or edit a Story.
  *
- * Fields: title, description, scope (CHARACTER / GROUP / GLOBAL).
+ * Fields: title, description (internal GM), summary ("The Story So Far",
+ * player-facing), scope (CHARACTER / GROUP / GLOBAL). On edit, the current
+ * maturity is shown read-only (promotion is a separate control).
  * Validation errors from DRF are surfaced inline next to their fields.
  */
 
@@ -29,6 +31,7 @@ import type { Story, StoryScope } from '../types';
 interface DRFFieldErrors {
   title?: string[];
   description?: string[];
+  summary?: string[];
   scope?: string[];
   non_field_errors?: string[];
   detail?: string;
@@ -55,6 +58,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
 
   const [title, setTitle] = useState(story?.title ?? '');
   const [description, setDescription] = useState(story?.description ?? '');
+  const [summary, setSummary] = useState(story?.summary ?? '');
   const [scope, setScope] = useState<StoryScope>(story?.scope ?? 'character');
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
@@ -66,6 +70,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
   function resetForm() {
     setTitle(story?.title ?? '');
     setDescription(story?.description ?? '');
+    setSummary(story?.summary ?? '');
     setScope(story?.scope ?? 'character');
     setFieldErrors({});
   }
@@ -98,7 +103,12 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
     e.preventDefault();
     setFieldErrors({});
 
-    const data = { title: title.trim(), description: description.trim(), scope };
+    const data = {
+      title: title.trim(),
+      description: description.trim(),
+      summary: summary.trim(),
+      scope,
+    };
 
     if (isEdit && story) {
       updateMutation.mutate(
@@ -163,18 +173,47 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
               )}
             </div>
 
-            {/* Description */}
+            {/* Maturity (read-only, edit mode only) */}
+            {isEdit && story?.maturity && (
+              <div
+                data-testid="story-maturity-indicator"
+                className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground"
+              >
+                Maturity: <span className="ml-1 font-medium capitalize">{story.maturity}</span>
+              </div>
+            )}
+
+            {/* Internal GM Description */}
             <div className="space-y-1.5">
-              <Label htmlFor="story-description">Description</Label>
+              <Label htmlFor="story-description">Internal GM Description</Label>
               <Textarea
                 id="story-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Story description…"
+                placeholder="GM-only notes about this story…"
                 rows={3}
               />
+              <p className="text-xs text-muted-foreground">Not shown to players.</p>
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description.join(' ')}</p>
+              )}
+            </div>
+
+            {/* The Story So Far (player-facing summary) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="story-summary">The Story So Far</Label>
+              <Textarea
+                id="story-summary"
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="What players know so far…"
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Player-facing recap — keep this current as the story advances.
+              </p>
+              {fieldErrors.summary && (
+                <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
               )}
             </div>
 

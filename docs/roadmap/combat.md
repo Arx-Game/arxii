@@ -3,6 +3,34 @@
 **Status:** in-progress
 **Depends on:** Traits, Skills, Magic, Conditions, Mechanics, Relationships (for combo attacks)
 
+## Reserved terminology: "clash"
+
+**"Clash" is a reserved term for a specific planned combat feature and MUST NOT be
+used to name any other concept anywhere in the codebase** (function names, variables,
+model names, design docs, comments). The reserved meaning: an opposed/contested
+combat mechanic where two combatants pour magical energy into overpowering each
+other (the "beam struggle" trope) — each side escalates effort to make their side
+win and strike the opponent (a clash of wills).
+
+For unrelated opposing-resonance / environmental-rejection concepts (e.g. casting an
+opposing-affinity technique in a hostile-aura room) use **"backfire"** (the term used
+in `docs/plans/2026-05-14-room-cascade-resonance-unification.md` for the deferred
+"technique pre-cast backfire trigger"), or "rejection" / "dissonance" / "backlash".
+Never "clash". When naming a new mechanic, ask: does this involve two sides
+contesting magical energy to overpower each other in combat? If not, it is not a
+"clash".
+
+**When the clash-of-wills feature IS built, reuse the resonance-environment work — do
+not reinvent it.** `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`
+already models directed, asymmetric affinity opposition as authored `AffinityInteraction`
+rows (the RPS cycle: Primal > Celestial > Abyssal > Primal, with per-pair `valence` /
+`kind` / `severity_multiplier`). A combat clash between opposed-affinity casters
+(Abyssal vs Celestial, Primal vs Abyssal, etc.) is the *caster-vs-caster* analogue of
+the *caster-vs-place* interaction: it should consume the same `AffinityInteraction`
+matrix and the same valence/severity concepts (and likely the `ResonanceEnvironmentConfig`
+tuning surface) rather than authoring a parallel opposition table. The clash feature adds
+the contested-escalation mechanic on top; the affinity-opposition substrate is shared.
+
 ## Overview
 Combat is always Players vs. the Bad Guys — no PVP killing. Three distinct combat modes serve different scales and narrative purposes, all designed to create heroic moments and reward teamwork over solo power.
 
@@ -227,6 +255,80 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **`bypass_soak` stays combo-only.** Architectural rule: solo casts never bypass soak. The `TechniqueDamageProfile` model has no `bypass_soak` field; `_apply_damage` never passes `bypass_soak=True`.
 - See `docs/superpowers/specs/2026-05-01-damage-scaling-design.md`
 
+**Phase 7 (complete):** Magic-in-combat fixes + unified player-action interface
+**Branch:** `unified-action-interface`
+**Design spec:** `docs/superpowers/specs/2026-05-17-unified-player-action-interface-design.md`
+
+Two deliverables in one branch:
+
+*Magic-in-combat fixes (Phase 1):*
+- **`offense_check_type` sourced from `technique.action_template`** — declared combat spells
+  now use the technique's authored check type instead of falling back to a bare `None`.
+  Previously, combat-cast techniques dealt 0 damage via the REST view path.
+- **`focused_ally_target` declarable via API** — `declare_action` serializer now validates
+  and accepts `focused_ally_target` (FK to CombatParticipant). Self-cast and ally-targeting
+  techniques are fully declarable over the REST API.
+- **Typed `ActionDispatchError`** — `_run_actions` now raises `ActionDispatchError` (with
+  `user_message`) and the `resolve_round` view returns a 400 response with the message,
+  instead of letting unhandled exceptions propagate.
+- **E2E regression test** — `test_e2e_combat_magic_api.py` drives the full
+  create-encounter → declare-spell → resolve-round cycle, asserting damage lands and
+  condition is applied.
+
+*Unified player-action interface (Phases 2–3):*
+- **`RoundContext` ABC + resolver** — combat-agnostic tempo seam. `RoundContext`
+  carries `round_number`, `declaration_open` flag, and `character` (CharacterSheet).
+  `get_round_context(character_sheet)` returns a concrete `CombatRoundContext` when
+  the character is in a declaration-phase encounter; `None` otherwise. Future
+  non-combat turn providers slot into the same seam without changing call sites.
+- **`RoundChallengeDeclaration` bridge** — deferred challenge declarations (challenge
+  approach + capability source) stored per (encounter, participant, challenge_instance)
+  triplet. `record_declaration()` is mutually exclusive with focused-action declarations
+  (XOR). `resolve_round` processes these as a post-pass in initiative order after all
+  focused/passive actions resolve.
+- **`PlayerAction` / `ActionRef` descriptors** — `PlayerAction` is the unified wire type
+  for "what can this character do right now": `backend` (CHALLENGE/COMBAT/REGISTRY),
+  `display_name`, `description`, `difficulty`, `prerequisite_met`,
+  `prerequisite_reasons`, `check_type`, `action_template`, `ref`. `ActionRef` is the
+  opaque dispatch token.
+- **`get_player_actions(character_sheet, location)`** — merges three backends into one
+  scored list: challenge approaches (from `get_available_actions`), declarable combat
+  actions (when declaration window is open), and REGISTRY actions (checkless utility
+  actions; excluded from the scored list but dispatchable).
+- **`dispatch_player_action(character_sheet, ref, **kwargs)`** — single routing function
+  that validates current availability, checks round-gating, and routes to the correct
+  backend handler.
+- **`GET /api/actions/characters/<id>/available/`** — returns the merged `PlayerAction`
+  list. Replaces the old `GET /api/mechanics/characters/<id>/available-actions/` endpoint
+  (which is deleted). Frontend repointed to the new URL.
+- **`POST /api/actions/characters/<id>/dispatch/`** — dispatches by `ActionRef`. Same
+  permission class (`IsCharacterOwner`) as the read endpoint.
+- **WebSocket `execute_action`** — now routes through `dispatch_player_action`. The legacy
+  `action_key`/`technique_id` shape is normalised into an `ActionRef` at the WS layer;
+  single dispatch path for REST and WS.
+- **Superseded mechanics endpoint removed** — `GET /api/mechanics/characters/<id>/available-actions/`
+  and its serializer are deleted. `ActionPanel` and `ActionAttachment` fetch from the
+  unified endpoint.
+
+*Known deferred seams (design follow-ups, not implementation gaps):*
+- **REGISTRY actions excluded from the scored list** — REGISTRY is checkless utility; the
+  actions are dispatchable but intentionally absent from `get_player_actions` scored
+  output.
+- **Enhancement-rich social surface not yet folded in** — `GET /api/action-requests/available/`
+  returns per-action `AvailableEnhancement` lists (anima costs, Soulfray warnings).
+  The unified endpoint returns plain `PlayerAction` descriptors without enhancement data.
+  `ActionPanel` fetches both and joins client-side. Follow-up: fold enhancement data into
+  `PlayerAction` so the unified endpoint is self-contained. (See magic.md Scope 4 deferred note.)
+- **Consequence→challenge spawn not yet wired** — the unified read surfaces spawned
+  challenges when that lands; no interface change will be needed.
+- **General (non-combat) turn provider not built** — `RoundContext` seam exists; combat
+  is the sole implementor. The general provider is unbuilt by design.
+- **Frontend targeted-action routing gap** — `PlayerAction` has no `is_targeted` /
+  target-spec field. `ActionPanel` currently uses `prerequisite_met` as a proxy for
+  whether to enable the dispatch button, leaving the targeted-action UI path effectively
+  unreachable. A future descriptor field (e.g. `is_targeted`) is needed to route the
+  frontend correctly to the consent/target-picker flow. Design follow-up.
+
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
 - Nullable covenant, participants can join/leave mid-fight
@@ -240,6 +342,37 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 ### Duels (future — separate system)
 - Normally non-lethal PC vs PC sparring with pose integration
 - Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
+
+### Clash of Wills (future — needs a design pass; NOT yet specced)
+
+**Status: undesigned planned feature.** The "clash" is the contested-power standoff
+in combat — two sides pouring magical energy (or locked swords / a struggle of wills)
+into overpowering each other, each escalating effort to win the exchange (the
+"beam-struggle" trope). Its *meaning and terminology reservation* are fixed (see
+"## Reserved terminology: 'clash'" at the top of this file); what does NOT exist is
+any mechanical design, spec, or implementation. This entry exists so the feature is
+tracked, not lost — it surfaced during the resonance-environment work (the 2026-05-16
+universal-path slice deliberately used "backfire" and avoided "clash" so this term
+stays free).
+
+When prioritized, it gets its own design spec. Hard constraints already known:
+
+- **Reuse the affinity-opposition substrate — do not author a parallel table.** The
+  shipped resonance-environment work models directed, asymmetric affinity opposition
+  as authored `AffinityInteraction` rows (the RPS cycle, per-pair `valence` / `kind` /
+  `severity_multiplier`) plus the `ResonanceEnvironmentConfig` tuning singleton and the
+  generic consequence-pool resolution pipeline. A combat clash between opposed-affinity
+  casters is the *caster-vs-caster* analogue of the *caster-vs-place* interaction: it
+  consumes the same `AffinityInteraction` matrix + tuning, adding only the
+  contested-escalation mechanic on top. See `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
+  (shipped) and the magic roadmap's "Resonance-Environment Interaction → Cross-reference:
+  combat clash-of-wills".
+- It is the only *symmetrical* magical exchange (both sides exerting/escalating), unlike
+  the caster-vs-place asymmetry — the design must define the escalation/commit loop and
+  resolution (who wins, at what cost) without re-deriving the opposition data.
+
+**Owner:** core combat + magic substrate (shared); needs a dedicated brainstorm/spec
+before any implementation.
 
 ### Shared Future Work (combat-adjacent)
 - **Combat REST API** — endpoints for encounter lifecycle, action declaration, combo upgrade, round resolution

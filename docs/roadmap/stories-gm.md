@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** phase-5-complete
+**Status:** redesign in progress — Phase 1–5 shipped, but reshaped as groundwork (see Direction below)
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -15,6 +15,51 @@ The narrative engine that tracks every character's story arc from CG backstory t
 - **Time reconciliation:** Three time modes coexist — canon world time (3:1 game-to-real ratio with character aging), scene time (slow RP pace where 10 minutes IC spans hours of typing), and abstract GM session time (pinned to a specific narrative moment)
 - **Coordinated world:** One staffer coordinates all GMs so the game maintains a single connected continuity. Every GM's stories happen in the same world, and actions in one table can affect others
 - **Player agency:** Players can reference active stories, see story beats, track what's happening, and have mechanical tasks they can pursue independently between GM sessions
+
+## Direction (2026-05-15): Authoring framework redesign
+
+**The Phase 1–5 model below is groundwork, not the target.** A validated heavy-design pass reshaped the authoring model. The full spec is
+`docs/plans/2026-05-15-stories-authoring-framework-design.md` (gitignored;
+committed on `feature/stories-authoring-framework-design`). Read it before
+any stories work — treat the shipped predicate/DAG model as the substrate
+being reshaped, not the spec.
+
+What changes:
+
+- **`Beat` becomes the umbrella**, in place: a `kind`
+  (SITUATION / ENCOUNTER / TASK / REQUIREMENT) + an `advances` flag
+  (a non-advancing beat is a Tangent — recorded for history, never gates a
+  transition). The old flat predicate types demote to the resolution
+  sub-config of TASK / REQUIREMENT.
+- **Maturity ladder** — `PITCH → OUTLINE → PLOT` on Story / Chapter /
+  Episode, fully independent per node. Authoring is a non-linear sketchpad:
+  no ordering, parent/child, or DAG-reachability constraints. Orthogonal to
+  the existing runtime status.
+- **Frontier behavior** — reaching unauthored content yields
+  `WAITING_FOR_GM` (infant content seeded ahead → ping owner GM, surfaces
+  aged on GM/staff dashboards) or `RESTING` (nothing ahead → deliberately
+  ambiguous, never `COMPLETED`). Requires a player-facing
+  `Episode.resting_conclusion`.
+- **Scope** gains `UNASSIGNED` (creation default; authorable but not
+  runnable). Scope is **not** trust-gated. GROUP anchors to the GM table's
+  people and/or an optional covenant seam.
+- **Risk** is a plain `Beat.risk` integer (no RiskTier model). PoC trust
+  gate: staff → any risk, non-staff → risk 0. The real trust→risk ladder
+  arrives with GM leveling — no schema change.
+- **Per-story OOC notes ledger** (author + timestamp), separate from
+  per-node pitch text, never player-visible.
+
+The backbone runs end-to-end immediately with every richer beat resolving
+via placeholder GM-mark. Sequenced follow-ups (each its own brainstorm):
+(1) Mission/Challenge engine via existing `resolve_challenge`,
+(2) Situation/Encounter resolution + Sessions,
+(3) consequence + reward computation (where risk numbers gain meaning),
+(4) GM leveling / the trust→risk earning curve,
+(5) covenant entity. GM advancement specifics are a deferred skeleton; the
+gating *hook* is built now, the *earning curve* is revisited later.
+
+The Phase 1–5 record below remains accurate as a description of what is in
+the code — it is the substrate this redesign reshapes.
 
 ## What Exists
 

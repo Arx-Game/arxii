@@ -23,7 +23,13 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.scenes.factories import PersonaFactory
-from world.stories.constants import BeatOutcome, StoryEpisodeStatus, StoryScope, TransitionMode
+from world.stories.constants import (
+    BeatOutcome,
+    ProgressStatus,
+    StoryEpisodeStatus,
+    StoryScope,
+    TransitionMode,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -117,6 +123,21 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         assert matching[0]["current_episode_id"] is None
         assert matching[0]["chapter_order"] is None
         assert matching[0]["episode_order"] is None
+
+    def test_progress_status_exposed(self):
+        """The authoritative ProgressStatus (not just the StoryEpisodeStatus
+        proxy) is on the payload so the FE banner can tell WAITING_FOR_GM
+        apart from RESTING (ledger (e))."""
+        StoryProgressFactory(
+            story=self.story,
+            character_sheet=self.sheet,
+            current_episode=self.episode,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+        entries = self._get_character_stories()
+        matching = [e for e in entries if e["story_id"] == self.story.pk]
+        assert len(matching) == 1
+        assert matching[0]["progress_status"] == ProgressStatus.WAITING_FOR_GM
 
     def test_episode_with_unmet_requirement_status(self):
         """Unmet EpisodeProgressionRequirement → status 'waiting_on_beats'."""

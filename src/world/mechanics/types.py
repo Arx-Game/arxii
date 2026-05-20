@@ -10,8 +10,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from world.checks.models import Consequence
+    from actions.models.action_templates import ActionTemplate
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
+    from world.mechanics.models import ChallengeApproach, ChallengeInstance
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
@@ -68,7 +70,17 @@ class CapabilitySource:
 
 @dataclass
 class AvailableAction:
-    """An Action available to a character for a specific Challenge."""
+    """An Action available to a character for a specific Challenge.
+
+    ``resolved_check_type`` and ``resolved_action_template`` carry the already-loaded
+    model instances (populated from the prefetched ChallengeApproach by
+    ``_match_approaches``).  They are excluded from wire serialization because
+    DataclassSerializer cannot render arbitrary model instances — the unified
+    ``get_player_actions`` adapter in ``actions.player_interface`` reads them
+    directly to build ``PlayerAction`` descriptors.  ``check_type_name`` is kept
+    as the wire-safe string representation for any consumer that reads the dataclass
+    without going through the unified adapter.
+    """
 
     application_id: int
     application_name: str
@@ -82,6 +94,14 @@ class AvailableAction:
     difficulty_indicator: DifficultyIndicator | None = None
     prerequisite_met: bool = True
     prerequisite_reasons: list[str] = field(default_factory=list)
+    # Resolved model instances (populated from already-prefetched approach data).
+    # Default None so existing construction sites that don't pass these still work.
+    resolved_check_type: CheckType | None = field(default=None)
+    resolved_action_template: ActionTemplate | None = field(default=None)
+    # Challenge/approach instances for dispatch — populated from already-loaded prefetch
+    # data in _match_approaches (no additional query).  Excluded from wire serialization.
+    resolved_challenge_instance: ChallengeInstance | None = field(default=None)
+    resolved_challenge_approach: ChallengeApproach | None = field(default=None)
 
 
 @dataclass

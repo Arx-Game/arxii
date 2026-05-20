@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from evennia_extensions.models import RoomProfile
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import (
@@ -13,6 +14,7 @@ from flows.events.payloads import (
 )
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
+from world.magic.services.resonance_environment import resonance_environment_for_cast
 from world.magic.services.soulfray import (
     _handle_soulfray_accumulation,
     _resolve_mishap,
@@ -231,7 +233,7 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, PLR0912, C901 — kw-only args are intentional; step 9 added a branch
+def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are intentional; step 10 pushed statement count over threshold
     *,
     character: ObjectDB,
     technique: Technique,
@@ -368,6 +370,19 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901 — kw-only args are intentio
             caster_sheet=sheet,
             technique_use_result=technique_result,
         )
+
+    # Step 10: Universal resonance-environment reaction (core magic-physics; no flow/trigger)
+    if sheet is not None and caster_room is not None:
+        try:
+            room_profile = caster_room.room_profile
+        except RoomProfile.DoesNotExist:
+            room_profile = None
+        if room_profile is not None:
+            resonance_environment_for_cast(
+                caster_sheet=sheet,
+                room_profile=room_profile,
+                technique=technique,
+            )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:

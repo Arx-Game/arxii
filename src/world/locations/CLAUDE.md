@@ -1,38 +1,57 @@
-# Locations - Ambient Stats Cascade
+# Locations - Ambient Value Cascade
 
-Authored substrate for ambient room/area stats (crime, order, lighting, …).
-Stats cascade through the area hierarchy and are read via a single service.
+Authored substrate for room/area values that cascade through the area
+hierarchy. Carries two axis types in one cascade:
 
-See `docs/plans/2026-05-09-location-stats-design.md` for the full design and
-the rationale behind every choice.
+- **Stat axis** — ambient stats (crime, order, lighting, …) keyed on a
+  `StatKey` TextChoices enum.
+- **Resonance axis** — magical resonance magnitudes per room, keyed on a
+  FK to `magic.Resonance`. Replaces the former `RoomAuraProfile` /
+  `RoomResonance` tag system from Spec C.
+
+A single read service (`effective_value`) resolves either axis.
+
+See `docs/plans/2026-05-09-location-stats-design.md` for the original
+cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`
+for the resonance axis addition.
 
 ## Models
 
-- **`LocationStatOverride`** — absolute claim at a specific area or room.
+- **`LocationValueOverride`** — absolute claim at a specific area or room.
   Most-specific override in the cascade chain wins, and any override
   anywhere in the chain causes ALL modifiers in that chain to be ignored.
   **Use rarely** — for warded sanctums, safehouses, magically stabilized
   chambers. The "this is the value, period" claim.
-- **`LocationStatModifier`** — additive contribution. Stacks across the
+- **`LocationValueModifier`** — additive contribution. Stacks across the
   cascade chain. Carries `change_per_day` for read-time decay/growth.
   **The common authoring path** — including for what feels like
   "the permanent value at this level," which is just a modifier with
   `change_per_day=0`.
 
 Both models inherit from `core.mixins.DiscriminatorMixin` and
-`evennia.utils.idmapper.models.SharedMemoryModel`. The discriminator field
-is `parent_type` (AREA or ROOM); only one of `area` / `room_profile` is set
-per row.
+`evennia.utils.idmapper.models.SharedMemoryModel`. They use two
+discriminators:
+
+- `parent_type` (AREA or ROOM) — selects `area` vs `room_profile` FK.
+- `key_type` (STAT or RESONANCE) — selects `stat_key` (CharField from
+  `StatKey`) vs `resonance` (FK to `magic.Resonance`).
+
+Exactly one of each discriminator pair is populated per row, enforced by
+`clean()` which calls `DiscriminatorMixin._validate_discriminator` once
+per pair. `_validate_discriminator` treats `None` and `""` as both unset,
+so the stat_key CharField (default `""`) works alongside the resonance FK.
 
 ## Cascade rule
 
-For any `(room, stat_key)`:
+For any `(room, axis_key)`:
 
 1. Walk the closure chain from the room outward via `world.areas.AreaClosure`.
-2. **If any level in the chain has authored an Override** → use the
-   most-specific Override's value (clamped). All Modifiers ignored.
+2. **If any level in the chain has authored an Override for the matching axis** → use the
+   most-specific Override's value (clamped for stats only). All Modifiers ignored.
 3. **Otherwise** → sum every Modifier's `current_value()` across the
-   chain, plus `STAT_DEFAULTS[stat_key]`, clamp.
+   chain for the matching axis. Stats add `STAT_DEFAULTS[stat_key]` and
+   clamp to `STAT_CLAMPS[stat_key]`; resonance starts from 0 and is not
+   clamped.
 
 `AreaClosure` includes self at depth 0, so a Room's own area is in the
 ancestor set.
@@ -47,7 +66,7 @@ ancestor set.
   and downstream — this is the value." If you find yourself authoring
   Overrides routinely, you're probably misusing them.
 - Use the `source` field on Modifiers when the originating system needs
-  to clean up later: `LocationStatModifier.objects.filter(source="rebellion_1234").delete()`.
+  to clean up later: `LocationValueModifier.objects.filter(source="rebellion_1234").delete()`.
 - `change_per_day` is signed: negative decays toward zero, positive grows
   away from zero, zero is permanent. `current_value()` clamps to zero
   once a modifier crosses its original sign — eligible for cleanup but
@@ -55,17 +74,37 @@ ancestor set.
 
 ## Reading
 
-Single service:
+Polymorphic single-axis read:
 
 ```python
-from world.locations.services import effective_stat
+from world.locations.services import effective_value
 from world.locations.constants import StatKey
+from world.magic.models import Resonance
 
-crime_here = effective_stat(room, StatKey.CRIME)
+# Stat axis
+crime_here = effective_value(room, stat_key=StatKey.CRIME)
+
+# Resonance axis (e.g. cathedral celestial intensity)
+copperi = Resonance.objects.get(name="Copperi")
+celestial_here = effective_value(room, resonance=copperi)
 ```
 
-That's it. No bulk reads, no convenience write helpers, no cleanup sweep
-in v1 — they're added when consumers need them.
+Exactly one of `stat_key` or `resonance` must be provided.
+
+For per-room "is this room tagged with resonance X" gates (e.g. residence
+trickle), prefer a direct query on `LocationValueModifier` rows rather
+than calling `effective_value` — the cascade walk is overkill if you only
+care about what the room itself emits. See `world.magic.services.gain.get_residence_resonances`
+for the pattern.
+
+Bulk variant:
+
+```python
+from world.locations.services import effective_values_for_rooms
+
+stats = effective_values_for_rooms(rooms, stat_keys=[StatKey.CRIME, StatKey.NOISE])
+resonances = effective_values_for_rooms(rooms, resonances=[copperi, predari])
+```
 
 ## Adding a new stat
 
@@ -321,7 +360,7 @@ Fall through cleanly:
 
 ## Cleanup sweep (added 2026-05-12)
 
-`LocationStatModifier` rows whose `current_value()` has decayed to
+`LocationValueModifier` rows whose `current_value()` has decayed to
 zero accumulate forever without a sweep. The service that prunes them:
 
 ```python

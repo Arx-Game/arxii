@@ -1,0 +1,43 @@
+# Pinned project name so VS Code, the devcontainer CLI, and Docker Desktop
+# all operate on the same stack (clean start/stop, no orphan projects).
+name: arxii-devcontainer
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    # Required by init-firewall.sh (iptables/ipset).
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ..:/workspaces/arxii:cached
+      # Shadow Windows-side artefacts with Linux-native named volumes.
+      - arxii-venv:/workspaces/arxii/.venv
+      - arxii-fe-node-modules:/workspaces/arxii/frontend/node_modules
+      # Persist Claude Code auth/config so login survives container rebuilds.
+      - arxii-claude-home:/home/vscode/.claude
+    environment:
+      # django-environ env.db() reads DATABASE_URL; points at the db service.
+      DATABASE_URL: postgres://arxii:arxii@db:5432/arxiidev
+    command: sleep infinity
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: arxii
+      POSTGRES_PASSWORD: arxii
+      POSTGRES_DB: arxiidev
+    volumes:
+      # Named volume = optional local-dev persistence. Wiping it is safe
+      # (DB is test-only); Django's test runner builds test_arxiidev anyway.
+      - arxii-pgdata:/var/lib/postgresql/data
+
+volumes:
+  arxii-pgdata:
+  arxii-venv:
+  arxii-fe-node-modules:
+  arxii-claude-home:

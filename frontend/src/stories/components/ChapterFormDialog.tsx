@@ -1,7 +1,9 @@
 /**
  * ChapterFormDialog — create or edit a Chapter within a Story.
  *
- * Fields: title, description, order.
+ * Fields: title, description (internal GM), summary ("The Story So Far",
+ * player-facing), order. On edit, the current maturity is shown read-only
+ * (promotion is a separate control).
  * The parent story ID is passed in as context — not user-editable.
  */
 
@@ -19,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateChapter, useUpdateChapter } from '../queries';
-import type { Chapter } from '../types';
+import type { Chapter, Maturity } from '../types';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -28,6 +30,7 @@ import type { Chapter } from '../types';
 interface DRFFieldErrors {
   title?: string[];
   description?: string[];
+  summary?: string[];
   order?: string[];
   story?: string[];
   non_field_errors?: string[];
@@ -43,6 +46,8 @@ export interface ChapterLike {
   id: number;
   title: string;
   description?: string;
+  summary?: string;
+  maturity?: Maturity;
   order: number;
 }
 
@@ -70,6 +75,7 @@ export function ChapterFormDialog({
 
   const [title, setTitle] = useState(chapter?.title ?? '');
   const [description, setDescription] = useState(chapter?.description ?? '');
+  const [summary, setSummary] = useState(chapter?.summary ?? '');
   const [order, setOrder] = useState<string>(
     chapter?.order !== undefined ? String(chapter.order) : ''
   );
@@ -82,6 +88,7 @@ export function ChapterFormDialog({
   function resetForm() {
     setTitle(chapter?.title ?? '');
     setDescription(chapter?.description ?? '');
+    setSummary(chapter?.summary ?? '');
     setOrder(chapter?.order !== undefined ? String(chapter.order) : '');
     setFieldErrors({});
   }
@@ -115,6 +122,7 @@ export function ChapterFormDialog({
       story: storyId,
       title: title.trim(),
       description: description.trim() || undefined,
+      summary: summary.trim() || undefined,
       order: order !== '' ? Number(order) : undefined,
     };
 
@@ -180,18 +188,47 @@ export function ChapterFormDialog({
               )}
             </div>
 
-            {/* Description */}
+            {/* Maturity (read-only, edit mode only) */}
+            {isEdit && chapter?.maturity && (
+              <div
+                data-testid="chapter-maturity-indicator"
+                className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground"
+              >
+                Maturity: <span className="ml-1 font-medium capitalize">{chapter.maturity}</span>
+              </div>
+            )}
+
+            {/* Internal GM Description */}
             <div className="space-y-1.5">
-              <Label htmlFor="chapter-description">Description</Label>
+              <Label htmlFor="chapter-description">Internal GM Description</Label>
               <Textarea
                 id="chapter-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Chapter description…"
+                placeholder="GM-only notes about this chapter…"
                 rows={2}
               />
+              <p className="text-xs text-muted-foreground">Not shown to players.</p>
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description.join(' ')}</p>
+              )}
+            </div>
+
+            {/* The Story So Far (player-facing summary) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="chapter-summary">The Story So Far</Label>
+              <Textarea
+                id="chapter-summary"
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="What players know so far…"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Player-facing recap — keep this current as the story advances.
+              </p>
+              {fieldErrors.summary && (
+                <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
               )}
             </div>
 

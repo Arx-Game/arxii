@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
+import { useAccount } from '@/store/hooks';
 import {
   useCreateBeat,
   useUpdateBeat,
@@ -39,6 +40,7 @@ import {
 import type {
   Beat,
   BeatCreateBody,
+  BeatKind,
   BeatPredicateType,
   BeatVisibility,
   ReferencedMilestoneType,
@@ -55,6 +57,9 @@ interface DRFFieldErrors {
   player_hint?: string[];
   player_resolution_text?: string[];
   visibility?: string[];
+  kind?: string[];
+  advances?: string[];
+  risk?: string[];
   order?: string[];
   deadline?: string[];
   agm_eligible?: string[];
@@ -83,6 +88,13 @@ const PREDICATE_OPTIONS: { value: BeatPredicateType; label: string }[] = [
   { value: 'codex_entry_unlocked', label: 'Codex Entry Unlocked' },
   { value: 'story_at_milestone', label: 'Story At Milestone' },
   { value: 'aggregate_threshold', label: 'Aggregate Threshold' },
+];
+
+const KIND_OPTIONS: { value: BeatKind; label: string }[] = [
+  { value: 'situation', label: 'Situation' },
+  { value: 'encounter', label: 'Encounter' },
+  { value: 'task', label: 'Task' },
+  { value: 'requirement', label: 'Requirement' },
 ];
 
 const VISIBILITY_OPTIONS: { value: BeatVisibility; label: string }[] = [
@@ -400,6 +412,11 @@ export function BeatFormDialog({
 }: BeatFormDialogProps) {
   const isEdit = beat !== undefined;
 
+  // Risk authoring is staff-gated server-side; the UI disables the control
+  // for non-staff as defense-in-depth (the server remains the real boundary).
+  const account = useAccount();
+  const canSetRisk = account?.is_staff ?? false;
+
   const [predicateType, setPredicateType] = useState<BeatPredicateType>(
     beat?.predicate_type ?? 'gm_marked'
   );
@@ -410,6 +427,9 @@ export function BeatFormDialog({
     beat?.player_resolution_text ?? ''
   );
   const [visibility, setVisibility] = useState<BeatVisibility>(beat?.visibility ?? 'hinted');
+  const [kind, setKind] = useState<BeatKind>(beat?.kind ?? 'task');
+  const [advances, setAdvances] = useState<boolean>(beat?.advances ?? true);
+  const [risk, setRisk] = useState<string>(beat?.risk !== undefined ? String(beat.risk) : '0');
   const [order, setOrder] = useState<string>(beat?.order !== undefined ? String(beat.order) : '');
   const [deadline, setDeadline] = useState(beat?.deadline ?? '');
   const [agmEligible, setAgmEligible] = useState(beat?.agm_eligible ?? false);
@@ -436,6 +456,9 @@ export function BeatFormDialog({
     setPlayerHint(beat?.player_hint ?? '');
     setPlayerResolutionText(beat?.player_resolution_text ?? '');
     setVisibility(beat?.visibility ?? 'hinted');
+    setKind(beat?.kind ?? 'task');
+    setAdvances(beat?.advances ?? true);
+    setRisk(beat?.risk !== undefined ? String(beat.risk) : '0');
     setOrder(beat?.order !== undefined ? String(beat.order) : '');
     setDeadline(beat?.deadline ?? '');
     setAgmEligible(beat?.agm_eligible ?? false);
@@ -471,6 +494,9 @@ export function BeatFormDialog({
       player_hint: playerHint.trim() || undefined,
       player_resolution_text: playerResolutionText.trim() || undefined,
       visibility,
+      kind,
+      advances,
+      risk: risk !== '' ? Number(risk) : 0,
       order: order !== '' ? Number(order) : undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
       agm_eligible: agmEligible,
@@ -669,6 +695,63 @@ export function BeatFormDialog({
               </RadioGroup>
               {fieldErrors.visibility && (
                 <p className="text-xs text-destructive">{fieldErrors.visibility.join(' ')}</p>
+              )}
+            </div>
+
+            {/* Kind */}
+            <div className="space-y-1.5">
+              <Label htmlFor="beat-kind">Kind</Label>
+              <select
+                id="beat-kind"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as BeatKind)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                {KIND_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.kind && (
+                <p className="text-xs text-destructive">{fieldErrors.kind.join(' ')}</p>
+              )}
+            </div>
+
+            {/* Advances */}
+            <div className="space-y-1.5">
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border p-3">
+                <input
+                  type="checkbox"
+                  checked={advances}
+                  onChange={(e) => setAdvances(e.target.checked)}
+                  className="h-4 w-4"
+                  id="beat-advances"
+                />
+                <span className="text-sm">Advances the plot</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Off = Tangent: recorded for history, never gates a transition
+              </p>
+              {fieldErrors.advances && (
+                <p className="text-xs text-destructive">{fieldErrors.advances.join(' ')}</p>
+              )}
+            </div>
+
+            {/* Risk */}
+            <div className="space-y-1.5">
+              <Label htmlFor="beat-risk">Risk</Label>
+              <Input
+                id="beat-risk"
+                type="number"
+                min={0}
+                value={risk}
+                onChange={(e) => setRisk(e.target.value)}
+                disabled={!canSetRisk}
+              />
+              <p className="text-xs text-muted-foreground">Only staff may set risk above 0</p>
+              {fieldErrors.risk && (
+                <p className="text-xs text-destructive">{fieldErrors.risk.join(' ')}</p>
               )}
             </div>
 

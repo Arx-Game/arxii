@@ -37,9 +37,8 @@ class ResonanceGrant(SharedMemoryModel):
     granted_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     # Typed source FKs — exactly one non-null per row, matching ``source``.
-    # (pose / scene-entry FKs added in Tasks 13 / 17.)
-    source_room_aura_profile = models.ForeignKey(
-        "magic.RoomAuraProfile",
+    source_room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -87,12 +86,12 @@ class ResonanceGrant(SharedMemoryModel):
             ),
         ]
         constraints = [
-            # ROOM_RESIDENCE: exactly room_aura_profile populated, others null
+            # ROOM_RESIDENCE: exactly source_room_profile populated, others null.
             models.CheckConstraint(
                 name="res_grant_residence_shape",
                 check=(
                     Q(source="ROOM_RESIDENCE")
-                    & Q(source_room_aura_profile__isnull=False)
+                    & Q(source_room_profile__isnull=False)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
@@ -100,13 +99,13 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
-            # STAFF_GRANT: room_aura_profile null, pose_endorsement null, scene_entry null
+            # STAFF_GRANT: room_profile null, pose_endorsement null, scene_entry null
             # (staff_account remains nullable by design — retirement can null it)
             models.CheckConstraint(
                 name="res_grant_staff_shape",
                 check=(
                     Q(source="STAFF_GRANT")
-                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -119,7 +118,7 @@ class ResonanceGrant(SharedMemoryModel):
                 check=(
                     Q(source="POSE_ENDORSEMENT")
                     & Q(source_pose_endorsement__isnull=False)
-                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -132,7 +131,7 @@ class ResonanceGrant(SharedMemoryModel):
                 check=(
                     Q(source="SCENE_ENTRY")
                     & Q(source_scene_entry_endorsement__isnull=False)
-                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -145,7 +144,7 @@ class ResonanceGrant(SharedMemoryModel):
                 check=(
                     Q(source="OUTFIT_TRICKLE")
                     & Q(outfit_item_facet__isnull=False)
-                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)

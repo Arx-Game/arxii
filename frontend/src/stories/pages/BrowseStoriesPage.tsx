@@ -14,13 +14,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBrowseStories } from '../queries';
 import { ScopeBadge } from '../components/ScopeBadge';
-import type { StoryList, StoryScope } from '../types';
+import type { AssignableStoryScope, StoryList, StoryScope } from '../types';
 
 // ---------------------------------------------------------------------------
 // Filter chips
 // ---------------------------------------------------------------------------
 
-type ScopeFilter = 'all' | StoryScope;
+// Filter chips only cover assignable scopes — unassigned stories are not
+// runnable and never surface on this player-facing page, so the regenerated
+// StoryScope's 'unassigned' member is intentionally excluded here.
+type ScopeFilter = 'all' | AssignableStoryScope;
 
 const FILTER_CHIPS: { value: ScopeFilter; label: string }[] = [
   { value: 'all', label: 'All Visible' },

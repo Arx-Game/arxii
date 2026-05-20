@@ -97,9 +97,12 @@ export interface BeatCompletion {
 export type BeatPredicateType = NonNullable<Beat['predicate_type']>;
 export type BeatOutcome = NonNullable<Beat['outcome']>;
 export type BeatVisibility = NonNullable<Beat['visibility']>;
+export type BeatKind = NonNullable<Beat['kind']>;
 export type StoryScope = NonNullable<Story['scope']>;
 export type StoryStatus = NonNullable<Story['status']>;
 export type StoryPrivacy = NonNullable<Story['privacy']>;
+/** Shared maturity enum (pitch / outline / plot) for Story, Chapter, Episode. */
+export type Maturity = NonNullable<components['schemas']['MaturityEnum']>;
 export type AssistantClaimStatus = NonNullable<AssistantGMClaim['status']>;
 export type SessionRequestStatus = NonNullable<SessionRequest['status']>;
 
@@ -142,6 +145,13 @@ export interface MyActiveStoryEntry {
   status: string;
   /** Human-readable label from StoryEpisodeStatus.label */
   status_label: string;
+  /**
+   * Authoritative ProgressStatus pointer state:
+   * "active" | "waiting_for_gm" | "resting" | "completed".
+   * Distinct from `status` (the StoryEpisodeStatus frontier proxy) — lets
+   * the banner tell a GM-blocked pause apart from a deliberate rest.
+   */
+  progress_status: string;
   chapter_order: number | null;
   episode_order: number | null;
   open_session_request_id: number | null;
@@ -252,6 +262,33 @@ export interface MarkBeatBody {
   progress_id?: number | null;
 }
 
+// Episode maturity promotion (B1). The generated requestBody for
+// episodes_promote_create is the full EpisodeDetailRequest because
+// spectacular cannot introspect the action's actual body — same known
+// pattern as ResolveEpisodeBody. The body is a single MaturityEnum target.
+export type EpisodeMaturity = NonNullable<components['schemas']['MaturityEnum']>;
+
+export interface PromoteEpisodeBody {
+  target: EpisodeMaturity;
+}
+
+// Story scope assignment (B2). assign-to-scope lifts a story out of
+// UNASSIGNED. Like promote, the generated requestBody is the full
+// StoryDetailRequest; the real action body is the scope + an optional
+// owning FK depending on scope.
+export type AssignableStoryScope = 'character' | 'group' | 'global';
+
+export interface AssignStoryBody {
+  scope: AssignableStoryScope;
+  character_sheet?: number;
+  gm_table?: number;
+}
+
+// StoryNote — OOC authorial memory (append-only). Both shapes are in the
+// generated schema; aliased here for cleaner imports within the module.
+export type StoryNote = components['schemas']['StoryNote'];
+export type StoryNoteRequest = components['schemas']['StoryNoteRequest'];
+
 export interface ContributeBeatBody {
   character_sheet: number;
   points: number;
@@ -295,6 +332,8 @@ export type ReferencedMilestoneType = NonNullable<
 export interface StoryCreateBody {
   title: string;
   description: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
   privacy?: StoryPrivacy;
   scope?: StoryScope;
 }
@@ -303,6 +342,8 @@ export interface ChapterCreateBody {
   story: number;
   title: string;
   description?: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
   order?: number;
   is_active?: boolean;
 }
@@ -311,6 +352,12 @@ export interface EpisodeCreateBody {
   chapter: number;
   title: string;
   description?: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
+  /** Player-facing text shown when progress RESTS at this episode. */
+  resting_conclusion?: string;
+  /** Explicit "this is an ending" marker. */
+  is_ending?: boolean;
   order?: number;
 }
 
@@ -332,6 +379,9 @@ export interface BeatCreateBody {
   player_hint?: string;
   player_resolution_text?: string;
   order?: number;
+  kind?: BeatKind;
+  advances?: boolean;
+  risk?: number;
   agm_eligible?: boolean;
   deadline?: string | null;
 

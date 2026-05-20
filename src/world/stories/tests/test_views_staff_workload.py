@@ -24,7 +24,12 @@ from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
+from world.stories.constants import (
+    AssistantClaimStatus,
+    ProgressStatus,
+    SessionRequestStatus,
+    StoryScope,
+)
 from world.stories.factories import (
     AssistantGMClaimFactory,
     BeatFactory,
@@ -35,8 +40,16 @@ from world.stories.factories import (
     StoryProgressFactory,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS
+from world.stories.types import StoryStatus
 
 STAFF_WORKLOAD_URL = reverse("stories-staff-workload")
+
+# Exact query count the bounded implementation issues regardless of how many
+# GMs / stories / progress rows exist. The unbounded implementation scaled
+# linearly (29 queries at N=3, 38 at N=6 — exactly 3 queries per GM); the
+# bounded one issues a flat constant: verified identical (26) at N=6 and
+# N=12 with episode-bearing rows that exercise the eligibility batch path.
+BOUNDED_QUERY_COUNT = 26
 
 
 class StaffWorkloadAuthTest(APITestCase):
@@ -78,6 +91,7 @@ class StaffWorkloadResponseShapeTest(APITestCase):
         for key in [
             "per_gm_queue_depth",
             "stale_stories",
+            "stories_waiting_for_gm",
             "stories_at_frontier",
             "pending_agm_claims_count",
             "open_session_requests_count",
@@ -143,6 +157,62 @@ class StaffWorkloadStaleStoriesTest(APITestCase):
         for field in ["story_id", "story_title", "last_advanced_at", "days_stale"]:
             assert field in entry, f"Missing field: {field}"
         assert entry["days_stale"] >= STALE_STORY_DAYS
+
+
+class StaffWorkloadWaitingForGMTest(APITestCase):
+    """WAITING_FOR_GM progress is surfaced with age regardless of staleness."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+        cls.sheet = CharacterSheetFactory()
+        cls.story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=cls.sheet)
+        # Fresh (not stale) but waiting on the GM — still a dropped ball.
+        cls.waiting_progress = StoryProgressFactory(
+            story=cls.story,
+            character_sheet=cls.sheet,
+            is_active=True,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+        cls.active_sheet = CharacterSheetFactory()
+        cls.active_story = StoryFactory(
+            scope=StoryScope.CHARACTER, character_sheet=cls.active_sheet
+        )
+        cls.active_progress = StoryProgressFactory(
+            story=cls.active_story,
+            character_sheet=cls.active_sheet,
+            is_active=True,
+            status=ProgressStatus.ACTIVE,
+        )
+
+    def test_waiting_story_appears(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        ids = [w["story_id"] for w in waiting]
+        assert self.story.pk in ids
+
+    def test_active_story_not_in_waiting(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        ids = [w["story_id"] for w in waiting]
+        assert self.active_story.pk not in ids
+
+    def test_waiting_entry_shape_exposes_age(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        matching = [w for w in waiting if w["story_id"] == self.story.pk]
+        assert len(matching) >= 1
+        entry = matching[0]
+        for field in ["story_id", "story_title", "scope", "last_advanced_at", "days_waiting"]:
+            assert field in entry, f"Missing field: {field}"
+        assert entry["last_advanced_at"] is not None
+        assert isinstance(entry["days_waiting"], int)
+        assert entry["days_waiting"] >= 0
 
 
 class StaffWorkloadFrontierTest(APITestCase):
@@ -268,3 +338,187 @@ class StaffWorkloadPerGMQueueTest(APITestCase):
             assert field in entry, f"Missing field: {field}"
         assert isinstance(entry["episodes_ready"], int)
         assert isinstance(entry["pending_claims"], int)
+
+
+class StaffWorkloadPerGMStatusAgnosticMembershipTest(APITestCase):
+    """per_gm_queue_depth membership is status-agnostic (pre-C2 behavior).
+
+    A GM whose only primary story is NON-active (INACTIVE — the model
+    default — / COMPLETED / CANCELLED) must still appear in
+    per_gm_queue_depth (with episodes_ready=0 and any status-agnostic
+    pending AGM claims), exactly as the pre-C2 implementation emitted via
+    ``GMProfile.objects.filter(tables__primary_stories__isnull=False)``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+        # GM whose only primary story is INACTIVE, with a REQUESTED claim.
+        cls.inactive_gm_account = AccountFactory()
+        cls.inactive_gm = GMProfileFactory(account=cls.inactive_gm_account)
+        cls.inactive_table = GMTableFactory(gm=cls.inactive_gm)
+        cls.inactive_sheet = CharacterSheetFactory()
+        cls.inactive_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.inactive_sheet,
+            primary_table=cls.inactive_table,
+            status=StoryStatus.INACTIVE,
+        )
+        cls.inactive_chapter = ChapterFactory(story=cls.inactive_story, order=1)
+        cls.inactive_episode = EpisodeFactory(chapter=cls.inactive_chapter, order=1)
+        cls.inactive_beat = BeatFactory(episode=cls.inactive_episode, agm_eligible=True)
+        cls.inactive_claim = AssistantGMClaimFactory(
+            beat=cls.inactive_beat,
+            status=AssistantClaimStatus.REQUESTED,
+        )
+
+        # GM whose only primary story is COMPLETED, with no claim.
+        cls.completed_gm_account = AccountFactory()
+        cls.completed_gm = GMProfileFactory(account=cls.completed_gm_account)
+        cls.completed_table = GMTableFactory(gm=cls.completed_gm)
+        cls.completed_sheet = CharacterSheetFactory()
+        cls.completed_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.completed_sheet,
+            primary_table=cls.completed_table,
+            status=StoryStatus.COMPLETED,
+        )
+
+    def test_per_gm_includes_gm_with_only_inactive_primary_story_and_pending_claim(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        assert response.status_code == status.HTTP_200_OK
+        queue = response.data["per_gm_queue_depth"]
+        matching = [e for e in queue if e["gm_profile_id"] == self.inactive_gm.pk]
+        assert len(matching) == 1, (
+            "GM with only an INACTIVE primary story must still appear in "
+            "per_gm_queue_depth (status-agnostic membership, pre-C2 behavior)."
+        )
+        entry = matching[0]
+        assert entry["episodes_ready"] == 0
+        assert entry["pending_claims"] >= 1
+
+    def test_per_gm_includes_gm_with_only_completed_primary_story(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        assert response.status_code == status.HTTP_200_OK
+        queue = response.data["per_gm_queue_depth"]
+        matching = [e for e in queue if e["gm_profile_id"] == self.completed_gm.pk]
+        assert len(matching) == 1, (
+            "GM with only a COMPLETED primary story must still appear in "
+            "per_gm_queue_depth (status-agnostic membership, pre-C2 behavior)."
+        )
+        entry = matching[0]
+        assert entry["episodes_ready"] == 0
+        assert entry["pending_claims"] == 0
+
+
+def _episode_for(story) -> object:
+    """Create a chapter+episode under ``story`` and return the episode."""
+    chapter = ChapterFactory(story=story, order=1)
+    return EpisodeFactory(chapter=chapter, order=1)
+
+
+def _build_workload_rows(n: int) -> list:
+    """Populate every staff-workload bucket with exactly ``n`` distinct rows.
+
+    Returns the created GMProfile instances. Per iteration:
+
+    - a lead story whose active progress sits on a real episode → drives the
+      per-GM queue scan *and* the heavier eligibility batch path;
+    - a stale row (old ``last_advanced_at``) on an episode;
+    - a waiting-for-GM row on an episode;
+    - a frontier row (``current_episode=None``).
+
+    Lead/stale/waiting progress carry an episode so they do NOT also fall
+    into the frontier bucket — keeping each bucket's length exactly ``n`` so
+    a dropped-rows regression is caught precisely.
+    """
+    gm_profiles = []
+    stale_time = timezone.now() - timedelta(days=STALE_STORY_DAYS + 1)
+    for _ in range(n):
+        gm_account = AccountFactory()
+        gm_profile = GMProfileFactory(account=gm_account)
+        gm_table = GMTableFactory(gm=gm_profile)
+
+        # Lead story + active progress on a real episode → per-GM queue scan
+        # plus the progression-req / transition eligibility batch path.
+        lead_sheet = CharacterSheetFactory()
+        lead_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=lead_sheet,
+            primary_table=gm_table,
+        )
+        StoryProgressFactory(
+            story=lead_story,
+            character_sheet=lead_sheet,
+            current_episode=_episode_for(lead_story),
+            is_active=True,
+        )
+        gm_profiles.append(gm_profile)
+
+        # Stale row (on an episode so it is not also a frontier row).
+        stale_sheet = CharacterSheetFactory()
+        stale_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=stale_sheet)
+        stale_progress = StoryProgressFactory(
+            story=stale_story,
+            character_sheet=stale_sheet,
+            current_episode=_episode_for(stale_story),
+            is_active=True,
+        )
+        StoryProgressFactory._meta.model.objects.filter(pk=stale_progress.pk).update(
+            last_advanced_at=stale_time
+        )
+
+        # Waiting-for-GM row (on an episode so it is not also a frontier row).
+        waiting_sheet = CharacterSheetFactory()
+        waiting_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=waiting_sheet)
+        StoryProgressFactory(
+            story=waiting_story,
+            character_sheet=waiting_sheet,
+            current_episode=_episode_for(waiting_story),
+            is_active=True,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+        # Frontier row (current_episode=None).
+        frontier_sheet = CharacterSheetFactory()
+        frontier_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=frontier_sheet)
+        StoryProgressFactory(
+            story=frontier_story,
+            character_sheet=frontier_sheet,
+            current_episode=None,
+            is_active=True,
+        )
+    return gm_profiles
+
+
+class StaffWorkloadQueryBoundTest(APITestCase):
+    """The view must issue a constant number of queries independent of N."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+    def test_staff_workload_query_count_is_bounded(self):
+        # Before the bounding refactor this scan was O(N): N=3 → 29 queries,
+        # N=6 → 38 (exactly 3 extra queries per GM). After the refactor the
+        # count is a constant independent of N (verified by bumping N here).
+        gm_profiles = _build_workload_rows(6)
+        self.client.force_authenticate(user=self.staff)
+        with self.assertNumQueries(BOUNDED_QUERY_COUNT):
+            resp = self.client.get(STAFF_WORKLOAD_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        # Content invariant: dropped-rows regression guard. Every bucket that
+        # scales with N must contain exactly our 6 freshly-built rows (other
+        # suites run in isolation, so these are the only rows present).
+        data = resp.data
+        per_gm_ids = {e["gm_profile_id"] for e in data["per_gm_queue_depth"]}
+        for gm in gm_profiles:
+            assert gm.pk in per_gm_ids
+        assert len(data["per_gm_queue_depth"]) == 6
+        assert len(data["stale_stories"]) == 6
+        assert len(data["stories_waiting_for_gm"]) == 6
+        assert len(data["stories_at_frontier"]) == 6

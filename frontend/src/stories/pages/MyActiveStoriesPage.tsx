@@ -10,13 +10,16 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMyActiveStories } from '../queries';
 import { StoryCard } from '../components/StoryCard';
-import type { MyActiveStoryEntry, StoryScope } from '../types';
+import type { AssignableStoryScope, MyActiveStoryEntry, StoryScope } from '../types';
 
 // ---------------------------------------------------------------------------
 // Filter state
 // ---------------------------------------------------------------------------
 
-type ScopeFilter = 'all' | StoryScope;
+// Filter chips only cover assignable scopes — unassigned stories are not
+// runnable and never surface on this player-facing page, so the regenerated
+// StoryScope's 'unassigned' member is intentionally excluded here.
+type ScopeFilter = 'all' | AssignableStoryScope;
 
 const FILTER_CHIPS: { value: ScopeFilter; label: string }[] = [
   { value: 'all', label: 'All' },

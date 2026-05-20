@@ -48,70 +48,29 @@ class AccountForSheetTests(TestCase):
         self.assertEqual(account_for_sheet(sheet), tenure.player_data.account)
 
 
-class RoomAuraProfileTests(TestCase):
-    def test_onetoone_to_room_profile(self) -> None:
-        from evennia_extensions.factories import RoomProfileFactory
-        from world.magic.models import RoomAuraProfile
-
-        rp = RoomProfileFactory()
-        aura = RoomAuraProfile.objects.create(room_profile=rp)
-        self.assertEqual(aura.pk, rp.pk)
-        self.assertEqual(rp.room_aura_profile, aura)
-
-
-class RoomResonanceTests(TestCase):
-    def test_tag_is_unique_per_profile_resonance(self) -> None:
-        from django.db import IntegrityError
-
-        from world.magic.factories import (
-            ResonanceFactory,
-            RoomAuraProfileFactory,
-        )
-        from world.magic.models import RoomResonance
-
-        aura = RoomAuraProfileFactory()
-        res = ResonanceFactory()
-        RoomResonance.objects.create(room_aura_profile=aura, resonance=res)
-        with self.assertRaises(IntegrityError):
-            RoomResonance.objects.create(room_aura_profile=aura, resonance=res)
-
-    def test_multiple_resonances_per_profile(self) -> None:
-        from world.magic.factories import (
-            ResonanceFactory,
-            RoomAuraProfileFactory,
-        )
-        from world.magic.models import RoomResonance
-
-        aura = RoomAuraProfileFactory()
-        r1 = ResonanceFactory()
-        r2 = ResonanceFactory()
-        RoomResonance.objects.create(room_aura_profile=aura, resonance=r1)
-        RoomResonance.objects.create(room_aura_profile=aura, resonance=r2)
-        self.assertEqual(aura.room_resonances.count(), 2)
-
-
 class ResonanceGrantTests(TestCase):
     def test_residence_grant_row_shape(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
-        from world.magic.factories import ResonanceFactory, RoomAuraProfileFactory
+        from world.magic.factories import ResonanceFactory
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
 
         grant = ResonanceGrant.objects.create(
             character_sheet=sheet,
             resonance=res,
             amount=1,
             source=GainSource.ROOM_RESIDENCE,
-            source_room_aura_profile=aura,
+            source_room_profile=rp,
         )
         self.assertEqual(grant.amount, 1)
         self.assertEqual(grant.source, GainSource.ROOM_RESIDENCE)
 
-    def test_residence_grant_requires_aura_profile_fk(self) -> None:
+    def test_residence_grant_requires_room_profile_fk(self) -> None:
         from django.db import IntegrityError
 
         from world.character_sheets.factories import CharacterSheetFactory
@@ -127,7 +86,7 @@ class ResonanceGrantTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                # missing source_room_aura_profile
+                # missing source_room_profile
             )
 
     def test_staff_grant_accepts_null_account(self) -> None:
@@ -226,18 +185,18 @@ class ResonanceGrantPoseEndorsementShapeTests(TestCase):
         """ROOM_RESIDENCE source must NOT have source_pose_endorsement set."""
         from django.db import IntegrityError
 
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
         from world.magic.factories import (
             PoseEndorsementFactory,
             ResonanceFactory,
-            RoomAuraProfileFactory,
         )
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         endorsement = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
         with self.assertRaises(IntegrityError):
             ResonanceGrant.objects.create(
@@ -245,7 +204,7 @@ class ResonanceGrantPoseEndorsementShapeTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                source_room_aura_profile=aura,
+                source_room_profile=rp,
                 source_pose_endorsement=endorsement,  # forbidden
             )
 
@@ -330,18 +289,18 @@ class ResonanceGrantSceneEntryShapeTests(TestCase):
     def test_residence_rejects_scene_entry_fk(self) -> None:
         from django.db import IntegrityError
 
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
         from world.magic.factories import (
             ResonanceFactory,
-            RoomAuraProfileFactory,
             SceneEntryEndorsementFactory,
         )
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         endorsement = SceneEntryEndorsementFactory(endorsee_sheet=sheet, resonance=res)
         with self.assertRaises(IntegrityError):
             ResonanceGrant.objects.create(
@@ -349,7 +308,7 @@ class ResonanceGrantSceneEntryShapeTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                source_room_aura_profile=aura,
+                source_room_profile=rp,
                 source_scene_entry_endorsement=endorsement,  # forbidden
             )
 

@@ -165,6 +165,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/actions/characters/{character_id}/available/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Available actions for a character — merged challenge + combat backends.
+     *
+     *     Returns all PlayerAction descriptors available to the character right now.
+     *     Recomputed on every request; no caching.
+     */
+    get: operations['actions_characters_available_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/actions/characters/{character_id}/dispatch/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the given action ref for character_id. */
+    post: operations['actions_characters_dispatch_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/aggregate-beat-contributions/': {
     parameters: {
       query?: never;
@@ -1775,7 +1814,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description GET / — return the current clock state. */
-    get: operations['clock_retrieve'];
+    get: operations['clock_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2163,7 +2202,20 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Player self-joins the encounter. */
+    /**
+     * @description Player self-joins the encounter as the specified character.
+     *
+     *     Requires an explicit ``character_sheet_id`` in the request body;
+     *     never auto-selects a character. The chosen sheet must belong to
+     *     an active roster tenure for the requesting user.
+     *
+     *     **No staff bypass on the ownership check.** Staff users who want
+     *     to put a character into an encounter use the GM-side
+     *     ``add_participant`` action — which lets them name any
+     *     character_sheet without an ownership requirement. ``join`` is the
+     *     self-service "act as my own character" entry point, and the
+     *     ownership check applies to staff identically to players.
+     */
     post: operations['combat_join_create'];
     delete?: never;
     options?: never;
@@ -2646,6 +2698,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/character-roles/{id}/promote/
+     *
+     *     Promote the membership from its current parent role to a sub-role.
+     *     Body: { "target_subrole": <pk> }
+     *
+     *     Returns the new CharacterCovenantRole row on success.
+     *     Returns 400 with a user_message body on promotion failures.
+     */
+    post: operations['covenants_character_roles_promote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/covenants/': {
     parameters: {
       query?: never;
@@ -2718,6 +2795,50 @@ export interface paths {
     };
     /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
     get: operations['covenants_gear_compatibilities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/level-thresholds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantLevelThreshold authored lookup table.
+     *
+     *     Returns the legend totals required to reach each covenant level.
+     *     No pagination — this is a small, stable lookup table.
+     */
+    get: operations['covenants_level_thresholds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/level-thresholds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantLevelThreshold authored lookup table.
+     *
+     *     Returns the legend totals required to reach each covenant level.
+     *     No pagination — this is a small, stable lookup table.
+     */
+    get: operations['covenants_level_thresholds_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2876,7 +2997,7 @@ export interface paths {
      *
      *     Returns the distinctions array from draft.draft_data.
      */
-    get: operations['distinctions_drafts_distinctions_retrieve'];
+    get: operations['distinctions_drafts_distinctions_list'];
     put?: never;
     /**
      * @description Add a distinction to the draft.
@@ -3171,6 +3292,30 @@ export interface paths {
      *     Manages story episodes with narrative connection tracking.
      */
     patch: operations['episodes_partial_update'];
+    trace?: never;
+  };
+  '/api/episodes/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/episodes/{id}/promote/ — set the episode's authoring maturity.
+     *
+     *     Lead GM or staff posts {target} (a StoryMaturity value). The PLOT-gate
+     *     (resting_conclusion + outbound transition / is_ending) is enforced in
+     *     PromoteEpisodeInputSerializer.validate(), so a violation is a 400.
+     *     Lateral moves and demotions are unvalidated by design.
+     */
+    post: operations['episodes_promote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/episodes/{id}/resolve/': {
@@ -4629,12 +4774,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Read-only ViewSet for EquippedItem (GET list/detail).
-     *
-     *     Mutations (equip/unequip) flow through the unified action dispatcher
-     *     via the ``execute_action`` websocket inputfunc — REST stays read-only.
-     */
+    /** @description Return equipped items for ``?character=<pk>``. */
     get: operations['items_equipped_items_list'];
     put?: never;
     post?: never;
@@ -4651,12 +4791,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Read-only ViewSet for EquippedItem (GET list/detail).
-     *
-     *     Mutations (equip/unequip) flow through the unified action dispatcher
-     *     via the ``execute_action`` websocket inputfunc — REST stays read-only.
-     */
+    /** @description Return a single EquippedItem if the requester may view it. */
     get: operations['items_equipped_items_retrieve'];
     put?: never;
     post?: never;
@@ -4707,16 +4842,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Read-only listing of ItemInstance rows for a character's inventory.
-     *
-     *     The wardrobe page uses this to render carried-but-not-worn items. The
-     *     ``character`` query parameter filters to items whose ``game_object.location``
-     *     is the requested character (i.e., currently held by them).
-     *
-     *     Permission scoping (non-staff): only items located on a character the
-     *     request user currently plays are returned. Staff see everything.
-     */
+    /** @description Return ItemInstance rows located on ``?character=<pk>``. */
     get: operations['items_inventory_list'];
     put?: never;
     post?: never;
@@ -4733,16 +4859,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Read-only listing of ItemInstance rows for a character's inventory.
-     *
-     *     The wardrobe page uses this to render carried-but-not-worn items. The
-     *     ``character`` query parameter filters to items whose ``game_object.location``
-     *     is the requested character (i.e., currently held by them).
-     *
-     *     Permission scoping (non-staff): only items located on a character the
-     *     request user currently plays are returned. Staff see everything.
-     */
+    /** @description Return a single ItemInstance if the requester may view it. */
     get: operations['items_inventory_retrieve'];
     put?: never;
     post?: never;
@@ -4759,10 +4876,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for ItemFacet attach/list/delete. */
+    /** @description Return ItemFacet rows for ``?item_instance=<pk>``. */
     get: operations['items_item_facets_list'];
     put?: never;
-    /** @description ViewSet for ItemFacet attach/list/delete. */
+    /** @description Attach a facet via the serializer (which calls the service). */
     post: operations['items_item_facets_create'];
     delete?: never;
     options?: never;
@@ -4777,11 +4894,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for ItemFacet attach/list/delete. */
+    /** @description Return a single ItemFacet if the requester owns its item. */
     get: operations['items_item_facets_retrieve'];
     put?: never;
     post?: never;
-    /** @description ViewSet for ItemFacet attach/list/delete. */
+    /** @description Remove the facet via the service (which fires cache invalidation). */
     delete: operations['items_item_facets_destroy'];
     options?: never;
     head?: never;
@@ -4795,19 +4912,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for OutfitSlot create/list/delete.
-     *
-     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
-     *     POST adds or replaces a single slot, one DELETE removes one slot).
-     */
+    /** @description Return OutfitSlot rows for ``?outfit=<pk>``. */
     get: operations['items_outfit_slots_list'];
     put?: never;
     /**
-     * @description ViewSet for OutfitSlot create/list/delete.
+     * @description Create an OutfitSlot via the existing write serializer.
      *
-     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
-     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     *     Cache invalidation lives inside ``add_outfit_slot`` (called by the
+     *     serializer's ``create``), so no manual invalidation is needed here.
      */
     post: operations['items_outfit_slots_create'];
     delete?: never;
@@ -4823,20 +4935,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for OutfitSlot create/list/delete.
-     *
-     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
-     *     POST adds or replaces a single slot, one DELETE removes one slot).
-     */
+    /** @description Return a single OutfitSlot if the requester may view it. */
     get: operations['items_outfit_slots_retrieve'];
     put?: never;
     post?: never;
     /**
-     * @description ViewSet for OutfitSlot create/list/delete.
+     * @description Delete via remove_outfit_slot (idempotent).
      *
-     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
-     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     *     Cache invalidation lives inside ``remove_outfit_slot``.
      */
     delete: operations['items_outfit_slots_destroy'];
     options?: never;
@@ -4851,24 +4957,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
-     *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
-     */
+    /** @description Return outfits saved on ``?character_sheet=<pk>``. */
     get: operations['items_outfits_list'];
     put?: never;
-    /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
-     *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
-     */
+    /** @description Create an Outfit via the existing write serializer (calls save_outfit). */
     post: operations['items_outfits_create'];
     delete?: never;
     options?: never;
@@ -4883,43 +4975,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
-     *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
-     */
+    /** @description Return a single Outfit if the requester may view it. */
     get: operations['items_outfits_retrieve'];
     /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     * @description Full update (PUT) — rename/redescribe an outfit.
      *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
+     *     Only ``name`` and ``description`` are mutable. ``character_sheet``
+     *     and ``wardrobe`` are write-once (set at create time). See
+     *     ``OutfitRenameSerializer`` for the accepted request shape.
      */
     put: operations['items_outfits_update'];
     post?: never;
-    /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
-     *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
-     */
+    /** @description Delete via the delete_outfit service (cascades slots). */
     delete: operations['items_outfits_destroy'];
     options?: never;
     head?: never;
     /**
-     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     * @description Partial update (PATCH) — rename/redescribe an outfit.
      *
-     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-     *     Per design, equip/unequip and apply/undress flow through the action
-     *     dispatcher — this ViewSet only handles configuration CRUD.
+     *     Same field set as PUT (only ``name``/``description``).
      */
     patch: operations['items_outfits_partial_update'];
     trace?: never;
@@ -5117,14 +5191,20 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     get: operations['magic_character_anima_list'];
     put?: never;
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     post: operations['magic_character_anima_create'];
     delete?: never;
@@ -5143,20 +5223,29 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     get: operations['magic_character_anima_retrieve'];
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     put: operations['magic_character_anima_update'];
     post?: never;
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     delete: operations['magic_character_anima_destroy'];
     options?: never;
@@ -5164,7 +5253,10 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAnima records.
      *
-     *     Manages character anima (magical energy) tracking.
+     *     Manages character anima (magical energy) tracking. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Pass ``?character=<pk>`` to narrow to a single character.
      */
     patch: operations['magic_character_anima_partial_update'];
     trace?: never;
@@ -5179,16 +5271,22 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     get: operations['magic_character_auras_list'];
     put?: never;
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     post: operations['magic_character_auras_create'];
     delete?: never;
@@ -5207,23 +5305,32 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     get: operations['magic_character_auras_retrieve'];
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     put: operations['magic_character_auras_update'];
     post?: never;
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     delete: operations['magic_character_auras_destroy'];
     options?: never;
@@ -5231,8 +5338,11 @@ export interface paths {
     /**
      * @description ViewSet for CharacterAura records.
      *
-     *     Provides access to character aura data. Users can only access
-     *     auras for characters they own (or all if staff).
+     *     Provides access to character aura data. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Frontends
+     *     that need a single-character view should pass ``?character=<pk>``
+     *     to disambiguate when the user has alts.
      */
     patch: operations['magic_character_auras_partial_update'];
     trace?: never;
@@ -5247,14 +5357,20 @@ export interface paths {
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     get: operations['magic_character_gifts_list'];
     put?: never;
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     post: operations['magic_character_gifts_create'];
     delete?: never;
@@ -5273,20 +5389,29 @@ export interface paths {
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     get: operations['magic_character_gifts_retrieve'];
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     put: operations['magic_character_gifts_update'];
     post?: never;
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     delete: operations['magic_character_gifts_destroy'];
     options?: never;
@@ -5294,7 +5419,10 @@ export interface paths {
     /**
      * @description ViewSet for CharacterGift records.
      *
-     *     Manages gifts possessed by characters.
+     *     Manages gifts possessed by characters. Non-staff users see all
+     *     characters they currently play (active roster tenure), regardless
+     *     of whether they are actively puppeting them right now. Pass
+     *     ``?character=<pk>`` to narrow to a single character.
      */
     patch: operations['magic_character_gifts_partial_update'];
     trace?: never;
@@ -5309,14 +5437,24 @@ export interface paths {
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     get: operations['magic_character_resonances_list'];
     put?: never;
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     post: operations['magic_character_resonances_create'];
     delete?: never;
@@ -5335,20 +5473,35 @@ export interface paths {
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     get: operations['magic_character_resonances_retrieve'];
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     put: operations['magic_character_resonances_update'];
     post?: never;
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     delete: operations['magic_character_resonances_destroy'];
     options?: never;
@@ -5356,7 +5509,12 @@ export interface paths {
     /**
      * @description ViewSet for CharacterResonance records.
      *
-     *     Manages personal resonances attached to characters.
+     *     Manages personal resonances attached to characters. Non-staff users
+     *     see all characters they currently play (active roster tenure),
+     *     regardless of whether they are actively puppeting them right now.
+     *     Frontends that operate on a single character (e.g., the resonance
+     *     picker for rituals) should pass ``?character_sheet=<pk>`` so the
+     *     result is unambiguous when the user has alts.
      */
     patch: operations['magic_character_resonances_partial_update'];
     trace?: never;
@@ -6721,27 +6879,6 @@ export interface paths {
     };
     /** @description List and retrieve character modifiers. */
     get: operations['mechanics_character_modifiers_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/mechanics/characters/{character_id}/available-actions/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Available actions for a character at their current location.
-     *
-     *     Returns actions grouped by challenge.
-     */
-    get: operations['mechanics_characters_available_actions_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -8682,6 +8819,39 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/assign-to-scope/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/assign-to-scope/ — lift a story out of UNASSIGNED.
+     *
+     *     Lead GM (story.primary_table.gm) or staff picks the scope and the
+     *     matching target; this sets ``Story.scope`` and creates the
+     *     scope-appropriate progress record so the story can run:
+     *
+     *     - CHARACTER: sets ``story.character_sheet`` and creates StoryProgress
+     *     - GROUP: creates GroupStoryProgress for the given gm_table
+     *     - GLOBAL: creates the GlobalStoryProgress singleton
+     *
+     *     The scope <-> target invariant is enforced by
+     *     AssignStoryInputSerializer.validate(), so an invalid combination is a
+     *     400 (no scope change, no progress row). Because scope is set before
+     *     the create_*_progress call, StoryNotAssignedError cannot fire — no
+     *     try/except is needed.
+     */
+    post: operations['stories_assign_to_scope_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/assign-to-table/': {
     parameters: {
       query?: never;
@@ -9131,6 +9301,62 @@ export interface paths {
      *     No body required. Returns 200 with the updated StoryGMOffer.
      */
     post: operations['story_gm_offers_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-notes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    get: operations['story_notes_list'];
+    put?: never;
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    post: operations['story_notes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-notes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    get: operations['story_notes_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -9707,6 +9933,26 @@ export interface components {
      * @enum {string}
      */
     ActionEnum: 'submit' | 'edit' | 'agree';
+    /**
+     * @description Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
+     *
+     *     Uses a plain Serializer (not DataclassSerializer) to avoid drf_spectacular's
+     *     get_type_hints() introspection, which cannot resolve TYPE_CHECKING-only imports
+     *     (CheckType, ActionTemplate, ChallengeResolutionResult) in actions/types.py and
+     *     crashes with NameError during schema generation.
+     */
+    ActionRef: {
+      readonly backend: string;
+      challenge_instance_id?: number | null;
+      approach_id?: number | null;
+      technique_id?: number | null;
+      registry_key?: string | null;
+    };
+    /** @description Minimal read-only representation of an ActionTemplate model instance. */
+    ActionTemplateMinimal: {
+      readonly id: number;
+      readonly name: string;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -9789,22 +10035,6 @@ export interface components {
      * @enum {string}
      */
     AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
-    AvailableAction: {
-      application_id: number;
-      application_name: string;
-      capability_source: components['schemas']['CapabilitySource'];
-      challenge_instance_id: number;
-      challenge_name: string;
-      approach_id: number | null;
-      check_type_name: string;
-      display_name: string;
-      custom_description: string;
-      difficulty_indicator?:
-        | (components['schemas']['DifficultyIndicatorEnum'] | components['schemas']['NullEnum'])
-        | null;
-      prerequisite_met?: boolean;
-      prerequisite_reasons?: string[];
-    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -9832,6 +10062,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -9865,6 +10100,12 @@ export interface components {
        * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
        */
       deadline?: string | null;
+      /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
+      success_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves FAILURE. */
+      failure_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
+      expired_consequences?: number | null;
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -9903,6 +10144,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -9936,6 +10182,12 @@ export interface components {
        * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
        */
       deadline?: string | null;
+      /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
+      success_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves FAILURE. */
+      failure_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
+      expired_consequences?: number | null;
     };
     /**
      * @description * `hinted` - Hinted
@@ -10136,16 +10388,6 @@ export interface components {
      * @enum {string}
      */
     CantripArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
-    CapabilitySource: {
-      capability_name: string;
-      capability_id: number;
-      value: number;
-      source_type: components['schemas']['SourceTypeEnum'];
-      source_name: string;
-      source_id: number;
-      effect_property_ids?: number[];
-      prerequisite?: number | null;
-    };
     /** @description Serializer for capability types. */
     CapabilityType: {
       readonly id: number;
@@ -10164,12 +10406,6 @@ export interface components {
       custom_description?: string;
       /** @description When set, resolution uses this template's check_type and pool. */
       action_template?: number | null;
-    };
-    /** @description Serializer for ChallengeGroup — actions grouped by challenge. */
-    ChallengeGroup: {
-      challenge_instance_id: number;
-      challenge_name: string;
-      actions: components['schemas']['AvailableAction'][];
     };
     /** @description Serializer for challenge instances. */
     ChallengeInstance: {
@@ -10237,6 +10473,8 @@ export interface components {
       story: number;
       title: string;
       description?: string;
+      /** @description Summary of what happened in this chapter */
+      summary?: string;
       order: number;
     };
     /** @description Serializer for creating chapters */
@@ -10244,6 +10482,8 @@ export interface components {
       story: number;
       title: string;
       description?: string;
+      /** @description Summary of what happened in this chapter */
+      summary?: string;
       order: number;
     };
     /** @description Full serializer for chapter details */
@@ -10256,6 +10496,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -10273,6 +10514,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -10705,6 +10947,49 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /** @description Minimal read-only representation of a CheckType model instance. */
+    CheckTypeMinimal: {
+      readonly id: number;
+      readonly name: string;
+    };
+    /** @description Request serializer for staff clock adjustment. */
+    ClockAdjustRequest: {
+      /** Format: date-time */
+      ic_datetime: string;
+      reason: string;
+    };
+    /** @description Response serializer for date conversion results. */
+    ClockConvertResponse: {
+      /** Format: date-time */
+      ic_date?: string;
+      /** Format: date-time */
+      real_date?: string;
+    };
+    /** @description Generic ``{"detail": "..."}`` response (staff actions + errors). */
+    ClockDetail: {
+      detail: string;
+    };
+    /** @description Request serializer for staff time-ratio change. */
+    ClockRatioRequest: {
+      /** Format: double */
+      ratio: number;
+      reason: string;
+    };
+    /** @description Read-only serializer for the current clock state. */
+    ClockState: {
+      /** Format: date-time */
+      ic_datetime: string;
+      year: number;
+      month: number;
+      day: number;
+      hour: number;
+      minute: number;
+      phase: components['schemas']['PhaseEnum'];
+      season: components['schemas']['SeasonEnum'];
+      /** Format: double */
+      light_level: number;
+      paused: boolean;
+    };
     CodexCategory: {
       readonly id: number;
       /** @description Name of this category. */
@@ -10898,6 +11183,13 @@ export interface components {
       readonly dissolved_at: string | null;
       readonly is_active: boolean;
       readonly member_count: number;
+      readonly legend_total: number;
+      readonly storylines: number[];
+    };
+    /** @description Read-only serializer for CovenantLevelThreshold lookup rows. */
+    CovenantLevelThreshold: {
+      level: number;
+      required_legend: number;
     };
     /** @description Read-only serializer for CovenantRole lookup data. */
     CovenantRole: {
@@ -11067,15 +11359,6 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
-    /**
-     * @description * `impossible` - IMPOSSIBLE
-     *     * `easy` - EASY
-     *     * `moderate` - MODERATE
-     *     * `hard` - HARD
-     *     * `very_hard` - VERY_HARD
-     * @enum {string}
-     */
-    DifficultyIndicatorEnum: 'impossible' | 'easy' | 'moderate' | 'hard' | 'very_hard';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -11247,6 +11530,50 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** @description Request body for adding a distinction to a draft (create). */
+    DraftDistinctionCreateRequest: {
+      distinction_id: number;
+      /** @default 1 */
+      rank: number;
+      /** @default  */
+      notes: string;
+    };
+    /** @description Read shape of one distinction entry stored in draft_data. */
+    DraftDistinctionEntry: {
+      distinction_id: number;
+      distinction_name: string;
+      distinction_slug: string;
+      category_slug: string;
+      rank: number;
+      cost: number;
+      notes: string;
+    };
+    /** @description Request body for swapping mutually-exclusive distinctions. */
+    DraftDistinctionSwapRequest: {
+      remove_id: number;
+      add_id: number;
+      /** @default 1 */
+      rank: number;
+      /** @default  */
+      notes: string;
+    };
+    DraftDistinctionSwapResult: {
+      removed: number;
+      added: components['schemas']['DraftDistinctionEntry'];
+    };
+    /** @description One ``{id, rank}`` pair in the sync request list. */
+    DraftDistinctionSyncItemRequest: {
+      id: number;
+      /** @default 1 */
+      rank: number;
+    };
+    /** @description Request body for replacing the full distinction list (sync). */
+    DraftDistinctionSyncRequest: {
+      distinctions: components['schemas']['DraftDistinctionSyncItemRequest'][];
+    };
+    DraftDistinctionSyncResult: {
+      distinctions: components['schemas']['DraftDistinctionEntry'][];
+    };
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
       readonly id: number;
@@ -11342,6 +11669,12 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
+      /** @description Summary of this episode's plot beats */
+      summary?: string;
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       order: number;
     };
     /** @description Serializer for creating episodes */
@@ -11349,6 +11682,12 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
+      /** @description Summary of this episode's plot beats */
+      summary?: string;
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       order: number;
     };
     /** @description Full serializer for episode details */
@@ -11361,6 +11700,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -11378,6 +11722,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -12462,12 +12811,6 @@ export interface components {
       readonly applied_at: string;
     };
     /** @description Write serializer for ItemFacet (POST create). */
-    ItemFacetWrite: {
-      item_instance: number;
-      facet: number;
-      attachment_quality_tier: number;
-    };
-    /** @description Write serializer for ItemFacet (POST create). */
     ItemFacetWriteRequest: {
       item_instance: number;
       facet: number;
@@ -12551,6 +12894,21 @@ export interface components {
       readonly is_craftable: boolean;
       readonly image_url: string;
     };
+    /**
+     * @description * `situation` - Situation
+     *     * `encounter` - Encounter
+     *     * `task` - Task
+     *     * `requirement` - Requirement
+     * @enum {string}
+     */
+    KindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
+    /**
+     * @description * `pitch` - Pitch
+     *     * `outline` - Outline
+     *     * `plot` - Plot
+     * @enum {string}
+     */
+    MaturityEnum: 'pitch' | 'outline' | 'plot';
     /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
@@ -12653,9 +13011,16 @@ export interface components {
      *     * `visions` - Visions
      *     * `happenstance` - Happenstance
      *     * `system` - System
+     *     * `covenant` - Covenant
      * @enum {string}
      */
-    NarrativeMessageCategoryEnum: 'story' | 'atmosphere' | 'visions' | 'happenstance' | 'system';
+    NarrativeMessageCategoryEnum:
+      | 'story'
+      | 'atmosphere'
+      | 'visions'
+      | 'happenstance'
+      | 'system'
+      | 'covenant';
     NarrativeMessageDelivery: {
       readonly id: number;
       readonly message: components['schemas']['NarrativeMessage'];
@@ -12760,6 +13125,20 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /**
+     * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
+     *
+     *     Distinct from ``OutfitWriteSerializer`` because update only touches
+     *     ``name`` and ``description`` — exposing ``character_sheet`` and
+     *     ``wardrobe`` in the request schema would imply they're editable when
+     *     they're write-once. The viewset wires this serializer via
+     *     ``@extend_schema`` on update/partial_update so the public API contract
+     *     matches reality.
+     */
+    OutfitRenameRequest: {
+      name: string;
+      description?: string;
+    };
     /** @description Read serializer for OutfitSlot — nests the item instance. */
     OutfitSlotRead: {
       readonly id: number;
@@ -12769,29 +13148,11 @@ export interface components {
       readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
     };
     /** @description Write serializer for OutfitSlot — delegates to add_outfit_slot service. */
-    OutfitSlotWrite: {
-      readonly id: number;
-      outfit: number;
-      item_instance: number;
-      body_region: components['schemas']['BodyRegionEnum'];
-      equipment_layer: components['schemas']['EquipmentLayerEnum'];
-    };
-    /** @description Write serializer for OutfitSlot — delegates to add_outfit_slot service. */
     OutfitSlotWriteRequest: {
       outfit: number;
       item_instance: number;
       body_region: components['schemas']['BodyRegionEnum'];
       equipment_layer: components['schemas']['EquipmentLayerEnum'];
-    };
-    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
-    OutfitWrite: {
-      readonly id: number;
-      name: string;
-      description?: string;
-      /** @description The character this sheet belongs to */
-      character_sheet: number;
-      /** @description The wardrobe ItemInstance this outfit is stored in. */
-      wardrobe: number;
     };
     /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
     OutfitWriteRequest: {
@@ -12898,21 +13259,6 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['BugReportDetail'][];
-    };
-    PaginatedChallengeGroupList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['ChallengeGroup'][];
     };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
@@ -13080,19 +13426,12 @@ export interface components {
       results?: components['schemas']['EpisodeScene'][];
     };
     PaginatedEquippedItemReadList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['EquippedItemRead'][];
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['EquippedItemRead'][];
     };
     PaginatedEraList: {
       /** @example 123 */
@@ -13310,34 +13649,20 @@ export interface components {
       results?: components['schemas']['InteractionList'][];
     };
     PaginatedItemFacetReadList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['ItemFacetRead'][];
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['ItemFacetRead'][];
     };
     PaginatedItemInstanceReadList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['ItemInstanceRead'][];
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['ItemInstanceRead'][];
     };
     PaginatedItemTemplateListList: {
       /** @example 123 */
@@ -13385,34 +13710,20 @@ export interface components {
       results?: components['schemas']['OrganizationSearch'][];
     };
     PaginatedOutfitReadList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['OutfitRead'][];
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['OutfitRead'][];
     };
     PaginatedOutfitSlotReadList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['OutfitSlotRead'][];
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['OutfitSlotRead'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -13473,6 +13784,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['Place'][];
+    };
+    PaginatedPlayerActionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PlayerAction'][];
     };
     PaginatedPlayerFeedbackDetailList: {
       /** @example 123 */
@@ -13759,6 +14085,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['StoryList'][];
     };
+    PaginatedStoryNoteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['StoryNote'][];
+    };
     PaginatedStoryParticipationList: {
       /** @example 123 */
       count?: number;
@@ -13966,6 +14307,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -13999,6 +14345,12 @@ export interface components {
        * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
        */
       deadline?: string | null;
+      /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
+      success_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves FAILURE. */
+      failure_consequences?: number | null;
+      /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
+      expired_consequences?: number | null;
     };
     PatchedBugReportDetailRequest: {
       reporter_persona?: number;
@@ -14015,6 +14367,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -14128,6 +14481,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -14255,14 +14613,19 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
-    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
-    PatchedOutfitWriteRequest: {
+    /**
+     * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
+     *
+     *     Distinct from ``OutfitWriteSerializer`` because update only touches
+     *     ``name`` and ``description`` — exposing ``character_sheet`` and
+     *     ``wardrobe`` in the request schema would imply they're editable when
+     *     they're write-once. The viewset wires this serializer via
+     *     ``@extend_schema`` on update/partial_update so the public API contract
+     *     matches reality.
+     */
+    PatchedOutfitRenameRequest: {
       name?: string;
       description?: string;
-      /** @description The character this sheet belongs to */
-      character_sheet?: number;
-      /** @description The wardrobe ItemInstance this outfit is stored in. */
-      wardrobe?: number;
     };
     PatchedPersonaRequest: {
       /** @description The character sheet this persona belongs to. */
@@ -14361,18 +14724,22 @@ export interface components {
     PatchedStoryDetailRequest: {
       title?: string;
       description?: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeEnum'];
-      /** Format: date-time */
-      completed_at?: string | null;
+      /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
+      covenant?: number | null;
     };
     /** @description Serializer for story feedback */
     PatchedStoryFeedbackRequest: {
@@ -14762,6 +15129,14 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary';
+    /**
+     * @description * `dawn` - Dawn
+     *     * `day` - Day
+     *     * `dusk` - Dusk
+     *     * `night` - Night
+     * @enum {string}
+     */
+    PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
     Place: {
       readonly id: number;
       name: string;
@@ -14787,6 +15162,25 @@ export interface components {
      * @enum {string}
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /**
+     * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
+     *
+     *     Does NOT use DataclassSerializer because PlayerAction contains Django model
+     *     instances (check_type, action_template) that DataclassSerializer cannot render.
+     *     Uses explicit field definitions with SerializerMethodField for the model instances.
+     */
+    PlayerAction: {
+      readonly backend: string;
+      readonly display_name: string;
+      readonly description: string;
+      /** @description Return the difficulty enum value string, or None. */
+      readonly difficulty: string | null;
+      readonly prerequisite_met: boolean;
+      readonly prerequisite_reasons: string[];
+      readonly check_type: components['schemas']['CheckTypeMinimal'];
+      readonly action_template: components['schemas']['ActionTemplateMinimal'];
+      readonly ref: components['schemas']['ActionRef'];
+    };
     /**
      * @description Write serializer - player creates feedback.
      *
@@ -15094,6 +15488,24 @@ export interface components {
      * @enum {string}
      */
     PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
+    /**
+     * @description Input serializer for the CharacterCovenantRoleViewSet.promote action.
+     *
+     *     Validates that the target sub-role's parent matches the membership's current role.
+     *     The actual promotion is performed by the promote_to_subrole service function.
+     */
+    PromoteSubrole: {
+      target_subrole: number;
+    };
+    /**
+     * @description Input serializer for the CharacterCovenantRoleViewSet.promote action.
+     *
+     *     Validates that the target sub-role's parent matches the membership's current role.
+     *     The actual promotion is performed by the promote_to_subrole service function.
+     */
+    PromoteSubroleRequest: {
+      target_subrole: number;
+    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -15378,7 +15790,7 @@ export interface components {
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
       readonly granted_at: string;
-      readonly source_room_aura_profile: number | null;
+      readonly source_room_profile: number | null;
       readonly source_staff_account: number | null;
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
@@ -15862,12 +16274,21 @@ export interface components {
       action: components['schemas']['ActionEnum'];
     };
     /**
-     * @description * `character` - Character
+     * @description * `unassigned` - Unassigned
+     *     * `character` - Personal
      *     * `group` - Group
      *     * `global` - Global
      * @enum {string}
      */
-    ScopeEnum: 'character' | 'group' | 'global';
+    ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
+    /**
+     * @description * `spring` - Spring
+     *     * `summer` - Summer
+     *     * `autumn` - Autumn
+     *     * `winter` - Winter
+     * @enum {string}
+     */
+    SeasonEnum: 'spring' | 'summer' | 'autumn' | 'winter';
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
       readonly id: number;
@@ -16038,14 +16459,6 @@ export interface components {
       | 'ROOM_RESIDENCE'
       | 'OUTFIT_TRICKLE'
       | 'STAFF_GRANT';
-    /**
-     * @description * `technique` - TECHNIQUE
-     *     * `trait` - TRAIT
-     *     * `condition` - CONDITION
-     *     * `equipment` - EQUIPMENT
-     * @enum {string}
-     */
-    SourceTypeEnum: 'technique' | 'trait' | 'condition' | 'equipment';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -16202,11 +16615,14 @@ export interface components {
     StoryCreate: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16216,11 +16632,14 @@ export interface components {
     StoryCreateRequest: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16231,12 +16650,16 @@ export interface components {
       readonly id: number;
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16253,24 +16676,30 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
       /** Format: date-time */
-      completed_at?: string | null;
+      readonly completed_at: string | null;
+      /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
+      covenant?: number | null;
     };
     /** @description Full serializer for story detail views */
     StoryDetailRequest: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeEnum'];
-      /** Format: date-time */
-      completed_at?: string | null;
+      /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
+      covenant?: number | null;
     };
     /** @description Serializer for story feedback */
     StoryFeedback: {
@@ -16346,7 +16775,8 @@ export interface components {
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16358,6 +16788,30 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
+    };
+    /**
+     * @description List + create serializer for StoryNote (append-only, GM/staff/owner only).
+     *
+     *     ``author_account`` is set from the requesting account (Evennia AccountDB)
+     *     in ``create()`` — it is never accepted from client input.
+     */
+    StoryNote: {
+      readonly id: number;
+      story: number;
+      readonly author_account: number | null;
+      body: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description List + create serializer for StoryNote (append-only, GM/staff/owner only).
+     *
+     *     ``author_account`` is set from the requesting account (Evennia AccountDB)
+     *     in ``create()`` — it is never accepted from client input.
+     */
+    StoryNoteRequest: {
+      story: number;
+      body: string;
     };
     /** @description Serializer for story participation */
     StoryParticipation: {
@@ -17354,6 +17808,52 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
         };
+      };
+    };
+  };
+  actions_characters_available_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerActionList'];
+        };
+      };
+    };
+  };
+  actions_characters_dispatch_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -19372,7 +19872,7 @@ export interface operations {
       };
     };
   };
-  clock_retrieve: {
+  clock_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -19381,12 +19881,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockState'][];
+        };
       };
     };
   };
@@ -19397,32 +19898,41 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClockAdjustRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
   clock_convert_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        ic_date?: string;
+        real_date?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockConvertResponse'];
+        };
       };
     };
   };
@@ -19435,12 +19945,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -19451,14 +19962,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClockRatioRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -19471,12 +19987,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -20473,6 +20990,31 @@ export interface operations {
       };
     };
   };
+  covenants_character_roles_promote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PromoteSubroleRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PromoteSubrole'];
+        };
+      };
+    };
+  };
   covenants_covenants_list: {
     parameters: {
       query?: {
@@ -20582,6 +21124,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GearArchetypeCompatibility'];
+        };
+      };
+    };
+  };
+  covenants_level_thresholds_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantLevelThreshold'][];
+        };
+      };
+    };
+  };
+  covenants_level_thresholds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this covenant level threshold. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantLevelThreshold'];
         };
       };
     };
@@ -20724,7 +21307,7 @@ export interface operations {
       };
     };
   };
-  distinctions_drafts_distinctions_retrieve: {
+  distinctions_drafts_distinctions_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -20735,12 +21318,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionEntry'][];
+        };
       };
     };
   };
@@ -20753,14 +21337,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionCreateRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       201: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionEntry'];
+        };
       };
     };
   };
@@ -20794,14 +21383,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionSwapRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionSwapResult'];
+        };
       };
     };
   };
@@ -20814,14 +21408,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionSyncRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionSyncResult'];
+        };
       };
     };
   };
@@ -21257,6 +21856,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedEpisodeDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeDetail'];
+        };
+      };
+    };
+  };
+  episodes_promote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EpisodeDetailRequest'];
       };
     };
     responses: {
@@ -23440,58 +24065,9 @@ export interface operations {
   };
   items_equipped_items_list: {
     parameters: {
-      query?: {
-        /**
-         * @description * `head` - Head
-         *     * `face` - Face
-         *     * `neck` - Neck
-         *     * `shoulders` - Shoulders
-         *     * `torso` - Torso
-         *     * `back` - Back
-         *     * `waist` - Waist
-         *     * `left_arm` - Left Arm
-         *     * `right_arm` - Right Arm
-         *     * `left_hand` - Left Hand
-         *     * `right_hand` - Right Hand
-         *     * `left_leg` - Left Leg
-         *     * `right_leg` - Right Leg
-         *     * `feet` - Feet
-         *     * `left_finger` - Left Finger
-         *     * `right_finger` - Right Finger
-         *     * `left_ear` - Left Ear
-         *     * `right_ear` - Right Ear
-         */
-        body_region?:
-          | 'back'
-          | 'face'
-          | 'feet'
-          | 'head'
-          | 'left_arm'
-          | 'left_ear'
-          | 'left_finger'
-          | 'left_hand'
-          | 'left_leg'
-          | 'neck'
-          | 'right_arm'
-          | 'right_ear'
-          | 'right_finger'
-          | 'right_hand'
-          | 'right_leg'
-          | 'shoulders'
-          | 'torso'
-          | 'waist';
-        character?: number;
-        /**
-         * @description * `skin` - Skin
-         *     * `under` - Under
-         *     * `base` - Base
-         *     * `over` - Over
-         *     * `outer` - Outer
-         *     * `accessory` - Accessory
-         */
-        equipment_layer?: 'accessory' | 'base' | 'outer' | 'over' | 'skin' | 'under';
-        /** @description A page number within the paginated result set. */
-        page?: number;
+      query: {
+        /** @description Character ObjectDB pk whose equipment to list. */
+        character: number;
       };
       header?: never;
       path?: never;
@@ -23504,7 +24080,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedEquippedItemReadList'];
+          'application/json': components['schemas']['PaginatedEquippedItemReadList'][];
         };
       };
     };
@@ -23514,8 +24090,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this equipped item. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23576,10 +24151,9 @@ export interface operations {
   };
   items_inventory_list: {
     parameters: {
-      query?: {
-        character?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
+      query: {
+        /** @description Character ObjectDB pk whose inventory to list. */
+        character: number;
       };
       header?: never;
       path?: never;
@@ -23592,7 +24166,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedItemInstanceReadList'];
+          'application/json': components['schemas']['PaginatedItemInstanceReadList'][];
         };
       };
     };
@@ -23602,8 +24176,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this item instance. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23621,11 +24194,9 @@ export interface operations {
   };
   items_item_facets_list: {
     parameters: {
-      query?: {
-        facet?: number;
-        item_instance?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
+      query: {
+        /** @description ItemInstance pk whose facets to list. */
+        item_instance: number;
       };
       header?: never;
       path?: never;
@@ -23638,7 +24209,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedItemFacetReadList'];
+          'application/json': components['schemas']['PaginatedItemFacetReadList'][];
         };
       };
     };
@@ -23661,7 +24232,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ItemFacetWrite'];
+          'application/json': components['schemas']['ItemFacetRead'];
         };
       };
     };
@@ -23671,8 +24242,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this item facet. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23693,8 +24263,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this item facet. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23711,10 +24280,9 @@ export interface operations {
   };
   items_outfit_slots_list: {
     parameters: {
-      query?: {
-        outfit?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
+      query: {
+        /** @description Outfit pk whose slots to list. */
+        outfit: number;
       };
       header?: never;
       path?: never;
@@ -23727,7 +24295,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedOutfitSlotReadList'];
+          'application/json': components['schemas']['PaginatedOutfitSlotReadList'][];
         };
       };
     };
@@ -23750,7 +24318,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitSlotWrite'];
+          'application/json': components['schemas']['OutfitSlotRead'];
         };
       };
     };
@@ -23760,8 +24328,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit slot. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23782,8 +24349,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit slot. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23800,11 +24366,9 @@ export interface operations {
   };
   items_outfits_list: {
     parameters: {
-      query?: {
-        character_sheet?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        wardrobe?: number;
+      query: {
+        /** @description CharacterSheet pk whose saved outfits to list. */
+        character_sheet: number;
       };
       header?: never;
       path?: never;
@@ -23817,7 +24381,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedOutfitReadList'];
+          'application/json': components['schemas']['PaginatedOutfitReadList'][];
         };
       };
     };
@@ -23840,7 +24404,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitWrite'];
+          'application/json': components['schemas']['OutfitRead'];
         };
       };
     };
@@ -23850,8 +24414,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23872,14 +24435,13 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['OutfitWriteRequest'];
+        'application/json': components['schemas']['OutfitRenameRequest'];
       };
     };
     responses: {
@@ -23888,7 +24450,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitWrite'];
+          'application/json': components['schemas']['OutfitRead'];
         };
       };
     };
@@ -23898,8 +24460,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -23919,14 +24480,13 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this outfit. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
     requestBody?: {
       content: {
-        'application/json': components['schemas']['PatchedOutfitWriteRequest'];
+        'application/json': components['schemas']['PatchedOutfitRenameRequest'];
       };
     };
     responses: {
@@ -23935,7 +24495,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitWrite'];
+          'application/json': components['schemas']['OutfitRead'];
         };
       };
     };
@@ -26407,32 +26967,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterModifier'];
-        };
-      };
-    };
-  };
-  mechanics_characters_available_actions_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
-      header?: never;
-      path: {
-        character_id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedChallengeGroupList'];
         };
       };
     };
@@ -29350,11 +29884,12 @@ export interface operations {
         /**
          * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
          *
-         *     * `character` - Character
+         *     * `unassigned` - Unassigned
+         *     * `character` - Personal
          *     * `group` - Group
          *     * `global` - Global
          */
-        scope?: 'character' | 'global' | 'group';
+        scope?: 'character' | 'global' | 'group' | 'unassigned';
         /** @description A search term. */
         search?: string;
         status?: string;
@@ -29494,6 +30029,32 @@ export interface operations {
     };
   };
   stories_apply_to_participate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_assign_to_scope_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -30069,6 +30630,78 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
+  story_notes_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryNoteList'];
+        };
+      };
+    };
+  };
+  story_notes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryNoteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryNote'];
+        };
+      };
+    };
+  };
+  story_notes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story note. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryNote'];
         };
       };
     };

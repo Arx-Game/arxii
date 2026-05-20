@@ -342,7 +342,29 @@ class OutfitWriteSerializer(serializers.ModelSerializer):
         ``wardrobe`` would let them relocate the outfit's anchor item to any
         item id on the planet. Both are silently dropped here — the serializer
         accepts the fields on POST (for create) but ignores them on PATCH.
+
+        Note: the OutfitViewSet's PUT/PATCH endpoints declare
+        ``OutfitRenameSerializer`` (below) to the schema instead, so OpenAPI
+        consumers see the accurate field set. This serializer's update path
+        only fires if a caller bypasses the viewset and reuses this class
+        directly for PATCH.
         """
         validated_data.pop("character_sheet", None)
         validated_data.pop("wardrobe", None)
         return super().update(instance, validated_data)
+
+
+class OutfitRenameSerializer(serializers.ModelSerializer):
+    """Write serializer for renames/redescribes (PUT / PATCH on Outfit).
+
+    Distinct from ``OutfitWriteSerializer`` because update only touches
+    ``name`` and ``description`` — exposing ``character_sheet`` and
+    ``wardrobe`` in the request schema would imply they're editable when
+    they're write-once. The viewset wires this serializer via
+    ``@extend_schema`` on update/partial_update so the public API contract
+    matches reality.
+    """
+
+    class Meta:
+        model = Outfit
+        fields = ["id", "name", "description"]

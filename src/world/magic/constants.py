@@ -152,3 +152,34 @@ path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10
 At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
 extreme tail of lifetime accumulation.
 """
+
+
+class ResonanceValence(models.TextChoices):
+    ALIGNED = "aligned", "Aligned (amplifies)"
+    OPPOSED = "opposed", "Opposed"
+
+
+class ResonanceDirection(models.TextChoices):
+    ENVIRONMENT_DOMINANT = "environment", "Environment affects the caster/working"
+    CASTER_DOMINANT = "caster", "Caster affects the place (defilement)"
+    BALANCED = "balanced", "Mutual backlash"
+
+
+class AffinityInteractionKind(models.TextChoices):
+    AMPLIFY = "amplify", "Amplify"
+    REJECT = "reject", "Reject"
+    REPEL = "repel", "Repel"
+    CORRUPT = "corrupt", "Corrupt"
+
+
+class AffinityInteractionAggressor(models.TextChoices):
+    ENVIRONMENT = "environment", "Environment"
+    CASTER = "caster", "Caster"
+
+
+# CheckType name for the OPPOSED backfire endurance roll.
+# Must exactly match the seeded authored name in integration_tests/game_content/magic.py
+# (_seed_endure_hallowed_ground_check). Fetched via CheckType.objects.get() — never
+# get_or_create — so a missing seed propagates loudly rather than silently creating
+# a chartless CheckType that would break the resolution pipeline.
+ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME: str = "endure_hallowed_ground"

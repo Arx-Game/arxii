@@ -1,6 +1,7 @@
 """API views for the game clock system."""
 
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -12,6 +13,7 @@ from world.game_clock.serializers import (
     ClockAdjustSerializer,
     ClockConvertResponseSerializer,
     ClockConvertSerializer,
+    ClockDetailSerializer,
     ClockRatioSerializer,
     ClockStateSerializer,
 )
@@ -29,9 +31,13 @@ from world.game_clock.services import (
 from world.game_clock.types import ClockError
 
 
+@extend_schema(tags=["game-clock"])
 class ClockViewSet(viewsets.ViewSet):
     """ViewSet for game clock queries and staff management."""
 
+    # Schema default read shape — drf-spectacular uses this for
+    # introspection on viewsets.ViewSet; per-action decorators override.
+    serializer_class = ClockStateSerializer
     permission_classes = [IsAuthenticated]
     # Must stay in sync with the @action methods that require IsAdminUser below.
     _staff_actions = frozenset({"adjust", "ratio", "pause", "unpause"})
@@ -42,6 +48,7 @@ class ClockViewSet(viewsets.ViewSet):
             return [IsAdminUser()]
         return [IsAuthenticated()]
 
+    @extend_schema(responses=ClockStateSerializer)
     def list(self, request: Request) -> Response:
         """GET / — return the current clock state."""
         clock = GameClock.get_active()
@@ -72,6 +79,10 @@ class ClockViewSet(viewsets.ViewSet):
         serializer = ClockStateSerializer(data)
         return Response(serializer.data)
 
+    @extend_schema(
+        parameters=[ClockConvertSerializer],
+        responses=ClockConvertResponseSerializer,
+    )
     @action(detail=False, methods=["get"])
     def convert(self, request: Request) -> Response:
         """GET /convert/ — convert between IC and real dates."""
@@ -107,6 +118,7 @@ class ClockViewSet(viewsets.ViewSet):
         response_serializer = ClockConvertResponseSerializer(response_data)
         return Response(response_serializer.data)
 
+    @extend_schema(request=ClockAdjustSerializer, responses=ClockDetailSerializer)
     @action(detail=False, methods=["post"])
     def adjust(self, request: Request) -> Response:
         """POST /adjust/ — staff: set the IC clock time."""
@@ -127,6 +139,7 @@ class ClockViewSet(viewsets.ViewSet):
 
         return Response({"detail": "Clock adjusted."})
 
+    @extend_schema(request=ClockRatioSerializer, responses=ClockDetailSerializer)
     @action(detail=False, methods=["post"])
     def ratio(self, request: Request) -> Response:
         """POST /ratio/ — staff: change the time ratio."""
@@ -147,6 +160,7 @@ class ClockViewSet(viewsets.ViewSet):
 
         return Response({"detail": "Time ratio updated."})
 
+    @extend_schema(request=None, responses=ClockDetailSerializer)
     @action(detail=False, methods=["post"])
     def pause(self, request: Request) -> Response:
         """POST /pause/ — staff: pause the clock."""
@@ -160,6 +174,7 @@ class ClockViewSet(viewsets.ViewSet):
 
         return Response({"detail": "Clock paused."})
 
+    @extend_schema(request=None, responses=ClockDetailSerializer)
     @action(detail=False, methods=["post"])
     def unpause(self, request: Request) -> Response:
         """POST /unpause/ — staff: unpause the clock."""

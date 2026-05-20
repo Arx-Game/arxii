@@ -1,9 +1,12 @@
 """Tests for combat damage resolution service functions."""
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 from evennia.utils.test_resources import EvenniaTestCase
 
+from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory, EncounterStatus, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
@@ -19,7 +22,14 @@ from world.combat.services import (
     apply_damage_to_participant,
     resolve_round,
 )
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueFactory,
+)
+from world.mechanics.factories import CharacterEngagementFactory
 from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
@@ -153,8 +163,16 @@ class KnockoutDeathProcessingTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
         cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
         cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def _setup_encounter(
         self,
@@ -184,7 +202,19 @@ class KnockoutDeathProcessingTest(TestCase):
             max_health=100,
             status=CharacterStatus.ALIVE,
         )
-        technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomKO",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
@@ -251,7 +281,19 @@ class KnockoutDeathProcessingTest(TestCase):
             status=CharacterStatus.DYING,
             dying_final_round=True,
         )
-        technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomDying",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
         CombatRoundAction.objects.create(
             participant=dying_pc,
             round_number=1,

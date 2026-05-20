@@ -20,6 +20,7 @@ from world.stories.views import (
     StaffWorkloadView,
     StoryFeedbackViewSet,
     StoryGMOfferViewSet,
+    StoryNoteViewSet,
     StoryParticipationViewSet,
     StoryViewSet,
     TableBulletinPostViewSet,
@@ -54,6 +55,8 @@ router.register(r"transition-required-outcomes", TransitionRequiredOutcomeViewSe
 # Wave 10: Bulletin board
 router.register(r"table-bulletin-posts", TableBulletinPostViewSet, basename="tablebulletinpost")
 router.register(r"table-bulletin-replies", TableBulletinReplyViewSet, basename="tablebulletinreply")
+# StoryNote: append-only OOC authorial memory (list + create + retrieve)
+router.register(r"story-notes", StoryNoteViewSet, basename="storynote")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

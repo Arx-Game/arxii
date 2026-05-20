@@ -640,6 +640,8 @@ def get_available_actions(
                     "application__required_effect_property",
                     "check_type",
                     "required_effect_property",
+                    "action_template",
+                    "action_template__check_type",
                 ),
                 to_attr="cached_approaches",
             ),
@@ -700,6 +702,17 @@ def _match_approaches(  # noqa: PLR0913
                 if difficulty == DifficultyIndicator.IMPOSSIBLE:
                     continue
 
+            # Resolve check_type and action_template from the already-loaded approach.
+            # If the approach has an action_template override, that template's check_type
+            # is authoritative; otherwise fall back to the approach's own check_type.
+            override_template = approach.action_template  # may be None (null FK)
+            if override_template is not None:
+                resolved_check_type = override_template.check_type
+                resolved_action_template = override_template
+            else:
+                resolved_check_type = approach.check_type
+                resolved_action_template = None
+
             actions.append(
                 AvailableAction(
                     application_id=app.id,
@@ -714,6 +727,12 @@ def _match_approaches(  # noqa: PLR0913
                     difficulty_indicator=difficulty,
                     prerequisite_met=prereq_met,
                     prerequisite_reasons=reasons,
+                    resolved_check_type=resolved_check_type,
+                    resolved_action_template=resolved_action_template,
+                    # Carry the already-loaded instances for dispatch_player_action
+                    # — no additional queries; ci and approach are from prefetched data.
+                    resolved_challenge_instance=ci,
+                    resolved_challenge_approach=approach,
                 )
             )
 

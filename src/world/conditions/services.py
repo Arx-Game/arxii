@@ -15,6 +15,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
@@ -28,6 +29,8 @@ from flows.events.payloads import (
     ConditionRemovedPayload,
     ConditionStageChangedPayload,
 )
+from flows.models.triggers import Trigger
+from world.achievements.constants import ConditionEventType
 from world.checks.models import CheckType
 from world.checks.services import perform_check
 from world.conditions.constants import (
@@ -86,17 +89,21 @@ if TYPE_CHECKING:
 SECONDS_PER_ROUND = 6
 
 
-def _invalidate_condition_handler_if_character(target: "ObjectDB") -> None:
-    """Invalidate target.conditions handler when target is a Character.
+def _invalidate_condition_handler(target: "ObjectDB") -> None:
+    """Invalidate the target's cached conditions handler.
 
-    Non-Character ObjectDBs that can host conditions (rooms, items)
-    don't have the handler and silently skip.
+    ``conditions`` is installed as a ``cached_property`` on ``ObjectParent``
+    so every typeclassed object (Character, Room, Exit, Object) exposes the
+    handler.  However, a ``ConditionInstance.target`` FK accessor resolved on
+    an identity-map MISS returns a bare ``ObjectDB`` instance — Django skips
+    the typeclass lookup and returns the base model, which does not go through
+    ``ObjectParent``'s MRO and therefore does NOT have ``.conditions``.
+    In that case there is no cached handler to invalidate, so silently skipping
+    is correct (not a swallowed bug).  ``hasattr`` is the right guard here —
+    it is NOT a getattr-literal and carries no linter suppression.
     """
-    # noqa: GETATTR_LITERAL — duck-type check; ObjectDB targets that aren't
-    # Character (rooms, items) lack the handler and silently skip invalidation.
-    handler = getattr(target, "conditions", None)  # noqa: GETATTR_LITERAL
-    if handler is not None and hasattr(handler, "invalidate"):
-        handler.invalidate()
+    if hasattr(target, "conditions"):
+        target.conditions.invalidate()
 
 
 # =============================================================================
@@ -130,6 +137,7 @@ def get_active_conditions(
     )
 
     if not include_suppressed:
+        # Keep in sync with ConditionHandler._canonical_active_qs in handlers.py
         qs = qs.filter(
             Q(is_suppressed=False)
             | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
@@ -608,7 +616,7 @@ def apply_condition(  # noqa: PLR0913
     )
     result = _apply_single(target, condition, params, ctx)
 
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -623,6 +631,7 @@ def apply_condition(  # noqa: PLR0913
 
     if result.success and result.instance is not None:
         _notify_stories_condition_applied(target, result.instance)
+        _install_reactive_side_effects(target, condition, result.instance)
 
     return result
 
@@ -692,6 +701,13 @@ def bulk_apply_conditions(
         )
         result = _apply_single(app.target, app.template, params, ctx)
 
+        # Invalidate immediately after the mutation and BEFORE emitting
+        # CONDITION_APPLIED, mirroring the single-target apply_condition ordering.
+        # A reactive handler that fires during CONDITION_APPLIED must see a fresh
+        # cache — if we deferred invalidation to a second pass after all emits,
+        # any reactive subscriber would read the stale pre-bulk cache instead.
+        _invalidate_condition_handler(app.target)
+
         if result.instance is not None and target_location is not None:
             emit_event(
                 EventName.CONDITION_APPLIED,
@@ -708,10 +724,56 @@ def bulk_apply_conditions(
 
         results.append(result)
 
-    for target in {a.target for a in applications}:
-        _invalidate_condition_handler_if_character(target)
-
     return results
+
+
+def _install_reactive_side_effects(
+    target: "ObjectDB",
+    condition: ConditionTemplate,
+    instance: ConditionInstance,
+) -> None:
+    """Auto-install reactive triggers and increment bridged stats after apply.
+
+    Both lookups go through the cached handler — never touches
+    template.reactive_triggers.all() or ConditionStatRule.objects.filter() directly.
+
+    Trigger.obj FK accepts ObjectDB directly; source_condition ensures
+    CASCADE cleanup when the ConditionInstance is removed.
+
+    Stat increments are guarded: non-character targets (rooms, items)
+    lack sheet_data and raise DoesNotExist — the increment loop is skipped.
+    """
+    handler = condition.reactive_handler
+
+    # Auto-install reactive triggers via the cached handler.
+    trigger_defs = handler.reactive_trigger_definitions
+    if trigger_defs:
+        created_triggers = Trigger.objects.bulk_create(
+            [
+                Trigger(
+                    trigger_definition=td,
+                    obj=target,
+                    source_condition=instance,
+                )
+                for td in trigger_defs
+            ]
+        )
+        # Notify the target's in-memory TriggerHandler so the new rows are
+        # visible to the NEXT emit_event dispatch (bulk_create bypasses
+        # save(), so on_trigger_added is not called automatically).
+        trigger_handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if trigger_handler is not None:
+            for new_trigger in created_triggers:
+                trigger_handler.on_trigger_added(new_trigger)
+
+    # Auto-increment bridged stats via the cached handler.
+    try:
+        sheet_data = target.sheet_data
+    except ObjectDoesNotExist:
+        sheet_data = None
+    if sheet_data is not None:
+        for rule in handler.stat_rules_for_event(ConditionEventType.GAINED):
+            sheet_data.stats.increment(rule.stat, amount=rule.increment_amount)
 
 
 def _notify_stories_condition_applied(
@@ -786,7 +848,7 @@ def remove_condition(
     if not remove_all_stacks and instance.stacks > 1:
         instance.stacks -= 1
         instance.save()
-        _invalidate_condition_handler_if_character(target)
+        _invalidate_condition_handler(target)
         if target_location is not None:
             emit_event(
                 EventName.CONDITION_REMOVED,
@@ -803,7 +865,7 @@ def remove_condition(
         return True
 
     instance.delete()
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     if target_location is not None:
         emit_event(
             EventName.CONDITION_REMOVED,
@@ -837,7 +899,7 @@ def remove_conditions_by_category(
     instances = get_active_conditions(target, category=category)
     removed = [i.condition for i in instances]
     instances.delete()
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     for template in removed:
         _notify_stories_condition_expired(target, template)
     return removed
@@ -937,7 +999,7 @@ def process_damage_interactions(
     # Invalidate once after all interactions — covers removed conditions.
     # apply_condition (above) also invalidates, but if only removals occurred
     # (no applies), the cache must still be cleared.
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
 
     return result
 
@@ -1168,7 +1230,7 @@ def process_round_start(target: "ObjectDB") -> RoundTickResult:
         RoundTickResult with damage, progressions, and expirations
     """
     result = _process_round_tick(target, DamageTickTiming.START_OF_ROUND)
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     return result
 
 
@@ -1190,7 +1252,7 @@ def process_round_end(target: "ObjectDB") -> RoundTickResult:
     # Process duration countdown and progression
     _process_duration_and_progression(target, result)
 
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
 
     return result
 
@@ -1207,7 +1269,7 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:
         RoundTickResult with damage dealt
     """
     result = _process_round_tick(target, DamageTickTiming.ON_ACTION)
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     return result
 
 
@@ -1337,7 +1399,7 @@ def suppress_condition(
             seconds=duration_rounds * SECONDS_PER_ROUND
         )
     instance.save()
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     return True
 
 
@@ -1362,7 +1424,7 @@ def unsuppress_condition(
     instance.is_suppressed = False
     instance.suppressed_until = None
     instance.save()
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     return True
 
 
@@ -1394,7 +1456,7 @@ def clear_all_conditions(
     removed_template_ids = list(qs.values_list("condition", flat=True))
     count = len(removed_template_ids)
     qs.delete()
-    _invalidate_condition_handler_if_character(target)
+    _invalidate_condition_handler(target)
     for template_id in removed_template_ids:
         try:
             template = ConditionTemplate.objects.get(pk=template_id)
@@ -1589,7 +1651,7 @@ def advance_condition_severity(
                     instance.resolved_at = None
                     update_fields.append("resolved_at")
                 instance.save(update_fields=update_fields)
-                _invalidate_condition_handler_if_character(instance.target)
+                _invalidate_condition_handler(instance.target)
                 return SeverityAdvanceResult(
                     previous_stage=previous_stage,
                     new_stage=previous_stage,
@@ -1608,7 +1670,7 @@ def advance_condition_severity(
         update_fields.append("resolved_at")
 
     instance.save(update_fields=update_fields)
-    _invalidate_condition_handler_if_character(instance.target)
+    _invalidate_condition_handler(instance.target)
 
     if stage_changed:
         stage_change_payload = ConditionStageChangedPayload(
@@ -1776,7 +1838,7 @@ def decay_condition_severity(
         update_fields.append("resolved_at")
 
     instance.save(update_fields=update_fields)
-    _invalidate_condition_handler_if_character(instance.target)
+    _invalidate_condition_handler(instance.target)
 
     if new_stage != previous_stage:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL

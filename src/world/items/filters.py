@@ -1,15 +1,20 @@
-"""FilterSet classes for items API."""
+"""FilterSet classes for items API.
+
+The item-first viewsets (``ItemFacetViewSet``, ``ItemInstanceViewSet``,
+``EquippedItemViewSet``, ``OutfitViewSet``, ``OutfitSlotViewSet``) do
+manual scope-param parsing in their action bodies and never call
+``self.filter_queryset(...)`` — their FilterSet classes were removed
+together with the dead ``filter_backends`` / ``filterset_class``
+declarations. Only the catalog viewsets (QualityTier, InteractionType,
+ItemTemplate) and the visible-worn endpoint still use FilterSets.
+"""
 
 import django_filters
 
 from world.items.models import (
     EquippedItem,
     InteractionType,
-    ItemFacet,
-    ItemInstance,
     ItemTemplate,
-    Outfit,
-    OutfitSlot,
     QualityTier,
 )
 
@@ -28,38 +33,6 @@ class InteractionTypeFilter(django_filters.FilterSet):
     class Meta:
         model = InteractionType
         fields = ["name"]
-
-
-class ItemFacetFilter(django_filters.FilterSet):
-    """Filters for ItemFacet."""
-
-    class Meta:
-        model = ItemFacet
-        fields = ["item_instance", "facet"]
-
-
-class EquippedItemFilter(django_filters.FilterSet):
-    """Filters for EquippedItem."""
-
-    character = django_filters.NumberFilter(field_name="character__id")
-
-    class Meta:
-        model = EquippedItem
-        fields = ["character", "body_region", "equipment_layer"]
-
-
-class ItemInstanceFilter(django_filters.FilterSet):
-    """Filters for ItemInstance — chiefly the character holding the item.
-
-    ``game_object.location`` is a Python property on ObjectDB, not an ORM
-    alias — at the database level the FK is named ``db_location``.
-    """
-
-    character = django_filters.NumberFilter(field_name="game_object__db_location__id")
-
-    class Meta:
-        model = ItemInstance
-        fields = ["character"]
 
 
 class ItemTemplateFilter(django_filters.FilterSet):
@@ -93,19 +66,3 @@ class VisibleWornItemFilter(django_filters.FilterSet):
     class Meta:
         model = EquippedItem
         fields = ["character"]
-
-
-class OutfitFilter(django_filters.FilterSet):
-    """Filters for Outfit."""
-
-    class Meta:
-        model = Outfit
-        fields = ["character_sheet", "wardrobe"]
-
-
-class OutfitSlotFilter(django_filters.FilterSet):
-    """Filters for OutfitSlot."""
-
-    class Meta:
-        model = OutfitSlot
-        fields = ["outfit"]

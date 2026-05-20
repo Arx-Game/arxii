@@ -175,6 +175,7 @@ What was built:
 - **Technique enhancement system** — Players can attach a technique to a social action via `ActionEnhancement` records. The technique wraps the action in `use_technique()`, deducting anima, evaluating Soulfray, and checking for control mishaps. Technique effects (conditions, properties) are rendered as distinct results from social outcomes
 - **Available-actions endpoint** — `GET /api/action-requests/available/` returns social actions with pre-calculated technique enhancement options, anima costs, and Soulfray stage warnings for informed player decisions
 - **Frontend enhancement selection** — ActionPanel displays technique enhancements per action with cost display and Soulfray warning confirmation flow before technique use
+- **Deferred follow-up: enhancement payload not yet folded into unified actions endpoint** — The social-action availability surface (`GET /api/action-requests/available/`) returns an enhancement-rich payload (anima costs, Soulfray warnings, `AvailableEnhancement` lists). The unified actions endpoint (`GET /api/actions/characters/<id>/available/`) returns plain `PlayerAction` descriptors without enhancement data. ActionPanel currently fetches both and joins them client-side by action key. A future task should fold the enhancement data into `PlayerAction` so the unified endpoint is self-contained.
 - **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
 - **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
@@ -344,8 +345,10 @@ What was built:
   (character A endorses pose by character B; 8-check precondition gate), `SceneEntryEndorsement`
   (immediate flat grant on room entry, captures persona snapshot), `ResonanceGrant` (typed-FK
   audit ledger keyed on source: POSE_ENDORSEMENT, SCENE_ENTRY, RESIDENCE_TRICKLE, OUTFIT_TRICKLE;
-  discriminator pattern ensures atomic grant journaling), `RoomAuraProfile` (FK to RoomProfile;
-  one-to-one), `RoomResonance` (through-M2M from `RoomAuraProfile` to `ResidualResonance`).
+  discriminator pattern ensures atomic grant journaling). Room resonance data lives in the
+  locations cascade as `LocationValueModifier` rows with `key_type=RESONANCE` (the former
+  `RoomAuraProfile` / `RoomResonance` tag models were retired during the cascade unification
+  refactor — see docs/plans/2026-05-14-room-cascade-resonance-unification.md).
 - **Services:** `grant_resonance(..., source=GainSource.X, typed_fk_kwargs)` — typed-FK signature
   with atomic ledger write; `create_pose_endorsement` — 8 preconditions (not self/alt/whisper/
   private/claimed/duplicate/active-engagement/masqueraded); `create_scene_entry_endorsement`
@@ -361,7 +364,7 @@ What was built:
   `ResonanceGrantViewSet` (read-only, user-scoped with staff bypass for audit);
   `CharacterSheet` serializer exposes `current_residence` FK.
 - **Admin:** `ResonanceGainConfig` singleton admin (has_add_permission False when row exists);
-  `RoomAuraProfile` with inline `RoomResonance`; read-only ledger admin for `ResonanceGrant`;
+  read-only ledger admin for `ResonanceGrant`;
   read-only admins for endorsements; staff-grant admin action on `CharacterResonance`.
 - **Scheduler:** `magic.resonance_daily` (24h interval); `magic.resonance_weekly_settlement`
   (7d interval, settable day via config).
@@ -960,6 +963,27 @@ Interim status notes:
   Option B (reconciliation) remains a possible follow-up if Beginnings logic grows more
   complex.
 
+**Magic-in-combat API fixes + unified player-action interface (DONE — branch `unified-action-interface`):**
+
+Two long-standing combat-magic integration bugs fixed and the unified action interface delivered.
+See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-specific items:
+
+- **`offense_check_type` bug fixed** — combat-cast techniques now source `offense_check_type`
+  from `technique.action_template` (the authored check type). Previously the serializer fell
+  back to `None`, causing declared spells to deal 0 damage through the REST API.
+- **`focused_ally_target` declarable** — self-cast and ally-targeting techniques are now
+  fully declarable via the `declare_action` endpoint. Previously the API rejected
+  `focused_ally_target` with a serializer error.
+- **`ActionDispatchError` typed exception** — `_run_actions` raises a typed exception with
+  `user_message`; `resolve_round` returns 400 with the message. Closes the raw exception
+  propagation path.
+- **E2E regression test** — full API cycle (create encounter → declare spell → resolve round →
+  assert damage + condition) guards the combat-magic path against future regressions.
+- **Unified player-action read/dispatch** — `GET /api/actions/characters/<id>/available/`
+  and `POST .../dispatch/` merge challenge + combat backends. The WebSocket `execute_action`
+  message now routes through the same `dispatch_player_action` function. ActionPanel and
+  ActionAttachment both repointed to the unified endpoint.
+
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
 - Risk is always explicit. Character death warnings use those exact words.
@@ -1010,6 +1034,192 @@ Interim status notes:
   + COVENANT_ROLE Thread anchor + gear compatibility shipped (Spec D PR1);
   covenant entity / formation ritual / lifecycle still post-MVP. See
   `docs/roadmap/covenants.md` for the full picture.
+
+## Resonance-Environment Interaction
+
+**Status: SHIPPED (universal path redesign on branch `resonance-environment-universal-path`)**
+**Specs:**
+- `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md` (original slice — primitive, AffinityInteraction, authored injury conditions)
+- `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md` (universal-path redesign — supersedes the Magically-Attuned subscriber approach)
+
+### Lore
+
+- **The Abyss corrupts.** Abyssal magic infects and corrupts the worldly — both primal *casters*
+  and primal *places*. It is the aggressor toward the Primal.
+- **The Celestial is too pure for the world.** It does not corrupt; it is repelled by worldly
+  things and only ever gets rejected or pushed out when away from celestial places. Celestial
+  places reject all worldly magic.
+- **Rock-paper-scissors, not symmetric opposition.** Primal beats Celestial beats Abyssal beats
+  Primal. Each interaction is a *directed* relationship — asymmetric per ordered
+  (caster-affinity, place-affinity) pair. No off-diagonal NEUTRAL cells: every pairing interacts.
+
+### The 9 directed AffinityInteraction pairs
+
+Stated as "**caster affinity** casting in **place affinity** → outcome." These are authored
+`AffinityInteraction` rows (staff-tunable data, not hard-coded logic).
+
+| # | Caster | Place | Valence | Kind | Default aggressor | Severity |
+|---|--------|-------|---------|------|-------------------|----------|
+| 1 | Celestial | Celestial | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+| 2 | Celestial | Abyssal | OPPOSED | REJECT | environment (harms working) | strong (1.0) |
+| 3 | Celestial | Primal | OPPOSED | REPEL | environment (harms working) | mild (0.3) |
+| 4 | Abyssal | Celestial | OPPOSED | REJECT | environment (harms working) — *Hallowed Rejection* | strong (1.0) |
+| 5 | Abyssal | Abyssal | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+| 6 | Abyssal | Primal | OPPOSED | CORRUPT | **caster** (caster defiles the place) | strong (1.0) |
+| 7 | Primal | Celestial | OPPOSED | REJECT | environment (harms working) | strong (1.0) |
+| 8 | Primal | Abyssal | OPPOSED | CORRUPT | environment (place corrupts the caster) | strong (1.0) |
+| 9 | Primal | Primal | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+
+Asymmetries: Abyssal corrupts Primal in both arrangements (#6 defiles a primal place; #8 a
+primal caster is corrupted by an abyssal place). Celestial only ever gets rejected or repelled
+away from non-celestial places and never corrupts. Celestial places reject all worldly magic.
+
+### Three-layer architecture
+
+| Layer | What | Form |
+|---|---|---|
+| **Mechanism** | `evaluate_resonance_environment()` primitive + two core services | `world/magic/services/resonance_environment.py` — peers of `accrue_corruption_for_cast` |
+| **Tuning** | 9 `AffinityInteraction` rows + scalar coefficients + authored pools/tiers | `AffinityInteraction` model + `ResonanceEnvironmentConfig` singleton + `AffinityInteraction.consequence_pool` FK + `ResonanceAlignmentBoonTier` rows |
+| **Content** | authored injury conditions (OPPOSED) + named buff conditions (ALIGNED) | existing Tempered/Singed/Burning/Hallowed Burn/Cast Disrupted templates selected by consequence pool; new named boon `ConditionTemplate`s per affinity/magnitude band |
+
+The primitive is a core magic-physics mechanism. Universal magic-physics is a core service,
+not a flow or trigger. Authored content (consequence pools, boon tiers) is data — staff-tunable
+rows on the existing `AffinityInteraction` table, not code changes.
+
+### What shipped
+
+**The anti-pattern removed:** the 2026-05-15 slice used a "Magically Attuned" baseline
+`ConditionTemplate` on every magic-capable PC to subscribe them to a `TriggerDefinition`/
+`FlowDefinition` pair. This is wrong by construction — a `ConditionInstance` row on every PC
+encodes a universal fact (this character is magical) that is already derivable from whether
+a `CharacterAura` exists. A flow/trigger is for authored, sequenced content and genuine
+per-entity exceptions; it must not model a baseline process that applies to all casters.
+The 2026-05-16 redesign removes the marker condition, trigger, flow, and the seeding of all
+three. The pipeline test no longer applies any condition in `setUp` — it exercises the
+production path directly.
+
+**What replaced it:**
+
+- **`magical_profile(character_sheet) -> CharacterAura | None`** — derived predicate in
+  `world/magic/services/resonance_environment.py`. Returns the character's `CharacterAura`
+  or `None` (Quiescent). Magic-capability is derived from the aura's existence, never
+  asserted or stored. No grant mechanism, no backfill, no idempotency guard needed.
+- **`ResonanceEnvironmentEffect` result shape** — extended with two fields:
+  `interaction: AffinityInteraction | None` (the resolved row, carried out of the primitive
+  so no service re-queries it) and `backfire_difficulty: int` (relocated from the deleted
+  flow adapter into the primitive).
+- **`resonance_environment_for_cast(*, caster_sheet, room_profile, technique)`** — OPPOSED
+  backfire service. Called from the technique-use orchestrator
+  (`world/magic/services/techniques.py`, "Step 10") immediately after
+  `accrue_corruption_for_cast`. Gated by `magical_profile`. Resolves the OPPOSED consequence
+  via `select_consequence_from_result` over `AffinityInteraction.consequence_pool` (a new
+  nullable FK, migration `magic/0064`) at config-derived `backfire_difficulty`. Emits no
+  event, runs no flow.
+- **`refresh_resonance_alignment(*, character_sheet) -> None`** — ALIGNED presence-buff
+  service. Called from `Character.at_post_move` on arrival. Idempotently clears any prior
+  alignment buff (using `ResonanceAlignmentBoonTier.objects.boon_condition_templates()` cached
+  set), evaluates `evaluate_resonance_environment(technique=None)`, and applies the named buff
+  `ConditionTemplate` for the highest matching `ResonanceAlignmentBoonTier` band via Python
+  `max()` over `interaction.cached_alignment_boon_tiers`. Also called from
+  `Character.at_pre_move(destination=None)` and `Character.at_post_unpuppet` for clean
+  teardown.
+- **`clear_resonance_alignment(*, character_sheet) -> None`** — explicit-clear variant
+  (step-1 logic extracted); called on departure and logout.
+- **`ResonanceAlignmentBoonTier`** — new authored model (migration `magic/0064`). FK to
+  `AffinityInteraction` (must be ALIGNED diagonal row) + `min_magnitude` + FK to
+  `ConditionTemplate`. `UniqueConstraint` on `(affinity_interaction, min_magnitude)`.
+  `clean()` validates the interaction is ALIGNED. No `Meta.ordering` — selection is Python
+  `max()` over a cached list.
+- **`obj.conditions` cached handler** (`ConditionHandler` / `CharacterConditionHandler` in
+  `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
+  `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()` wired
+  into all `world/conditions/services.py` mutation sites. The movement service's clear step
+  intersects the character's already-cached condition instances against the cached boon
+  template set — no per-move query.
+- **Seed rework** — `integration_tests/game_content/magic.py` drops the Magically-Attuned
+  condition, universal trigger, and universal flow seeding; seeds OPPOSED `ConsequencePool` +
+  `Consequence` + `ConsequenceEffect` rows for the celestial-place pairs (#4/#7) and ALIGNED
+  `ResonanceAlignmentBoonTier` rows with named buff `ConditionTemplate`s for the abyssal/
+  abyssal pair (#5).
+- **Pipeline test rework** — `setUp` applies no condition. The test exercises the real
+  production path: OPPOSED subtests cast in the celestial cascade room and assert the correct
+  injury `ConditionInstance` per `CheckOutcome` tier; ALIGNED subtests move the caster into
+  the abyssal-aligned room and assert the named buff is applied, cleared on departure, and
+  swapped on affinity-change.
+
+**Retained unchanged:** the `evaluate_resonance_environment` primitive logic, the 9
+`AffinityInteraction` rows, `ResonanceEnvironmentConfig`, the `endure_hallowed_ground`
+`CheckType`/`ResultChart`, and the Tempered Against Light / Singed / Burning / Hallowed Burn /
+Cast Disrupted `ConditionTemplate`s.
+
+### What's deferred (primitive already supports it — additive, not re-architecture)
+
+1. **~~"Magically Attuned" production grant~~** — **SUPERSEDED/REMOVED.** This deferred item
+   from the 2026-05-15 spec is not implemented as a grant; the entire marker-condition
+   approach was replaced by the derived `magical_profile` predicate (see
+   `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`). No
+   grant is needed: magic-capability is derived from `CharacterAura` presence, which is
+   created unconditionally at CG finalization by `finalize_magic_data()`.
+2. **Presence-escalation for scarred characters** — characters with heavy opposing scars
+   harmed on mere *entry* (`MOVED`), not only on cast. This is a genuine per-entity exception
+   → correctly a scar-gated MOVED `TriggerDefinition` via `ConditionTemplate.reactive_triggers`
+   M2M (the legitimate flow/trigger use). `evaluate_resonance_environment(technique=None)`
+   already serves this; the ALIGNED universal presence path added here does not subsume it.
+3. **Defilement (CASTER_DOMINANT)** *(core magic — Tehom's domain, not brother's)* — when a
+   strong opposing caster overpowers a weak place, the caster degrades the place's cascade
+   resonance. The primitive already returns `direction=CASTER_DOMINANT`; the cast service
+   treats CORRUPT as inert at the fill-in point. **Soul-tether integration lever (must be preserved):** defilement's caster→world
+   corruption MUST be emitted through the existing interceptable `CORRUPTION_ACCRUING` event
+   (the one `soul_tether_redirect_handler` already subscribes to) — then a Sinner's Hollow
+   can absorb world-defilement corruption with zero new wiring.
+4. **Brother's richer formula** — steps 5–7 of the v1 formula are deliberately simple. His
+   follow-up enriches the primitive body (technique-resonance opposition weighting,
+   multi-resonance place weighting). Call sites, `AffinityInteraction` data,
+   `ResonanceEnvironmentConfig`, the consequence pools, and the boon-tier rows do not change.
+5. **`TECHNIQUE_PRE_CAST` block/modify variant** *(fundamental — core reactive capability)*
+   — a true pre-cast intercept that can block or modify the cast before it resolves; needs
+   cancel/modify-payload semantics in the reactive layer. v1's post-resolve backfire is a
+   deliberate scoping simplification (environment reacts *after* the working fires), **not**
+   a substitute for the environment being able to stop/alter a cast. This is foundational
+   capability work, not an indefinite deferral.
+
+### Recommended next steps (priority order)
+
+The deferred items above, ordered by recommended sequence with rationale and ownership:
+
+1. **Presence-escalation for scarred characters** *(Tehom/brother; cheap)* — authored scar-
+   gated MOVED trigger + an escalation condition (e.g., "Hallowed Agony on entry"). Reuses
+   `evaluate_resonance_environment(technique=None)` and `ConditionTemplate.reactive_triggers`
+   M2M. The ALIGNED universal presence path already works; this adds the OPPOSED side for
+   heavily-scarred characters.
+2. **`TECHNIQUE_PRE_CAST` block/modify variant** *(Tehom/core; fundamental)* — a true
+   pre-cast intercept that can **block or modify** a working *before* it resolves. This
+   is a foundational reactive-layer capability, **not** a nice-to-have: v1's post-resolve
+   backfire (the environment reacts *after* the working fires) was a deliberate scoping
+   simplification, never a substitute for the environment being able to stop or alter a
+   cast. Needs cancel / modify-payload semantics in the reactive layer. Sequence as core
+   capability work, not "defer until a concrete need."
+3. **Defilement (CASTER_DOMINANT)** *(Tehom/core; medium — magic-physics + soul-tether)*
+   — **our system, not brother's.** When a strong opposing caster overpowers a weak place,
+   the caster degrades the place's cascade resonance. High narrative value; ties into soul
+   tether. Must route caster→world corruption through the existing `CORRUPTION_ACCRUING`
+   event so a Sinner's Hollow absorbs world-defilement (the social-responsibility layer).
+   The `test_caster_dominant_stub` pipeline test is the fill-in point.
+4. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
+   (technique-resonance opposition weighting, multi-resonance places). v1 is functional;
+   do when brother prioritizes. Zero change to call sites / data / authored content. (This
+   one *is* genuinely brother's — the per-resonance weighting is his deferred follow-up.)
+
+### Cross-reference: combat clash-of-wills
+
+The planned combat **clash** feature (opposed-affinity casters contesting magical energy —
+see `docs/roadmap/combat.md`) is the caster-vs-caster analogue of this caster-vs-place
+interaction. When built, it MUST reuse the same `AffinityInteraction` rows and
+`ResonanceEnvironmentConfig` tuning rather than author a parallel opposition table — the
+affinity-opposition substrate is shared; clash only adds the contested-escalation mechanic
+on top.
+
+---
 
 ## Notes
 

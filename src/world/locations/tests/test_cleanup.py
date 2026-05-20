@@ -7,15 +7,15 @@ from django.utils import timezone
 
 from world.areas.factories import AreaFactory
 from world.locations.constants import StatKey
-from world.locations.factories import LocationStatModifierFactory
-from world.locations.models import LocationStatModifier
+from world.locations.factories import LocationValueModifierFactory
+from world.locations.models import LocationValueModifier
 from world.locations.services import cleanup_decayed_modifiers
 
 
 class CleanupDecayedModifiersTests(TestCase):
     def test_zero_rate_modifier_not_deleted(self) -> None:
         area = AreaFactory()
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=10,
@@ -24,12 +24,12 @@ class CleanupDecayedModifiersTests(TestCase):
         )
         deleted = cleanup_decayed_modifiers()
         self.assertEqual(deleted, 0)
-        self.assertEqual(LocationStatModifier.objects.count(), 1)
+        self.assertEqual(LocationValueModifier.objects.count(), 1)
 
     def test_non_decayed_modifier_not_deleted(self) -> None:
         area = AreaFactory()
         # value=20, decays at -1/day, applied 5 days ago → current_value=15
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=20,
@@ -38,12 +38,12 @@ class CleanupDecayedModifiersTests(TestCase):
         )
         deleted = cleanup_decayed_modifiers()
         self.assertEqual(deleted, 0)
-        self.assertEqual(LocationStatModifier.objects.count(), 1)
+        self.assertEqual(LocationValueModifier.objects.count(), 1)
 
     def test_decayed_modifier_deleted(self) -> None:
         area = AreaFactory()
         # value=10, decays at -1/day, applied 30 days ago → current_value=0
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=10,
@@ -52,12 +52,12 @@ class CleanupDecayedModifiersTests(TestCase):
         )
         deleted = cleanup_decayed_modifiers()
         self.assertEqual(deleted, 1)
-        self.assertEqual(LocationStatModifier.objects.count(), 0)
+        self.assertEqual(LocationValueModifier.objects.count(), 0)
 
     def test_mixed_batch_only_decayed_deleted(self) -> None:
         area = AreaFactory()
         # Decayed
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=5,
@@ -65,7 +65,7 @@ class CleanupDecayedModifiersTests(TestCase):
             applied_at=timezone.now() - timedelta(days=20),
         )
         # Not decayed
-        active = LocationStatModifierFactory(
+        active = LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.NOISE,
             value=20,
@@ -73,7 +73,7 @@ class CleanupDecayedModifiersTests(TestCase):
             applied_at=timezone.now() - timedelta(days=3),
         )
         # Static (no decay)
-        static = LocationStatModifierFactory(
+        static = LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.ORDER,
             value=50,
@@ -82,7 +82,7 @@ class CleanupDecayedModifiersTests(TestCase):
 
         deleted = cleanup_decayed_modifiers()
         self.assertEqual(deleted, 1)
-        surviving = set(LocationStatModifier.objects.values_list("pk", flat=True))
+        surviving = set(LocationValueModifier.objects.values_list("pk", flat=True))
         self.assertEqual(surviving, {active.pk, static.pk})
 
     def test_returns_zero_when_nothing_to_delete(self) -> None:
@@ -93,7 +93,7 @@ class CleanupDecayedModifiersTests(TestCase):
         # value=10, decays at -1/day, applied 5 days ago — NOT decayed if
         # now is 5 days ago, but IS decayed if now is well into the future
         applied = timezone.now() - timedelta(days=5)
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=10,
@@ -108,21 +108,21 @@ class CleanupDecayedModifiersTests(TestCase):
         far_future = applied + timedelta(days=100)
         deleted_with_future_now = cleanup_decayed_modifiers(now=far_future)
         self.assertEqual(deleted_with_future_now, 1)
-        self.assertEqual(LocationStatModifier.objects.count(), 0)
+        self.assertEqual(LocationValueModifier.objects.count(), 0)
 
 
 class CleanupDecayedModifiersCommandTests(TestCase):
     def test_command_runs_and_reports_count(self) -> None:
         area = AreaFactory()
         # One decayed, one not
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=5,
             change_per_day=-1,
             applied_at=timezone.now() - timedelta(days=30),
         )
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.NOISE,
             value=20,
@@ -134,4 +134,4 @@ class CleanupDecayedModifiersCommandTests(TestCase):
         call_command("cleanup_decayed_modifiers", stdout=out)
         output = out.getvalue()
         self.assertIn("Deleted 1", output)
-        self.assertEqual(LocationStatModifier.objects.count(), 1)
+        self.assertEqual(LocationValueModifier.objects.count(), 1)

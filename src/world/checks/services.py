@@ -53,6 +53,23 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         effort_level: Optional EffortLevel value. Applies effort check modifier.
         fatigue_penalty: Penalty from fatigue zone (caller-computed, typically negative).
     """
+    # Test-rig seam (NOT a production code path).
+    from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
+
+    _record_capture(check_type=check_type, target_difficulty=target_difficulty)
+
+    forced_outcome = _consume_forced_outcome()
+    if forced_outcome is not None:
+        return _build_forced_check_result(
+            character=character,
+            check_type=check_type,
+            forced_outcome=forced_outcome,
+            target_difficulty=target_difficulty,
+            extra_modifiers=extra_modifiers,
+            effort_level=effort_level,
+            fatigue_penalty=fatigue_penalty,
+        )
+
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     level = _get_character_level(character)
 
@@ -80,6 +97,52 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     return CheckResult(
         check_type=check_type,
         outcome=outcome,
+        chart=chart,
+        roller_rank=roller_rank,
+        target_rank=target_rank,
+        rank_difference=rank_difference,
+        trait_points=trait_points,
+        aspect_bonus=aspect_bonus,
+        total_points=total_points,
+    )
+
+
+def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signature for test seam
+    character: "ObjectDB",
+    check_type: "CheckType",
+    forced_outcome: CheckOutcome,
+    target_difficulty: int,
+    extra_modifiers: int,
+    effort_level: str | None,
+    fatigue_penalty: int,
+) -> CheckResult:
+    """Build a synthetic CheckResult for the test-rig forced-outcome path.
+
+    Computes real rank breakdowns from target_difficulty so callers that
+    inspect ranks see something reasonable. Skips the dice roll entirely.
+    NOT a production code path — only reached inside force_check_outcome().
+    """
+    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    level = _get_character_level(character)
+
+    effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
+
+    trait_points = _calculate_trait_points(handler, check_type)
+    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    total_points = trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
+
+    roller_rank = CheckRank.get_rank_for_points(total_points)
+    target_rank = CheckRank.get_rank_for_points(target_difficulty)
+
+    roller_rank_value = roller_rank.rank if roller_rank else 0
+    target_rank_value = target_rank.rank if target_rank else 0
+    rank_difference = roller_rank_value - target_rank_value
+
+    chart = ResultChart.get_chart_for_difference(rank_difference)
+
+    return CheckResult(
+        check_type=check_type,
+        outcome=forced_outcome,
         chart=chart,
         roller_rank=roller_rank,
         target_rank=target_rank,

@@ -5,6 +5,7 @@ from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.models import (
     Affinity,
+    AffinityInteraction,
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
@@ -25,14 +26,13 @@ from world.magic.models import (
     PoseEndorsement,
     Reincarnation,
     Resonance,
+    ResonanceEnvironmentConfig,
     ResonanceGainConfig,
     ResonanceGrant,
     Restriction,
     Ritual,
     RitualComponentRequirement,
     RitualSceneActionConfig,
-    RoomAuraProfile,
-    RoomResonance,
     SceneEntryEndorsement,
     SoulfrayConfig,
     Technique,
@@ -66,6 +66,20 @@ class ResonanceAdmin(admin.ModelAdmin):
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+
+@admin.register(AffinityInteraction)
+class AffinityInteractionAdmin(admin.ModelAdmin):
+    list_display = [
+        "source_affinity",
+        "environment_affinity",
+        "valence",
+        "kind",
+        "aggressor",
+        "severity_multiplier",
+    ]
+    list_filter = ["valence", "kind"]
+    raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
 @admin.register(EffectType)
@@ -383,6 +397,27 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
         return False
 
 
+@admin.register(ResonanceEnvironmentConfig)
+class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the resonance-environment primitive."""
+
+    list_display = (
+        "pk",
+        "base_coefficient",
+        "caster_power_scalar",
+        "balanced_band",
+        "backfire_base_difficulty",
+        "backfire_difficulty_per_magnitude",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return not ResonanceEnvironmentConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+
 @admin.register(MishapPoolTier)
 class MishapPoolTierAdmin(admin.ModelAdmin):
     list_display = ["min_deficit", "max_deficit", "consequence_pool"]
@@ -546,23 +581,6 @@ class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at"]
 
 
-class RoomResonanceInline(admin.TabularInline):
-    model = RoomResonance
-    fields = ("resonance", "set_by", "set_at")
-    readonly_fields = ("set_at",)
-    extra = 0
-
-
-@admin.register(RoomAuraProfile)
-class RoomAuraProfileAdmin(admin.ModelAdmin):
-    list_display = ("room_profile", "tag_count")
-    inlines = [RoomResonanceInline]
-
-    @admin.display(description="Tags")
-    def tag_count(self, obj: RoomAuraProfile) -> int:
-        return obj.room_resonances.count()
-
-
 @admin.register(ResonanceGrant)
 class ResonanceGrantAdmin(admin.ModelAdmin):
     list_display = (
@@ -581,7 +599,7 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "amount",
         "source",
         "granted_at",
-        "source_room_aura_profile",
+        "source_room_profile",
         "source_staff_account",
         "source_pose_endorsement",
         "source_scene_entry_endorsement",

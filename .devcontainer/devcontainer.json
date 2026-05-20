@@ -1,0 +1,17 @@
+{
+  "name": "arxii-sandbox",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/arxii",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+  // One-time setup with network OPEN (deps + db schema).
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  // Reapply firewall every start (iptables rules do not persist).
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+  }
+}

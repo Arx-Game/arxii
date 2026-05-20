@@ -21,6 +21,7 @@ from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatPredicateType,
+    ProgressStatus,
     SessionRequestStatus,
     StoryScope,
     TransitionMode,
@@ -163,6 +164,74 @@ class GMQueueEpisodesReadyTest(APITestCase):
         assert "mode" in transitions[0]
 
 
+class GMQueueWaitingForGMTest(APITestCase):
+    """Progress parked at WAITING_FOR_GM surfaces with its staleness age."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account, cls.profile, cls.table = _make_lead_gm()
+
+        cls.char_sheet = CharacterSheetFactory()
+        cls.story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.char_sheet,
+            primary_table=cls.table,
+        )
+        cls.chapter = ChapterFactory(story=cls.story, order=1)
+        cls.episode = EpisodeFactory(chapter=cls.chapter, order=1)
+        cls.progress = StoryProgressFactory(
+            story=cls.story,
+            character_sheet=cls.char_sheet,
+            current_episode=cls.episode,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+    def test_waiting_progress_appears_with_age(self):
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(GM_QUEUE_URL)
+        assert response.status_code == status.HTTP_200_OK
+        waiting = response.data["waiting_for_gm"]
+        matching = [w for w in waiting if w["progress_id"] == self.progress.pk]
+        assert len(matching) == 1, "WAITING_FOR_GM progress missing from GM queue"
+        entry = matching[0]
+        for field in [
+            "story_id",
+            "story_title",
+            "scope",
+            "progress_type",
+            "progress_id",
+            "episode_id",
+            "episode_title",
+            "last_advanced_at",
+            "days_waiting",
+        ]:
+            assert field in entry, f"Missing field: {field}"
+        assert entry["last_advanced_at"] is not None
+        assert isinstance(entry["days_waiting"], int)
+        assert entry["days_waiting"] >= 0
+
+    def test_active_progress_not_in_waiting_list(self):
+        """An ACTIVE progress (default) must not appear in waiting_for_gm."""
+        other_sheet = CharacterSheetFactory()
+        other_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=other_sheet,
+            primary_table=self.table,
+        )
+        other_ep = EpisodeFactory(chapter=ChapterFactory(story=other_story, order=1), order=1)
+        active_progress = StoryProgressFactory(
+            story=other_story,
+            character_sheet=other_sheet,
+            current_episode=other_ep,
+            status=ProgressStatus.ACTIVE,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(GM_QUEUE_URL)
+        waiting_ids = [w["progress_id"] for w in response.data["waiting_for_gm"]]
+        assert active_progress.pk not in waiting_ids
+        active_progress.delete()
+
+
 class GMQueuePendingClaimsTest(APITestCase):
     """Pending AGM claims on Lead GM's stories appear in the queue."""
 
@@ -277,3 +346,61 @@ class GMQueueAssignedSessionRequestsTest(APITestCase):
         req_ids = [r["session_request_id"] for r in assigned]
         assert other_req.pk not in req_ids
         other_req.delete()
+
+
+def _make_ready_story(table):
+    """Create a CHARACTER-scope story that surfaces in episodes_ready_to_run.
+
+    Mirrors GMQueueEpisodesReadyTest.setUpTestData: a story whose primary
+    table is the given table, with a current episode that has an eligible
+    AUTO transition (no routing requirements) and an ACTIVE progress record.
+    Returns the Story.
+    """
+    char_sheet = CharacterSheetFactory()
+    story = StoryFactory(
+        scope=StoryScope.CHARACTER,
+        character_sheet=char_sheet,
+        primary_table=table,
+    )
+    chapter = ChapterFactory(story=story, order=1)
+    episode = EpisodeFactory(chapter=chapter, order=1)
+    next_ep = EpisodeFactory(chapter=chapter, order=2)
+    TransitionFactory(
+        source_episode=episode,
+        target_episode=next_ep,
+        mode=TransitionMode.AUTO,
+    )
+    StoryProgressFactory(
+        story=story,
+        character_sheet=char_sheet,
+        current_episode=episode,
+    )
+    return story
+
+
+class GMQueueQueryBoundTest(APITestCase):
+    """The gm-queue endpoint's query count must not scale with story count.
+
+    CLAUDE.md "No Queries in Loops": GMQueueView loops over the GM's stories,
+    so the total query count must be a constant independent of N stories.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account, cls.profile, cls.table = _make_lead_gm()
+        # N = 6 distinct ready stories for this one Lead GM / table.
+        for _ in range(6):
+            _make_ready_story(cls.table)
+
+    def test_gm_queue_query_count_is_bounded(self):
+        self.client.force_authenticate(user=self.account)
+        # Constant bound, independent of the number of stories. Pre-refactor the
+        # implementation issued queries per-story (N=3 -> 32, N=6 -> 56: ~8/story);
+        # post-refactor it is a fixed batched count (N=6 -> 16, N=12 -> 16:
+        # verified N-independent). 16 is the constant the bounded implementation
+        # hits; this test failed pre-refactor (56 > 16) and passes after.
+        with self.assertNumQueries(16):
+            resp = self.client.get(GM_QUEUE_URL)
+        self.assertEqual(resp.status_code, 200)
+        # Sanity: all 6 ready stories surfaced (behavior preserved).
+        self.assertEqual(len(resp.data["episodes_ready_to_run"]), 6)

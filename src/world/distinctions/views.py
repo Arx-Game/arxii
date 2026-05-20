@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -29,6 +30,10 @@ from world.distinctions.serializers import (
     DistinctionCategorySerializer,
     DistinctionDetailSerializer,
     DistinctionListSerializer,
+    DraftDistinctionCreateSerializer,
+    DraftDistinctionEntrySerializer,
+    DraftDistinctionSwapSerializer,
+    DraftDistinctionSyncSerializer,
 )
 from world.distinctions.types import ValidatedDistinction, build_distinction_entry
 
@@ -119,6 +124,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         return context
 
 
+@extend_schema(tags=["distinctions"])
 class DraftDistinctionViewSet(viewsets.ViewSet):
     """
     ViewSet for managing distinctions on a CharacterDraft.
@@ -130,6 +136,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
     - swap: Swap mutually exclusive distinctions
     """
 
+    # Schema default read shape — drf-spectacular uses this for
+    # introspection on viewsets.ViewSet; per-action decorators override.
+    serializer_class = DraftDistinctionEntrySerializer
     permission_classes = [IsAuthenticated]
 
     def _get_draft(self, draft_id: int) -> CharacterDraft:
@@ -242,6 +251,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         """Build the dictionary entry for a distinction on a draft."""
         return build_distinction_entry(distinction, rank, notes)
 
+    @extend_schema(responses=DraftDistinctionEntrySerializer(many=True))
     def list(self, request, draft_id: int):
         """
         List distinctions currently on the draft.
@@ -252,6 +262,10 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         distinctions = draft.draft_data.get("distinctions", [])
         return Response(distinctions)
 
+    @extend_schema(
+        request=DraftDistinctionCreateSerializer,
+        responses=DraftDistinctionEntrySerializer,
+    )
     def create(self, request, draft_id: int):
         """
         Add a distinction to the draft.
@@ -279,6 +293,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response(new_entry, status=status.HTTP_201_CREATED)
 
+    @extend_schema(responses={204: None})
     def destroy(self, request, draft_id: int, pk: int):
         """
         Remove a distinction from the draft.
@@ -306,6 +321,16 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(
+        request=DraftDistinctionSwapSerializer,
+        responses=inline_serializer(
+            name="DraftDistinctionSwapResult",
+            fields={
+                "removed": serializers.IntegerField(),
+                "added": DraftDistinctionEntrySerializer(),
+            },
+        ),
+    )
     @action(detail=False, methods=["post"])
     def swap(self, request, draft_id: int):
         """
@@ -368,6 +393,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response({"removed": remove_id, "added": new_entry})
 
+    @extend_schema(
+        request=DraftDistinctionSyncSerializer,
+        responses=inline_serializer(
+            name="DraftDistinctionSyncResult",
+            fields={"distinctions": DraftDistinctionEntrySerializer(many=True)},
+        ),
+    )
     @action(detail=False, methods=["put"])
     def sync(self, request, draft_id: int):
         """

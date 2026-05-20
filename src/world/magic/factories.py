@@ -8,18 +8,22 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
 from world.magic.constants import (
+    AffinityInteractionAggressor,
+    AffinityInteractionKind,
     AlterationKind,
     AlterationTier,
     CantripArchetype,
     EffectKind,
     ParticipationRule,
     PendingAlterationStatus,
+    ResonanceValence,
     RitualExecutionKind,
     TargetKind,
     VitalBonusTarget,
 )
 from world.magic.models import (
     Affinity,
+    AffinityInteraction,
     AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
@@ -140,6 +144,19 @@ class AffinityFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Affinity{n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
+
+
+class AffinityInteractionFactory(factory.django.DjangoModelFactory):
+    """Factory for AffinityInteraction directed-pair rows."""
+
+    class Meta:
+        model = AffinityInteraction
+
+    source_affinity = factory.SubFactory(AffinityFactory)
+    environment_affinity = factory.SubFactory(AffinityFactory)
+    valence = ResonanceValence.ALIGNED
+    kind = AffinityInteractionKind.AMPLIFY
+    aggressor = AffinityInteractionAggressor.ENVIRONMENT
 
 
 class ResonanceFactory(factory.django.DjangoModelFactory):
@@ -1164,21 +1181,6 @@ class CorruptionConfigFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("pk",)
 
     pk = 1
-
-
-class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = "magic.RoomAuraProfile"
-
-    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
-
-
-class RoomResonanceFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = "magic.RoomResonance"
-
-    room_aura_profile = factory.SubFactory(RoomAuraProfileFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
 
 
 class PoseEndorsementFactory(factory.django.DjangoModelFactory):

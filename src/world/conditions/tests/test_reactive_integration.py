@@ -536,3 +536,66 @@ class BystanderConditionReactionTest(TestCase):
         # Watcher IS the target — NOT_SELF_FILTER rejects, source stays None
         self.assertEqual(len(captured), 1)
         self.assertIsNone(captured[0].source)
+
+
+# ---------------------------------------------------------------------------
+# bulk_apply_conditions invalidation ordering regression
+# ---------------------------------------------------------------------------
+
+
+class BulkApplyInvalidationOrderingTest(TestCase):
+    """bulk_apply_conditions must invalidate each target's handler cache BEFORE
+    emitting CONDITION_APPLIED for that target, not in a second pass after all
+    emits.
+
+    Regression guard: a reactive handler that reads target.conditions at
+    CONDITION_APPLIED emit time must see the just-applied condition as active.
+    Before the fix (second-pass invalidation) the cache was stale at emit time.
+    After the fix (per-application invalidation before emit) the cache is fresh.
+    """
+
+    def test_handler_fresh_at_condition_applied_emit(self) -> None:
+        """Cache is invalidated before CONDITION_APPLIED fires in bulk path.
+
+        Setup:
+        - Create a character in a room.
+        - Warm target.conditions (cold cache, sees no conditions).
+        - Intercept emit_event; at CONDITION_APPLIED time, read
+          target.conditions.has_template(template) from inside the interceptor.
+        - Drive bulk_apply_conditions.
+        - Assert: the interceptor observed has_template == True
+          (cache was invalidated before the emit, not after).
+        """
+        target = _target_in_room()
+        template = ConditionTemplateFactory()
+
+        # Warm the handler cache so it starts stale (no conditions).
+        _ = target.conditions.active()
+        self.assertFalse(target.conditions.has_template(template))
+
+        observed_fresh: list[bool] = []
+
+        import world.conditions.services as svc_mod
+
+        original_emit = svc_mod.emit_event
+
+        def intercepting_emit(name, payload, **kw):
+            if name == EventName.CONDITION_APPLIED:
+                # At this point, was the cache already invalidated?
+                observed_fresh.append(target.conditions.has_template(template))
+            return original_emit(name, payload, **kw)
+
+        svc_mod.emit_event = intercepting_emit
+        try:
+            bulk_apply_conditions([BulkConditionApplication(target=target, template=template)])
+        finally:
+            svc_mod.emit_event = original_emit
+
+        # CONDITION_APPLIED must have fired exactly once
+        self.assertEqual(len(observed_fresh), 1, "CONDITION_APPLIED was not emitted")
+        # Cache must have been fresh (invalidated before emit)
+        self.assertTrue(
+            observed_fresh[0],
+            "target.conditions was STALE at CONDITION_APPLIED emit time "
+            "(invalidation happened after emit, not before)",
+        )

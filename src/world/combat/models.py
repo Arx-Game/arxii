@@ -788,3 +788,58 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"granted_capability": "Must be null for NARRATIVE_ONLY."})
         if self.vital_target:
             raise ValidationError({"vital_target": "Must be null for NARRATIVE_ONLY."})
+
+
+# =============================================================================
+# Consumer-owned bridge: one declared action per (encounter, round, participant)
+# =============================================================================
+
+
+class RoundChallengeDeclaration(SharedMemoryModel):
+    """Consumer-owned bridge recording a participant's challenge declaration for a round.
+
+    Mutually exclusive with CombatRoundAction for the same (encounter, round,
+    participant) — ``CombatRoundContext.record_declaration`` enforces the invariant
+    by deleting the competing row before writing this one, and vice versa.
+
+    The combat app owns this bridge; the mechanics app gets no FK back into combat
+    (project rule: bridge tables over cross-system FKs).
+    """
+
+    encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        related_name="challenge_declarations",
+    )
+    round_number = models.PositiveIntegerField()
+    participant = models.ForeignKey(
+        "combat.CombatParticipant",
+        on_delete=models.CASCADE,
+        related_name="challenge_declarations",
+    )
+    challenge_instance = models.ForeignKey(
+        "mechanics.ChallengeInstance",
+        on_delete=models.CASCADE,
+        related_name="combat_declarations",
+    )
+    challenge_approach = models.ForeignKey(
+        "mechanics.ChallengeApproach",
+        on_delete=models.CASCADE,
+        related_name="combat_declarations",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "round_number", "participant"],
+                name="one_challenge_declaration_per_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"RoundChallengeDeclaration("
+            f"encounter={self.encounter_id} "
+            f"round={self.round_number} "
+            f"participant={self.participant_id})"
+        )

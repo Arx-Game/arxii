@@ -150,18 +150,18 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
   pose. FK `endorser_sheet`, FK `endorsee_sheet`, FK `scene`, M2M `resonance`. Unique per
   `(endorser_sheet, endorsee_sheet, scene)`. Fires `grant_resonance` synchronously on creation.
 - `ResonanceGrant` - Universal audit ledger. Discriminator `source` (TextChoice: POSE_ENDORSEMENT,
-  SCENE_ENTRY, ROOM_RESIDENCE, OUTFIT_ITEM, STAFF_GRANT) + typed FKs: `source_room_aura_profile`,
+  SCENE_ENTRY, ROOM_RESIDENCE, OUTFIT_ITEM, STAFF_GRANT) + typed FKs: `source_room_profile`,
   `source_staff_account`, `source_pose_endorsement`, `source_scene_entry_endorsement`. FK
   `character_sheet`, FK `resonance`, `amount`. CheckConstraints enforce shape per source.
-- `RoomAuraProfile` - OneToOne extension of RoomProfile; hosts magical-character metadata.
-  Non-magical rooms have no row. FK `room_profile`, M2M `resonances` (through RoomResonance).
-- `RoomResonance` - Through-model for RoomAuraProfile ↔ Resonance M2M. Unique per
-  `(profile, resonance)`. Tracks set-by timestamp for audit.
+- **Room resonance data lives in the locations cascade.** What used to be tagged via
+  the former `RoomAuraProfile` / `RoomResonance` models is now stored as
+  `LocationValueModifier` rows with `key_type=RESONANCE`. See `world/locations/CLAUDE.md`
+  and the `tag_room_resonance` / `get_residence_resonances` services in `services/gain.py`.
 
 **Services (`services/gain.py` — new module):**
 - `grant_resonance(sheet, resonance, amount, *, source, typed_fk_kwargs)` - Typed-FK signature.
   Writes CharacterResonance + ResonanceGrant atomically. `source` is a GainSource TextChoice.
-  Matching typed FK kwarg required per source: ROOM_RESIDENCE → `room_aura_profile=`,
+  Matching typed FK kwarg required per source: ROOM_RESIDENCE → `room_profile=`,
   POSE_ENDORSEMENT → `pose_endorsement=`, SCENE_ENTRY → `scene_entry_endorsement=`,
   STAFF_GRANT → optional `staff_account=`, OUTFIT_ITEM reserved.
 - `create_pose_endorsement(endorser_sheet, interaction, resonance)` - 8 preconditions
@@ -195,7 +195,8 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
 
 **Related changes:**
 - `CharacterSheet.current_residence` FK to RoomProfile (narrative declaration; mechanical
-  trickle fires only on RoomAuraProfile match)
+  trickle fires only when the room has a positive cascade-row LocationValueModifier
+  with key_type=RESONANCE matching a claimed resonance)
 - `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
 - `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT
 

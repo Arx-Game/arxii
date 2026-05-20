@@ -85,13 +85,13 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
 )
 from world.magic.models.reincarnation import Reincarnation
+from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_scene_action import RitualSceneActionConfig
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
     Ritual,
     RitualComponentRequirement,
 )
-from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
 from world.magic.models.sessions import (
     RitualSession,
     RitualSessionParticipant,
@@ -135,6 +135,8 @@ from world.magic.models.weaving import (
 __all__ = [
     # affinity
     "Affinity",
+    # resonance-environment
+    "AffinityInteraction",
     "AffinityManager",
     # anima
     "AnimaConfig",
@@ -189,6 +191,8 @@ __all__ = [
     # reincarnation
     "Reincarnation",
     "Resonance",
+    # resonance-environment config
+    "ResonanceEnvironmentConfig",
     # gain config (Spec C §2.1)
     "ResonanceGainConfig",
     # gain ledger (Spec C §2.4)
@@ -203,9 +207,6 @@ __all__ = [
     "RitualSession",
     "RitualSessionParticipant",
     "RitualSessionReference",
-    # room aura (Spec C §2.5, §2.6)
-    "RoomAuraProfile",
-    "RoomResonance",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
     # soul tether (Spec B §14.1, §15.1)

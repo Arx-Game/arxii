@@ -27,6 +27,7 @@ import type {
 } from './api';
 import type {
   ApproveClaimBody,
+  AssignStoryBody,
   Beat,
   BeatOutcome,
   ChapterCreateBody,
@@ -38,11 +39,13 @@ import type {
   EpisodeProgressionRequirement,
   MarkBeatBody,
   OfferStoryToGMBody,
+  PromoteEpisodeBody,
   RejectClaimBody,
   RequestClaimBody,
   RespondToOfferBody,
   ResolveEpisodeBody,
   StoryCreateBody,
+  StoryNoteRequest,
   Transition,
   TransitionRequiredOutcome,
 } from './types';
@@ -98,6 +101,9 @@ export const storiesKeys = {
 
   // Story log
   storyLog: (id: number) => [...storiesKeys.all, 'story', id, 'log'] as const,
+
+  // Story notes (OOC authorial memory) — keyed by owning story
+  storyNotes: (storyId: number) => [...storiesKeys.all, 'story-notes', storyId] as const,
 
   // Transitions (Wave 9)
   transitionList: (params?: ListTransitionsParams) =>
@@ -483,6 +489,23 @@ export function useResolveEpisode() {
   });
 }
 
+export function usePromoteEpisode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      episodeId,
+      storyId: _storyId,
+      ...body
+    }: { episodeId: number; storyId: number } & PromoteEpisodeBody) =>
+      api.promoteEpisode(episodeId, body),
+    onSuccess: (_, { episodeId, storyId }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.episodeList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+    },
+  });
+}
+
 export function useMarkBeat() {
   const qc = useQueryClient();
   return useMutation({
@@ -657,6 +680,29 @@ export function useExpireOverdueBeats() {
 }
 
 // ---------------------------------------------------------------------------
+// StoryNote hooks (OOC authorial memory)
+// ---------------------------------------------------------------------------
+
+export function useStoryNotes(storyId: number) {
+  return useQuery({
+    queryKey: storiesKeys.storyNotes(storyId),
+    queryFn: () => api.listStoryNotes({ story: storyId }),
+    enabled: storyId > 0,
+    throwOnError: true,
+  });
+}
+
+export function useCreateStoryNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StoryNoteRequest) => api.createStoryNote(body),
+    onSuccess: (_, { story }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyNotes(story) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Transition hooks (Wave 9 author editor)
 // ---------------------------------------------------------------------------
 
@@ -799,6 +845,20 @@ export function useStoryGMOffers(params?: ListStoryGMOffersParams) {
     queryKey: storiesKeys.storyGMOffers(params),
     queryFn: () => api.listStoryGMOffers(params),
     throwOnError: true,
+  });
+}
+
+export function useAssignStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, ...body }: { storyId: number } & AssignStoryBody) =>
+      api.assignStory(storyId, body),
+    onSuccess: (_, { storyId }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+    },
   });
 }
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
+from actions.errors import ActionDispatchError
 from world.combat.constants import ActionCategory, OpponentTier
 from world.combat.models import (
     CombatEncounter,
@@ -14,6 +16,7 @@ from world.combat.models import (
     CombatRoundAction,
 )
 from world.fatigue.constants import EffortLevel
+from world.magic.models import Technique
 
 # ---------------------------------------------------------------------------
 # Nested read serializers
@@ -372,6 +375,10 @@ class DeclareActionSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    focused_ally_target = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+    )
     physical_passive = serializers.IntegerField(
         required=False,
         allow_null=True,
@@ -384,6 +391,21 @@ class DeclareActionSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Validate that a focused_action technique is combat-ready."""
+        focused_action_id = attrs.get("focused_action")
+        if focused_action_id is not None:
+            technique = get_object_or_404(Technique, pk=focused_action_id)
+            if technique.action_template is None:
+                raise serializers.ValidationError(
+                    {
+                        "focused_action": ActionDispatchError(
+                            ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY
+                        ).user_message,
+                    }
+                )
+        return attrs
 
 
 class RemoveParticipantSerializer(serializers.Serializer):
