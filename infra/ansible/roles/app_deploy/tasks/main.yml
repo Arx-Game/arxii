@@ -27,6 +27,101 @@
     force: true
   register: app_symlink
 
+# Build the project venv from uv.lock so the `evennia` entrypoint exists
+# under the service user. --frozen ensures we install EXACTLY what the
+# lockfile says (no implicit resolution drift); --no-dev skips dev deps.
+- name: Build the project venv from uv.lock (uv sync --frozen --no-dev)
+  ansible.builtin.command:
+    cmd: "{{ base_uv_bin }} sync --frozen --no-dev"
+    chdir: "{{ app_current }}"
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_uv_sync
+  changed_when: app_uv_sync.rc == 0 and app_uv_sync.stdout is search('Installed|Removed|Updated|Resolved')
+
+# Django/Evennia migrations are idempotent: re-running when up-to-date is a
+# no-op (output contains no "Applying" lines). Sourcing the rendered
+# EnvironmentFile gives the migration the Postgres password + SECRET_KEY it
+# needs. Runs every deploy by design — the gate against schema-breaking
+# changes lives in the release-safety classifier upstream, not here.
+- name: Apply Django/Evennia DB migrations (idempotent on every deploy)
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    {{ base_uv_bin }} run evennia migrate --noinput
+  args:
+    chdir: "{{ app_gamedir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_migrate
+  changed_when: "'Applying' in app_migrate.stdout"
+
+# Collect Django/Evennia static assets so Caddy can serve /static/ off disk
+# (admin CSS/JS, Evennia static, anything Django's staticfiles knows about).
+- name: Collect Django static files (idempotent)
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    {{ base_uv_bin }} run evennia collectstatic --noinput
+  args:
+    chdir: "{{ app_gamedir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_collectstatic
+  changed_when: "'0 static files copied' not in app_collectstatic.stdout"
+
+# Idempotent superuser bootstrap: if any superuser already exists, skip
+# the create entirely. The credentials come from gated Environment values
+# (username/email = Variables, password = Secret); `evennia
+# createsuperuser --noinput` reads them from DJANGO_SUPERUSER_* env.
+- name: Check whether a Django superuser already exists (first-run guard)
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    {{ base_uv_bin }} run evennia shell <<'PY'
+    from django.contrib.auth import get_user_model
+    print('YES' if get_user_model().objects.filter(is_superuser=True).exists() else 'NO')
+    PY
+  args:
+    chdir: "{{ app_gamedir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_su_check
+  changed_when: false
+
+- name: Create the Django superuser on first run only
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    {{ base_uv_bin }} run evennia createsuperuser --noinput
+  args:
+    chdir: "{{ app_gamedir }}"
+    executable: /bin/bash
+  environment:
+    DJANGO_SUPERUSER_USERNAME: "{{ app_superuser_username }}"
+    DJANGO_SUPERUSER_EMAIL: "{{ app_superuser_email }}"
+  become: true
+  become_user: "{{ app_user }}"
+  no_log: true
+  when: "'YES' not in (app_su_check.stdout | default(''))"
+  register: app_su_create
+  changed_when: app_su_create.rc == 0
+
 - name: Install the systemd unit
   ansible.builtin.template:
     src: arxii.service.j2
@@ -43,8 +138,13 @@
     state: started
     daemon_reload: true
 
-- name: Reload Evennia on a code-only change (Portal keeps players connected)
+- name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
   ansible.builtin.systemd_service:
     name: "{{ app_service }}"
     state: reloaded
-  when: app_checkout is changed or app_symlink is changed
+  when: >
+    app_checkout is changed
+    or app_symlink is changed
+    or app_uv_sync is changed
+    or app_migrate is changed
+    or app_collectstatic is changed

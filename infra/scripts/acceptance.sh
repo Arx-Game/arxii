@@ -45,6 +45,28 @@ chk   "app runs as non-root user"     "grep -q 'User={{ app_user }}' infra/ansib
 chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 
+echo "== first-run setup =="
+chk   "base role installs uv (pinned + sha-verified)" \
+  "grep -q 'sha256:{{ base_uv_sha256 }}' infra/ansible/roles/base/tasks/main.yml"
+chk   "base role pins uv version + sha256"           \
+  "grep -qE '^base_uv_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_uv_sha256: ' infra/ansible/roles/base/defaults/main.yml"
+chk   "app_deploy runs uv sync --frozen --no-dev"    \
+  "grep -q 'sync --frozen --no-dev' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy runs evennia migrate --noinput"    \
+  "grep -q 'evennia migrate --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy runs evennia collectstatic --noinput" \
+  "grep -q 'evennia collectstatic --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy guards superuser create with an exists-check (idempotent)" \
+  "grep -q 'is_superuser=True' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q \"'YES' not in\" infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "secrets_vault maps ARXII_DJANGO_SUPERUSER_PASSWORD -> DJANGO_SUPERUSER_PASSWORD" \
+  "grep -q 'ARXII_DJANGO_SUPERUSER_PASSWORD: DJANGO_SUPERUSER_PASSWORD' infra/ansible/roles/secrets_vault/defaults/main.yml"
+chkno "no plaintext superuser password committed anywhere"               \
+  "git grep -nE '^[^#]*DJANGO_SUPERUSER_PASSWORD\\s*[=:]\\s*\"[^{$]' -- ':!infra/scripts/acceptance.sh' ':!infra/ansible/group_vars/secrets.env.example'"
+chk   "systemd unit uses uv run (not a bare evennia binary)" \
+  "grep -q '{{ base_uv_bin }} run evennia start' infra/ansible/roles/app_deploy/templates/arxii.service.j2"
+chk   "app_pidfile points at the Evennia gamedir (src/server/server.pid)" \
+  "grep -q 'app_pidfile: /opt/arxii/current/src/server/server.pid' infra/ansible/roles/app_deploy/defaults/main.yml"
+
 echo "== secrets posture (public repo) =="
 chkno "no tracked *.tfstate"          "git ls-files | grep -E '\\.tfstate'"
 chkno "no tracked .env"               "git ls-files | grep -E '(^|/)\\.env$'"

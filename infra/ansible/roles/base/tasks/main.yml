@@ -28,6 +28,40 @@
     update_cache: true
     cache_valid_time: 3600
 
+# Install uv (Python project / venv manager). Pinned version + SHA verified.
+# Idempotent: if the binary already reports the pinned version, the install
+# block is skipped entirely (no redundant downloads on every deploy).
+- name: Check installed uv version (if present)
+  ansible.builtin.command: "{{ base_uv_bin }} --version"
+  register: base_uv_check
+  changed_when: false
+  failed_when: false
+
+- name: Install uv (pinned + sha256-verified standalone binary)
+  when: "base_uv_version not in (base_uv_check.stdout | default(''))"
+  block:
+    - name: Download uv tarball
+      ansible.builtin.get_url:
+        url: "https://github.com/astral-sh/uv/releases/download/{{ base_uv_version }}/uv-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "/tmp/uv-{{ base_uv_version }}.tar.gz"
+        checksum: "sha256:{{ base_uv_sha256 }}"
+        mode: "0644"
+
+    - name: Extract uv tarball
+      ansible.builtin.unarchive:
+        src: "/tmp/uv-{{ base_uv_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install uv to {{ base_uv_bin }}
+      ansible.builtin.copy:
+        src: /tmp/uv-x86_64-unknown-linux-gnu/uv
+        dest: "{{ base_uv_bin }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+
 - name: Create the game cgroup slice (MemoryMax isolates a leak from the box)
   ansible.builtin.copy:
     dest: /etc/systemd/system/arxii.slice
