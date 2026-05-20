@@ -1,0 +1,132 @@
+name: Infra Validate
+
+# The real static-validation gate for the turnkey infra. Local dev cannot run
+# tofu/caddy (Windows), so CI is authoritative: infra code is "unvalidated
+# until this is green." Account-independent — no cloud creds, no secrets,
+# never applies anything (fmt/validate/lint/syntax only).
+#
+# SUPPLY CHAIN: every third-party action is pinned to a full commit SHA (a
+# mutable tag like @v4 could be repointed at malicious code). The trailing
+# `# vX.Y.Z` is the human-readable version Dependabot bumps; only the SHA is
+# authoritative. Re-pin via: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+
+on:
+  push:
+    paths: ["infra/**", ".github/workflows/validate.yml"]
+  pull_request:
+    paths: ["infra/**", ".github/workflows/validate.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(infra/scripts/*.sh)
+          if [ ${#files[@]} -eq 0 ]; then echo "no shell scripts yet — skip"; exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck "${files[@]}"
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2.0.1
+        with: { tofu_wrapper: false }
+      - name: tofu fmt
+        run: |
+          set -euo pipefail
+          if [ -z "$(find infra/terraform -name '*.tf' -print -quit 2>/dev/null)" ]; then
+            echo "no .tf yet — skip"; exit 0
+          fi
+          tofu fmt -check -recursive infra/terraform
+      - name: tofu validate (each root, no backend, no creds)
+        run: |
+          set -euo pipefail
+          for root in infra/terraform/bootstrap infra/terraform/prod infra/terraform/ephemeral-stage; do
+            if [ -n "$(find "$root" -maxdepth 1 -name '*.tf' -print -quit 2>/dev/null)" ]; then
+              echo "== validate $root =="
+              ( cd "$root" && tofu init -backend=false -input=false && tofu validate )
+            else
+              echo "== skip $root (no .tf yet) =="
+            fi
+          done
+
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with: { python-version: "3.13" }
+      - name: ansible-lint + syntax-check
+        run: |
+          set -euo pipefail
+          if [ -z "$(find infra/ansible -name '*.yml' -print -quit 2>/dev/null)" ]; then
+            echo "no ansible yet — skip"; exit 0
+          fi
+          pip install --quiet ansible-lint
+          # site.yml legitimately uses community.postgresql.* (see
+          # infra/ansible/requirements.yml). Without the collection, ansible's
+          # syntax-check can't resolve those modules -> fatal
+          # syntax-check[unknown-module]. The real deploy (standup.yml) already
+          # installs the same requirements; the lint env must match it.
+          ansible-galaxy collection install -r infra/ansible/requirements.yml
+          ansible-lint infra/ansible
+          if [ -f infra/ansible/site.yml ]; then
+            ansible-playbook --syntax-check -i 'localhost,' infra/ansible/site.yml
+          fi
+
+  secrets-scan:
+    # Public repo + secrets-adjacent infra => NOT deferrable. Scans full
+    # git history (any plaintext secret ever committed is compromised).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { fetch-depth: 0 }
+      - name: gitleaks (full history)
+        run: |
+          set -euo pipefail
+          # Release assets embed the version (gitleaks_<ver>_linux_x64.tar.gz);
+          # there is NO stable `latest/download/<name>` path — it 404s. Resolve
+          # the latest tag, then fetch the versioned asset.
+          ver="$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+            | grep -oE '"tag_name": *"v[0-9.]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          [ -n "$ver" ] || { echo "could not resolve latest gitleaks version"; exit 1; }
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" -o /tmp/gl.tgz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          # `detect` was removed in gitleaks v8.19+; `git` scans full history.
+          /tmp/gitleaks git . --redact --no-banner --exit-code 1
+
+  caddy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: caddy adapt (render the Jinja template, plugin build)
+        run: |
+          set -euo pipefail
+          cf="$(find infra -iname 'Caddyfile*' -print -quit 2>/dev/null || true)"
+          if [ -z "$cf" ]; then echo "no Caddyfile yet — skip"; exit 0; fi
+          # The repo ships a Jinja TEMPLATE (Caddyfile.j2); Caddy cannot parse
+          # `{{ ... }}`. The template has no Jinja control flow (only simple
+          # substitutions), so stub every `{{ ... }}` with a placeholder host
+          # to get a syntactically real Caddyfile. Caddy-native single-brace
+          # placeholders ({env.X}, {remote_host}) are intentionally left intact.
+          rendered=/tmp/Caddyfile.rendered
+          sed -E 's/\{\{[^}]*\}\}/placeholder.example.com/g' "$cf" > "$rendered"
+          # Prod Caddy is a custom build WITH caddy-dns/cloudflare (the
+          # `acme_dns cloudflare` directive needs it); the stock binary cannot
+          # adapt that directive. Build the same plugin set here.
+          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com/caddy-dns/cloudflare" -o /tmp/caddy
+          chmod +x /tmp/caddy
+          # `adapt` (NOT `validate`): checks Caddyfile syntax + that every
+          # directive/module (incl. the cloudflare DNS plugin) is real, WITHOUT
+          # provisioning TLS — so no Cloudflare API token / secret is ever
+          # needed in this account-independent static gate.
+          /tmp/caddy adapt --config "$rendered" --adapter caddyfile >/dev/null

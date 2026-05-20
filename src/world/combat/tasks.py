@@ -61,6 +61,9 @@ def check_and_resolve_timed_encounters() -> list[int]:
         except CombatEncounter.DoesNotExist:
             pass  # Already resolved by GM or status changed
         except Exception:
+            # Note: ActionDispatchError (e.g. technique missing action_template) is a
+            # configuration error — it will recur every tick until the technique is fixed.
+            # The real upstream guard is serializer validation on technique authoring (later task).
             logger.exception("Failed to auto-resolve encounter %d", enc_id)
 
     return resolved_ids

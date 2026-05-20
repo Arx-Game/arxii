@@ -1,0 +1,8 @@
+---
+# Free-tier external dead-man's-switch (e.g. healthchecks.io). The check
+# UUID/URL is the secret OFFBOX_ALERT_TOKEN from the EnvironmentFile; if the
+# box is down the EXTERNAL service alerts (works precisely when on-box
+# monitoring can't). Plus a cert-expiry early warning.
+offbox_ping_interval: "*-*-* *:0/15:00"   # every 15 min
+offbox_cert_path: "{{ ttc_game_dir | default('/opt/arxii/current') }}/server/ssl.cert"
+offbox_cert_warn_days: 10

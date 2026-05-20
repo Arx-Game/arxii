@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: caddy
+  author: Arx II
+  description: Caddy reverse-proxy to the localhost backend; auto-HTTPS via Cloudflare DNS-01; security headers. Plugin-build is a flagged verify item.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

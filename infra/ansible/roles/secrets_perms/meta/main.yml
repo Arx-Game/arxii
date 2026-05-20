@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: secrets_perms
+  author: Arx II
+  description: Asserts on-box secret hygiene — EnvironmentFile 0600/service-user, no provisioning tokens on box, no committed secrets in the app checkout.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

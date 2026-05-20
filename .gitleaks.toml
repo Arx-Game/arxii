@@ -1,0 +1,35 @@
+# gitleaks config for the repo-wide, full-history secret scan
+# (.github/workflows/validate.yml -> secrets-scan job).
+#
+# We keep gitleaks' entire default ruleset (useDefault = true) active across
+# the whole repo and all of git history. The ONLY adjustment is a per-rule
+# allowlist that scopes the `generic-api-key` rule so it does not fire inside
+# test files. That rule is deliberately broad (any key/token-ish identifier
+# assigned a >=10-char value) and is the canonical false-positive generator
+# on test fixtures and mocks (e.g. `key: 'valid-key-456'`,
+# CharacterFactory(db_key="..."), generated confirmation keys). Real
+# credentials do not live in unit tests.
+#
+# Scope is intentionally narrow and verified against gitleaks 8.30.1:
+#   - generic-api-key is STILL enforced everywhere except test files
+#     (production/app/infra code, settings, history — all still scanned).
+#   - EVERY OTHER rule (private-key, aws-*, stripe, jwt, ...) stays fully
+#     active EVERYWHERE, including inside test files — a real private key
+#     committed to a test still fails CI.
+#   - Adding `[[rules]] id = "generic-api-key"` with `[extend].useDefault`
+#     MERGES this allowlist into the default rule (detection preserved); it
+#     does not replace the rule.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Test fixtures/mocks are FP-prone for the broad generic-api-key rule; real secrets are never in unit tests. Only this rule is scoped; all other rules still scan test files."
+paths = [
+  '''(^|/)tests?/''',
+  '''(^|/)test_[^/]*\.py$''',
+  '''\.test\.[jt]sx?$''',
+]

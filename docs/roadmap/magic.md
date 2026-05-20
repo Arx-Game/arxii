@@ -175,6 +175,7 @@ What was built:
 - **Technique enhancement system** — Players can attach a technique to a social action via `ActionEnhancement` records. The technique wraps the action in `use_technique()`, deducting anima, evaluating Soulfray, and checking for control mishaps. Technique effects (conditions, properties) are rendered as distinct results from social outcomes
 - **Available-actions endpoint** — `GET /api/action-requests/available/` returns social actions with pre-calculated technique enhancement options, anima costs, and Soulfray stage warnings for informed player decisions
 - **Frontend enhancement selection** — ActionPanel displays technique enhancements per action with cost display and Soulfray warning confirmation flow before technique use
+- **Deferred follow-up: enhancement payload not yet folded into unified actions endpoint** — The social-action availability surface (`GET /api/action-requests/available/`) returns an enhancement-rich payload (anima costs, Soulfray warnings, `AvailableEnhancement` lists). The unified actions endpoint (`GET /api/actions/characters/<id>/available/`) returns plain `PlayerAction` descriptors without enhancement data. ActionPanel currently fetches both and joins them client-side by action key. A future task should fold the enhancement data into `PlayerAction` so the unified endpoint is self-contained.
 - **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
 - **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
@@ -961,6 +962,27 @@ Interim status notes:
   manual skill lookup rather than a `reconcile_beginnings()` reconciliation pass.
   Option B (reconciliation) remains a possible follow-up if Beginnings logic grows more
   complex.
+
+**Magic-in-combat API fixes + unified player-action interface (DONE — branch `unified-action-interface`):**
+
+Two long-standing combat-magic integration bugs fixed and the unified action interface delivered.
+See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-specific items:
+
+- **`offense_check_type` bug fixed** — combat-cast techniques now source `offense_check_type`
+  from `technique.action_template` (the authored check type). Previously the serializer fell
+  back to `None`, causing declared spells to deal 0 damage through the REST API.
+- **`focused_ally_target` declarable** — self-cast and ally-targeting techniques are now
+  fully declarable via the `declare_action` endpoint. Previously the API rejected
+  `focused_ally_target` with a serializer error.
+- **`ActionDispatchError` typed exception** — `_run_actions` raises a typed exception with
+  `user_message`; `resolve_round` returns 400 with the message. Closes the raw exception
+  propagation path.
+- **E2E regression test** — full API cycle (create encounter → declare spell → resolve round →
+  assert damage + condition) guards the combat-magic path against future regressions.
+- **Unified player-action read/dispatch** — `GET /api/actions/characters/<id>/available/`
+  and `POST .../dispatch/` merge challenge + combat backends. The WebSocket `execute_action`
+  message now routes through the same `dispatch_player_action` function. ActionPanel and
+  ActionAttachment both repointed to the unified endpoint.
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.

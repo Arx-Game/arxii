@@ -1,0 +1,11 @@
+---
+# Settings changes are code-only → evennia reload (Portal keeps players
+# connected). Real unit/reload wiring lands in app_deploy; this handler is
+# the contract.
+- name: Reload evennia
+  ansible.builtin.command:
+    cmd: evennia reload
+    chdir: "{{ dh_game_dir }}"
+  become: true
+  become_user: "{{ dh_service_user }}"
+  changed_when: true

@@ -1,0 +1,10 @@
+# Real inventory is generated from tofu output — do not commit it.
+inventory/hosts.yml
+# This is a PUBLIC repo: NO secret material is committed, encrypted or not.
+# Secrets live only in the gated GitHub Environment and reach the host as
+# env -> the secrets_vault 0600 EnvironmentFile. There is no committed vault
+# file. Belt-and-braces ignores:
+.vault-pass
+*.decrypted
+*.retry
+secrets.vault.yml

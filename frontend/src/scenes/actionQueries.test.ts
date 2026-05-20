@@ -29,16 +29,20 @@ describe('actionQueries', () => {
   });
 
   describe('fetchAvailableActions', () => {
-    it('returns empty stub response (no backend endpoint yet)', async () => {
-      const result = await fetchAvailableActions('42');
+    it('calls unified actions endpoint with characterId', async () => {
+      const mockData = { count: 0, next: null, previous: null, results: [] };
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(mockData));
 
-      // No API call — this is a placeholder until backend implements the endpoint
-      expect(apiFetch).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        self_actions: [],
-        targeted_actions: [],
-        technique_actions: [],
-      });
+      const result = await fetchAvailableActions(42);
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/actions/characters/42/available/');
+      expect(result).toEqual(mockData);
+    });
+
+    it('throws on error response', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
+
+      await expect(fetchAvailableActions(42)).rejects.toThrow('Failed to load available actions');
     });
   });
 

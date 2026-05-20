@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: unattended_upgrades
+  author: Arx II
+  description: Auto-apply the security pocket; auto-reboot in the documented maintenance window.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

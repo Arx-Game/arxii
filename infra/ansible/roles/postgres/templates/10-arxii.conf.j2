@@ -1,0 +1,4 @@
+# Managed by Ansible (postgres). Hardening: bind LOCALHOST ONLY — the DB is
+# never exposed to the network (the app connects over localhost/socket).
+listen_addresses = 'localhost'
+password_encryption = scram-sha-256

@@ -1,0 +1,32 @@
+---
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Configure jail.local (sshd enabled)
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (fail2ban).
+      [DEFAULT]
+      bantime  = {{ fail2ban_bantime }}
+      findtime = {{ fail2ban_findtime }}
+      maxretry = {{ fail2ban_maxretry }}
+      backend  = systemd
+
+      [sshd]
+      enabled = true
+
+      # VERIFY-DON'T-ASSUME (plan §security): an Evennia-auth jail requires
+      # Evennia to emit parseable failed-login lines. Not enabled until that
+      # is confirmed against the running app — shipping a broken/guessed
+      # filter would be worse than none. Tracked, deliberately disabled:
+      # [evennia]
+      # enabled = false
+  notify: Restart fail2ban

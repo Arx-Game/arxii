@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: tls_telnet_cert
+  author: Arx II
+  description: Sync Caddy's ACME cert into Evennia's hardcoded SSL-telnet paths; evennia reboot only when changed, in the maintenance window.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

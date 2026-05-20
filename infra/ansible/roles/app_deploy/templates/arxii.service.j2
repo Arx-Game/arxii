@@ -1,0 +1,29 @@
+[Unit]
+Description=Arx II (Evennia) game server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+# Non-root, memory-isolated slice, secrets via the 0600 EnvironmentFile.
+User={{ app_user }}
+Group={{ app_group }}
+Slice=arxii.slice
+# Evennia commands resolve paths relative to the gamedir (server/conf/
+# settings.py is at WorkingDirectory/server/conf/settings.py), so we cd
+# into the gamedir, not the project root. uv finds pyproject.toml by
+# walking upward, so the venv is still picked up from app_current.
+WorkingDirectory={{ app_gamedir }}
+EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+# Evennia is a Twisted app; forking start + pidfile. Reload is code-only
+# (Portal keeps players connected). `uv run` activates the project venv
+# so the `evennia` entrypoint installed via uv sync is on PATH.
+Type=forking
+PIDFile={{ app_pidfile }}
+ExecStart={{ base_uv_bin }} run evennia start
+ExecReload={{ base_uv_bin }} run evennia reload
+ExecStop={{ base_uv_bin }} run evennia stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

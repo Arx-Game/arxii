@@ -1,0 +1,24 @@
+---
+# Convergence playbook for the prod host. Idempotent: re-running changes
+# nothing. Roles are added here as each is built (M3-M5); order matters
+# (base/hardening → secrets → data → web/email → app → backups → observ.).
+- name: Converge Arx II production host
+  hosts: arxii_prod
+  become: true
+  roles:
+    - base
+    - ssh_hardening
+    - fail2ban
+    - unattended_upgrades
+    - host_firewall
+    - secrets_vault
+    - postgres
+    - caddy
+    - tls_telnet_cert
+    - django_hardening
+    - app_deploy
+    - backups
+    - offsite_replication
+    - secrets_perms
+    - offbox_alerting
+    - observability

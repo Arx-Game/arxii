@@ -4,7 +4,6 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.mechanics.views import (
-    AvailableActionsView,
     ChallengeInstanceViewSet,
     ChallengeTemplateViewSet,
     CharacterModifierViewSet,
@@ -26,10 +25,5 @@ router.register(r"situation-templates", SituationTemplateViewSet, basename="situ
 router.register(r"situation-instances", SituationInstanceViewSet, basename="situation-instance")
 
 urlpatterns = [
-    path(
-        "characters/<int:character_id>/available-actions/",
-        AvailableActionsView.as_view(),
-        name="available-actions",
-    ),
     path("", include(router.urls)),
 ]

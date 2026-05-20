@@ -1,0 +1,19 @@
+# Terraform/OpenTofu — NEVER commit state or local working dirs.
+# State can contain resource IDs and (if a resource emits them) secrets.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Provider plugin cache / working dir.
+.terraform/
+
+# Plan outputs and any *.tfvars (may hold secrets — secrets live in
+# ansible-vault / env, never here).
+*.tfplan
+*.auto.tfvars
+*.tfvars
+!*.tfvars.example
+
+# Keep the dependency lock file tracked (do NOT ignore .terraform.lock.hcl).

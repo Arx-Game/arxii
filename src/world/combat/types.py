@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import ConditionTemplate
     from world.magic.types import TechniqueUseResult
+    from world.mechanics.types import ChallengeResolutionResult
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class RoundResolutionResult:
     phase_transitions: list[tuple[CombatOpponent, int]] = field(default_factory=list)
     encounter_completed: bool = False
     available_combos: list[AvailableCombo] = field(default_factory=list)
+    challenge_outcomes: list[ChallengeResolutionResult] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

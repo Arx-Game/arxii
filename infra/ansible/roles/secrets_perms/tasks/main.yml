@@ -1,0 +1,43 @@
+---
+# Assertion role — verifies the on-box secret posture. Object Lock on the
+# backup buckets (not key perms) remains the authoritative backstop against
+# an on-box backup-key compromise; this just guards local hygiene.
+
+- name: Stat the EnvironmentFile
+  ansible.builtin.stat:
+    path: "{{ secrets_env_file | default('/etc/arxii/arxii.env') }}"
+  register: envfile
+
+- name: EnvironmentFile must exist, be 0600, owned by the service user
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - envfile.stat.exists
+      - "envfile.stat.mode == '0600'"
+      - "envfile.stat.pw_name == (secrets_owner | default('arxii'))"
+    fail_msg: "EnvironmentFile is missing or not 0600/service-user-owned."
+
+- name: Linode/Cloudflare PROVISIONING tokens must NOT be on the box
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "lookup('env', item) | length == 0"
+    fail_msg: "'{{ item }}' (operator/CI-only provisioning token) is present on the box — it must never reach here."
+  loop:
+    - LINODE_TOKEN
+    - CLOUDFLARE_API_TOKEN
+  no_log: true
+
+- name: The deployed app dir must contain no committed secret files
+  ansible.builtin.find:
+    paths: "{{ app_current | default('/opt/arxii/current') }}"
+    patterns: ["*.pem", "*.key", ".env", "secrets.yml", "*.tfstate"]
+    recurse: true
+    hidden: true
+  register: leaked
+
+- name: Fail if any secret-shaped file is committed in the app checkout
+  ansible.builtin.assert:
+    quiet: true
+    that: "leaked.files | length == 0"
+    fail_msg: "Secret-shaped files found in the app checkout: {{ leaked.files | map(attribute='path') | list }}"

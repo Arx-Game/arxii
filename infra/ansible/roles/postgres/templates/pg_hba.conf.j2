@@ -1,0 +1,7 @@
+# Managed by Ansible (postgres). Locked down: NO `trust` anywhere; only
+# local socket + loopback, scram-sha-256. Nothing listens off-box anyway
+# (listen_addresses=localhost) — this is defense-in-depth.
+local   all   postgres                  peer
+local   all   all                       scram-sha-256
+host    all   all   127.0.0.1/32        scram-sha-256
+host    all   all   ::1/128             scram-sha-256

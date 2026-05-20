@@ -1,0 +1,13 @@
+---
+# LOW PRIORITY, deliberately minimal. The exporter (evennia_extensions.
+# observability, Plan-1 T0-T4) already ships in the app checkout and is
+# OFF by default (OBSERVABILITY_ENABLED defaults False). Enabling it is a
+# future, deliberate opt-in (set OBSERVABILITY_ENABLED via the
+# django_hardening overlay). Plan-1 T5-T10 are intentionally NOT built.
+# This role only records that contract — it changes nothing.
+- name: Observability is present-but-off-by-default (no action)
+  ansible.builtin.debug:
+    msg: >-
+      Exporter ships in the app, OBSERVABILITY_ENABLED defaults False.
+      Enable deliberately later via the django_hardening settings overlay;
+      do not expand here (Plan-1 T5-T10 deferred by decision).

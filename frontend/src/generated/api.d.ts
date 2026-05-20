@@ -165,6 +165,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/actions/characters/{character_id}/available/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Available actions for a character — merged challenge + combat backends.
+     *
+     *     Returns all PlayerAction descriptors available to the character right now.
+     *     Recomputed on every request; no caching.
+     */
+    get: operations['actions_characters_available_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/actions/characters/{character_id}/dispatch/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the given action ref for character_id. */
+    post: operations['actions_characters_dispatch_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/aggregate-beat-contributions/': {
     parameters: {
       query?: never;
@@ -6848,27 +6887,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/mechanics/characters/{character_id}/available-actions/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Available actions for a character at their current location.
-     *
-     *     Returns actions grouped by challenge.
-     */
-    get: operations['mechanics_characters_available_actions_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/mechanics/modifier-targets/': {
     parameters: {
       query?: never;
@@ -9915,6 +9933,26 @@ export interface components {
      * @enum {string}
      */
     ActionEnum: 'submit' | 'edit' | 'agree';
+    /**
+     * @description Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
+     *
+     *     Uses a plain Serializer (not DataclassSerializer) to avoid drf_spectacular's
+     *     get_type_hints() introspection, which cannot resolve TYPE_CHECKING-only imports
+     *     (CheckType, ActionTemplate, ChallengeResolutionResult) in actions/types.py and
+     *     crashes with NameError during schema generation.
+     */
+    ActionRef: {
+      readonly backend: string;
+      challenge_instance_id?: number | null;
+      approach_id?: number | null;
+      technique_id?: number | null;
+      registry_key?: string | null;
+    };
+    /** @description Minimal read-only representation of an ActionTemplate model instance. */
+    ActionTemplateMinimal: {
+      readonly id: number;
+      readonly name: string;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -9997,22 +10035,6 @@ export interface components {
      * @enum {string}
      */
     AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
-    AvailableAction: {
-      application_id: number;
-      application_name: string;
-      capability_source: components['schemas']['CapabilitySource'];
-      challenge_instance_id: number;
-      challenge_name: string;
-      approach_id: number | null;
-      check_type_name: string;
-      display_name: string;
-      custom_description: string;
-      difficulty_indicator?:
-        | (components['schemas']['DifficultyIndicatorEnum'] | components['schemas']['NullEnum'])
-        | null;
-      prerequisite_met?: boolean;
-      prerequisite_reasons?: string[];
-    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -10366,16 +10388,6 @@ export interface components {
      * @enum {string}
      */
     CantripArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
-    CapabilitySource: {
-      capability_name: string;
-      capability_id: number;
-      value: number;
-      source_type: components['schemas']['SourceTypeEnum'];
-      source_name: string;
-      source_id: number;
-      effect_property_ids?: number[];
-      prerequisite?: number | null;
-    };
     /** @description Serializer for capability types. */
     CapabilityType: {
       readonly id: number;
@@ -10394,12 +10406,6 @@ export interface components {
       custom_description?: string;
       /** @description When set, resolution uses this template's check_type and pool. */
       action_template?: number | null;
-    };
-    /** @description Serializer for ChallengeGroup — actions grouped by challenge. */
-    ChallengeGroup: {
-      challenge_instance_id: number;
-      challenge_name: string;
-      actions: components['schemas']['AvailableAction'][];
     };
     /** @description Serializer for challenge instances. */
     ChallengeInstance: {
@@ -10941,6 +10947,11 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /** @description Minimal read-only representation of a CheckType model instance. */
+    CheckTypeMinimal: {
+      readonly id: number;
+      readonly name: string;
+    };
     /** @description Request serializer for staff clock adjustment. */
     ClockAdjustRequest: {
       /** Format: date-time */
@@ -11348,15 +11359,6 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
-    /**
-     * @description * `impossible` - IMPOSSIBLE
-     *     * `easy` - EASY
-     *     * `moderate` - MODERATE
-     *     * `hard` - HARD
-     *     * `very_hard` - VERY_HARD
-     * @enum {string}
-     */
-    DifficultyIndicatorEnum: 'impossible' | 'easy' | 'moderate' | 'hard' | 'very_hard';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -13258,21 +13260,6 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['BugReportDetail'][];
     };
-    PaginatedChallengeGroupList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['ChallengeGroup'][];
-    };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
       count?: number;
@@ -13797,6 +13784,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['Place'][];
+    };
+    PaginatedPlayerActionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PlayerAction'][];
     };
     PaginatedPlayerFeedbackDetailList: {
       /** @example 123 */
@@ -15161,6 +15163,25 @@ export interface components {
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
     /**
+     * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
+     *
+     *     Does NOT use DataclassSerializer because PlayerAction contains Django model
+     *     instances (check_type, action_template) that DataclassSerializer cannot render.
+     *     Uses explicit field definitions with SerializerMethodField for the model instances.
+     */
+    PlayerAction: {
+      readonly backend: string;
+      readonly display_name: string;
+      readonly description: string;
+      /** @description Return the difficulty enum value string, or None. */
+      readonly difficulty: string | null;
+      readonly prerequisite_met: boolean;
+      readonly prerequisite_reasons: string[];
+      readonly check_type: components['schemas']['CheckTypeMinimal'];
+      readonly action_template: components['schemas']['ActionTemplateMinimal'];
+      readonly ref: components['schemas']['ActionRef'];
+    };
+    /**
      * @description Write serializer - player creates feedback.
      *
      *     Frontend supplies ``reporter_persona``; the serializer validates
@@ -16438,14 +16459,6 @@ export interface components {
       | 'ROOM_RESIDENCE'
       | 'OUTFIT_TRICKLE'
       | 'STAFF_GRANT';
-    /**
-     * @description * `technique` - TECHNIQUE
-     *     * `trait` - TRAIT
-     *     * `condition` - CONDITION
-     *     * `equipment` - EQUIPMENT
-     * @enum {string}
-     */
-    SourceTypeEnum: 'technique' | 'trait' | 'condition' | 'equipment';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -17795,6 +17808,52 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
         };
+      };
+    };
+  };
+  actions_characters_available_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerActionList'];
+        };
+      };
+    };
+  };
+  actions_characters_dispatch_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -19528,7 +19587,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };
@@ -26907,32 +26967,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterModifier'];
-        };
-      };
-    };
-  };
-  mechanics_characters_available_actions_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
-      header?: never;
-      path: {
-        character_id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedChallengeGroupList'];
         };
       };
     };

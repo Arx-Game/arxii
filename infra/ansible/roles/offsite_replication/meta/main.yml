@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: offsite_replication
+  author: Arx II
+  description: Replicate the latest dump to the independent Cloudflare R2 offsite copy using the separate R2 credential (3-2-1); never restores/deletes.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

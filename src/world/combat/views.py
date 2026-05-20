@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ModelViewSet
 
+from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
@@ -147,6 +148,11 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         try:
             resolve_round(encounter)
+        except ActionDispatchError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ValueError:
             return Response(
                 {"detail": _ERR_INVALID_STATUS},
@@ -270,6 +276,16 @@ class CombatEncounterViewSet(ModelViewSet):
                 encounter=encounter,
             )
 
+        # Resolve focused ally target FK
+        focused_ally_target = None
+        ally_target_id = data.get("focused_ally_target")
+        if ally_target_id:
+            focused_ally_target = get_object_or_404(
+                CombatParticipant,
+                pk=ally_target_id,
+                encounter=encounter,
+            )
+
         # Resolve passive technique FKs
         passive_kwargs: dict[str, Technique | None] = {}
         for passive_field in ("physical_passive", "social_passive", "mental_passive"):
@@ -287,7 +303,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 focused_category=data.get("focused_category"),
                 effort_level=data["effort_level"],
                 focused_opponent_target=focused_opponent_target,
-                focused_ally_target=None,
+                focused_ally_target=focused_ally_target,
                 physical_passive=passive_kwargs.get("physical_passive"),
                 social_passive=passive_kwargs.get("social_passive"),
                 mental_passive=passive_kwargs.get("mental_passive"),

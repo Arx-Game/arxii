@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: app_deploy
+  author: Arx II
+  description: Release-dir + current-symlink deploy of the Evennia app; non-root, memory-sliced, env-file systemd unit; reload-not-restart on code-only change.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

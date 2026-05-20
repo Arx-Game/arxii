@@ -1,0 +1,36 @@
+---
+- name: Fail-closed — every required secret env var must be present & non-empty
+  ansible.builtin.assert:
+    that:
+      - "lookup('env', item) | length > 0"
+    fail_msg: "Required secret env '{{ item }}' is missing/empty (set it from the gated GitHub Environment / password manager)."
+    quiet: true
+  loop: "{{ secrets_map.keys() | list }}"
+  no_log: true
+
+- name: Defense-in-depth — operator/CI-only tokens must NOT be in this env
+  ansible.builtin.assert:
+    that:
+      - "lookup('env', item) | length == 0"
+    fail_msg: "'{{ item }}' is operator/CI-only and must never reach the box — do not export it to the ansible step."
+    quiet: true
+  loop: "{{ secrets_forbidden_env }}"
+  no_log: true
+
+- name: Ensure secrets dir exists
+  ansible.builtin.file:
+    path: "{{ secrets_env_dir }}"
+    state: directory
+    owner: "{{ secrets_owner }}"
+    group: "{{ secrets_group }}"
+    mode: "0750"
+
+- name: Render the 0600 service-user EnvironmentFile (no_log — never printed)
+  ansible.builtin.template:
+    src: arxii.env.j2
+    dest: "{{ secrets_env_file }}"
+    owner: "{{ secrets_owner }}"
+    group: "{{ secrets_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Reload systemd

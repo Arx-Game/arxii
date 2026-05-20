@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Managed by Ansible (offbox_alerting). Dead-man's-switch heartbeat + cert
+# expiry early warning. OFFBOX_ALERT_TOKEN (the check URL) from the
+# EnvironmentFile; never echoed.
+set -euo pipefail
+set +x
+
+base="${OFFBOX_ALERT_TOKEN}"   # full base ping URL incl. the check id
+
+# Cert-expiry: if the SSL-telnet/web cert expires within the warn window,
+# signal the /fail endpoint so the external service alerts EARLY.
+if [ -f "{{ offbox_cert_path }}" ]; then
+  end="$(openssl x509 -enddate -noout -in "{{ offbox_cert_path }}" | cut -d= -f2)"
+  end_s="$(date -d "$end" +%s)"
+  now_s="$(date +%s)"
+  if [ $(( (end_s - now_s) / 86400 )) -lt {{ offbox_cert_warn_days }} ]; then
+    curl -fsS -m 10 "${base}/fail" -d "cert expiring <{{ offbox_cert_warn_days }}d" >/dev/null || true
+    exit 0
+  fi
+fi
+
+# Healthy: ping success (silence => the external service raises the alarm).
+curl -fsS -m 10 "${base}" >/dev/null || true
