@@ -60,6 +60,11 @@ repos:
         entry: uv run python tools/check_migrations.py
         language: system
         pass_filenames: false
+      - id: shard-coverage
+        name: Enforce CI shard coverage for every backend app
+        entry: uv run python tools/lint_shard_coverage.py
+        language: system
+        pass_filenames: false
       - id: check-migration-seed-data
         name: Check for seed data in migrations
         entry: uv run python tools/check_migration_seed_data.py
