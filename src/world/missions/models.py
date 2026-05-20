@@ -732,6 +732,25 @@ class MissionInstance(SharedMemoryModel):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Phase 5b.3: runtime side of the stories-missions seam. When set, this
+    # instance was launched as the resolver of a specific Beat; the Phase-3
+    # terminal helper notifies the seam (see
+    # ``world.missions.services.beat.on_mission_complete_for_beat``). When
+    # null the instance is a "free" run with no Beat reporting. SET_NULL on
+    # Beat delete: losing the Beat must not also lose the run record.
+    source_beat = models.ForeignKey(
+        "stories.Beat",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Optional: the stories Beat that launched this run. SET_NULL on "
+            "Beat delete. Engine that flips the Beat at terminal is deferred "
+            "to a future stories-missions seam design pass (5b.3 stub-records "
+            "the trigger only)."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.template.slug} ({self.status})"

@@ -1,10 +1,18 @@
 """In-memory beat-completion stub (Phase 5b.1 placeholder).
 
-Phase 5b.3 will wire :func:`propagate_beat` to the real
-:class:`world.stories.models.BeatCompletion` upsert. For 5b.1 the stub
-records the call in-memory so the apply-router test suite can verify the
-call fired without depending on the cross-app stories migration that 5b.3
-will introduce.
+# DESIGN: Reward-line BEAT sinks (DeedRewardSink.BEAT) are reserved for future
+# fine-grained Beat propagation (e.g., per-deed beat advancement, multi-beat
+# fan-out). The PRIMARY Beat seam is MissionInstance.source_beat →
+# on_mission_complete_for_beat() called at terminal (Phase 5b.3). A BEAT-sink
+# reward line is currently a no-op record; the canonical instance-level seam
+# fires independently when the mission terminates.
+
+Phase 5b.3 landed the cross-app data shape (Beat.required_mission +
+MissionInstance.source_beat FKs) and ``on_mission_complete_for_beat()`` as
+the canonical instance-level seam; the real BeatCompletion engine is
+deferred to a future stories-missions seam design pass. This stub's
+behavior is unchanged: it records BEAT-sink line deliveries in-memory so
+the apply-router test suite can verify the call fired.
 """
 
 from __future__ import annotations

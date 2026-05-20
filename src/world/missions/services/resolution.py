@@ -48,6 +48,7 @@ from world.missions.models import (
 )
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.missions.services.affordances import bindings_for_character
+from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import PresentedOption
 
@@ -229,11 +230,22 @@ def _rider_permitted(
 
 
 def _finish_terminal(instance: MissionInstance) -> None:
-    """Mark the run complete (terminal route reached)."""
+    """Mark the run complete (terminal route reached).
+
+    Phase 5b.3: after the status write, notify the Mission→Beat seam. The
+    call is a cheap no-op when ``instance.source_beat_id is None`` (a free
+    run); when set, it appends one :class:`MissionBeatTriggerRecord` to the
+    seam's stub-record log. The actual Beat-completion engine is deferred —
+    see :mod:`world.missions.services.beat` for the three deferred
+    product-level design questions. JOINT terminals call ``_finish_terminal``
+    exactly once (Phase 4 invariant), so the seam fires exactly once per
+    instance termination.
+    """
     instance.status = MissionStatus.COMPLETE
     instance.completed_at = timezone.now()
     instance.current_node = None
     instance.save()
+    on_mission_complete_for_beat(instance)
 
 
 def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing

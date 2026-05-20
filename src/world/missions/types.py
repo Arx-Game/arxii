@@ -209,6 +209,28 @@ class RewardBatchResult:
 
 
 @dataclass(frozen=True)
+class MissionBeatTriggerRecord:
+    """One recorded mission→Beat trigger emitted by ``_finish_terminal``.
+
+    Phase 5b.3 stub-record carrier for the stories-missions seam. When a
+    :class:`~world.missions.models.MissionInstance` with ``source_beat`` set
+    reaches a terminal route, ``world.missions.services.beat.on_mission_complete_for_beat``
+    appends one of these to its module-level log; tests assert the trigger
+    was recorded. The actual "complete the Beat" engine is deferred — see
+    the service module's docstring for the three deferred design questions.
+
+    Mirrors the shape of :class:`BeatStubCall` (the reward-line BEAT sink's
+    stub-record) so future engine work can converge them with no shape
+    change. ``triggered_at`` is the wall-clock moment of the call (DB writes
+    in 5b.3 are zero; this is a pure in-memory marker).
+    """
+
+    instance_pk: int
+    beat_pk: int
+    triggered_at: datetime
+
+
+@dataclass(frozen=True)
 class PresentedOption:
     """One player-facing option surfaced at a node for the acting participant.
 

@@ -158,7 +158,13 @@ class MissionOptionRouteCandidateFactory(DjangoModelFactory):
 
 
 class MissionInstanceFactory(DjangoModelFactory):
-    """Factory for MissionInstance. Defaults to an ACTIVE run."""
+    """Factory for MissionInstance. Defaults to an ACTIVE, free (no source Beat) run.
+
+    Callers exercising the Phase 5b.3 stories-missions seam pass
+    ``source_beat=`` with a ``world.stories.factories.BeatFactory()``
+    instance; the default ``None`` keeps the existing fixture surface
+    unchanged (a "free" mission).
+    """
 
     class Meta:
         model = MissionInstance
@@ -167,6 +173,7 @@ class MissionInstanceFactory(DjangoModelFactory):
     current_node = None
     status = MissionStatus.ACTIVE
     completed_at = None
+    source_beat = None
 
 
 class MissionParticipantFactory(DjangoModelFactory):
