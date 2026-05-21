@@ -4,6 +4,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.areas.constants import AreaLevel
 
+_POSTGRES_VENDOR = "postgresql"  # noqa: STRING_LITERAL — Django backend identifier
+
 
 class Area(SharedMemoryModel):
     """A spatial hierarchy node representing a named area at a specific level."""
@@ -86,6 +88,13 @@ class AreaClosure(SharedMemoryModel):
 
 
 def refresh_area_closure() -> None:
-    """Refresh the areas_areaclosure materialized view."""
+    """Refresh the areas_areaclosure materialized view.
+
+    No-ops on non-Postgres backends — the view is PG-only (created via
+    PostgresOnlyRunSQL in migrations) and doesn't exist on the SQLite
+    inner-loop test tier.
+    """
+    if connection.vendor != _POSTGRES_VENDOR:
+        return
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW areas_areaclosure")
