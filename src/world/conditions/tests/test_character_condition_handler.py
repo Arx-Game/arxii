@@ -1,5 +1,6 @@
 """Tests for CharacterConditionHandler — caches active condition instances."""
 
+from django.test import tag
 from evennia import create_object
 from evennia.utils.test_resources import EvenniaTestCase
 
@@ -138,7 +139,12 @@ class CharacterConditionHandlerTests(EvenniaTestCase):
         # resolved_at does not exclude the condition — parity with get_active_conditions
         self.assertEqual(char.conditions.resistance_modifier(fire), 10)
 
+    @tag("postgres")
     def test_stage_level_modifier_when_at_that_stage(self):
+        """PG-only: ``apply_condition`` calls ``_build_bulk_context`` which
+        runs ``ConditionStage.objects.filter(...).distinct("condition_id")``
+        — DISTINCT ON is Postgres-only.
+        """
         from world.conditions.factories import (
             ConditionResistanceModifierFactory,
             ConditionStageFactory,

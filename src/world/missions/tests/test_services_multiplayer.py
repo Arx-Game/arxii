@@ -45,7 +45,7 @@ from world.missions.factories import (
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionDeedRewardLine
+from world.missions.models import MissionDeedRewardLine, MissionOptionRouteReward
 from world.missions.services import (
     build_group_option_list,
     build_option_list,
@@ -566,6 +566,16 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         cls.success = CheckOutcomeFactory(name="JTermSuccess", success_level=3)
         cls.failure = CheckOutcomeFactory(name="JTermFailure", success_level=-3)
         cls.sneak = CheckTypeFactory(name="JTermSneak")
+
+    def setUp(self) -> None:
+        # SharedMemoryModel idmap hygiene: each test in this class creates
+        # fresh MissionOptionRouteReward + MissionDeedRewardLine rows whose
+        # PKs collide with prior tests' rows on the SQLite tier (PK
+        # autoincrement resets after rollback; PG sequences don't). Without
+        # a flush, ``route.reward_templates.all()`` returns stale cached
+        # instances with the prior test's amount / recipient_id values.
+        MissionOptionRouteReward.flush_instance_cache()
+        MissionDeedRewardLine.flush_instance_cache()
 
     def _outcome_by_character(self, mapping: dict[object, object]) -> object:
         def _side_effect(character: object, check_type: object, **_kw: object):

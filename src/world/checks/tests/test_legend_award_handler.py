@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from world.checks.constants import EffectType
@@ -186,8 +186,13 @@ class LegendAwardDescriptionFallbackTests(TestCase):
         assert "Legendary deed" in event.description
 
 
+@tag("postgres")
 class LegendAwardHandlerCovenantFanOutTests(TestCase):
-    """Covenant fan-out: create_legend_event credits engaged covenant memberships."""
+    """Covenant fan-out: create_legend_event credits engaged covenant memberships.
+
+    PG-only: queries ``societies_covenantlegendsummary`` (a materialized view).
+    On the SQLite inner-loop tier the view doesn't exist; this class is skipped.
+    """
 
     def test_covenant_credit_fans_out_for_engaged_member(self) -> None:
         """A persona with an engaged covenant membership gets a CovenantLegendCredit row."""
