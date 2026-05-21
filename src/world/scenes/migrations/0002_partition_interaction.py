@@ -10,6 +10,8 @@ from pathlib import Path
 
 from django.db import migrations
 
+from core_management.migration_utils import PostgresOnlyRunSQL
+
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
@@ -23,7 +25,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
+        PostgresOnlyRunSQL(
             sql=_read_sql("partition_interaction_forward.sql"),
             reverse_sql=_read_sql("partition_interaction_reverse.sql"),
         ),

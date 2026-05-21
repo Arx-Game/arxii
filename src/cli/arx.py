@@ -44,6 +44,14 @@ PRODUCTION_SETTINGS_OPTION = typer.Option(
     "--production-settings",
     help="Use production settings instead of optimized test settings",
 )
+SQLITE_OPTION = typer.Option(
+    False,
+    "--sqlite",
+    help=(
+        "Use SQLite in-memory test DB (fast inner-loop tier). "
+        "Tests with @tag('postgres') will be skipped."
+    ),
+)
 SHELL_COMMAND_OPTION = typer.Option(
     None,
     "-c",
@@ -108,6 +116,7 @@ def run_tests(
     timing: bool = TIMING_OPTION,
     coverage: bool = COVERAGE_OPTION,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
+    sqlite: bool = SQLITE_OPTION,
 ) -> None:
     """Run Evennia tests with optimized test settings for performance.
 
@@ -138,8 +147,14 @@ def run_tests(
     # internally to build the fully-qualified dotted path. Django's management layer
     # then sets DJANGO_SETTINGS_MODULE to the bare name (e.g. "test_settings"). On
     # Windows, spawn-mode parallel workers inherit that env var and resolve it via the
-    # src/test_settings.py shim (src/ is on sys.path via the editable install .pth).
-    settings_module = "settings" if production_settings else "test_settings"
+    # src/test_settings.py / src/sqlite_test_settings.py shims (src/ is on sys.path via
+    # the editable install .pth).
+    if production_settings:
+        settings_module = "settings"
+    elif sqlite:
+        settings_module = "sqlite_test_settings"
+    else:
+        settings_module = "test_settings"
     command = ["evennia", "test", f"--settings={settings_module}"]
 
     # Add performance options
