@@ -16,8 +16,6 @@ from world.codex.constants import CodexKnowledgeStatus
 from world.consent.models import VisibilityMixin
 from world.roster.models import RosterEntry, RosterTenure
 
-_POSTGRES_VENDOR = "postgresql"  # noqa: STRING_LITERAL — Django backend identifier
-
 
 class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -157,14 +155,7 @@ class CodexSubjectBreadcrumb(SharedMemoryModel):
 
 
 def refresh_codex_breadcrumbs() -> None:
-    """Refresh the codex_subjectbreadcrumb materialized view.
-
-    No-ops on non-Postgres backends — the view is PG-only (created via
-    PostgresOnlyRunSQL in migrations) and doesn't exist on the SQLite
-    inner-loop test tier.
-    """
-    if connection.vendor != _POSTGRES_VENDOR:
-        return
+    """Refresh the codex_subjectbreadcrumb materialized view."""
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW codex_subjectbreadcrumb")
 

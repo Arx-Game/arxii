@@ -6,8 +6,6 @@ from pathlib import Path
 from django.db import migrations, models
 import django.db.models.deletion
 
-from core_management.migration_utils import PostgresOnlyRunSQL
-
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
@@ -82,7 +80,7 @@ class Migration(migrations.Migration):
                 ],
             },
         ),
-        PostgresOnlyRunSQL(
+        migrations.RunSQL(
             sql=_read_sql("covenant_legend_summary.sql"),
             reverse_sql=(
                 "DROP MATERIALIZED VIEW IF EXISTS societies_covenantlegendsummary CASCADE;"

@@ -9,8 +9,6 @@ from pathlib import Path
 
 from django.db import migrations
 
-from core_management.migration_utils import PostgresOnlyRunSQL
-
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
@@ -24,7 +22,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        PostgresOnlyRunSQL(
+        migrations.RunSQL(
             sql=_read_sql("areaclosure.sql"),
             reverse_sql="DROP MATERIALIZED VIEW IF EXISTS areas_areaclosure;",
         ),

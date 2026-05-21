@@ -28,8 +28,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.societies.types import ReputationTier
 
-_POSTGRES_VENDOR = "postgresql"  # noqa: STRING_LITERAL — Django backend identifier
-
 # Validators for principle fields (-5 to +5 range)
 PRINCIPLE_MIN = -5
 PRINCIPLE_MAX = 5
@@ -1028,15 +1026,7 @@ class CovenantLegendSummary(SharedMemoryModel):
 
 
 def refresh_legend_views() -> None:
-    """Refresh all legend materialized views concurrently.
-
-    No-ops on non-Postgres backends — the materialized views are PG-only
-    (created via PostgresOnlyRunSQL in migrations) and don't exist on the
-    SQLite inner-loop test tier. Tests that assert against the refreshed
-    view contents must be decorated with ``@django.test.tag("postgres")``.
-    """
-    if connection.vendor != _POSTGRES_VENDOR:
-        return
+    """Refresh all legend materialized views concurrently."""
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_personalegendsummary")

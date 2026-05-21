@@ -9,8 +9,6 @@ from pathlib import Path
 
 from django.db import migrations
 
-from core_management.migration_utils import PostgresOnlyRunSQL
-
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
@@ -24,11 +22,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        PostgresOnlyRunSQL(
+        migrations.RunSQL(
             sql=_read_sql("character_legend_summary.sql"),
             reverse_sql="DROP MATERIALIZED VIEW IF EXISTS societies_characterlegendsummary;",
         ),
-        PostgresOnlyRunSQL(
+        migrations.RunSQL(
             sql=_read_sql("guise_legend_summary.sql"),
             reverse_sql="DROP MATERIALIZED VIEW IF EXISTS societies_personalegendsummary;",
         ),

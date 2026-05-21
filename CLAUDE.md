@@ -206,7 +206,7 @@ Production runs Postgres exclusively. Tests run in TWO tiers:
 1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
 2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. Use before pushing, and for apps the SQLite tier can't cover. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
 
-#### Working app set for `--sqlite` (per `docs/perf/sqlite-spike-2026-05-20.md`)
+#### Working app set for `--sqlite`
 
 | Tier | Apps |
 |---|---|
