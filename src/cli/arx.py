@@ -52,6 +52,14 @@ SQLITE_OPTION = typer.Option(
         "Tests with @tag('postgres') will be skipped."
     ),
 )
+EXCLUDE_TAG_OPTION = typer.Option(
+    [],
+    "--exclude-tag",
+    help=(
+        "Skip tests decorated with @tag(<name>). Repeatable. Passed through "
+        "to Django's test runner. Use with --sqlite to skip @tag('postgres')."
+    ),
+)
 SHELL_COMMAND_OPTION = typer.Option(
     None,
     "-c",
@@ -107,7 +115,7 @@ def shell(command: str | None = SHELL_COMMAND_OPTION) -> None:
 
 
 @app.command(name="test")
-def run_tests(
+def run_tests(  # noqa: C901 — CLI option parser; complexity is inherent in the per-flag append chain
     args: list[str] = TEST_ARGS_ARG,
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,
@@ -117,6 +125,7 @@ def run_tests(
     coverage: bool = COVERAGE_OPTION,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
     sqlite: bool = SQLITE_OPTION,
+    exclude_tag: list[str] = EXCLUDE_TAG_OPTION,
 ) -> None:
     """Run Evennia tests with optimized test settings for performance.
 
@@ -164,6 +173,8 @@ def run_tests(
         command.append("--keepdb")
     if failfast:
         command.append("--failfast")
+    for tag in exclude_tag:
+        command += ["--exclude-tag", tag]
 
     # Add verbosity
     MIN_VERBOSITY_FOR_TIMING = 2

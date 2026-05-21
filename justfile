@@ -22,6 +22,26 @@ default:
 test *args:
     uv run arx test {{args}}
 
+# Inner-loop SQLite tier — fast in-memory DB, excludes @tag("postgres")
+# tests that don't work on SQLite. Auto-confirms the destroy-test-DB
+# prompt. Serial by default: --parallel REGRESSES small per-app suites
+# (per-worker DB-clone overhead > parallelism gain). See
+# docs/perf/sqlite-spike-2026-05-20.md for the working/broken per-app set.
+#   just test-fast world.missions
+#   just test-fast world.checks world.flows
+# For apps where the SQLite tier doesn't work (character_sheets, roster,
+# and the migration-disabled set: magic, scenes, codex, areas, societies),
+# use `just test-parity` instead.
+test-fast *args:
+    echo "yes" | uv run arx test --sqlite --exclude-tag postgres {{args}}
+
+# CI-parity tier — runs the same Postgres path CI runs, in parallel.
+# Use before pushing, and for apps that can't run on the SQLite tier.
+#   just test-parity world.character_sheets
+#   just test-parity                              # full suite, ~30+ min
+test-parity *args:
+    echo "yes" | uv run arx test --parallel {{args}}
+
 # Run `arx test` and mirror combined stdout+stderr to .claude/scratch/<name>.
 # Use when output is too big to fit in context and needs reading back.
 # <name> must be a bare filename (no slashes, no ..).
