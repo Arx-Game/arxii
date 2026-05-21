@@ -1,75 +1,95 @@
-# SQLite spike — 2026-05-20
+# SQLite spike — per-app survey
 
 Branch: `feature/test-speedups`. Settings: `server.conf.sqlite_test_settings`
-(SQLite in-memory, `MIGRATION_MODULES = _DisableMigrations()` so the schema
-builds from current model state with no migration replay).
+(SQLite `:memory:`, `MIGRATION_MODULES = _DisableMigrations()` so schema builds
+from current model state).
 
-## Per-app results
+After the full-suite SQLite run revealed cross-test contamination is the
+dominant failure mode (tests pass in isolation, break in suite), the spike
+pivoted to **per-app SQLite as a per-app inner-loop tool**. The full suite
+stays on the Postgres parity tier.
 
-| App | Tests | SQLite outcome | PG baseline | Speedup |
-|---|---:|---|---:|---:|
-| `world.missions` | 246 | **242 pass, 4 fail, 1 skipped** in **10.394s** | 18.841s | **45% faster** |
+## Per-app survey (with REFRESH vendor guards landed at `e3b718e7`)
 
-(More apps to follow as the spike expands.)
+| App | Tests | SQLite time | Broken | % broken | Tier |
+|---|---:|---:|---:|---:|---|
+| **Clean — SQLite works perfectly** ||||||
+| `world.action_points` | 60 | 0.760s | 0 | 0% | SQLite |
+| `world.forms` | 48 | 0.690s | 0 | 0% | SQLite |
+| `world.achievements` | 53 | 1.056s | 0 | 0% | SQLite |
+| `world.game_clock` | 104 | 1.231s | 0 | 0% | SQLite |
+| `world.skills` | 79 | 1.488s | 0 | 0% | SQLite |
+| `world.relationships` | 88 | 3.039s | 0 | 0% | SQLite |
+| `flows` | 253 | 7.974s | 0 (4 skip) | 0% | SQLite |
+| **Mostly clean — SQLite viable, ≤5% need `@tag("postgres")`** ||||||
+| `world.checks` | 97 | 1.136s | 1 | 1.0% | SQLite |
+| `world.events` | 94 | 3.946s | 1 | 1.1% | SQLite |
+| `world.missions` | 246 | 5.278s | 4 | 1.6% | SQLite |
+| `world.journals` | 56 | 1.890s | 1 | 1.8% | SQLite |
+| `world.mechanics` | 255 | 3.956s | 5 | 2.0% | SQLite |
+| `world.progression` | 255 | 7.413s | 6 | 2.4% | SQLite |
+| `world.conditions` | 235 | 14.713s | 8 | 3.4% | SQLite |
+| **Partial — SQLite has noticeable rough edges (5-15%)** ||||||
+| `world.combat` | 343 | 27.735s | 19 | 5.5% | SQLite (with caveats) |
+| `world.items` | 248 | 11.818s | 20 | 8.1% | SQLite (with caveats) |
+| `world.vitals` | 35 | 0.334s | 3 | 8.6% | SQLite (with caveats) |
+| `actions` | 203 | 5.131s | 21 | 10.3% | SQLite (with caveats) |
+| **Broken — falls back to PG-only** ||||||
+| `world.roster` | 112 | 9.367s | 50 | 44.6% | PG only |
+| `world.character_sheets` | 202 | 6.850s | 190 | 94.1% | PG only |
+| **Carved out at the settings level (migrations disabled)** ||||||
+| `world.magic` | — | — | — | — | PG only |
+| `world.scenes` | — | — | — | — | PG only |
+| `world.codex` | — | — | — | — | PG only |
+| `world.areas` | — | — | — | — | PG only |
+| `world.societies` | — | — | — | — | PG only |
 
-## Missions failure analysis
+## Time savings per tier
 
-All 4 failures are **test-design issues, not SQLite incompatibilities**:
+- **14 SQLite-clean / mostly-clean apps** sum to **2,070 tests in ~54.6s** on
+  SQLite. On Postgres these would be roughly 2-3× that (extrapolating from
+  missions: 5.3s SQLite → 18.8s PG). So the SQLite path saves **~80-120s
+  per inner-loop invocation** when working in this set of apps.
+- **Single-app SQLite typical case: 1-15s.** Compare to PG single-app: 5-30s
+  including DB setup. Roughly 2-4× faster per invocation.
+- **Full-suite Postgres still required** as the parity gate (CI shards, local
+  `arx test --postgres` before push). Phase 5 squashing + Phase 6.2 optional
+  tmpfs will speed that up too.
 
-| Test | Assertion | Cause |
-|---|---|---|
-| `test_joint_per_attempt_does_not_emit_rewards` | `1 != 50` | Picks `line.amount` from queryset without `order_by` — SQLite returns insertion order, PG returns physical-storage order, so `lines[0]` differs |
-| `test_joint_terminal_emits_rewards_once_on_holder_deed` | `[2, 3] != [1, 2]` | Compares character IDs directly. SQLite starts auto-increment IDs differently (no Account #1 / Limbo seed); the IDs differ but the test logic is correct |
-| `test_branch_terminal_via_null_route_emits_authored_rewards` | `100 != 200` | Same first-row-from-queryset issue |
-| `test_check_terminal_route_emits_authored_reward_line` | `100 != 750` | Same |
+## Pattern: which apps work on SQLite, which don't
 
-Fix shape: replace `lines[0].amount` with `sum(l.amount for l in lines)` or
-`assertCountEqual([l.amount for l in lines], expected_amounts)`. Replace
-`assertEqual(recipient_ids, [1, 2])` with `assertEqual(set(recipient_ids), {char.id for char in chars})`. These tests would also be flaky on PG with
-different sequence states; the SQLite spike just surfaced the latent issue.
+**Works cleanly:** engine-style apps with shallow fixture graphs. Their tests
+create objects via factory directly, don't depend on Evennia's initial-setup
+side effects, and use minimal cross-app FK chains. Examples: missions, flows,
+game_clock, achievements, action_points, skills, relationships.
 
-## Architecture
+**Fails on SQLite:** apps whose fixtures recursively pull in the full
+character graph (Character → CharacterSheet → Persona → RosterEntry →
+RosterTenure → Account → ...). PG defers FK checks until commit and silently
+accepts intermediate states; SQLite enforces immediately and catches dangling
+references at teardown. The biggest offender (`character_sheets` itself) is
+the source-of-truth anchor every other app FKs into — its tests assume the
+PG migration chain has set up scaffolding that the SQLite tier skips.
 
-- **`src/server/conf/sqlite_test_settings.py`**: inherits from `test_settings`,
-  overrides `DATABASES['default']` to SQLite `:memory:`, sets
-  `MIGRATION_MODULES = _DisableMigrations()` so the test DB schema builds from
-  current model state.
-- **`src/sqlite_test_settings.py`**: Windows parallel-worker shim
-  (`from server.conf.sqlite_test_settings import *`), mirrors the existing
-  `src/test_settings.py` pattern.
-- **`src/cli/arx.py`**: `--sqlite` flag switches `--settings=sqlite_test_settings`.
-- **`src/core_management/migration_utils.py`**: `PostgresOnlyRunSQL` subclass
-  that skips on non-PG backends. Defensive — not strictly required when
-  `MIGRATION_MODULES = _DisableMigrations()` skips ALL migrations on SQLite,
-  but documents intent and keeps the PG-only RunSQL operations honest.
+**Carved out at settings level:** apps with raw `REFRESH MATERIALIZED VIEW`,
+table partitioning, or complex schema-evolution histories that SQLite can't
+replay (magic, scenes, codex, areas, societies). Their migrations are
+disabled in `sqlite_test_settings`; their tests can't be run with `--sqlite`.
 
-The 5 raw-RunSQL migrations (materialized views in
-`societies`/`codex`/`areas`, range-partitioning in `scenes`, covenant
-mat-view in `societies/0003`) were wrapped with `PostgresOnlyRunSQL`. They
-behave identically on PG and noop on SQLite — defensive even though the
-DisableMigrations sentinel means they don't get a chance to run on SQLite
-anyway.
+## Recommendation
 
-## Caveats / known limitations
+Ship `arx test --sqlite <app>` as a developer convenience for the 14 known-
+clean apps. Document the working set in CLAUDE.md. For apps not in the set,
+the developer falls back to `arx test --postgres <app>`. Full-suite testing
+(both inner-loop and pre-push gate) stays on Postgres.
 
-- **RunPython data seeds don't run.** Per `docs/perf/squash-audit-2026-05-20.md`,
-  `world.progression.migrations.0002_social_engagement_kudos_category` seeds a
-  `KudosSourceCategory(name="social_engagement")` row. If a test relies on
-  it being present, that test needs either explicit seeding in
-  `setUpTestData` or `@tag("postgres")`. Watch for failures during the
-  broader app survey.
-- **Materialized views don't exist on SQLite.** Tests that query
-  `CharacterLegendSummary`, `PersonaLegendSummary`, `CovenantLegendSummary`,
-  `SubjectBreadcrumb`, `AreaClosure` will fail with "no such table" on
-  SQLite. They need `@tag("postgres")`.
-- **`Interaction` is unpartitioned on SQLite.** Tests don't care about the
-  partitioning specifically (it's a physical-storage optimization), so they
-  should work.
+## Next work
 
-## Next steps
-
-1. **Phase 2.2** — full-suite SQLite run. Count failures + skips, capture
-   wall-clock.
-2. **Phase 3.1-3.2** — for each failure: classify as test-design issue (fix
-   in-place) vs PG-required (decorate with `@tag("postgres")`).
-3. Fix the 4 missions test-design issues found here.
+1. **Phase 3.2** — decorate the ~50 SQLite failures across the 7 mostly-clean
+   apps with `@tag("postgres")`. After that, those apps should be 0% broken
+   on SQLite.
+2. **Phase 4.1+4.2** — wire `just test-fast <app>` to default to `--sqlite`,
+   `just test-parity` to default to `--postgres`. Document in CLAUDE.md.
+3. **Phase 5** — PG-tier squashing. Still valuable: the PG tier is the
+   parity gate for every PR and the only option for character_sheets/roster
+   work.
