@@ -230,9 +230,6 @@ just test-parity                         # full suite, ~30+ min
 # Generic pass-through (PG, no parallel):
 just test <args>
 
-# Output capture (writes to .claude/scratch/<name>):
-just test-scratch <name> <arx test args>
-
 # Full-suite parity gate (matches CI exactly):
 just regression                          # echo "yes" | arx test
 ```
@@ -271,19 +268,16 @@ This catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI
 ```bash
 just                        # list recipes
 just test flows --keepdb    # arx test pass-through
-just test-scratch name args # capture output to .claude/scratch/<name>
+just test-fast world.foo    # SQLite inner loop
+just test-parity world.foo  # PG parity tier (parallel)
 just regression             # full no-keepdb regression run
 just lint                   # ruff check
 just manage migrate flows   # arx manage pass-through
 ```
 
-Prefer `just <recipe>` over:
-- Raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
-- Direct `bash .claude/scripts/<name>.sh` — still works (covered by `Bash(bash .claude/scripts/*)`) but use the just recipe if one exists so all invocation forms converge on one canonical form.
+Prefer `just <recipe>` over raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
 
-**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries. Wrappers in `.claude/scripts/` that need input validation (path traversal, etc.) still live there and are called from justfile recipes — `set -o pipefail` / `PIPESTATUS` preserves exit codes. Document new recipes in this section.
-
-**Scratch workspace.** Test output capture: `just test-scratch <filename> <arx test args...>` (wraps `.claude/scripts/arx-test-scratch.sh`). Files land in `.claude/scratch/<filename>`, which is inside the working directory so `Read` works without prompts, and the whole `.claude/` tree is gitignored. Do NOT use `/tmp/...`, `$TMPDIR`, or `%TEMP%` paths. Propagate the `just test-scratch` convention into subagent prompts when you dispatch them.
+**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries.
 
 ### Proactive Quality Checks
 
