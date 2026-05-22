@@ -821,6 +821,13 @@ class ChallengeApproach(SharedMemoryModel):
         related_name="challenge_approaches",
         help_text="When set, resolution uses this template's check_type and pool.",
     )
+    auto_succeeds = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, this approach skips the roll and lands in the top "
+            "outcome tier — the capability trivializes the obstacle."
+        ),
+    )
 
     class Meta:
         constraints = [

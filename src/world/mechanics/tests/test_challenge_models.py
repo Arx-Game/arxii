@@ -129,6 +129,15 @@ class ChallengeApproachTests(TestCase):
         approach = ChallengeApproachFactory(required_effect_property=self.effect_prop)
         self.assertEqual(approach.required_effect_property, self.effect_prop)
 
+    def test_auto_succeeds_defaults_false(self) -> None:
+        approach = ChallengeApproachFactory()
+        self.assertFalse(approach.auto_succeeds)
+
+    def test_auto_succeeds_round_trips(self) -> None:
+        approach = ChallengeApproachFactory(auto_succeeds=True)
+        approach.refresh_from_db()
+        self.assertTrue(approach.auto_succeeds)
+
 
 class ApproachConsequenceTests(TestCase):
     @classmethod
