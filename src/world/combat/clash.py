@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.combat.constants import ClashFlavor, LockPcRole
 from world.combat.models import ClashConfig, StrainConfig
 from world.combat.types import ClashContributionResult
 from world.magic.services import use_technique
@@ -211,3 +212,54 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
         soulfray_severity_accrued=soulfray_severity_accrued,
         technique_use_result=technique_use_result,
     )
+
+
+def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: ARG001 — round_number reserved for future phase-aware modifiers
+    """The NPC's per-round contribution to a Clash's meter, in progress units.
+
+    Per-flavor behavior:
+      - BREAK → always 0 (the boss contributes nothing structurally; PCs grind
+        through the barrier on their own).
+      - WARD → the sustained attack's per-round pressure
+        (``triggering_threat_entry.clash_npc_pressure``).
+      - CLASH → the big-attack entry's ``clash_npc_pressure``.
+        TODO (Phase 5 / boss tuning): add a boss-phase modifier when
+        ``clash.npc_opponent.current_phase`` has a clash-relevant
+        BossPhase field. BossPhase has no such field in v1, so the base
+        pressure is used unmodified.
+        Variance: ``_resolve_npc_action`` in services.py applies no variance
+        to NPC base_damage — it uses the authored value directly.  This
+        function mirrors that convention: no variance in v1. The function
+        is fully deterministic and pure.
+        TODO (tuning): add a small variance roll here if playtesting shows
+        the meter feels too mechanical.
+      - LOCK / SUSTAINING → the NPC is trying to break free of the lock;
+        returns ``triggering_threat_entry.clash_break_free_force``.
+      - LOCK / ESCAPING → the NPC is maintaining the lock against the PC's
+        escape attempt; returns ``triggering_threat_entry.clash_npc_pressure``.
+
+    Returns 0 when no ``triggering_threat_entry`` is set or its relevant field
+    is null.  Phase 5 (opportunity detection) is responsible for setting the
+    entry at clash creation; this function degrades cleanly when it isn't set.
+
+    Pure read — no DB writes, no mutation of inputs.
+    """
+    if clash.flavor == ClashFlavor.BREAK:
+        return 0
+
+    entry = clash.triggering_threat_entry
+    if entry is None:
+        return 0
+
+    if clash.flavor == ClashFlavor.WARD:
+        return entry.clash_npc_pressure or 0
+
+    if clash.flavor == ClashFlavor.CLASH:
+        return entry.clash_npc_pressure or 0
+
+    # LOCK flavor — branch on the PC's role in the contest.
+    if clash.lock_pc_role == LockPcRole.SUSTAINING:
+        # PC is holding the lock; NPC is trying to break free.
+        return entry.clash_break_free_force or 0
+    # LockPcRole.ESCAPING: PC is escaping; NPC is maintaining the lock.
+    return entry.clash_npc_pressure or 0

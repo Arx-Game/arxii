@@ -1151,6 +1151,20 @@ class Clash(SharedMemoryModel):
         blank=True,
         help_text="Set iff flavor=WARD; null otherwise.",
     )
+    triggering_threat_entry = models.ForeignKey(
+        "combat.ThreatPoolEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The ThreatPoolEntry that opened this clash and is the NPC side of its contest "
+            "(the sustained-attack entry for WARD, the lock-applying entry for LOCK, the "
+            "big-attack entry for CLASH). Null for BREAK (NPC contributes nothing to the "
+            "meter). Set at clash creation in Phase 5; Phase 3 reads it for the NPC "
+            "per-round contribution."
+        ),
+    )
 
     class Meta:
         constraints = [
