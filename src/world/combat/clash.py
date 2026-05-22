@@ -62,7 +62,7 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int
     level = check_outcome.success_level
     if level >= 3:  # noqa: PLR2004 — tier breakpoints are design constants, not magic values
         return config.delta_critical_success
-    if level == 2:  # noqa: PLR2004
+    if level == 2:  # noqa: PLR2004 — tier breakpoints are design constants, not magic values
         return config.delta_great_success
     if level == 1:
         return config.delta_success
