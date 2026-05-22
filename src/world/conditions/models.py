@@ -302,6 +302,19 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     passive_decay_max_severity = models.PositiveIntegerField(null=True, blank=True)
     passive_decay_blocked_in_engagement = models.BooleanField(default=True)
 
+    # === Clash-Lock Marker (Task 1.5) ===
+    is_clash_lock = models.BooleanField(
+        default=False,
+        help_text=(
+            "Marks this condition as a clash-lock — a Suppress/Break Free clash forms around it."
+        ),
+    )
+    clash_lock_strength = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=("The LOCK-clash MAX threshold (lock strength); set on clash-lock conditions."),
+    )
+
     # === Corruption (Scope 7) ===
     corruption_resonance = models.ForeignKey(
         "magic.Resonance",

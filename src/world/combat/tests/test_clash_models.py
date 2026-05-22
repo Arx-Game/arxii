@@ -325,3 +325,130 @@ class ClashRoundModelTests(TestCase):
         )
         self.assertNotEqual(row_a.clash_id, row_b.clash_id)
         self.assertEqual(row_a.round_number, row_b.round_number)
+
+
+class ClashContributionModelTests(TestCase):
+    """Tests for the ClashContribution per-PC-per-round audit record.
+
+    Builds Clash/ClashRound dependencies inline following the existing pattern.
+    """
+
+    def setUp(self) -> None:
+        from actions.models import ConsequencePool
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.constants import OpponentTier
+        from world.combat.models import Clash, ClashRound, CombatEncounter, CombatOpponent
+        from world.traits.factories import CheckOutcomeFactory
+
+        self.encounter = CombatEncounter.objects.create()
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Contribution Test Opponent",
+            health=50,
+            max_health=50,
+        )
+        self.resolution_pool = ConsequencePool.objects.create(name="ContribTestResolutionPool")
+        self.clash = Clash.objects.create(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            resolution_consequence_pool=self.resolution_pool,
+            flavor=ClashFlavor.CLASH,
+            progress=0,
+            pc_win_threshold=5,
+            npc_win_threshold=-5,
+            started_round=1,
+        )
+        self.clash_round = ClashRound.objects.create(
+            clash=self.clash,
+            round_number=1,
+            pc_progress_delta=1,
+            npc_progress_delta=0,
+            progress_after=1,
+        )
+        self.sheet = CharacterSheetFactory()
+        self.check_outcome = CheckOutcomeFactory(name="ContribTestSuccess", success_level=1)
+
+    def _make_contribution(self, sheet=None, clash_round=None, **kwargs):
+        """Helper: create a ClashContribution with required fields."""
+        from world.combat.constants import ClashActionSlot
+        from world.combat.models import ClashContribution
+
+        defaults = {
+            "clash_round": clash_round or self.clash_round,
+            "character": sheet or self.sheet,
+            "action_slot": ClashActionSlot.FOCUSED,
+            "anima_committed": 10,
+            "check_outcome": self.check_outcome,
+            "progress_delta": 1,
+        }
+        defaults.update(kwargs)
+        return ClashContribution.objects.create(**defaults)
+
+    # (a) A valid ClashContribution row persists.
+    def test_valid_contribution_persists(self) -> None:
+        from world.combat.models import ClashContribution
+
+        contrib = self._make_contribution()
+        fetched = ClashContribution.objects.get(pk=contrib.pk)
+        self.assertEqual(fetched.clash_round_id, self.clash_round.pk)
+        self.assertEqual(fetched.character_id, self.sheet.pk)
+        self.assertEqual(fetched.anima_committed, 10)
+        self.assertEqual(fetched.progress_delta, 1)
+        self.assertFalse(fetched.was_overburn)
+        self.assertFalse(fetched.was_audere)
+        self.assertEqual(fetched.soulfray_severity_accrued, 0)
+
+    # (b) UniqueConstraint(clash_round, character) rejects a second contribution
+    # from the same character in the same ClashRound.
+    def test_unique_constraint_rejects_duplicate_character_per_round(self) -> None:
+        from django.db import IntegrityError
+
+        self._make_contribution()
+        with self.assertRaises(IntegrityError):
+            self._make_contribution()
+
+    # (c) Two contributions from the same character in different ClashRounds are allowed.
+    def test_same_character_different_rounds_allowed(self) -> None:
+        from world.combat.models import ClashRound
+
+        round_2 = ClashRound.objects.create(
+            clash=self.clash,
+            round_number=2,
+            pc_progress_delta=2,
+            npc_progress_delta=-1,
+            progress_after=3,
+        )
+        contrib_1 = self._make_contribution()
+        contrib_2 = self._make_contribution(clash_round=round_2)
+        self.assertNotEqual(contrib_1.clash_round_id, contrib_2.clash_round_id)
+        self.assertEqual(contrib_1.character_id, contrib_2.character_id)
+
+
+class TechniqueLockApplyingTests(TestCase):
+    """Tests for Technique.is_lock_applying property."""
+
+    # (a) A Technique with an applied ConditionTemplate flagged is_clash_lock=True
+    # returns is_lock_applying=True.
+    def test_technique_with_lock_condition_is_lock_applying(self) -> None:
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.factories import TechniqueAppliedConditionFactory, TechniqueFactory
+
+        technique = TechniqueFactory(damage_profile=False)
+        lock_condition = ConditionTemplateFactory(name="LockTestCondition", is_clash_lock=True)
+        TechniqueAppliedConditionFactory(technique=technique, condition=lock_condition)
+        # Force refresh to clear cached_property
+        technique.__class__._default_manager.filter(pk=technique.pk)
+        fresh = technique.__class__.objects.get(pk=technique.pk)
+        self.assertTrue(fresh.is_lock_applying)
+
+    # (b) A Technique with no lock-flagged applied condition returns is_lock_applying=False.
+    def test_technique_without_lock_condition_is_not_lock_applying(self) -> None:
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.factories import TechniqueAppliedConditionFactory, TechniqueFactory
+
+        technique = TechniqueFactory(damage_profile=False)
+        normal_condition = ConditionTemplateFactory(name="NormalTestCondition", is_clash_lock=False)
+        TechniqueAppliedConditionFactory(technique=technique, condition=normal_condition)
+        fresh = technique.__class__.objects.get(pk=technique.pk)
+        self.assertFalse(fresh.is_lock_applying)

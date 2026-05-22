@@ -10,6 +10,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
+    ClashActionSlot,
     ClashFlavor,
     ClashResolution,
     ClashStatus,
@@ -150,6 +151,59 @@ class ThreatPoolEntry(SharedMemoryModel):
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
 
+    # === Clash fields (Task 1.5) ===
+    clash_capable = models.BooleanField(
+        default=False,
+        help_text="When True, this entry can initiate or sustain a Clash.",
+    )
+    is_sustained_attack = models.BooleanField(
+        default=False,
+        help_text="When True, this attack sustains over multiple rounds (a lock-type threat).",
+    )
+    sustained_duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many rounds a sustained attack persists before the NPC must re-use it.",
+    )
+    is_lock_applying = models.BooleanField(
+        default=False,
+        help_text="When True, this threat entry applies a clash-lock condition on hit.",
+    )
+    clash_break_free_force = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The BREAK-clash PC win threshold for breaking free of a lock applied "
+            "by this entry. Required when is_lock_applying=True."
+        ),
+    )
+    clash_npc_pressure = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "NPC's per-round pressure contribution in a Clash initiated or sustained by this entry."
+        ),
+    )
+    clash_resolution_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Consequence pool fired when a Clash initiated by this entry resolves.",
+    )
+    clash_per_round_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Optional per-round consequence pool fired each round of a Clash "
+            "initiated by this entry."
+        ),
+    )
+
     def __str__(self) -> str:
         return f"{self.pool.name}: {self.name}"
 
@@ -205,6 +259,24 @@ class CombatOpponent(SharedMemoryModel):
         help_text="If True, the ObjectDB was created for this encounter only "
         "and will be cleaned up at encounter completion. Persona-bearing "
         "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
+    )
+
+    # === Clash fields (Task 1.5) ===
+    barrier_strength = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The BREAK-clash MAX threshold source; governs how hard it is for PCs "
+            "to break through this opponent's barrier."
+        ),
+    )
+    barrier_break_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=("Consequence pool fired when PCs successfully break this opponent's barrier."),
     )
 
     class Meta:
@@ -315,6 +387,29 @@ class ComboDefinition(SharedMemoryModel):
     bonus_damage = models.PositiveIntegerField(
         default=0,
         help_text="Flat bonus damage added when the combo fires.",
+    )
+
+    # === Clash fields (Task 1.5) ===
+    required_clash_flavor = models.CharField(
+        max_length=10,
+        choices=ClashFlavor.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, this combo is only available during a Clash of the specified flavor. "
+            "Null means the combo is not clash-gated."
+        ),
+    )
+    required_clash_window_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Clash-window gate: the target must have an active instance of this condition "
+            "for the combo to be available. Null means no window condition is required."
+        ),
     )
 
     def __str__(self) -> str:
@@ -1142,4 +1237,90 @@ class ClashRound(SharedMemoryModel):
         return (
             f"ClashRound(clash={self.clash_id} "
             f"round={self.round_number} progress={self.progress_after})"
+        )
+
+
+# =============================================================================
+# ClashContribution model (Task 1.5) — per-PC-per-round audit record
+# =============================================================================
+
+
+class ClashContribution(SharedMemoryModel):
+    """Per-PC per-round audit record of a single contribution to a Clash.
+
+    One row is written for each PC each round that a ``ClashRound`` resolves.
+    Captures what the PC committed, what technique was used, what the check
+    produced, and how that translated into progress delta and any soulfray cost.
+    The ``UniqueConstraint`` on ``(clash_round, character)`` enforces at most
+    one contribution per character per round.
+    """
+
+    clash_round = models.ForeignKey(
+        ClashRound,
+        on_delete=models.CASCADE,
+        related_name="contributions",
+        help_text="The ClashRound this contribution belongs to.",
+    )
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The PC whose contribution this row records.",
+    )
+    action_slot = models.CharField(
+        max_length=10,
+        choices=ClashActionSlot.choices,
+        help_text="Whether the PC committed their focused or passive action slot to this Clash.",
+    )
+    anima_committed = models.PositiveIntegerField(
+        help_text="Anima the PC committed to the Clash this round.",
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Technique the PC used in the focused action slot. "
+            "Null when the PC contributed from the passive slot."
+        ),
+    )
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The check outcome tier the PC rolled this round.",
+    )
+    progress_delta = models.IntegerField(
+        help_text=(
+            "Signed progress contribution from this PC this round. "
+            "Positive moves the meter toward the PC win threshold."
+        ),
+    )
+    was_overburn = models.BooleanField(
+        default=False,
+        help_text="True if the PC overburned their anima commitment this round.",
+    )
+    was_audere = models.BooleanField(
+        default=False,
+        help_text="True if the PC triggered an Audere escalation this round.",
+    )
+    soulfray_severity_accrued = models.PositiveIntegerField(
+        default=0,
+        help_text="Soulfray severity the PC accrued as a result of this contribution.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["clash_round", "character"],
+                name="unique_contribution_per_character_per_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashContribution(round={self.clash_round_id} "
+            f"character={self.character_id} slot={self.action_slot})"
         )

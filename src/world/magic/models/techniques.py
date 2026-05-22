@@ -282,6 +282,15 @@ class Technique(SharedMemoryModel):
         blank=True,
         help_text="Description of what this technique does.",
     )
+    # === Clash fields (Task 1.5) ===
+    clash_capable = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, this technique can be committed as a clash action. "
+            "Drives clash-opportunity detection."
+        ),
+    )
+
     source_cantrip = models.ForeignKey(
         "magic.Cantrip",
         on_delete=models.SET_NULL,
@@ -348,6 +357,16 @@ class Technique(SharedMemoryModel):
         if self.level <= self.TIER_4_MAX:
             return 4
         return 5
+
+    @cached_property
+    def is_lock_applying(self) -> bool:
+        """Return True if this technique applies any ConditionTemplate flagged as a clash-lock.
+
+        The technique's applied conditions are reachable via condition_applications
+        (TechniqueAppliedCondition through model). Returns False when no lock-flagged
+        condition is found.
+        """
+        return self.condition_applications.filter(condition__is_clash_lock=True).exists()
 
 
 class TechniqueCapabilityGrant(SharedMemoryModel):
