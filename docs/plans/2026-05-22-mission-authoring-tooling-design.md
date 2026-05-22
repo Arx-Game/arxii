@@ -329,10 +329,15 @@ doc Q2):
 No "challenge→outcome bridge" is needed: a challenge approach already runs `perform_check`
 and yields a normal `CheckOutcome`, the same currency missions route on.
 
-**Still open (findings doc Q3, Q4), to settle before the implementation plan:** how an
-approach's *auto-success* ("fly out") is represented; and which `ChallengeTemplate` fields
-(`severity` → check difficulty looks right; `challenge_type`, `discovery_type`,
-`properties` — likely ignored in a missions context) are meaningful here.
+**Auto-success** is a real challenge-system concept — some capabilities trivialize an
+obstacle ("fly out"). `ChallengeApproach` gains an `auto_succeeds` boolean (a small,
+legitimate addition to the challenge model); an auto-success approach surfaces as an
+option that skips the roll and lands top-tier.
+
+**Of the `ChallengeTemplate` fields:** `severity` → the approach rolls' check difficulty.
+`challenge_type`, `discovery_type`, `blocked_capability`, `properties` → ignored in a
+missions context — a mission that presents a challenge has by definition made it obvious,
+and framing/reveal/routing are mission-owned.
 
 ---
 
@@ -430,9 +435,10 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
    findings doc for the full reasoning.
 10. **Challenge attachment** — a `MissionNode` references `ChallengeTemplate`(s); the engine
     expands each attached challenge's approaches into challenge-contributed options at
-    runtime, resolved through `resolve_option` (data-source shape — §8.4). Two sub-items
-    remain open (Q3 auto-success representation, Q4 which `ChallengeTemplate` fields apply
-    in a missions context) — settle before the implementation plan.
+    runtime, resolved through `resolve_option` (data-source shape — §8.4). Includes a small
+    challenge-model addition: a `ChallengeApproach.auto_succeeds` boolean (§8.4). `severity`
+    maps to the approach rolls' difficulty; other `ChallengeTemplate` fields are ignored
+    in a missions context.
 11. **Predicate leaf-resolver registry expansion** — resolvers for level, org membership,
     society/org reputation, achievement, codex entry, resonance type, giver standing, etc.
     Incremental; the requirements-builder palette reflects whatever is registered.
@@ -441,11 +447,9 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
 
 ## 12. Open questions & deferred work
 
-- **Challenge integration Q3 & Q4** — the two remaining reconciliation questions from the
-  findings doc: (Q3) how an approach's auto-success is represented; (Q4) which
-  `ChallengeTemplate` fields apply in a missions context. Settle before the implementation
-  plan. Q1 (the affordance/challenge duplication) and Q2/Q5 (data-source shape; missions
-  reference challenges) are **resolved** — see §8.4 and §11.9–10.
+The challenge↔missions integration is fully resolved (findings doc Q1–Q5; see §8.4 and
+§11.9–10). Remaining items below are genuinely deferred, not blockers.
+
 - **"Social capability" derivation** — modelling achievement / reputation / NPC-affection
   as derived capabilities (so a social challenge can have approaches keyed on them) is a
   wanted *capability-system* enhancement, separate from missions authoring. Today
@@ -484,9 +488,8 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
 
 ## Next step
 
-Settle the two remaining challenge-integration questions (findings doc Q3 & Q4), then turn
-this into an implementation plan (`superpowers:writing-plans`). The plan must sequence: the
+The design is complete — all challenge-integration questions are settled. Turn this into an
+implementation plan (`superpowers:writing-plans`). The plan must sequence: the
 `Affordance`/`AffordanceBinding` retirement and the engine model extensions (§11) ahead of
 the tool that depends on them; the predicate leaf-resolver build-out; and the challenge
-attachment (§8.4) — now a concrete data-source integration, no longer an open architectural
-question.
+attachment (§8.4) as a concrete data-source integration.
