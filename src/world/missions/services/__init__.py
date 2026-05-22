@@ -1,8 +1,6 @@
 """Missions service layer.
 
 Public surface:
-  * :func:`bindings_for_character` (Phase 1) — authored-once affordance
-    bindings → the concrete options an acting character can take.
   * :func:`validate_mission_option` (Phase 2) — post-save graph invariants.
   * :func:`build_option_list`, :func:`enter_node`, :func:`resolve_option`
     (Phase 3) — the runtime resolution engine.
@@ -30,7 +28,6 @@ Public surface:
     three deferred product-level questions).
 """
 
-from world.missions.services.affordances import bindings_for_character
 from world.missions.services.availability import offer_missions
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.cron import apply_mission_reward_batch
@@ -59,7 +56,6 @@ __all__ = [
     "accept_mission",
     "apply_deed_rewards",
     "apply_mission_reward_batch",
-    "bindings_for_character",
     "build_group_option_list",
     "build_option_list",
     "contract_holder",

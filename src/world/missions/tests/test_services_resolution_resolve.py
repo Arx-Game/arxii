@@ -1,14 +1,15 @@
-"""Tests for ``resolve_option`` (Phase 3, Tasks 3.3 / 3.4 / 3.5).
+"""Tests for ``resolve_option``.
 
-CHECK options roll a check (difficulty = template.risk_tier), match the
-route for the rolled outcome tier, apply the route consequence (authored or
-synthetic fallback), additively apply a permitted binding rider, then route
-or complete. BRANCH options skip the check entirely. Terminal routes (null
-destination) complete the run WITHOUT emitting any reward lines.
+CHECK options roll a check (AUTHORED difficulty = template.risk_tier;
+CHALLENGE difficulty = the challenge's severity), match the route for the
+rolled outcome tier, apply the route consequence (authored or synthetic
+fallback), then route or complete. BRANCH options skip the check entirely.
+Terminal routes (null destination) complete the run WITHOUT emitting any
+reward lines.
 
 Real factory objects, no ORM mocks. ``force_check_outcome`` pins the rolled
 outcome tier deterministically. ``apply_resolution`` (the reuse boundary) is
-spied to assert the consequence/rider composition without wiring the full
+spied to assert the consequence composition without wiring the full
 ConsequenceEffect machinery.
 """
 
@@ -20,19 +21,15 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
-from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import (
     DeedRewardKind,
     DeedRewardSink,
     MissionStatus,
     OptionKind,
-    OptionProduces,
     OptionSource,
 )
 from world.missions.factories import (
-    AffordanceBindingFactory,
-    AffordanceFactory,
     MissionDeedRewardLineFactory,
     MissionInstanceFactory,
     MissionNodeFactory,
@@ -44,7 +41,6 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.models import (
-    SOURCE_DISTINCTION,
     MissionDeedRecord,
     MissionDeedRewardLine,
     MissionOptionRouteReward,
@@ -101,19 +97,19 @@ class ResolveCheckOptionTests(TestCase):
 
     def test_success_routes_to_a_and_emits_deed(self) -> None:
         with force_check_outcome(self.success), patch(_APPLY) as mocked:
-            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.node_a)
         self.assertEqual(deed.outcome, self.success)
         self.assertEqual(deed.actor, self.character)
-        # Authored consequence applied (no rider configured → exactly one call).
+        # Authored consequence applied (exactly one call).
         self.assertEqual(mocked.call_count, 1)
         pending = mocked.call_args_list[0].args[0]
         self.assertEqual(pending.selected_consequence, self.success_conseq)
 
     def test_fail_routes_to_b_with_synthetic_fallback(self) -> None:
         with force_check_outcome(self.failure), patch(_APPLY) as mocked:
-            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.node_b)
         self.assertEqual(deed.outcome, self.failure)
@@ -126,67 +122,8 @@ class ResolveCheckOptionTests(TestCase):
         # No mock here: apply_resolution must genuinely no-op on the unsaved
         # fallback (returns []) and the deed must still be emitted.
         with force_check_outcome(self.failure):
-            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.assertTrue(MissionDeedRecord.objects.filter(pk=deed.pk).exists())
-
-    def test_rider_applied_when_node_allows_it(self) -> None:
-        rider = ConsequenceFactory(outcome_tier=self.success)
-        self.entry.allowed_riders.add(rider)
-        dist = DistinctionFactory(slug="rider-dist")
-        CharacterDistinctionFactory(character=self.character, distinction=dist)
-        aff = AffordanceFactory(name="rider-aff")
-        binding = AffordanceBindingFactory(
-            source_kind=SOURCE_DISTINCTION,
-            source_distinction=dist,
-            affordance=aff,
-            produces=OptionProduces.CHECK,
-            check_type=self.sneak,
-            rider=rider,
-        )
-        with force_check_outcome(self.success), patch(_APPLY) as mocked:
-            resolve_option(self.instance, self.entry, self.check_option, self.actor, binding)
-        # Two calls: route consequence THEN rider (additive composition).
-        self.assertEqual(mocked.call_count, 2)
-        self.assertEqual(
-            mocked.call_args_list[0].args[0].selected_consequence,
-            self.success_conseq,
-        )
-        self.assertEqual(
-            mocked.call_args_list[1].args[0].selected_consequence,
-            rider,
-        )
-
-    def test_rider_suppressed_when_deny_all_riders(self) -> None:
-        rider = ConsequenceFactory(outcome_tier=self.success)
-        self.entry.allowed_riders.add(rider)
-        self.entry.deny_all_riders = True
-        self.entry.save()
-        binding = AffordanceBindingFactory(
-            source_kind=SOURCE_DISTINCTION,
-            source_distinction=DistinctionFactory(slug="deny-dist"),
-            affordance=AffordanceFactory(name="deny-aff"),
-            produces=OptionProduces.CHECK,
-            check_type=self.sneak,
-            rider=rider,
-        )
-        with force_check_outcome(self.success), patch(_APPLY) as mocked:
-            resolve_option(self.instance, self.entry, self.check_option, self.actor, binding)
-        self.assertEqual(mocked.call_count, 1)
-
-    def test_rider_suppressed_when_not_in_allowed_riders(self) -> None:
-        rider = ConsequenceFactory(outcome_tier=self.success)
-        # rider deliberately NOT added to entry.allowed_riders.
-        binding = AffordanceBindingFactory(
-            source_kind=SOURCE_DISTINCTION,
-            source_distinction=DistinctionFactory(slug="notallowed-dist"),
-            affordance=AffordanceFactory(name="notallowed-aff"),
-            produces=OptionProduces.CHECK,
-            check_type=self.sneak,
-            rider=rider,
-        )
-        with force_check_outcome(self.success), patch(_APPLY) as mocked:
-            resolve_option(self.instance, self.entry, self.check_option, self.actor, binding)
-        self.assertEqual(mocked.call_count, 1)
 
     def test_random_set_route_picks_a_candidate(self) -> None:
         rand_outcome = CheckOutcomeFactory(name="Partial", success_level=1)
@@ -199,24 +136,14 @@ class ResolveCheckOptionTests(TestCase):
         MissionOptionRouteCandidateFactory(route=rand_route, target_node=self.node_a, weight=1)
         MissionOptionRouteCandidateFactory(route=rand_route, target_node=self.node_b, weight=1)
         with force_check_outcome(rand_outcome):
-            resolve_option(self.instance, self.entry, self.check_option, self.actor, None)
+            resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.instance.refresh_from_db()
         self.assertIn(self.instance.current_node, {self.node_a, self.node_b})
 
     def test_deed_actor_is_acting_participants_character(self) -> None:
         with force_check_outcome(self.success):
-            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.assertEqual(deed.actor, self.actor.character)
-
-    def test_misconfigured_check_without_check_type_raises(self) -> None:
-        bad_option = MissionOptionFactory(
-            node=self.entry,
-            order=9,
-            option_kind=OptionKind.CHECK,
-            source_kind=OptionSource.AFFORDANCE,
-        )
-        with self.assertRaises(ValueError):
-            resolve_option(self.instance, self.entry, bad_option, self.actor, None)
 
 
 class ResolveChallengeOptionTests(TestCase):
@@ -284,7 +211,6 @@ class ResolveChallengeOptionTests(TestCase):
                 self.entry,
                 self.option,
                 self.actor,
-                None,
                 chosen_approach=self.normal_approach,
             )
         self.instance.refresh_from_db()
@@ -298,7 +224,6 @@ class ResolveChallengeOptionTests(TestCase):
                 self.entry,
                 self.option,
                 self.actor,
-                None,
                 chosen_approach=self.auto_approach,
             )
         pc.assert_not_called()
@@ -308,7 +233,7 @@ class ResolveChallengeOptionTests(TestCase):
 
     def test_challenge_option_without_chosen_approach_raises(self) -> None:
         with self.assertRaises(ValueError):
-            resolve_option(self.instance, self.entry, self.option, self.actor, None)
+            resolve_option(self.instance, self.entry, self.option, self.actor)
 
 
 class ResolveBranchOptionTests(TestCase):
@@ -335,7 +260,7 @@ class ResolveBranchOptionTests(TestCase):
             branch_target=self.target,
         )
         with patch("world.missions.services.resolution.perform_check") as pc:
-            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, option, self.actor)
         pc.assert_not_called()
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.target)
@@ -349,7 +274,7 @@ class ResolveBranchOptionTests(TestCase):
             source_kind=OptionSource.AUTHORED,
         )
         MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=self.target)
-        deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.target)
         self.assertIsNone(deed.outcome)
@@ -381,7 +306,7 @@ class TerminalCompletionTests(TestCase):
             source_kind=OptionSource.AUTHORED,
         )
         # No branch_target, no route → terminal.
-        deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
         self.assertIsNotNone(self.instance.completed_at)
@@ -403,7 +328,7 @@ class TerminalCompletionTests(TestCase):
             target_node=None,  # terminal
         )
         with force_check_outcome(self.success):
-            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
         self.assertIsNotNone(self.instance.completed_at)
@@ -421,7 +346,7 @@ class TerminalCompletionTests(TestCase):
             option_kind=OptionKind.BRANCH,
             source_kind=OptionSource.AUTHORED,
         )
-        deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        deed = resolve_option(self.instance, self.entry, option, self.actor)
         # Manually attaching one still works, but the engine itself created
         # none (the route has no authored reward templates).
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)
@@ -479,7 +404,7 @@ class TerminalRewardEmissionTests(TestCase):
             contract_holder_only=False,
         )
         with force_check_outcome(self.success):
-            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
         lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
@@ -507,7 +432,7 @@ class TerminalRewardEmissionTests(TestCase):
             amount=200,
             contract_holder_only=True,
         )
-        deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
         lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
@@ -541,5 +466,5 @@ class TerminalRewardEmissionTests(TestCase):
             amount=999,
         )
         with force_check_outcome(self.success):
-            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+            deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)

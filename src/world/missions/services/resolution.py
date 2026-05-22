@@ -11,14 +11,13 @@ Phase 3 is SINGLE-participant: ``viewer``/``actor`` is the one acting
 participant. Multi-participant union/arbitration is Phase 4.
 
 Design invariants honored here:
-  * difficulty for every CHECK is ``instance.template.risk_tier`` (the only
-    authored DC); ``base_risk`` is the surfaced "Risk" axis, never the DC.
+  * difficulty for an AUTHORED CHECK is ``instance.template.risk_tier`` (the
+    authored DC); for a CHALLENGE CHECK it is the challenge's ``severity``
+    (design §8.4 Q4). ``base_risk`` is the surfaced "Risk" axis, never the DC.
   * a route's authored ``consequence`` is applied when set; otherwise a
     synthetic UNSAVED fallback ``Consequence`` is built so
     ``apply_resolution`` is still called uniformly (and returns [] for the
     unsaved row — mirrors ``challenge_resolution._select_consequence``).
-  * riders compose ADDITIVELY (a second ``apply_resolution`` call), never by
-    precedence, and only when the node permits them.
   * M1: never trust a possibly-stale cached ``instance.current_node``; engine
     functions operate on the ``node`` argument and write (not read) the FK.
   * Phase 5b.0: TERMINAL routes (next_node is None) emit
@@ -47,7 +46,6 @@ from world.missions.models import (
     MissionOptionRoute,
 )
 from world.missions.predicates import CharacterPredicateContext, evaluate
-from world.missions.services.affordances import bindings_for_character
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.rewards import emit_terminal_rewards
@@ -62,7 +60,6 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
-        AffordanceBinding,
         MissionInstance,
         MissionNode,
         MissionOption,
@@ -94,16 +91,15 @@ def build_option_list(
 
     For each :class:`MissionOption` on ``node``:
 
-      * AFFORDANCE source — fans out via
-        :func:`bindings_for_character` over the option's accepted
-        affordances; each resolved binding becomes one ``PresentedOption``.
+      * CHALLENGE source — fans out via
+        :func:`~world.missions.services.challenge_options.challenge_options_for_character`
+        over the option's attached challenge's qualifying approaches.
       * AUTHORED source — included iff its ``visibility_rule`` predicate
         passes for the viewer's character.
 
     Merge is additive (no arbitration — the player picks later). Order is
-    deterministic: option ``order``, then affordance name + binding pk for
-    fanned-out affordance entries (the order
-    :func:`bindings_for_character` already returns them in).
+    deterministic: option ``order``, then approach pk for fanned-out
+    CHALLENGE entries.
 
     Phase 3 is single-participant; ``instance`` is accepted for signature
     stability (Phase 4 unions across ``instance.participants``).
@@ -119,32 +115,17 @@ def present_options_for_character(
     """Present an already-ordered ``options`` iterable for one character.
 
     The single-participant body of :func:`build_option_list`, extracted so
-    Phase-4 ``build_group_option_list`` can fetch the node's options +
-    ``accepted_affordances`` ONCE (one prefetched queryset) and reuse them
-    across every participant instead of re-querying per participant
-    (Phase-3 review Minor-1). ``options`` MUST already be ordered by the
-    caller (``order``, then ``pk``) — this preserves
+    Phase-4 ``build_group_option_list`` can fetch the node's options ONCE and
+    reuse them across every participant. ``options`` MUST already be ordered
+    by the caller (``order``, then ``pk``) — this preserves
     :func:`build_option_list`'s exact behavior; it just no longer owns the
     queryset construction. A CHALLENGE-sourced option fans out per qualifying
-    ``ChallengeApproach`` via :func:`challenge_options_for_character`.
+    ``ChallengeApproach`` via
+    :func:`~world.missions.services.challenge_options.challenge_options_for_character`.
     """
     presented: list[PresentedOption] = []
     for option in options:
-        if option.source_kind == OptionSource.AFFORDANCE:
-            accepted = set(option.accepted_affordances_cached)
-            presented.extend(
-                PresentedOption(
-                    option=option,
-                    kind=option.option_kind,
-                    check_type=resolved.check_type,
-                    base_risk=resolved.base_risk,
-                    ic_framing=resolved.ic_framing,
-                    owner=character,
-                    binding=resolved.binding,
-                )
-                for resolved in bindings_for_character(character, accepted)
-            )
-        elif option.source_kind == OptionSource.CHALLENGE:
+        if option.source_kind == OptionSource.CHALLENGE:
             challenge = option.challenge
             if challenge is None:
                 raise ValueError(_ERR_CHALLENGE_NO_CHALLENGE.format(option_pk=option.pk))
@@ -156,7 +137,6 @@ def present_options_for_character(
                     base_risk=0,
                     ic_framing=co.approach.display_name,
                     owner=character,
-                    binding=None,
                     approach=co.approach,
                 )
                 for co in challenge_options_for_character(challenge, character)
@@ -171,7 +151,6 @@ def present_options_for_character(
                     base_risk=option.authored_base_risk,
                     ic_framing=option.authored_ic_framing,
                     owner=character,
-                    binding=None,
                 )
             )
     return presented
@@ -198,20 +177,16 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
     instance.save()
 
 
-def _resolve_check_type(
-    option: MissionOption,
-    chosen_binding: AffordanceBinding | None,
-) -> CheckType:
-    """The CheckType for a CHECK option: binding's else authored.
+def _resolve_check_type(option: MissionOption) -> CheckType:
+    """The CheckType for an AUTHORED CHECK option; raises if unset.
 
-    Raises ``ValueError`` when neither is set — a CHECK option that resolves
-    no check is an authoring/configuration error, not a runtime branch.
+    A CHECK option's ``clean()`` already requires ``authored_check_type``
+    for AUTHORED-source options; this is the runtime defensive guard.
     """
-    if chosen_binding is not None and chosen_binding.check_type_id is not None:
-        return chosen_binding.check_type
-    if option.authored_check_type_id is not None:
-        return option.authored_check_type
-    raise ValueError(_ERR_CHECK_NO_TYPE.format(option_pk=option.pk))
+    check_type = option.authored_check_type
+    if check_type is None:
+        raise ValueError(_ERR_CHECK_NO_TYPE.format(option_pk=option.pk))
+    return check_type
 
 
 def _auto_success_result(check_type: CheckType) -> CheckResult:
@@ -298,18 +273,6 @@ def _route_next_node(route: MissionOptionRoute) -> MissionNode | None:
     return route.target_node
 
 
-def _rider_permitted(
-    node: MissionNode,
-    chosen_binding: AffordanceBinding | None,
-) -> bool:
-    """A binding rider attaches only when the node allows it (§6)."""
-    if chosen_binding is None or chosen_binding.rider_id is None:
-        return False
-    if node.deny_all_riders:
-        return False
-    return node.allowed_riders.filter(pk=chosen_binding.rider_id).exists()
-
-
 def _finish_terminal(instance: MissionInstance) -> None:
     """Mark the run complete (terminal route reached).
 
@@ -329,40 +292,42 @@ def _finish_terminal(instance: MissionInstance) -> None:
     on_mission_complete_for_beat(instance)
 
 
-def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
-    # positional args identify "who-resolves-what-where-with-what-binding" and
-    # are co-equal, plus the keyword-only ``chosen_approach``/``advance``
-    # toggles. Collapsing them into a dataclass would obscure call sites.
+def resolve_option(  # noqa: PLR0913 — stable engine signature; 4 positional
+    # args identify "who-resolves-what-where" and are co-equal, plus the
+    # keyword-only ``chosen_approach``/``advance`` toggles. Collapsing them
+    # into a dataclass would obscure call sites.
     instance: MissionInstance,
     node: MissionNode,
     option: MissionOption,
     actor: MissionParticipant,
-    chosen_binding: AffordanceBinding | None,
     *,
     chosen_approach: ChallengeApproach | None = None,
     advance: bool = True,
 ) -> MissionDeedRecord:
     """Resolve ``actor`` taking ``option`` at ``node``; return its deed.
 
-    BRANCH options route the graph with no dice. CHECK options roll
-    ``perform_check`` (difficulty = ``instance.template.risk_tier``), match
-    the route for the rolled outcome tier, apply that route's consequence
-    (authored or synthetic fallback) via ``apply_resolution``, then
-    additively apply a permitted binding rider as a SECOND
-    ``apply_resolution`` call. Either kind then advances ``current_node`` or
-    completes the run (terminal route). Emits and returns the
-    :class:`MissionDeedRecord` (consequence follows the actor).
+    BRANCH options route the graph with no dice. CHECK options either:
+
+      * AUTHORED — roll ``perform_check`` at
+        ``instance.template.risk_tier``.
+      * CHALLENGE — resolve via the player's ``chosen_approach``: run
+        ``perform_check`` at the challenge's ``severity`` (or, when the
+        approach is ``auto_succeeds``, synthesize a top-tier outcome with
+        no roll).
+
+    Either CHECK then matches the route for the rolled outcome tier, applies
+    that route's consequence (authored or synthetic fallback) via
+    ``apply_resolution``, and advances ``current_node`` or completes the run
+    (terminal route). Emits and returns the :class:`MissionDeedRecord`
+    (moral consequence follows the actor).
 
     When ``advance=False`` (Phase-5a I-1, the routing-free check primitive):
-    the check + per-act consequence/rider application happens and the deed
-    is emitted exactly as ``advance=True``, but NO routing / terminal write
+    the check + per-act consequence application happens and the deed is
+    emitted exactly as ``advance=True``, but NO routing / terminal write
     occurs (``instance.current_node`` / ``status`` / ``completed_at`` are
     left untouched). The Phase-4 JOINT orchestrator uses this so that no
     per-attempt write ever transiently routes/terminates the instance
     mid-loop; the single combined decision is the only thing that routes.
-    Phase 5b adds reward-line / contractual side effects that an overwrite
-    trick cannot neutralize, so the routing-free path must be the JOINT
-    per-attempt primitive going forward.
 
     M1: writes ``current_node`` but never reads a stale cached one.
     """
@@ -375,10 +340,10 @@ def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
     if option.source_kind == OptionSource.CHALLENGE:
         # The chosen ChallengeApproach supplies the check; the challenge's
         # severity is the difficulty. Routing below is unchanged — it keys
-        # on the resulting CheckOutcome exactly like an authored CHECK.
+        # on the resulting CheckOutcome exactly like an AUTHORED CHECK.
         result = _resolve_challenge_check(option, character, chosen_approach)
     else:
-        check_type = _resolve_check_type(option, chosen_binding)
+        check_type = _resolve_check_type(option)
         result = perform_check(
             character,
             check_type,
@@ -400,12 +365,6 @@ def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
     consequence = _select_route_consequence(route, result)
     context = ResolutionContext(character=character)
     apply_resolution(PendingResolution(result, consequence), context)
-
-    if _rider_permitted(node, chosen_binding):
-        apply_resolution(
-            PendingResolution(result, chosen_binding.rider),
-            ResolutionContext(character=character),
-        )
 
     is_terminal = False
     if advance:

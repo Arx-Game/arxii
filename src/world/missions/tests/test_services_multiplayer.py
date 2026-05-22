@@ -31,12 +31,9 @@ from world.missions.constants import (
     JointCombine,
     MissionStatus,
     OptionKind,
-    OptionProduces,
     OptionSource,
 )
 from world.missions.factories import (
-    AffordanceBindingFactory,
-    AffordanceFactory,
     MissionInstanceFactory,
     MissionNodeFactory,
     MissionOptionFactory,
@@ -91,59 +88,57 @@ class BuildGroupOptionListTests(TestCase):
         )
         cls.p_b = MissionParticipantFactory(instance=cls.instance, character=cls.char_b)
 
-        # AFFORDANCE option; A owns dist_a, B owns dist_b (disjoint).
-        cls.aff = AffordanceFactory(name="sneak-aff")
+        # A owns dist_a, B owns dist_b (disjoint).
         cls.dist_a = DistinctionFactory(slug="grp-dist-a")
         cls.dist_b = DistinctionFactory(slug="grp-dist-b")
         CharacterDistinctionFactory(character=cls.char_a, distinction=cls.dist_a)
         CharacterDistinctionFactory(character=cls.char_b, distinction=cls.dist_b)
-        for dist, framing in (
-            (cls.dist_a, "A-only path."),
-            (cls.dist_b, "B-only path."),
-        ):
-            AffordanceBindingFactory(
-                source_kind="distinction",
-                source_distinction=dist,
-                affordance=cls.aff,
-                produces=OptionProduces.BRANCH,
-                ic_framing=framing,
-            )
-        cls.aff_option = MissionOptionFactory(
-            node=cls.node,
-            order=0,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AFFORDANCE,
-        )
-        cls.aff_option.accepted_affordances.add(cls.aff)
 
         # AUTHORED option visible only to A (requires dist_a).
-        cls.authored = MissionOptionFactory(
+        cls.a_only = MissionOptionFactory(
             node=cls.node,
-            order=1,
+            order=0,
             option_kind=OptionKind.BRANCH,
             source_kind=OptionSource.AUTHORED,
             visibility_rule={
                 "leaf": "has_distinction",
                 "params": {"slug": "grp-dist-a"},
             },
-            authored_ic_framing="A's authored way.",
+            authored_ic_framing="A-only path.",
+        )
+        # AUTHORED option visible only to B (requires dist_b).
+        cls.b_only = MissionOptionFactory(
+            node=cls.node,
+            order=1,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            visibility_rule={
+                "leaf": "has_distinction",
+                "params": {"slug": "grp-dist-b"},
+            },
+            authored_ic_framing="B-only path.",
+        )
+        # Ungated AUTHORED option visible to both.
+        cls.open_option = MissionOptionFactory(
+            node=cls.node,
+            order=2,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            authored_ic_framing="Open path.",
         )
 
     def test_union_has_both_disjoint_owned_sets_owner_tagged(self) -> None:
         options = build_group_option_list(self.instance, self.node)
         a_framings = {o.ic_framing for o in options if o.owner == self.char_a}
         b_framings = {o.ic_framing for o in options if o.owner == self.char_b}
-        # A: A-only affordance + A's authored. B: B-only affordance.
-        self.assertEqual(a_framings, {"A-only path.", "A's authored way."})
-        self.assertEqual(b_framings, {"B-only path."})
+        self.assertEqual(a_framings, {"A-only path.", "Open path."})
+        self.assertEqual(b_framings, {"B-only path.", "Open path."})
 
-    def test_authored_option_appears_once_owned_by_passing_participant(
-        self,
-    ) -> None:
+    def test_gated_option_appears_once_owned_by_passing_participant(self) -> None:
         options = build_group_option_list(self.instance, self.node)
-        authored_entries = [o for o in options if o.option == self.authored]
-        self.assertEqual(len(authored_entries), 1)
-        self.assertEqual(authored_entries[0].owner, self.char_a)
+        a_only_entries = [o for o in options if o.option == self.a_only]
+        self.assertEqual(len(a_only_entries), 1)
+        self.assertEqual(a_only_entries[0].owner, self.char_a)
 
     def test_stable_order_by_participant_then_per_viewer_order(self) -> None:
         options = build_group_option_list(self.instance, self.node)
@@ -157,7 +152,7 @@ class BuildGroupOptionListTests(TestCase):
         single = build_option_list(self.instance, self.node, self.p_a)
         self.assertEqual(
             {o.ic_framing for o in single},
-            {"A-only path.", "A's authored way."},
+            {"A-only path.", "Open path."},
         )
 
 

@@ -18,10 +18,9 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
-    from world.checks.models import CheckType, Consequence
+    from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
-        AffordanceBinding,
         MissionOption,
         MissionParticipant,
         MissionRewardQueue,
@@ -64,28 +63,6 @@ class DeedRewardLine:
     kind: str  # DeedRewardKind value
     sink: str  # DeedRewardSink value
     payload: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class ResolvedOption:
-    """One surfaced player option produced from an owned descriptor binding.
-
-    Built by ``world.missions.services.bindings_for_character`` for each
-    :class:`~world.missions.models.AffordanceBinding` whose affordance the
-    challenge accepts AND whose descriptor the acting character owns. Fields
-    are flattened off the binding so resolution callers never re-walk the FK
-    side. ``owner`` is the acting character (an ``ObjectDB``); Phase 4
-    generalizes this to per-participant owners and the default stays the
-    acting character.
-    """
-
-    binding: AffordanceBinding
-    produces: str
-    check_type: CheckType | None
-    base_risk: int
-    ic_framing: str
-    rider: Consequence | None
-    owner: ObjectDB
 
 
 @dataclass(frozen=True)
@@ -262,16 +239,14 @@ class MissionBeatTriggerRecord:
 class PresentedOption:
     """One player-facing option surfaced at a node for the acting participant.
 
-    Built by ``world.missions.services.resolution.build_option_list``. An
-    AFFORDANCE-sourced :class:`~world.missions.models.MissionOption` fans out
-    into one ``PresentedOption`` per owned descriptor binding (``binding`` set,
-    ``owner`` the acting character); a CHALLENGE-sourced option fans out into
-    one entry per qualifying ``ChallengeApproach`` (``approach`` set); an
-    AUTHORED option produces a single entry (``binding``/``approach`` None)
-    when its visibility predicate passes. Fields are flattened off the
-    binding/approach/option so resolution callers never re-walk the FK side.
-    Phase 3 is single-participant — ``owner`` is the acting participant's
-    character; Phase 4 generalizes to per-participant owners.
+    Built by ``world.missions.services.resolution.build_option_list``. A
+    CHALLENGE-sourced :class:`~world.missions.models.MissionOption` fans out
+    into one ``PresentedOption`` per qualifying ``ChallengeApproach``
+    (``approach`` set); an AUTHORED option produces a single entry
+    (``approach`` None) when its visibility predicate passes. Fields are
+    flattened off the approach/option so resolution callers never re-walk
+    the FK side. ``owner`` is the acting participant's character (Phase 4
+    generalizes to per-participant owners in the multi-participant union).
     """
 
     option: MissionOption
@@ -280,5 +255,4 @@ class PresentedOption:
     base_risk: int
     ic_framing: str
     owner: ObjectDB
-    binding: AffordanceBinding | None
     approach: ChallengeApproach | None = None

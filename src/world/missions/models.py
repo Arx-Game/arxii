@@ -1,28 +1,24 @@
-"""Missions data models (Phase 1).
+"""Missions data models.
 
-Phase 1 builds the *affordance registry* and the authored-once
-descriptor→affordance bindings.
+The mission graph is built natively here. It reuses the existing
+check/consequence *primitives* by FK only — ``checks.CheckType``,
+``traits.CheckOutcome`` (the outcome ladder), ``checks.Consequence`` — and
+does NOT overload ``mechanics.ChallengeTemplate``/``ChallengeInstance``
+(those carry combat/situation/reveal semantics missions do not want).
 
-Design recap: a mission challenge declares which *affordances* it accepts
-(e.g. ``distraction``, ``lethal``). Any durable descriptor a character owns
-that is *tagged* (bound) with a matching affordance auto-surfaces as an
-option. The binding is authored ONCE per (descriptor, affordance) and
-globally reused; it records whether the option produces a narrative BRANCH
-(no check) or a CHECK (which ``checks.CheckType`` + base risk), the thin IC
-framing line, and an optional reusable ``checks.Consequence`` "rider".
-
-The check/consequence substrate is reused wholesale — bindings FK directly
-to ``checks.CheckType`` / ``checks.Consequence``; this app introduces no new
-check or consequence models.
+A mission node attaches one or more ``mechanics.ChallengeTemplate`` via
+CHALLENGE-sourced :class:`MissionOption`s; each attached challenge's
+``ChallengeApproach``es fan out into challenge-contributed options at
+runtime (see ``services.challenge_options``). The check/consequence
+substrate is reused wholesale — options FK directly to ``checks.CheckType``
+and ``checks.Consequence``; this app introduces no new check or consequence
+models.
 """
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.mixins import DiscriminatorMixin
-from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
     MAX_PERCENT_REPLACE,
     ArcScope,
@@ -32,195 +28,13 @@ from world.missions.constants import (
     JointCombine,
     MissionStatus,
     OptionKind,
-    OptionProduces,
     OptionSource,
     RewardGroupRule,
 )
 
-# Discriminator value -> typed FK field name. Authored-once bindings point at
-# a single durable-descriptor model; the discriminator selects which typed FK
-# is active (validated by DiscriminatorMixin). ``source_technique`` is
-# intentionally absent — see the class docstring on AffordanceBinding.
-SOURCE_TRAIT = "trait"
-SOURCE_DISTINCTION = "distinction"
-SOURCE_ACHIEVEMENT = "achievement"
-SOURCE_CAPABILITY = "capability"
-SOURCE_CONDITION = "condition"
-
-
-class SourceKind(models.TextChoices):
-    """Which durable-descriptor family a binding is authored against."""
-
-    TRAIT = SOURCE_TRAIT, "Trait"
-    DISTINCTION = SOURCE_DISTINCTION, "Distinction"
-    ACHIEVEMENT = SOURCE_ACHIEVEMENT, "Achievement"
-    CAPABILITY = SOURCE_CAPABILITY, "Capability"
-    CONDITION = SOURCE_CONDITION, "Condition"
-
-
-class AffordanceManager(NaturalKeyManager):
-    """Manager for Affordance with natural-key support."""
-
-
-class Affordance(NaturalKeyMixin, SharedMemoryModel):
-    """A capability-category a mission challenge can accept.
-
-    Examples: ``distraction``, ``lethal``, ``stealth``, ``social``. A
-    challenge declares the set of affordances it will accept; any descriptor
-    a character owns that is bound to one of those affordances surfaces as a
-    player option. Pure lookup table — mirrors ``mechanics.ModifierCategory``.
-    """
-
-    name = models.CharField(
-        max_length=64,
-        unique=True,
-        help_text="Affordance name (e.g., 'distraction', 'lethal').",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="What kind of approach this affordance represents.",
-    )
-
-    objects = AffordanceManager()
-
-    class NaturalKeyConfig:
-        fields = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class AffordanceBinding(DiscriminatorMixin, SharedMemoryModel):
-    """Authored-once link from a durable descriptor to an affordance.
-
-    Exactly one typed ``source_*`` FK is set, selected by ``source_kind``
-    (enforced by :class:`~core.mixins.DiscriminatorMixin`). When a character
-    owns that descriptor and a challenge accepts ``affordance``, this binding
-    surfaces as one player option carrying its ``produces`` mode, optional
-    ``check_type`` + ``base_risk``, the thin ``ic_framing`` line, and an
-    optional reusable ``rider`` consequence.
-
-    A ``trait``-sourced binding surfaces whenever the acting character has any
-    positive value in that trait (the threshold is hardcoded to 1 and is not
-    authorable in Phase 1; see ``services.affordances`` where the ``min_trait``
-    resolver is reused at ``value=1``).
-
-    ``source_technique`` is intentionally omitted. ``magic.Technique`` is a
-    *per-character* instance (``Technique.name`` is explicitly non-unique and
-    techniques are "unique per character and not shared"), so a globally
-    authored-once binding cannot point at one technique without binding to a
-    single character's instance; Phase 0 also ships no technique-ownership
-    resolver to reuse. Deferred until the magic technique catalog model is
-    confirmed.
-    # DESIGN: technique source deferred — verify magic technique model
-    """
-
-    DISCRIMINATOR_FIELD = "source_kind"
-    DISCRIMINATOR_MAP = {
-        SOURCE_TRAIT: "source_trait",
-        SOURCE_DISTINCTION: "source_distinction",
-        SOURCE_ACHIEVEMENT: "source_achievement",
-        SOURCE_CAPABILITY: "source_capability",
-        SOURCE_CONDITION: "source_condition",
-    }
-
-    source_kind = models.CharField(
-        max_length=20,
-        choices=SourceKind.choices,
-        help_text="Which durable-descriptor family this binding is authored against.",
-    )
-    source_trait = models.ForeignKey(
-        "traits.Trait",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-    )
-    source_distinction = models.ForeignKey(
-        "distinctions.Distinction",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-    )
-    source_achievement = models.ForeignKey(
-        "achievements.Achievement",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-    )
-    source_capability = models.ForeignKey(
-        "conditions.CapabilityType",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-    )
-    source_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-    )
-
-    affordance = models.ForeignKey(
-        Affordance,
-        on_delete=models.PROTECT,
-        related_name="bindings",
-        help_text="The affordance this descriptor satisfies.",
-    )
-    produces = models.CharField(
-        max_length=10,
-        choices=OptionProduces.choices,
-        help_text="Whether this option is a narrative branch or a resolved check.",
-    )
-    check_type = models.ForeignKey(
-        "checks.CheckType",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="affordance_bindings",
-        help_text="Resolved when produces=check; must be null when produces=branch.",
-    )
-    base_risk = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Authored base risk for the surfaced option.",
-    )
-    ic_framing = models.CharField(
-        max_length=200,
-        help_text="Thin in-character one-liner describing the approach.",
-    )
-    rider = models.ForeignKey(
-        "checks.Consequence",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="Optional reusable consequence attached to this option.",
-    )
-
-    def clean(self) -> None:
-        super().clean()
-        if self.produces == OptionProduces.CHECK and self.check_type_id is None:
-            raise ValidationError({"check_type": "Required when produces is 'check'."})
-        if self.produces == OptionProduces.BRANCH and self.check_type_id is not None:
-            raise ValidationError({"check_type": "Must be null when produces is 'branch'."})
-
-    def __str__(self) -> str:
-        return f"{self.get_active_target_name()} → {self.affordance.name}"
-
-
 # ---------------------------------------------------------------------------
-# Phase 2 — mission graph data model (no engine logic; that is Phase 3)
+# Mission graph data model
 # ---------------------------------------------------------------------------
-#
-# The mission graph is built NATIVELY here. It reuses the existing
-# check/consequence *primitives* by FK only — ``checks.CheckType``,
-# ``traits.CheckOutcome`` (the six-tier outcome), ``checks.Consequence`` —
-# and does NOT overload ``mechanics.ChallengeTemplate``/``ChallengeInstance``
-# (those carry combat/situation/reveal semantics missions do not want).
 
 
 class MissionTemplate(SharedMemoryModel):
@@ -406,10 +220,11 @@ class MissionNode(SharedMemoryModel):
 class MissionOption(SharedMemoryModel):
     """One choice available at a :class:`MissionNode`.
 
-    An option is either AFFORDANCE-sourced (surfaced from the acting
-    character's owned descriptor bindings whose affordance is accepted) or
-    AUTHORED (hand-written). Independently, it is a BRANCH (routes the graph
-    with no dice) or a CHECK (resolves a ``checks.CheckType`` first).
+    An option is either AUTHORED (hand-written) or CHALLENGE (references a
+    ``mechanics.ChallengeTemplate`` whose approaches fan out into
+    challenge-contributed options at runtime). Independently, it is a BRANCH
+    (routes the graph with no dice) or a CHECK (resolves a ``checks.CheckType``
+    first). CHALLENGE-sourced options are always CHECK.
     """
 
     node = models.ForeignKey(
@@ -428,12 +243,6 @@ class MissionOption(SharedMemoryModel):
     source_kind = models.CharField(
         max_length=10,
         choices=OptionSource.choices,
-    )
-    accepted_affordances = models.ManyToManyField(
-        Affordance,
-        blank=True,
-        related_name="accepting_options",
-        help_text="AFFORDANCE source: descriptor bindings to these affordances surface here.",
     )
     # SANCTIONED DYNAMIC JSON: this is the design §4 predicate tree consumed
     # by the Phase 0 ``evaluate`` engine. It is the one approved JSONField in
@@ -474,26 +283,6 @@ class MissionOption(SharedMemoryModel):
             "this option's challenge-contributed options at runtime."
         ),
     )
-
-    def _affordance_source_errors(self) -> dict[str, str]:
-        """AFFORDANCE-sourced options forbid the authored_* fields.
-
-        NOTE: ``accepted_affordances`` is M2M and cannot be validated in
-        ``model.clean()`` before the row has a pk. The "≥1 accepted
-        affordance" rule is enforced by
-        ``world.missions.services.validate_mission_option`` (covered by a
-        dedicated test). We do NOT fake an M2M check here.
-        """
-        if self.source_kind != OptionSource.AFFORDANCE:
-            return {}
-        errors: dict[str, str] = {}
-        if self.authored_check_type_id is not None:
-            errors["authored_check_type"] = "Must be null for AFFORDANCE-sourced options."
-        if self.authored_base_risk:
-            errors["authored_base_risk"] = "Must be 0 for AFFORDANCE-sourced options."
-        if self.authored_ic_framing:
-            errors["authored_ic_framing"] = "Must be blank for AFFORDANCE-sourced options."
-        return errors
 
     def _challenge_source_errors(self) -> dict[str, str]:
         """CHALLENGE-sourced options carry a challenge and forbid authored_* fields.
@@ -544,7 +333,6 @@ class MissionOption(SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         errors = {
-            **self._affordance_source_errors(),
             **self._challenge_source_errors(),
             **self._kind_errors(),
         }
@@ -552,28 +340,10 @@ class MissionOption(SharedMemoryModel):
             raise ValidationError(errors)
 
     def save(self, *args: object, **kwargs: object) -> None:
-        # Runs only the scalar clean() invariants on the real write path. The
-        # M2M "AFFORDANCE source requires ≥1 accepted_affordance" rule cannot
-        # be validated at save time (M2M rows have no pk yet) and stays in
-        # ``services.mission_graph.validate_mission_option`` — see that module
-        # and ``_affordance_source_errors``.
+        # Runs the scalar clean() invariants on the real write path so
+        # factory creates / explicit create() calls cannot bypass them.
         self.clean()
         super().save(*args, **kwargs)
-
-    @cached_property
-    def accepted_affordances_cached(self) -> list["Affordance"]:
-        """Accepted affordances as a cache-safe list.
-
-        Reads from the prefetch when a caller set up
-        ``Prefetch("options__accepted_affordances",
-        to_attr="accepted_affordances_cached")`` (Phase-4
-        ``build_group_option_list`` does this ONCE so the per-participant
-        union never re-queries — Phase-3 review Minor-1); otherwise it
-        issues exactly one query, matching the prior
-        ``accepted_affordances.all()`` behavior. The cached_property is
-        Django's (cache-safe with ``Prefetch(to_attr=...)``).
-        """
-        return list(self.accepted_affordances.all())
 
     def __str__(self) -> str:
         return f"{self.node}#{self.order}"
