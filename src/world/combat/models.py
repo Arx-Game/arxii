@@ -10,9 +10,13 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
+    ClashFlavor,
+    ClashResolution,
+    ClashStatus,
     ComboLearningMethod,
     EncounterStatus,
     EncounterType,
+    LockPcRole,
     OpponentStatus,
     OpponentTier,
     PaceMode,
@@ -942,3 +946,143 @@ class ClashConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ClashConfig(pk={self.pk})"
+
+
+# =============================================================================
+# Clash model (Task 1.3) — discriminator model for multi-round contested struggles
+# =============================================================================
+
+
+class Clash(SharedMemoryModel):
+    """Central primitive for a Clash multi-round contest between PCs and an NPC opponent.
+
+    ``flavor`` is the discriminator (CLASH / LOCK / WARD / BREAK). Three flavored
+    fields have an iff coupling enforced at the application layer (``clean()``) and
+    at the DB layer (``CheckConstraint``):
+
+    - ``lock_pc_role`` is non-null iff ``flavor == LOCK``
+    - ``npc_win_threshold`` is non-null iff ``flavor == CLASH``
+    - ``ward_ends_on_round`` is non-null iff ``flavor == WARD``
+
+    Mirrors the Thread discriminator pattern from world/magic/models/threads.py.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="clashes",
+    )
+    npc_opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.PROTECT,
+        related_name="clashes",
+    )
+    initiator = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    resolution_consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    per_round_consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    flavor = models.CharField(
+        max_length=10,
+        choices=ClashFlavor.choices,
+    )
+    lock_pc_role = models.CharField(
+        max_length=12,
+        choices=LockPcRole.choices,
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=LOCK; null otherwise.",
+    )
+    progress = models.IntegerField(default=0)
+    pc_win_threshold = models.IntegerField()
+    npc_win_threshold = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=CLASH; null otherwise.",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=ClashStatus.choices,
+        default=ClashStatus.ACTIVE,
+    )
+    started_round = models.PositiveIntegerField()
+    resolved_round = models.PositiveIntegerField(null=True, blank=True)
+    resolution = models.CharField(
+        max_length=15,
+        choices=ClashResolution.choices,
+        null=True,
+        blank=True,
+    )
+    ward_ends_on_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=WARD; null otherwise.",
+    )
+
+    class Meta:
+        constraints = [
+            # lock_pc_role is non-null iff flavor == LOCK
+            models.CheckConstraint(
+                name="clash_lock_role_iff_lock_flavor",
+                check=(~Q(flavor=ClashFlavor.LOCK) | Q(lock_pc_role__isnull=False))
+                & (Q(flavor=ClashFlavor.LOCK) | Q(lock_pc_role__isnull=True)),
+            ),
+            # npc_win_threshold is non-null iff flavor == CLASH
+            models.CheckConstraint(
+                name="clash_npc_threshold_iff_clash_flavor",
+                check=(~Q(flavor=ClashFlavor.CLASH) | Q(npc_win_threshold__isnull=False))
+                & (Q(flavor=ClashFlavor.CLASH) | Q(npc_win_threshold__isnull=True)),
+            ),
+            # ward_ends_on_round is non-null iff flavor == WARD
+            models.CheckConstraint(
+                name="clash_ward_round_iff_ward_flavor",
+                check=(~Q(flavor=ClashFlavor.WARD) | Q(ward_ends_on_round__isnull=False))
+                & (Q(flavor=ClashFlavor.WARD) | Q(ward_ends_on_round__isnull=True)),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Clash<{self.flavor}>(encounter={self.encounter_id} "
+            f"opponent={self.npc_opponent_id} status={self.status})"
+        )
+
+    def clean(self) -> None:
+        """Validate the three iff couplings between flavor and flavored fields."""
+        errors: dict[str, str] = {}
+
+        # lock_pc_role iff LOCK
+        if self.flavor == ClashFlavor.LOCK and not self.lock_pc_role:
+            errors["lock_pc_role"] = "flavor=LOCK requires lock_pc_role."
+        elif self.flavor != ClashFlavor.LOCK and self.lock_pc_role:
+            errors["lock_pc_role"] = "lock_pc_role must be null for non-LOCK flavors."
+
+        # npc_win_threshold iff CLASH
+        if self.flavor == ClashFlavor.CLASH and self.npc_win_threshold is None:
+            errors["npc_win_threshold"] = "flavor=CLASH requires npc_win_threshold."
+        elif self.flavor != ClashFlavor.CLASH and self.npc_win_threshold is not None:
+            errors["npc_win_threshold"] = "npc_win_threshold must be null for non-CLASH flavors."
+
+        # ward_ends_on_round iff WARD
+        if self.flavor == ClashFlavor.WARD and self.ward_ends_on_round is None:
+            errors["ward_ends_on_round"] = "flavor=WARD requires ward_ends_on_round."
+        elif self.flavor != ClashFlavor.WARD and self.ward_ends_on_round is not None:
+            errors["ward_ends_on_round"] = "ward_ends_on_round must be null for non-WARD flavors."
+
+        if errors:
+            raise ValidationError(errors)

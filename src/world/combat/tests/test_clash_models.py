@@ -62,3 +62,104 @@ class ClashConfigTests(TestCase):
         self.assertEqual(cfg.delta_partial, 0)
         self.assertEqual(cfg.delta_failure, -1)
         self.assertEqual(cfg.delta_botch, -2)
+
+
+class ClashModelTests(TestCase):
+    """Tests for the Clash discriminator model.
+
+    Creates encounter and opponent inline (no CombatNPC typeclass ObjectDB) to avoid
+    the setUpTestData deepcopy restriction on Evennia DbHolder objects.
+    """
+
+    def setUp(self) -> None:
+        from actions.models import ConsequencePool
+        from world.combat.constants import OpponentTier
+        from world.combat.models import CombatEncounter, CombatOpponent
+
+        self.encounter = CombatEncounter.objects.create()
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Test Opponent",
+            health=50,
+            max_health=50,
+        )
+        self.resolution_pool = ConsequencePool.objects.create(name="ClashTestResolutionPool")
+        self.per_round_pool = ConsequencePool.objects.create(name="ClashTestPerRoundPool")
+
+    def _make_clash(self, **kwargs):
+        """Helper: build a minimal CLASH-flavor Clash with required fields."""
+        from world.combat.models import Clash
+
+        defaults = {
+            "encounter": self.encounter,
+            "npc_opponent": self.opponent,
+            "resolution_consequence_pool": self.resolution_pool,
+            "flavor": ClashFlavor.CLASH,
+            "progress": 0,
+            "pc_win_threshold": 5,
+            "npc_win_threshold": -5,
+            "started_round": 1,
+        }
+        defaults.update(kwargs)
+        return Clash(**defaults)
+
+    # (a) Valid CLASH-flavor row passes full_clean()
+    def test_clash_flavor_valid(self) -> None:
+        clash = self._make_clash()
+        # full_clean() must pass before save
+        clash.full_clean()
+        clash.save()
+
+    # (b) LOCK flavor requires lock_pc_role
+    def test_lock_flavor_requires_lock_pc_role(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.combat.models import Clash
+
+        # LOCK without lock_pc_role should fail full_clean() before hitting the DB
+        lock = Clash(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            resolution_consequence_pool=self.resolution_pool,
+            flavor=ClashFlavor.LOCK,
+            progress=0,
+            pc_win_threshold=3,
+            started_round=1,
+            lock_pc_role=None,
+        )
+        with self.assertRaises(ValidationError):
+            lock.full_clean()
+
+    def test_lock_flavor_with_role_passes(self) -> None:
+        clash = self._make_clash(
+            flavor=ClashFlavor.LOCK,
+            lock_pc_role=LockPcRole.SUSTAINING,
+            npc_win_threshold=None,
+        )
+        clash.full_clean()
+        clash.save()
+
+    # (c) Non-LOCK row with lock_pc_role set is rejected
+    def test_non_lock_with_lock_pc_role_rejected(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        clash = self._make_clash(lock_pc_role=LockPcRole.ESCAPING)
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+
+    # (d) status defaults to ACTIVE
+    def test_status_defaults_to_active(self) -> None:
+        from world.combat.models import Clash
+
+        clash = Clash(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            resolution_consequence_pool=self.resolution_pool,
+            flavor=ClashFlavor.CLASH,
+            progress=0,
+            pc_win_threshold=5,
+            npc_win_threshold=-5,
+            started_round=1,
+        )
+        self.assertEqual(clash.status, ClashStatus.ACTIVE)
