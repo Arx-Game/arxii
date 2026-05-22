@@ -1088,3 +1088,58 @@ class Clash(SharedMemoryModel):
 
         if errors:
             raise ValidationError(errors)
+
+
+# =============================================================================
+# ClashRound model (Task 1.4) — per-round record for a Clash contest
+# =============================================================================
+
+
+class ClashRound(SharedMemoryModel):
+    """Per-round record of a Clash multi-round contest.
+
+    One row is written at the end of each round of a ``Clash``.  The deltas
+    record how much each side moved the progress meter this round, and
+    ``progress_after`` snapshots the meter value after the round resolves so
+    that the history is self-contained and does not depend on replaying all
+    prior rounds.
+
+    ``ClashContribution`` (Task 1.5) will hang off this model — one row per PC
+    per round.
+    """
+
+    clash = models.ForeignKey(
+        Clash,
+        on_delete=models.CASCADE,
+        related_name="rounds",
+        help_text="The Clash this round belongs to.",
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="Which round of the Clash this row records (1-indexed, matches encounter round).",
+    )
+    pc_progress_delta = models.IntegerField(
+        help_text="Net signed progress contribution from all PCs this round. "
+        "Positive moves the meter toward the PC win threshold.",
+    )
+    npc_progress_delta = models.IntegerField(
+        help_text="Net signed progress contribution from the NPC opponent this round. "
+        "Negative moves the meter toward the NPC win threshold.",
+    )
+    progress_after = models.IntegerField(
+        help_text="Clash progress meter value after this round's deltas are applied. "
+        "Snapshot so history is self-contained without replaying all prior rounds.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["clash", "round_number"],
+                name="unique_round_per_clash",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashRound(clash={self.clash_id} "
+            f"round={self.round_number} progress={self.progress_after})"
+        )

@@ -219,3 +219,109 @@ class ClashModelTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             clash.full_clean()
+
+
+class ClashRoundModelTests(TestCase):
+    """Tests for the ClashRound per-round record model.
+
+    Builds Clash dependencies inline following the ClashModelTests pattern.
+    """
+
+    def setUp(self) -> None:
+        from actions.models import ConsequencePool
+        from world.combat.constants import OpponentTier
+        from world.combat.models import CombatEncounter, CombatOpponent
+
+        self.encounter = CombatEncounter.objects.create()
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Round Test Opponent",
+            health=50,
+            max_health=50,
+        )
+        self.resolution_pool = ConsequencePool.objects.create(name="RoundTestResolutionPool")
+
+    def _make_clash(self, **kwargs) -> "Clash":
+        """Build a minimal CLASH-flavor Clash and save it."""
+        from world.combat.models import Clash
+
+        defaults = {
+            "encounter": self.encounter,
+            "npc_opponent": self.opponent,
+            "resolution_consequence_pool": self.resolution_pool,
+            "flavor": ClashFlavor.CLASH,
+            "progress": 0,
+            "pc_win_threshold": 5,
+            "npc_win_threshold": -5,
+            "started_round": 1,
+        }
+        defaults.update(kwargs)
+        clash = Clash(**defaults)
+        clash.save()
+        return clash
+
+    # (a) A valid ClashRound row can be created and persists.
+    def test_clash_round_creates_and_persists(self) -> None:
+        from world.combat.models import ClashRound
+
+        clash = self._make_clash()
+        round_row = ClashRound.objects.create(
+            clash=clash,
+            round_number=1,
+            pc_progress_delta=2,
+            npc_progress_delta=-1,
+            progress_after=2,
+        )
+        fetched = ClashRound.objects.get(pk=round_row.pk)
+        self.assertEqual(fetched.clash_id, clash.pk)
+        self.assertEqual(fetched.round_number, 1)
+        self.assertEqual(fetched.pc_progress_delta, 2)
+        self.assertEqual(fetched.npc_progress_delta, -1)
+        self.assertEqual(fetched.progress_after, 2)
+
+    # (b) UniqueConstraint on (clash, round_number) rejects a duplicate.
+    def test_unique_constraint_rejects_duplicate_round(self) -> None:
+        from django.db import IntegrityError
+
+        from world.combat.models import ClashRound
+
+        clash = self._make_clash()
+        ClashRound.objects.create(
+            clash=clash,
+            round_number=1,
+            pc_progress_delta=1,
+            npc_progress_delta=0,
+            progress_after=1,
+        )
+        with self.assertRaises(IntegrityError):
+            ClashRound.objects.create(
+                clash=clash,
+                round_number=1,
+                pc_progress_delta=2,
+                npc_progress_delta=-1,
+                progress_after=2,
+            )
+
+    # (c) Two ClashRound rows with the same round_number but different clashes are allowed.
+    def test_same_round_number_different_clashes_allowed(self) -> None:
+        from world.combat.models import ClashRound
+
+        clash_a = self._make_clash()
+        clash_b = self._make_clash()
+        row_a = ClashRound.objects.create(
+            clash=clash_a,
+            round_number=1,
+            pc_progress_delta=1,
+            npc_progress_delta=0,
+            progress_after=1,
+        )
+        row_b = ClashRound.objects.create(
+            clash=clash_b,
+            round_number=1,
+            pc_progress_delta=-1,
+            npc_progress_delta=2,
+            progress_after=-1,
+        )
+        self.assertNotEqual(row_a.clash_id, row_b.clash_id)
+        self.assertEqual(row_a.round_number, row_b.round_number)
