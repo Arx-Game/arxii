@@ -3,7 +3,9 @@
 Public surface:
   * :func:`validate_mission_option` (Phase 2) — post-save graph invariants.
   * :func:`build_option_list`, :func:`enter_node`, :func:`resolve_option`
-    (Phase 3) — the runtime resolution engine.
+    (Phase 3) — the runtime resolution engine. A CHALLENGE-sourced option
+    fans out per qualifying ``ChallengeApproach`` via
+    :func:`world.missions.services.challenge_options.challenge_options_for_character`.
   * :func:`build_group_option_list`, :func:`select_group_choice`,
     :func:`group_resolve_node`, :func:`contract_holder` (Phase 4) — the
     multi-participant orchestrator (reuses Phase-3 ``resolve_option``).

@@ -195,8 +195,7 @@ class MissionOptionInvariantTests(TestCase):
     def test_save_enforces_scalar_kind_invariant(self) -> None:
         # Regression (I1): the scalar clean() rule (BRANCH option forbids a
         # check type) must run on the real create()/factory write path, NOT
-        # only via explicit full_clean(). This is the scalar clean() rule,
-        # NOT the M2M accepted_affordances rule (that stays in the service).
+        # only via explicit full_clean().
         with self.assertRaises(ValidationError):
             MissionOptionFactory(
                 node=self.node,

@@ -130,6 +130,8 @@ def present_options_for_character(
         if option.source_kind == OptionSource.CHALLENGE:
             challenge = option.challenge
             if challenge is None:
+                # DESIGN: defense-in-depth — clean() forbids this state for
+                # CHALLENGE source. Unreachable in normal operation.
                 raise ValueError(_ERR_CHALLENGE_NO_CHALLENGE.format(option_pk=option.pk))
             presented.extend(
                 PresentedOption(
@@ -228,6 +230,11 @@ def _resolve_challenge_check(
     missions context). An ``auto_succeeds`` approach skips the roll and lands
     in the top tier. The challenge is consumed as authored data —
     ``resolve_challenge`` is never called (findings doc Q2).
+
+    The data-source integration also means ``ChallengeApproach.action_template``
+    overrides and per-approach ``ApproachConsequence`` rows are NOT honored
+    here — missions own the routes and consequences; the approach contributes
+    only its capability gate, ``check_type``, and (when set) ``auto_succeeds``.
     """
     if chosen_approach is None:
         raise ValueError(_ERR_CHALLENGE_NO_APPROACH.format(option_pk=option.pk))
@@ -235,6 +242,8 @@ def _resolve_challenge_check(
         return _auto_success_result(chosen_approach.check_type)
     challenge = option.challenge
     if challenge is None:
+        # DESIGN: defense-in-depth — clean() forbids this state for CHALLENGE
+        # source. Unreachable in normal operation.
         raise ValueError(_ERR_CHALLENGE_NO_CHALLENGE.format(option_pk=option.pk))
     return perform_check(
         character,

@@ -150,15 +150,26 @@ class MissionNode(SharedMemoryModel):
         blank=True,
         help_text="JOINT+COUNT mode: minimum number of successes required.",
     )
+    # DESIGN: rider config is kept as authored node state but no engine
+    # path currently consumes it — the binding-rider mechanism it serviced
+    # was retired alongside the affordance system. The fields persist so a
+    # future phase (e.g. per-approach riders) can wire them up without a
+    # schema change.
     allowed_riders = models.ManyToManyField(
         "checks.Consequence",
         blank=True,
         related_name="+",
-        help_text="Reusable consequence riders permitted at this node.",
+        help_text=(
+            "Reusable consequence riders permitted at this node. NOT "
+            "consumed by the engine in Phase A; reserved for future use."
+        ),
     )
     deny_all_riders = models.BooleanField(
         default=False,
-        help_text="When true, no consequence riders may attach at this node.",
+        help_text=(
+            "When true, no consequence riders may attach at this node. NOT "
+            "consumed by the engine in Phase A; reserved for future use."
+        ),
     )
 
     class Meta:
@@ -280,7 +291,9 @@ class MissionOption(SharedMemoryModel):
         related_name="+",
         help_text=(
             "CHALLENGE source: the challenge whose approaches fan out into "
-            "this option's challenge-contributed options at runtime."
+            "this option's challenge-contributed options at runtime. "
+            "on_delete=PROTECT — detach all referencing options before "
+            "deleting the challenge."
         ),
     )
 

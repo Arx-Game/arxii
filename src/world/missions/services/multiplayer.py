@@ -11,7 +11,7 @@ Two invariants this module enforces:
   * **Moral consequence follows the actor.** The deed ``actor`` is always
     the participant whose option actually performed. COINFLIP/VOTE resolve
     to ONE acting participant; JOINT runs every participant's own pick so
-    each participant's per-act consequences/riders attach to *their own*
+    each participant's per-act consequences attach to *their own*
     deed (Phase-3 ``resolve_option(actor=participant)`` already records
     that participant — no cross-attribution).
   * **Contractual consequence is the contract-holder's alone.** Phase 4
@@ -330,7 +330,7 @@ def group_resolve_node(
 
     JOINT — every participant runs their OWN pick via Phase-3
     ``resolve_option(actor=participant)`` so each participant's check and
-    per-act consequences/riders attach to their own deed (no
+    per-act consequences attach to their own deed (no
     cross-attribution). The combined success is then computed per
     ``joint_combine``/``joint_count`` and the node ROUTING/terminal is
     performed ONCE — based on that combined boolean — by reusing the
@@ -352,7 +352,7 @@ def group_resolve_node(
     if not gc.is_joint:
         # COINFLIP / VOTE: exactly one option resolves once, as the
         # selected acting participant — Phase-3 resolve_option performs
-        # the check, applies the route consequence + permitted rider, and
+        # the check, applies the route consequence, and
         # advances/terminates the run. We do NOT reimplement any of that.
         # select_group_choice guarantees option+actor are set when
         # is_joint is False (only JOINT leaves them None).
@@ -368,7 +368,7 @@ def group_resolve_node(
     # JOINT: run every participant's own pick via Phase-3 resolve_option
     # in the routing-free mode (advance=False — Phase-5a I-1). Each call
     # records that participant as the deed actor and applies that
-    # participant's own check + per-act consequences/riders — per-actor
+    # participant's own check + per-act consequences — per-actor
     # moral consequence is correct by construction (no cross-attribution).
     # Crucially, NO per-attempt routing or terminal write touches the
     # instance: the only thing that routes/terminates is the combined

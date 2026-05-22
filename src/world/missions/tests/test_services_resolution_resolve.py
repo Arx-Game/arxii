@@ -52,7 +52,7 @@ _APPLY = "world.missions.services.resolution.apply_resolution"
 
 
 class ResolveCheckOptionTests(TestCase):
-    """CHECK routing, consequence fallback, riders, random sets."""
+    """CHECK routing, consequence fallback, random sets."""
 
     @classmethod
     def setUpTestData(cls) -> None:
