@@ -9,17 +9,18 @@ approach (offered to everyone). The challenge is consumed as authored
 data-source integration). Of the ``ChallengeTemplate`` fields only
 ``severity`` rides along, as the approach rolls' difficulty (design §8.4 Q4).
 
-Capability ownership is **not** re-implemented here. It is decided by the
-Phase-0 ``_resolve_has_capability`` resolver in ``world.missions.predicates``
-— the single definition of "does this acting character own capability X".
+Capability ownership is **not** re-implemented here. It is decided by
+``world.conditions.services.get_capability_value`` — the single definition
+of "does this acting character own capability X" (the Phase-0
+``has_capability`` predicate resolver wraps the same call).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.conditions.services import get_capability_value
 from world.mechanics.models import ChallengeApproach, ChallengeTemplate
-from world.missions.predicates import _resolve_has_capability
 from world.missions.types import ChallengeOption
 
 if TYPE_CHECKING:
@@ -35,11 +36,12 @@ def challenge_options_for_character(
     For each ``ChallengeApproach`` of ``challenge``, build one
     :class:`~world.missions.types.ChallengeOption` when the acting
     ``character`` qualifies — they hold the approach's
-    ``Application.capability``, or the approach is ``is_default`` (offered to
-    everyone). Approaches the character neither qualifies for nor that are
-    ``is_default`` are excluded; the result is legitimately empty when the
-    challenge defines no default and the character qualifies for none of its
-    approaches.
+    ``Application.capability`` (per
+    ``conditions.services.get_capability_value``) — or the approach is
+    ``is_default`` (offered to everyone). Approaches the character neither
+    qualifies for nor that are ``is_default`` are excluded; the result is
+    legitimately empty when the challenge defines no default and the
+    character qualifies for none of its approaches.
 
     Args:
         challenge: The challenge attached to a CHALLENGE-sourced option.
@@ -56,8 +58,12 @@ def challenge_options_for_character(
         .order_by("pk")
     )
     for approach in approaches:
-        qualifies = approach.is_default or _resolve_has_capability(
-            character, name=approach.application.capability.name
+        # approach.application.capability is the live CapabilityType
+        # instance (select_related'd above) — call the underlying service
+        # directly rather than re-looking-up by name.
+        qualifies = (
+            approach.is_default
+            or get_capability_value(character, approach.application.capability) > 0
         )
         if not qualifies:
             continue

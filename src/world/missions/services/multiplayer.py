@@ -99,7 +99,10 @@ def build_group_option_list(
     ``build_option_list``'s single-participant behavior is unchanged (it
     delegates to the same extracted helper).
     """
-    options = list(node.options.all().order_by("order", "pk"))
+    # select_related("challenge") so the CHALLENGE-branch FK walk in
+    # present_options_for_character doesn't fire one query per option per
+    # participant (the options list is built once and reused).
+    options = list(node.options.select_related("challenge").order_by("order", "pk"))
 
     participants = instance.participants.all().order_by("pk")
     presented: list[PresentedOption] = []

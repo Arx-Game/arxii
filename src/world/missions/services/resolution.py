@@ -104,7 +104,9 @@ def build_option_list(
     Phase 3 is single-participant; ``instance`` is accepted for signature
     stability (Phase 4 unions across ``instance.participants``).
     """
-    options = node.options.all().order_by("order", "pk")
+    # select_related("challenge") so the CHALLENGE-branch FK walk in
+    # present_options_for_character doesn't fire one query per option.
+    options = node.options.select_related("challenge").order_by("order", "pk")
     return present_options_for_character(viewer.character, options)
 
 
