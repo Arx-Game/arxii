@@ -253,24 +253,88 @@ class MissionOptionInvariantTests(TestCase):
         self.assertEqual(fetched.authored_base_risk, 4)
 
 
-class MissionNodeAttachedChallengesTests(TestCase):
-    """MissionNode.attached_challenges M2M to mechanics.ChallengeTemplate."""
+class MissionOptionChallengeSourceTests(TestCase):
+    """source_kind=CHALLENGE invariants on MissionOption.
+
+    A CHALLENGE-sourced option references one mechanics.ChallengeTemplate;
+    its approaches fan out into challenge-contributed options at runtime. It
+    is always a CHECK and carries none of the authored_* fields (the check
+    type and odds come from the chosen approach, the difficulty from the
+    challenge's severity).
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="attach-tmpl")
+        cls.template = MissionTemplateFactory(slug="ch-opt-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="n", is_entry=True)
-        cls.challenge = ChallengeTemplateFactory(name="Pit Climb")
+        cls.challenge = ChallengeTemplateFactory(name="Locked Vault")
+        cls.check_type = CheckTypeFactory(name="Vault-Lockpick")
 
-    def test_attached_challenges_defaults_empty(self) -> None:
-        self.assertEqual(list(self.node.attached_challenges.all()), [])
+    def test_challenge_option_round_trips(self) -> None:
+        option = MissionOptionFactory(
+            node=self.node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=self.challenge,
+        )
+        fetched = MissionOption.objects.get(pk=option.pk)
+        self.assertEqual(fetched.challenge, self.challenge)
+        self.assertEqual(fetched.source_kind, OptionSource.CHALLENGE)
 
-    def test_attach_challenge(self) -> None:
-        self.node.attached_challenges.add(self.challenge)
-        fetched = MissionNode.objects.get(pk=self.node.pk)
-        self.assertIn(self.challenge, fetched.attached_challenges.all())
+    def test_challenge_option_requires_a_challenge(self) -> None:
+        option = MissionOptionFactory.build(
+            node=self.node,
+            order=1,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=None,
+        )
+        with self.assertRaises(ValidationError):
+            option.full_clean()
 
-    def test_attached_challenges_cached(self) -> None:
-        node = MissionNodeFactory(template=self.template, key="cached", is_entry=False)
-        node.attached_challenges.add(self.challenge)
-        self.assertEqual(node.attached_challenges_cached, [self.challenge])
+    def test_challenge_option_must_be_check_kind(self) -> None:
+        option = MissionOptionFactory.build(
+            node=self.node,
+            order=2,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=self.challenge,
+        )
+        with self.assertRaises(ValidationError):
+            option.full_clean()
+
+    def test_challenge_option_forbids_authored_check_type(self) -> None:
+        option = MissionOptionFactory.build(
+            node=self.node,
+            order=3,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=self.challenge,
+            authored_check_type=self.check_type,
+        )
+        with self.assertRaises(ValidationError):
+            option.full_clean()
+
+    def test_non_challenge_option_forbids_a_challenge(self) -> None:
+        option = MissionOptionFactory.build(
+            node=self.node,
+            order=4,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.check_type,
+            challenge=self.challenge,
+        )
+        with self.assertRaises(ValidationError):
+            option.full_clean()
+
+    def test_save_enforces_challenge_invariant(self) -> None:
+        # clean() runs on the real factory/create write path (regression I1).
+        with self.assertRaises(ValidationError):
+            MissionOptionFactory(
+                node=self.node,
+                order=5,
+                option_kind=OptionKind.CHECK,
+                source_kind=OptionSource.CHALLENGE,
+                challenge=None,
+            )

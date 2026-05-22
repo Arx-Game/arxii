@@ -16,8 +16,6 @@ to ``checks.CheckType`` / ``checks.Consequence``; this app introduces no new
 check or consequence models.
 """
 
-from typing import TYPE_CHECKING
-
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
@@ -38,9 +36,6 @@ from world.missions.constants import (
     OptionSource,
     RewardGroupRule,
 )
-
-if TYPE_CHECKING:
-    from world.mechanics.models import ChallengeTemplate
 
 # Discriminator value -> typed FK field name. Authored-once bindings point at
 # a single durable-descriptor model; the discriminator selects which typed FK
@@ -351,12 +346,6 @@ class MissionNode(SharedMemoryModel):
         default=False,
         help_text="When true, no consequence riders may attach at this node.",
     )
-    attached_challenges = models.ManyToManyField(
-        "mechanics.ChallengeTemplate",
-        blank=True,
-        related_name="+",
-        help_text="Challenges whose approaches surface as options on this node.",
-    )
 
     class Meta:
         constraints = [
@@ -409,17 +398,6 @@ class MissionNode(SharedMemoryModel):
     # expressed as a single-row invariant). Entry-node uniqueness is
     # row-level; route-set completeness is graph-level-deferred. See the
     # MissionOptionRoute DESIGN note. This split is intentional-on-record.
-
-    @cached_property
-    def attached_challenges_cached(self) -> list["ChallengeTemplate"]:
-        """Prefetch-friendly snapshot of this node's attached challenges.
-
-        Use with ``Prefetch("attached_challenges",
-        to_attr="attached_challenges_cached")`` so challenge-option
-        expansion reads the M2M once per request. Falls back to a fresh
-        ``attached_challenges.all()`` when no prefetch ran.
-        """
-        return list(self.attached_challenges.all())
 
     def __str__(self) -> str:
         return f"{self.template.slug}:{self.key}"
@@ -485,6 +463,17 @@ class MissionOption(SharedMemoryModel):
         related_name="+",
         help_text="BRANCH/authored route: the node this option leads to.",
     )
+    challenge = models.ForeignKey(
+        "mechanics.ChallengeTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "CHALLENGE source: the challenge whose approaches fan out into "
+            "this option's challenge-contributed options at runtime."
+        ),
+    )
 
     def _affordance_source_errors(self) -> dict[str, str]:
         """AFFORDANCE-sourced options forbid the authored_* fields.
@@ -506,6 +495,36 @@ class MissionOption(SharedMemoryModel):
             errors["authored_ic_framing"] = "Must be blank for AFFORDANCE-sourced options."
         return errors
 
+    def _challenge_source_errors(self) -> dict[str, str]:
+        """CHALLENGE-sourced options carry a challenge and forbid authored_* fields.
+
+        A CHALLENGE option fans out per qualifying ``ChallengeApproach``; the
+        check type and odds come from the chosen approach and the difficulty
+        from the challenge's ``severity``, so the ``authored_*`` fields are
+        meaningless here. It is always a CHECK (every approach resolves to a
+        ``CheckOutcome``). A non-CHALLENGE option may not set a ``challenge``.
+        """
+        if self.source_kind != OptionSource.CHALLENGE:
+            return (
+                {"challenge": "Only CHALLENGE-sourced options may set a challenge."}
+                if self.challenge_id is not None
+                else {}
+            )
+        errors: dict[str, str] = {}
+        if self.challenge_id is None:
+            errors["challenge"] = "Required for CHALLENGE-sourced options."
+        if self.option_kind != OptionKind.CHECK:
+            errors["option_kind"] = "CHALLENGE-sourced options must be CHECK."
+        if self.authored_check_type_id is not None:
+            errors["authored_check_type"] = "Must be null for CHALLENGE-sourced options."
+        if self.authored_base_risk:
+            errors["authored_base_risk"] = "Must be 0 for CHALLENGE-sourced options."
+        if self.authored_ic_framing:
+            errors["authored_ic_framing"] = "Must be blank for CHALLENGE-sourced options."
+        if self.branch_target_id is not None:
+            errors["branch_target"] = "Must be null for CHALLENGE-sourced options."
+        return errors
+
     def _kind_errors(self) -> dict[str, str]:
         """BRANCH forbids check fields; AUTHORED+CHECK requires a check type."""
         errors: dict[str, str] = {}
@@ -524,7 +543,11 @@ class MissionOption(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        errors = {**self._affordance_source_errors(), **self._kind_errors()}
+        errors = {
+            **self._affordance_source_errors(),
+            **self._challenge_source_errors(),
+            **self._kind_errors(),
+        }
         if errors:
             raise ValidationError(errors)
 

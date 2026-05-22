@@ -96,11 +96,14 @@ class OptionSource(models.TextChoices):
     """Where a :class:`~world.missions.models.MissionOption` comes from.
 
     AFFORDANCE — surfaced from a character's owned descriptor bindings;
-    AUTHORED — hand-written by the mission author on this node.
+    AUTHORED — hand-written by the mission author on this node;
+    CHALLENGE — references a ``mechanics.ChallengeTemplate`` whose approaches
+    fan out into challenge-contributed options at runtime.
     """
 
     AFFORDANCE = "affordance", "Affordance"
     AUTHORED = "authored", "Authored"
+    CHALLENGE = "challenge", "Challenge"
 
 
 class MissionStatus(models.TextChoices):
