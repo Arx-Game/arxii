@@ -44,6 +44,22 @@ PRODUCTION_SETTINGS_OPTION = typer.Option(
     "--production-settings",
     help="Use production settings instead of optimized test settings",
 )
+SQLITE_OPTION = typer.Option(
+    False,
+    "--sqlite",
+    help=(
+        "Use SQLite in-memory test DB (fast inner-loop tier). "
+        "Tests with @tag('postgres') will be skipped."
+    ),
+)
+EXCLUDE_TAG_OPTION = typer.Option(
+    [],
+    "--exclude-tag",
+    help=(
+        "Skip tests decorated with @tag(<name>). Repeatable. Passed through "
+        "to Django's test runner. Use with --sqlite to skip @tag('postgres')."
+    ),
+)
 SHELL_COMMAND_OPTION = typer.Option(
     None,
     "-c",
@@ -99,7 +115,7 @@ def shell(command: str | None = SHELL_COMMAND_OPTION) -> None:
 
 
 @app.command(name="test")
-def run_tests(
+def run_tests(  # noqa: C901 — CLI option parser; complexity is inherent in the per-flag append chain
     args: list[str] = TEST_ARGS_ARG,
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,
@@ -108,6 +124,8 @@ def run_tests(
     timing: bool = TIMING_OPTION,
     coverage: bool = COVERAGE_OPTION,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
+    sqlite: bool = SQLITE_OPTION,
+    exclude_tag: list[str] = EXCLUDE_TAG_OPTION,
 ) -> None:
     """Run Evennia tests with optimized test settings for performance.
 
@@ -138,8 +156,14 @@ def run_tests(
     # internally to build the fully-qualified dotted path. Django's management layer
     # then sets DJANGO_SETTINGS_MODULE to the bare name (e.g. "test_settings"). On
     # Windows, spawn-mode parallel workers inherit that env var and resolve it via the
-    # src/test_settings.py shim (src/ is on sys.path via the editable install .pth).
-    settings_module = "settings" if production_settings else "test_settings"
+    # src/test_settings.py / src/sqlite_test_settings.py shims (src/ is on sys.path via
+    # the editable install .pth).
+    if production_settings:
+        settings_module = "settings"
+    elif sqlite:
+        settings_module = "sqlite_test_settings"
+    else:
+        settings_module = "test_settings"
     command = ["evennia", "test", f"--settings={settings_module}"]
 
     # Add performance options
@@ -149,6 +173,8 @@ def run_tests(
         command.append("--keepdb")
     if failfast:
         command.append("--failfast")
+    for tag in exclude_tag:
+        command += ["--exclude-tag", tag]
 
     # Add verbosity
     MIN_VERBOSITY_FOR_TIMING = 2

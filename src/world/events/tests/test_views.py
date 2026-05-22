@@ -1,3 +1,4 @@
+from django.test import tag
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -420,8 +421,18 @@ class AccountPersonaCacheInvalidationTestCase(APITestCase):
             [sheet.primary_persona.id],
         )
 
+    @tag("postgres")
     def test_tenure_end_date_set_invalidates_persona_cache(self) -> None:
-        """Setting end_date on a tenure clears the cache (player loses access)."""
+        """Setting end_date on a tenure clears the cache (player loses access).
+
+        PG-only: exercises Evennia's SharedMemoryModel idmap consistency
+        across the ``tenure.player_data.account`` walk in
+        ``RelatedCacheClearingMixin.clear_related_caches``. The first test
+        in this class passes on SQLite; the end-date-mutation path here
+        does not, suggesting the in-memory SQLite tier doesn't preserve the
+        same AccountDB instance across the FK walk that fires the cache
+        clear. Real PG behavior is verified in the parity tier.
+        """
         from django.utils import timezone
 
         account = AccountFactory()

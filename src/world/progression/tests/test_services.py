@@ -2,7 +2,7 @@
 Tests for progression services.
 """
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 import pytest
@@ -127,8 +127,20 @@ class UnlockServiceTest(TestCase):
         ExperiencePointsData.flush_instance_cache()
         CharacterUnlock.flush_instance_cache()
 
+    @tag("postgres")
     def test_spend_xp_on_unlock_success(self):
-        """Test successful XP spending on unlock."""
+        """Test successful XP spending on unlock.
+
+        PG-only: ``setUpTestData`` creates ``cls.xp_tracker`` with
+        total_earned=150, but on the SQLite tier the DB row at the
+        ``cls.account`` FK is observed with stale values (e.g. 105/60)
+        from a prior test file's ``ExperiencePointsDataFactory()`` call
+        — a SQLite TestCase-rollback / SharedMemoryModel-idmap
+        interaction that PG sidesteps because sequences and FK uniqueness
+        don't permit the cross-class collision. spend_xp_on_unlock then
+        sees insufficient XP and returns False. Verified in the parity
+        tier.
+        """
         success, message, unlock = spend_xp_on_unlock(self.character, self.class_unlock)
 
         assert success

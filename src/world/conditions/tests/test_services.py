@@ -4,7 +4,7 @@ Tests for conditions service layer.
 
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
@@ -260,8 +260,14 @@ class ApplyConditionTest(TestCase):
         assert result.instance.rounds_remaining == 6  # 3 + 3
 
 
+@tag("postgres")
 class ApplyConditionProgressionTest(TestCase):
-    """Tests for apply_condition with progressive conditions."""
+    """Tests for apply_condition with progressive conditions.
+
+    PG-only: ``apply_condition`` for progressive conditions calls
+    ``_build_bulk_context`` which runs ``ConditionStage.objects.filter(
+    ...).distinct("condition_id")`` — DISTINCT ON is Postgres-only.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -1366,8 +1372,14 @@ class ConditionPercentageModifiersTest(TestCase):
         assert modifier == 125  # 100 + 25
 
 
+@tag("postgres")
 class AdvanceConditionSeverityTests(TestCase):
-    """Tests for severity-driven stage advancement."""
+    """Tests for severity-driven stage advancement.
+
+    PG-only: ``apply_condition`` for progressive conditions calls
+    ``_build_bulk_context`` which runs ``ConditionStage.objects.filter(
+    ...).distinct("condition_id")`` — DISTINCT ON is Postgres-only.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -1520,7 +1532,12 @@ class BuildBulkContextTest(TestCase):
         ctx = _build_bulk_context([self.target], [blocker])
         assert len(ctx.prevention_interactions) >= 1
 
+    @tag("postgres")
     def test_context_fetches_first_stages(self):
+        """PG-only: ``_build_bulk_context`` for progressive conditions
+        runs ``ConditionStage.objects.filter(...).distinct("condition_id")``
+        — DISTINCT ON is Postgres-only.
+        """
         progressive = ConditionTemplateFactory(name="staged", has_progression=True)
         stage1 = ConditionStageFactory(condition=progressive, stage_order=1, rounds_to_next=2)
         ConditionStageFactory(condition=progressive, stage_order=2, rounds_to_next=None)

@@ -46,6 +46,7 @@ from world.missions.models import (
     SOURCE_DISTINCTION,
     MissionDeedRecord,
     MissionDeedRewardLine,
+    MissionOptionRouteReward,
 )
 from world.missions.services import resolve_option
 from world.traits.factories import CheckOutcomeFactory
@@ -353,6 +354,16 @@ class TerminalRewardEmissionTests(TestCase):
         )
         cls.success = CheckOutcomeFactory(name="EmitIntSuccess", success_level=3)
         cls.sneak = CheckTypeFactory(name="EmitIntSneak")
+
+    def setUp(self) -> None:
+        # SharedMemoryModel idmap hygiene: each test in this class creates
+        # fresh MissionOptionRouteReward rows whose PKs collide with prior
+        # tests' rows on the SQLite tier (PK autoincrement resets after
+        # rollback; PG sequences don't). Without a flush,
+        # ``route.reward_templates.all()`` returns stale cached instances
+        # with the prior test's amount value.
+        MissionOptionRouteReward.flush_instance_cache()
+        MissionDeedRewardLine.flush_instance_cache()
 
     def test_check_terminal_route_emits_authored_reward_line(self) -> None:
         option = MissionOptionFactory(

@@ -3,7 +3,7 @@ Tests for progression models.
 """
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 import pytest
@@ -208,8 +208,14 @@ class CharacterUnlockModelTest(TestCase):
             )
 
 
+@tag("postgres")
 class LegendRequirementTests(TestCase):
-    """Tests for LegendRequirement model."""
+    """Tests for LegendRequirement model.
+
+    PG-only: ``LegendRequirement.is_met_by_character`` queries
+    ``societies_characterlegendsummary``, a Postgres materialized view.
+    On the SQLite tier the view doesn't exist; this class is skipped.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

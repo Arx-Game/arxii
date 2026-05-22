@@ -15,7 +15,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.contenttypes.models import ContentType
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from actions.constants import GateRole, Pipeline, ResolutionPhase
@@ -1599,8 +1599,14 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
     # Test 2: Low anima — Soulfray accumulates
     # ------------------------------------------------------------------
 
+    @tag("postgres")
     def test_soulfray_accumulation_from_low_anima(self) -> None:
-        """Low anima post-deduction triggers Soulfray condition creation."""
+        """Low anima post-deduction triggers Soulfray condition creation.
+
+        PG-only: ``apply_condition`` calls ``_build_bulk_context`` which
+        runs ``ConditionStage.objects.filter(...).distinct("condition_id")``
+        — DISTINCT ON is Postgres-only. Verified in the parity tier.
+        """
         # anima_cost=2, intensity=10, control=7
         # delta = 7-10 = -3, effective = max(2-(-3), 0) = 5
         # After deduction: current = 10 - 5 = 5, ratio = 5/10 = 0.50
@@ -1630,9 +1636,14 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
     # Test 3: First Soulfray is unwarned
     # ------------------------------------------------------------------
 
+    @tag("postgres")
     def test_first_soulfray_is_unwarned(self) -> None:
         """No existing Soulfray => no warning checkpoint, but Soulfray can still
-        accumulate from low anima on this cast."""
+        accumulate from low anima on this cast.
+
+        PG-only: same DISTINCT ON path as
+        ``test_soulfray_accumulation_from_low_anima``.
+        """
         self.anima.current = 1
         self.anima.save(update_fields=["current"])
 

@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -198,6 +198,7 @@ class JournalEntryCreateTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
+    @tag("postgres")
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_create_entry_with_tags(
         self,
@@ -205,7 +206,17 @@ class JournalEntryCreateTests(TestCase):
         mock_award: object,
         mock_stat: object,
     ) -> None:
-        """Can create an entry with tags."""
+        """Can create an entry with tags.
+
+        PG-only: ``create_journal_entry`` uses ``JournalTag.objects.bulk_create``,
+        which skips the SharedMemoryModel idmap update. On the SQLite tier
+        the integer-PK sequence resets between tests, so reused PKs collide
+        with stale tag instances cached from prior tests (e.g. test_models'
+        ``test_unique_tag_per_entry`` cached a "combat" tag at the reused
+        pk). The prefetch in the create-response path then returns those
+        stale-named instances. PG never reuses PKs after rollback, so the
+        idmap collision can't occur in the parity tier.
+        """
         mock_get_char.return_value = self.character
         data = {
             "title": "New Entry",

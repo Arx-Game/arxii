@@ -24,6 +24,25 @@ class ProgressionViewTestCase(TestCase):
         )
 
     def setUp(self):
+        # SharedMemoryModel idmap hygiene: progression-API responses are
+        # built by re-querying ``KudosPointsData`` / ``ExperiencePointsData``
+        # after a mutation. The idmap returns the cached Python instance
+        # if its pk is in the cache, ignoring fresh field values from the
+        # DB row — so a prior test's KudosPointsData at the same pk leaks
+        # stale ``total_claimed`` / ``total_earned`` values into this
+        # test's response. On PG, pk reuse can't happen because the
+        # sequence is not rolled back; on SQLite it's the default.
+        from world.progression.models import (
+            ExperiencePointsData,
+            KudosPointsData,
+            KudosTransaction,
+            XPTransaction,
+        )
+
+        KudosPointsData.flush_instance_cache()
+        ExperiencePointsData.flush_instance_cache()
+        KudosTransaction.flush_instance_cache()
+        XPTransaction.flush_instance_cache()
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
