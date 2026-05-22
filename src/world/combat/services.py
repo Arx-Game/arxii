@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
+    from world.combat.models import ClashConfig, StrainConfig
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
@@ -2256,3 +2257,24 @@ def resolve_round(
     encounter.refresh_from_db()
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Clash tuning singleton accessors
+# ---------------------------------------------------------------------------
+
+
+def get_strain_config() -> StrainConfig:
+    """Get-or-create the StrainConfig singleton (pk=1)."""
+    from world.combat.models import StrainConfig  # noqa: PLC0415
+
+    cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def get_clash_config() -> ClashConfig:
+    """Get-or-create the ClashConfig singleton (pk=1)."""
+    from world.combat.models import ClashConfig  # noqa: PLC0415
+
+    cfg, _ = ClashConfig.objects.get_or_create(pk=1)
+    return cfg

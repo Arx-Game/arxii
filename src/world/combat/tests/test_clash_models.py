@@ -8,6 +8,7 @@ from world.combat.constants import (
     LockPcRole,
 )
 from world.combat.models import ClashConfig, StrainConfig
+from world.combat.services import get_clash_config, get_strain_config
 
 
 class ClashConstantsTests(TestCase):
@@ -40,3 +41,24 @@ class ClashConfigTests(TestCase):
         self.assertGreater(cfg.passive_anima_cap, 0)
         self.assertEqual(cfg.delta_great_success, 2)
         self.assertGreaterEqual(cfg.break_abandon_idle_rounds, 1)
+
+    def test_get_strain_config_lazy_creates_singleton(self):
+        self.assertFalse(StrainConfig.objects.filter(pk=1).exists())
+        cfg = get_strain_config()
+        self.assertEqual(cfg.pk, 1)
+        self.assertGreater(cfg.conversion_base, 0)
+        self.assertGreaterEqual(cfg.diminishing_step, 1)
+        self.assertGreaterEqual(cfg.diminishing_floor, 1)
+
+    def test_get_clash_config_lazy_creates_singleton(self):
+        self.assertFalse(ClashConfig.objects.filter(pk=1).exists())
+        cfg = get_clash_config()
+        self.assertEqual(cfg.pk, 1)
+        self.assertGreater(cfg.affinity_tilt_coefficient, 0)
+        self.assertGreater(cfg.passive_anima_cap, 0)
+        self.assertEqual(cfg.delta_critical_success, 3)
+        self.assertEqual(cfg.delta_great_success, 2)
+        self.assertEqual(cfg.delta_success, 1)
+        self.assertEqual(cfg.delta_partial, 0)
+        self.assertEqual(cfg.delta_failure, -1)
+        self.assertEqual(cfg.delta_botch, -2)

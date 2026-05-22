@@ -942,15 +942,3 @@ class ClashConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ClashConfig(pk={self.pk})"
-
-
-def get_strain_config() -> StrainConfig:
-    """Get-or-create the StrainConfig singleton (pk=1)."""
-    cfg, _ = StrainConfig.objects.get_or_create(pk=1)
-    return cfg
-
-
-def get_clash_config() -> ClashConfig:
-    """Get-or-create the ClashConfig singleton (pk=1)."""
-    cfg, _ = ClashConfig.objects.get_or_create(pk=1)
-    return cfg
