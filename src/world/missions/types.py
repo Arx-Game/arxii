@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType, Consequence
+    from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         AffordanceBinding,
         MissionOption,
@@ -84,6 +85,33 @@ class ResolvedOption:
     base_risk: int
     ic_framing: str
     rider: Consequence | None
+    owner: ObjectDB
+
+
+@dataclass(frozen=True)
+class ChallengeOption:
+    """One challenge-contributed option surfaced at a node for a character.
+
+    Built by
+    ``world.missions.services.challenge_options.challenge_options_for_character``
+    for each ``mechanics.ChallengeApproach`` of a node's attached challenges
+    that the acting character qualifies for — they hold the approach's
+    ``Application.capability`` (decided by the Phase-0 ``has_capability``
+    resolver) — or that is ``is_default`` (offered to everyone). Fields are
+    flattened off the approach/challenge so resolution callers never re-walk
+    the FK side.
+
+    The challenge↔missions integration is *data-source* (findings doc Q2): a
+    challenge is consumed as authored data, never run as an engine. Of the
+    ``ChallengeTemplate`` fields only ``severity`` rides along — it is
+    ``difficulty`` here (design §8.4 Q4). ``auto_succeeds`` mirrors the
+    approach flag; an auto-success option skips the roll at resolution time.
+    """
+
+    approach: ChallengeApproach
+    check_type: CheckType
+    auto_succeeds: bool
+    difficulty: int
     owner: ObjectDB
 
 
