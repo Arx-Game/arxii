@@ -156,18 +156,24 @@ class ThreatPoolEntry(SharedMemoryModel):
         default=False,
         help_text="When True, this entry can initiate or sustain a Clash.",
     )
+    is_lock_applying = models.BooleanField(
+        default=False,
+        help_text=(
+            "When this attack lands on a PC, it opens a LOCK-flavor Clash — the PC must win "
+            "a Break Free clash to escape. Requires `clash_break_free_force`."
+        ),
+    )
     is_sustained_attack = models.BooleanField(
         default=False,
-        help_text="When True, this attack sustains over multiple rounds (a lock-type threat).",
+        help_text=(
+            "This attack is a sustained multi-round barrage that opens a WARD-flavor Clash — "
+            "PCs endure it for `sustained_duration_rounds`. Distinct from `is_lock_applying`."
+        ),
     )
     sustained_duration_rounds = models.PositiveIntegerField(
         null=True,
         blank=True,
         help_text="How many rounds a sustained attack persists before the NPC must re-use it.",
-    )
-    is_lock_applying = models.BooleanField(
-        default=False,
-        help_text="When True, this threat entry applies a clash-lock condition on hit.",
     )
     clash_break_free_force = models.PositiveIntegerField(
         null=True,
@@ -203,6 +209,20 @@ class ThreatPoolEntry(SharedMemoryModel):
             "initiated by this entry."
         ),
     )
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.is_lock_applying and self.clash_break_free_force is None:
+            errors["clash_break_free_force"] = (
+                "clash_break_free_force is required when is_lock_applying=True."
+            )
+        if self.is_sustained_attack and self.sustained_duration_rounds is None:
+            errors["sustained_duration_rounds"] = (
+                "sustained_duration_rounds is required when is_sustained_attack=True."
+            )
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self) -> str:
         return f"{self.pool.name}: {self.name}"
@@ -267,7 +287,8 @@ class CombatOpponent(SharedMemoryModel):
         blank=True,
         help_text=(
             "The BREAK-clash MAX threshold source; governs how hard it is for PCs "
-            "to break through this opponent's barrier."
+            "to break through this opponent's barrier. PCs must accumulate this much "
+            "progress in a BREAK Clash to breach the barrier (e.g. 10 = ten progress)."
         ),
     )
     barrier_break_pool = models.ForeignKey(

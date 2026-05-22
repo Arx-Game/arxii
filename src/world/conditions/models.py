@@ -312,7 +312,11 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     clash_lock_strength = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=("The LOCK-clash MAX threshold (lock strength); set on clash-lock conditions."),
+        help_text=(
+            "The LOCK-clash MAX threshold (lock strength); set on clash-lock conditions. "
+            "The LOCK-Clash MAX threshold (e.g. 10 = PCs must reach 10 progress to fully "
+            "secure / fully break the lock)."
+        ),
     )
 
     # === Corruption (Scope 7) ===

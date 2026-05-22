@@ -437,8 +437,6 @@ class TechniqueLockApplyingTests(TestCase):
         technique = TechniqueFactory(damage_profile=False)
         lock_condition = ConditionTemplateFactory(name="LockTestCondition", is_clash_lock=True)
         TechniqueAppliedConditionFactory(technique=technique, condition=lock_condition)
-        # Force refresh to clear cached_property
-        technique.__class__._default_manager.filter(pk=technique.pk)
         fresh = technique.__class__.objects.get(pk=technique.pk)
         self.assertTrue(fresh.is_lock_applying)
 
@@ -452,3 +450,64 @@ class TechniqueLockApplyingTests(TestCase):
         TechniqueAppliedConditionFactory(technique=technique, condition=normal_condition)
         fresh = technique.__class__.objects.get(pk=technique.pk)
         self.assertFalse(fresh.is_lock_applying)
+
+
+class ThreatPoolEntryClashValidationTests(TestCase):
+    """Tests for ThreatPoolEntry.clean() clash-field coupling validation."""
+
+    def setUp(self) -> None:
+        from world.combat.factories import ThreatPoolFactory
+
+        self.pool = ThreatPoolFactory()
+
+    # (a) is_lock_applying=True without clash_break_free_force fails full_clean().
+    def test_lock_applying_without_break_free_force_fails(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory.build(
+            pool=self.pool,
+            is_lock_applying=True,
+            clash_break_free_force=None,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            entry.full_clean()
+        self.assertIn("clash_break_free_force", ctx.exception.message_dict)
+
+    # (b) is_lock_applying=True with clash_break_free_force set passes full_clean().
+    def test_lock_applying_with_break_free_force_passes(self) -> None:
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory.build(
+            pool=self.pool,
+            is_lock_applying=True,
+            clash_break_free_force=8,
+        )
+        entry.full_clean()
+
+    # (c) is_sustained_attack=True without sustained_duration_rounds fails full_clean().
+    def test_sustained_without_duration_rounds_fails(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory.build(
+            pool=self.pool,
+            is_sustained_attack=True,
+            sustained_duration_rounds=None,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            entry.full_clean()
+        self.assertIn("sustained_duration_rounds", ctx.exception.message_dict)
+
+    # (d) is_sustained_attack=True with sustained_duration_rounds set passes full_clean().
+    def test_sustained_with_duration_rounds_passes(self) -> None:
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory.build(
+            pool=self.pool,
+            is_sustained_attack=True,
+            sustained_duration_rounds=3,
+        )
+        entry.full_clean()
