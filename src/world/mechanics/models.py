@@ -828,6 +828,13 @@ class ChallengeApproach(SharedMemoryModel):
             "outcome tier — the capability trivializes the obstacle."
         ),
     )
+    is_default = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, this approach is offered to every character "
+            "regardless of capabilities — the fallback anyone can attempt."
+        ),
+    )
 
     class Meta:
         constraints = [
