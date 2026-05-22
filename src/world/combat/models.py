@@ -1,5 +1,7 @@
 """Models for the combat system."""
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -843,3 +845,112 @@ class RoundChallengeDeclaration(SharedMemoryModel):
             f"round={self.round_number} "
             f"participant={self.participant_id})"
         )
+
+
+# =============================================================================
+# Clash tuning singletons (Task 1.2)
+# =============================================================================
+
+
+class StrainConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for the anima→modifier diminishing-returns curve.
+
+    ``conversion_base`` is the base unit for converting raw anima commitment
+    into a modifier value.  ``diminishing_step`` controls how quickly successive
+    units are worth less.  ``diminishing_floor`` is the minimum value any unit
+    can contribute.
+    """
+
+    conversion_base = models.PositiveIntegerField(
+        default=10,
+        help_text="Base anima units required per +1 modifier step.",
+    )
+    diminishing_step = models.PositiveIntegerField(
+        default=5,
+        help_text="Additional anima required per step above the first (diminishing returns).",
+    )
+    diminishing_floor = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum modifier contribution any anima unit can produce.",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="strain_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"StrainConfig(pk={self.pk})"
+
+
+class ClashConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for clash contest math.
+
+    ``affinity_tilt_coefficient`` scales how much affinity alignment shifts the
+    final progress delta.  ``passive_anima_cap`` limits how much anima a passive
+    contribution can commit.  ``break_abandon_idle_rounds`` controls how many
+    consecutive zero-contribution rounds a BREAK clash tolerates before it
+    auto-resolves as ABANDONED.  ``max_round_cap`` is the hard upper limit after
+    which any CLASH resolves as MUTUAL.
+
+    The six ``delta_*`` fields map check-result tiers to progress-delta integers.
+    Default table: critical +3, great +2, success +1, partial 0, failure -1,
+    botch -2.
+    """
+
+    affinity_tilt_coefficient = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.25"),
+        help_text="Fraction by which affinity alignment tilts the progress delta.",
+    )
+    passive_anima_cap = models.PositiveIntegerField(
+        default=20,
+        help_text="Maximum anima a passive contribution may commit per round.",
+    )
+    break_abandon_idle_rounds = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Consecutive zero-contribution rounds before a BREAK clash resolves as ABANDONED."
+        ),
+    )
+    max_round_cap = models.PositiveIntegerField(
+        default=12,
+        help_text="Round cap after which a CLASH auto-resolves as MUTUAL.",
+    )
+
+    # Progress-delta table — can be negative.
+    delta_critical_success = models.IntegerField(default=3)
+    delta_great_success = models.IntegerField(default=2)
+    delta_success = models.IntegerField(default=1)
+    delta_partial = models.IntegerField(default=0)
+    delta_failure = models.IntegerField(default=-1)
+    delta_botch = models.IntegerField(default=-2)
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="clash_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"ClashConfig(pk={self.pk})"
+
+
+def get_strain_config() -> StrainConfig:
+    """Get-or-create the StrainConfig singleton (pk=1)."""
+    cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def get_clash_config() -> ClashConfig:
+    """Get-or-create the ClashConfig singleton (pk=1)."""
+    cfg, _ = ClashConfig.objects.get_or_create(pk=1)
+    return cfg

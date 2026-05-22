@@ -7,6 +7,7 @@ from world.combat.constants import (
     ClashStatus,
     LockPcRole,
 )
+from world.combat.models import ClashConfig, StrainConfig
 
 
 class ClashConstantsTests(TestCase):
@@ -25,3 +26,17 @@ class ClashConstantsTests(TestCase):
             set(ClashResolution.values),
             {"PC_DECISIVE", "PC_MARGINAL", "MUTUAL", "NPC_MARGINAL", "NPC_DECISIVE", "ABANDONED"},
         )
+
+
+class ClashConfigTests(TestCase):
+    def test_strain_config_singleton_defaults(self):
+        cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+        self.assertGreater(cfg.conversion_base, 0)
+        self.assertGreaterEqual(cfg.diminishing_step, 1)
+
+    def test_clash_config_singleton_defaults(self):
+        cfg, _ = ClashConfig.objects.get_or_create(pk=1)
+        self.assertGreater(cfg.affinity_tilt_coefficient, 0)
+        self.assertGreater(cfg.passive_anima_cap, 0)
+        self.assertEqual(cfg.delta_great_success, 2)
+        self.assertGreaterEqual(cfg.break_abandon_idle_rounds, 1)
