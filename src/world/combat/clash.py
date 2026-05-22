@@ -6,15 +6,18 @@ each function is unit-testable in isolation.  Higher-level orchestration
 (views, commands, flow steps) calls into this module rather than implementing
 Clash logic themselves.
 
-Current scope (Task 2.1):
+Current scope (Tasks 2.1–2.2):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
+  - ``outcome_to_delta``: maps a ``CheckOutcome`` tier to a per-round progress
+    delta, driven by the six ``ClashConfig.delta_*`` tuning knobs.
 
 Future tasks will add clash-commit, round-resolution, and outcome helpers here.
 """
 
-from world.combat.models import StrainConfig
+from world.combat.models import ClashConfig, StrainConfig
+from world.traits.models import CheckOutcome
 
 
 def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
@@ -40,3 +43,31 @@ def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
         remaining -= take
         rate = max(rate - 1, config.diminishing_floor)
     return mod
+
+
+def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int:
+    """Map a CheckOutcome tier to a clash progress delta.
+
+    Banding (by CheckOutcome.success_level):
+      >= 3  → critical success → config.delta_critical_success
+      == 2  → great success    → config.delta_great_success
+      == 1  → success          → config.delta_success
+      == 0  → partial          → config.delta_partial
+      == -1 → failure          → config.delta_failure
+      <= -2 → botch            → config.delta_botch
+
+    Values outside the authored range are clamped to the nearest band.
+    Pure function — no DB writes, no I/O.
+    """
+    level = check_outcome.success_level
+    if level >= 3:  # noqa: PLR2004 — tier breakpoints are design constants, not magic values
+        return config.delta_critical_success
+    if level == 2:  # noqa: PLR2004
+        return config.delta_great_success
+    if level == 1:
+        return config.delta_success
+    if level == 0:
+        return config.delta_partial
+    if level == -1:
+        return config.delta_failure
+    return config.delta_botch
