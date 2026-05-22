@@ -452,6 +452,86 @@ class TechniqueLockApplyingTests(TestCase):
         self.assertFalse(fresh.is_lock_applying)
 
 
+class ClashFactoriesTests(TestCase):
+    """Verify that each clash factory produces a valid, persisted row.
+
+    Each factory must produce a row that passes full_clean() — the
+    per-flavor Clash subclass factories are the critical case because
+    Clash.clean() enforces the flavor↔field couplings.
+    """
+
+    def test_strain_config_factory_valid(self) -> None:
+        from world.combat.factories import StrainConfigFactory
+
+        cfg = StrainConfigFactory()
+        self.assertIsNotNone(cfg.pk)
+        cfg.full_clean()
+
+    def test_clash_config_factory_valid(self) -> None:
+        from world.combat.factories import ClashConfigFactory
+
+        cfg = ClashConfigFactory()
+        self.assertIsNotNone(cfg.pk)
+        cfg.full_clean()
+
+    def test_clash_factory_default_flavor(self) -> None:
+        """Default ClashFactory produces a CLASH-flavor row that passes full_clean()."""
+        from world.combat.factories import ClashFactory
+
+        clash = ClashFactory()
+        self.assertIsNotNone(clash.pk)
+        self.assertEqual(clash.flavor, ClashFlavor.CLASH)
+        clash.full_clean()
+
+    def test_lock_clash_factory_valid(self) -> None:
+        """LockClashFactory produces a LOCK-flavor Clash that passes full_clean()."""
+        from world.combat.factories import LockClashFactory
+
+        clash = LockClashFactory()
+        self.assertIsNotNone(clash.pk)
+        self.assertEqual(clash.flavor, ClashFlavor.LOCK)
+        self.assertIsNotNone(clash.lock_pc_role)
+        self.assertIsNone(clash.npc_win_threshold)
+        clash.full_clean()
+
+    def test_ward_clash_factory_valid(self) -> None:
+        """WardClashFactory produces a WARD-flavor Clash that passes full_clean()."""
+        from world.combat.factories import WardClashFactory
+
+        clash = WardClashFactory()
+        self.assertIsNotNone(clash.pk)
+        self.assertEqual(clash.flavor, ClashFlavor.WARD)
+        self.assertIsNotNone(clash.ward_ends_on_round)
+        self.assertIsNone(clash.npc_win_threshold)
+        clash.full_clean()
+
+    def test_break_clash_factory_valid(self) -> None:
+        """BreakClashFactory produces a BREAK-flavor Clash that passes full_clean()."""
+        from world.combat.factories import BreakClashFactory
+
+        clash = BreakClashFactory()
+        self.assertIsNotNone(clash.pk)
+        self.assertEqual(clash.flavor, ClashFlavor.BREAK)
+        self.assertIsNone(clash.npc_win_threshold)
+        self.assertIsNone(clash.lock_pc_role)
+        self.assertIsNone(clash.ward_ends_on_round)
+        clash.full_clean()
+
+    def test_clash_round_factory_valid(self) -> None:
+        from world.combat.factories import ClashRoundFactory
+
+        clash_round = ClashRoundFactory()
+        self.assertIsNotNone(clash_round.pk)
+        clash_round.full_clean()
+
+    def test_clash_contribution_factory_valid(self) -> None:
+        from world.combat.factories import ClashContributionFactory
+
+        contrib = ClashContributionFactory()
+        self.assertIsNotNone(contrib.pk)
+        contrib.full_clean()
+
+
 class ThreatPoolEntryClashValidationTests(TestCase):
     """Tests for ThreatPoolEntry.clean() clash-field coupling validation."""
 
