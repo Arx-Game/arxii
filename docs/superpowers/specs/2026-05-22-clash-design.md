@@ -518,8 +518,9 @@ per flavor, contribution gathering, per-round resolution in initiative order,
 threshold check); clash interleaving with normal combat in one round; multi-round
 persistence; a PC joining an in-progress clash.
 
-**End-to-end integration tests** (`world/combat/tests/integration/test_clash_flow.py`)
-— one full-pipeline scenario per flavor:
+**End-to-end integration tests** (`world/combat/tests/test_clash_flow.py` — combat's
+`tests/` directory is flat, no `integration/` subdirectory) — one full-pipeline
+scenario per flavor:
 
 - `CLASH`: declare big attack → opposed NPC big attack → clash forms → multi-round
   contributions → threshold → resolution pool → damage outcome
