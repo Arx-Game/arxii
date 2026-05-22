@@ -214,14 +214,19 @@ def calculate_effective_anima_cost(
     runtime_intensity: int,
     runtime_control: int,
     current_anima: int,
+    strain_commitment: int = 0,
 ) -> AnimaCostResult:
     """Calculate effective anima cost using the delta formula.
 
-    effective_cost = max(base_cost - (control - intensity), 0)
+    effective_cost = max(base_cost - (control - intensity), 0) + max(strain_commitment, 0)
+
+    ``strain_commitment`` adds on top of the floored cost — the floor is the minimum
+    before strain; strain then raises the effective cost (and potential deficit) above it.
+
     deficit = max(effective_cost - current_anima, 0)
     """
     control_delta = runtime_control - runtime_intensity
-    effective_cost = max(base_cost - control_delta, 0)
+    effective_cost = max(base_cost - control_delta, 0) + max(strain_commitment, 0)
     deficit = max(effective_cost - current_anima, 0)
 
     return AnimaCostResult(
@@ -241,8 +246,14 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
     confirm_soulfray_risk: bool = True,
     check_result: CheckResult | None = None,
     targets: list | None = None,
+    strain_commitment: int = 0,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
+
+    ``strain_commitment`` is extra anima committed beyond the technique's normal
+    effective cost (e.g. for Clash contributions). It defaults to ``0`` so every
+    existing caller is unaffected. The strain adds on top of the floored
+    effective cost via ``calculate_effective_anima_cost``.
 
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
@@ -261,6 +272,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
         runtime_intensity=stats.intensity,
         runtime_control=stats.control,
         current_anima=anima.current,
+        strain_commitment=strain_commitment,
     )
 
     # Step 3: Safety checkpoint (Soulfray stage-driven)

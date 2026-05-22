@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
+    from world.traits.models import CheckOutcome
 
 
 @dataclass(frozen=True)
@@ -142,4 +143,41 @@ class CombatTechniqueResult:
 
     damage_results: list[OpponentDamageResult]
     applied_conditions: list[AppliedConditionResult]
+    technique_use_result: TechniqueUseResult
+
+
+# ---------------------------------------------------------------------------
+# Clash pipeline types (Task 2.3)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClashContributionResult:
+    """Result of a single PC's per-round clash contribution.
+
+    Produced by ``commit_to_clash``. Captures the check outcome and all
+    magic-pipeline side-effects (anima cost, Soulfray, Audere) so the
+    round-resolution engine can aggregate progress without re-running the cast.
+
+    Fields:
+        check_outcome: The ``CheckOutcome`` that the contribution roll produced.
+        progress_delta: Change in clash progress this contribution contributes,
+            derived from ``outcome_to_delta``.
+        anima_committed: The raw strain commitment (anima poured in beyond the
+            effective-cost floor).
+        was_overburn: ``True`` when ``technique_use_result.was_deficit`` is set —
+            the cast dipped into negative anima.
+        was_audere: ``True`` when the character was in Audere during the cast.
+        soulfray_severity_accrued: Severity points added by Soulfray this cast
+            (``soulfray_result.severity_added`` when present, else 0).
+        technique_use_result: The full ``TechniqueUseResult`` from the magic
+            pipeline for callers that need lower-level details.
+    """
+
+    check_outcome: CheckOutcome
+    progress_delta: int
+    anima_committed: int
+    was_overburn: bool
+    was_audere: bool
+    soulfray_severity_accrued: int
     technique_use_result: TechniqueUseResult
