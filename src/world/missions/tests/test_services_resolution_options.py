@@ -9,7 +9,13 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.mechanics.factories import (
+    ApplicationFactory,
+    ChallengeApproachFactory,
+    ChallengeTemplateFactory,
+)
 from world.missions.constants import OptionKind, OptionProduces, OptionSource
 from world.missions.factories import (
     AffordanceBindingFactory,
@@ -126,3 +132,66 @@ class BuildOptionListTests(TestCase):
         self.assertEqual(options[0].option, self.aff_option)
         self.assertEqual(options[1].option, self.aff_option)
         self.assertEqual(options[2].option, self.authored_option)
+
+
+class BuildOptionListChallengeTests(TestCase):
+    """A CHALLENGE-sourced option fans out per qualifying ChallengeApproach."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.template = MissionTemplateFactory(slug="ch-opt-list-tmpl")
+        cls.instance = MissionInstanceFactory(template=cls.template)
+        cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.participant = MissionParticipantFactory(
+            instance=cls.instance,
+            character=cls.character,
+            is_contract_holder=True,
+        )
+        cls.challenge = ChallengeTemplateFactory(name="ChOptList Pit")
+        cls.default_approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge,
+            is_default=True,
+            display_name="Bare-handed",
+        )
+        # A capability-keyed approach the character does NOT qualify for.
+        cls.gated_approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge,
+            application=ApplicationFactory(
+                name="chopt-app",
+                capability=CapabilityTypeFactory(name="chopt-cap"),
+            ),
+            display_name="Capability way",
+        )
+        cls.option = MissionOptionFactory(
+            node=cls.node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=cls.challenge,
+        )
+
+    def test_challenge_option_fans_out_to_qualifying_approaches(self) -> None:
+        # The character holds no capabilities → only the is_default approach.
+        options = build_option_list(self.instance, self.node, self.participant)
+        self.assertEqual(len(options), 1)
+        presented = options[0]
+        self.assertEqual(presented.option, self.option)
+        self.assertEqual(presented.approach, self.default_approach)
+        self.assertEqual(presented.check_type, self.default_approach.check_type)
+        self.assertEqual(presented.owner, self.character)
+
+    def test_challenge_and_authored_options_coexist(self) -> None:
+        authored = MissionOptionFactory(
+            node=self.node,
+            order=1,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            authored_ic_framing="The authored way.",
+        )
+        options = build_option_list(self.instance, self.node, self.participant)
+        self.assertEqual(
+            {o.option.pk for o in options},
+            {self.option.pk, authored.pk},
+        )

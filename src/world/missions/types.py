@@ -265,11 +265,13 @@ class PresentedOption:
     Built by ``world.missions.services.resolution.build_option_list``. An
     AFFORDANCE-sourced :class:`~world.missions.models.MissionOption` fans out
     into one ``PresentedOption`` per owned descriptor binding (``binding`` set,
-    ``owner`` the acting character); an AUTHORED option produces a single entry
-    (``binding`` None) when its visibility predicate passes. Fields are
-    flattened off the binding/option so resolution callers never re-walk the
-    FK side. Phase 3 is single-participant — ``owner`` is the acting
-    participant's character; Phase 4 generalizes to per-participant owners.
+    ``owner`` the acting character); a CHALLENGE-sourced option fans out into
+    one entry per qualifying ``ChallengeApproach`` (``approach`` set); an
+    AUTHORED option produces a single entry (``binding``/``approach`` None)
+    when its visibility predicate passes. Fields are flattened off the
+    binding/approach/option so resolution callers never re-walk the FK side.
+    Phase 3 is single-participant — ``owner`` is the acting participant's
+    character; Phase 4 generalizes to per-participant owners.
     """
 
     option: MissionOption
@@ -279,3 +281,4 @@ class PresentedOption:
     ic_framing: str
     owner: ObjectDB
     binding: AffordanceBinding | None
+    approach: ChallengeApproach | None = None

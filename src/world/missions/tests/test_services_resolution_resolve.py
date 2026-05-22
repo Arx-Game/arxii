@@ -21,6 +21,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import (
     DeedRewardKind,
     DeedRewardSink,
@@ -216,6 +217,98 @@ class ResolveCheckOptionTests(TestCase):
         )
         with self.assertRaises(ValueError):
             resolve_option(self.instance, self.entry, bad_option, self.actor, None)
+
+
+class ResolveChallengeOptionTests(TestCase):
+    """CHALLENGE option: approach check (or auto-success) → route on outcome.
+
+    Routes live on the CHALLENGE MissionOption and are keyed by outcome
+    tier, shared across the challenge's approaches. The chosen approach
+    supplies the check type; an auto_succeeds approach skips the roll and
+    lands in the top tier.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.template = MissionTemplateFactory(slug="ch-resolve-tmpl", risk_tier=4)
+        cls.instance = MissionInstanceFactory(template=cls.template)
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.node_a = MissionNodeFactory(template=cls.template, key="a")
+        cls.node_b = MissionNodeFactory(template=cls.template, key="b")
+        cls.actor = MissionParticipantFactory(
+            instance=cls.instance,
+            character=cls.character,
+            is_contract_holder=True,
+        )
+        cls.top = CheckOutcomeFactory(name="ChResolveCritical", success_level=5)
+        cls.failure = CheckOutcomeFactory(name="ChResolveFailure", success_level=-3)
+
+        cls.challenge = ChallengeTemplateFactory(name="ChResolve Pit", severity=7)
+        cls.normal_approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge,
+            check_type=CheckTypeFactory(name="ChResolveClimb"),
+            is_default=True,
+        )
+        cls.auto_approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge,
+            check_type=CheckTypeFactory(name="ChResolveFly"),
+            auto_succeeds=True,
+            is_default=True,
+        )
+        cls.option = MissionOptionFactory(
+            node=cls.entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=cls.challenge,
+        )
+        # Routes on the CHALLENGE option, keyed by outcome tier — shared by
+        # every approach the challenge defines.
+        cls.top_route = MissionOptionRouteFactory(
+            option=cls.option,
+            outcome_tier=cls.top,
+            target_node=cls.node_a,
+        )
+        cls.fail_route = MissionOptionRouteFactory(
+            option=cls.option,
+            outcome_tier=cls.failure,
+            target_node=cls.node_b,
+        )
+
+    def test_normal_approach_rolls_and_routes_on_outcome(self) -> None:
+        with force_check_outcome(self.failure):
+            deed = resolve_option(
+                self.instance,
+                self.entry,
+                self.option,
+                self.actor,
+                None,
+                chosen_approach=self.normal_approach,
+            )
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.current_node, self.node_b)
+        self.assertEqual(deed.outcome, self.failure)
+
+    def test_auto_success_approach_skips_roll_and_lands_top_tier(self) -> None:
+        with patch("world.missions.services.resolution.perform_check") as pc:
+            deed = resolve_option(
+                self.instance,
+                self.entry,
+                self.option,
+                self.actor,
+                None,
+                chosen_approach=self.auto_approach,
+            )
+        pc.assert_not_called()
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.current_node, self.node_a)
+        self.assertEqual(deed.outcome, self.top)
+
+    def test_challenge_option_without_chosen_approach_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve_option(self.instance, self.entry, self.option, self.actor, None)
 
 
 class ResolveBranchOptionTests(TestCase):

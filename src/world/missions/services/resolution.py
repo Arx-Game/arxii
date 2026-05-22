@@ -39,7 +39,7 @@ from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
 from world.checks.services import perform_check
-from world.checks.types import PendingResolution, ResolutionContext
+from world.checks.types import CheckResult, PendingResolution, ResolutionContext
 from world.missions.constants import MissionStatus, OptionKind, OptionSource
 from world.missions.models import (
     MissionDeedRecord,
@@ -49,8 +49,10 @@ from world.missions.models import (
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.missions.services.affordances import bindings_for_character
 from world.missions.services.beat import on_mission_complete_for_beat
+from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import PresentedOption
+from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -58,7 +60,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         AffordanceBinding,
         MissionInstance,
@@ -72,6 +74,15 @@ _ERR_CHECK_NO_TYPE = (
     "(neither a chosen binding's check_type nor authored_check_type) — "
     "authoring/configuration error."
 )
+_ERR_CHALLENGE_NO_APPROACH = (
+    "CHALLENGE option {option_pk} resolved without a chosen approach — the "
+    "caller must pass the ChallengeApproach the player picked."
+)
+_ERR_CHALLENGE_NO_CHALLENGE = (
+    "CHALLENGE option {option_pk} has no challenge — clean() should forbid "
+    "this; the row is corrupt."
+)
+_ERR_NO_OUTCOME_TIERS = "Cannot synthesize an auto-success result: no CheckOutcome tiers exist."
 
 
 def build_option_list(
@@ -114,7 +125,8 @@ def present_options_for_character(
     (Phase-3 review Minor-1). ``options`` MUST already be ordered by the
     caller (``order``, then ``pk``) — this preserves
     :func:`build_option_list`'s exact behavior; it just no longer owns the
-    queryset construction.
+    queryset construction. A CHALLENGE-sourced option fans out per qualifying
+    ``ChallengeApproach`` via :func:`challenge_options_for_character`.
     """
     presented: list[PresentedOption] = []
     for option in options:
@@ -131,6 +143,23 @@ def present_options_for_character(
                     binding=resolved.binding,
                 )
                 for resolved in bindings_for_character(character, accepted)
+            )
+        elif option.source_kind == OptionSource.CHALLENGE:
+            challenge = option.challenge
+            if challenge is None:
+                raise ValueError(_ERR_CHALLENGE_NO_CHALLENGE.format(option_pk=option.pk))
+            presented.extend(
+                PresentedOption(
+                    option=option,
+                    kind=option.option_kind,
+                    check_type=co.check_type,
+                    base_risk=0,
+                    ic_framing=co.approach.display_name,
+                    owner=character,
+                    binding=None,
+                    approach=co.approach,
+                )
+                for co in challenge_options_for_character(challenge, character)
             )
         elif evaluate(option.visibility_rule, CharacterPredicateContext(character)):
             # OptionSource.AUTHORED, visibility predicate satisfied.
@@ -183,6 +212,58 @@ def _resolve_check_type(
     if option.authored_check_type_id is not None:
         return option.authored_check_type
     raise ValueError(_ERR_CHECK_NO_TYPE.format(option_pk=option.pk))
+
+
+def _auto_success_result(check_type: CheckType) -> CheckResult:
+    """A synthetic CheckResult landing in the top outcome tier, no roll.
+
+    An ``auto_succeeds`` ChallengeApproach trivializes the obstacle — the
+    capability simply wins (findings doc Q3). The synthesized result carries
+    the top ``CheckOutcome`` (highest ``success_level``) and neutral roll
+    fields so the unchanged routing/consequence pipeline keys on it exactly
+    like a real roll.
+    """
+    top = CheckOutcome.objects.order_by("-success_level").first()
+    if top is None:
+        raise ValueError(_ERR_NO_OUTCOME_TIERS)
+    return CheckResult(
+        check_type=check_type,
+        outcome=top,
+        chart=None,
+        roller_rank=None,
+        target_rank=None,
+        rank_difference=0,
+        trait_points=0,
+        aspect_bonus=0,
+        total_points=0,
+    )
+
+
+def _resolve_challenge_check(
+    option: MissionOption,
+    character: ObjectDB,
+    chosen_approach: ChallengeApproach | None,
+) -> CheckResult:
+    """Resolve a CHALLENGE option's check via the player's chosen approach.
+
+    The approach supplies the ``CheckType``; the challenge's ``severity`` is
+    the difficulty (design §8.4 Q4 — only ``severity`` rides along into a
+    missions context). An ``auto_succeeds`` approach skips the roll and lands
+    in the top tier. The challenge is consumed as authored data —
+    ``resolve_challenge`` is never called (findings doc Q2).
+    """
+    if chosen_approach is None:
+        raise ValueError(_ERR_CHALLENGE_NO_APPROACH.format(option_pk=option.pk))
+    if chosen_approach.auto_succeeds:
+        return _auto_success_result(chosen_approach.check_type)
+    challenge = option.challenge
+    if challenge is None:
+        raise ValueError(_ERR_CHALLENGE_NO_CHALLENGE.format(option_pk=option.pk))
+    return perform_check(
+        character,
+        chosen_approach.check_type,
+        target_difficulty=challenge.severity,
+    )
 
 
 def _select_route_consequence(
@@ -250,14 +331,15 @@ def _finish_terminal(instance: MissionInstance) -> None:
 
 def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
     # positional args identify "who-resolves-what-where-with-what-binding" and
-    # are co-equal, plus the keyword-only ``advance`` toggle (Phase-5a I-1).
-    # Collapsing them into a dataclass would obscure call sites.
+    # are co-equal, plus the keyword-only ``chosen_approach``/``advance``
+    # toggles. Collapsing them into a dataclass would obscure call sites.
     instance: MissionInstance,
     node: MissionNode,
     option: MissionOption,
     actor: MissionParticipant,
     chosen_binding: AffordanceBinding | None,
     *,
+    chosen_approach: ChallengeApproach | None = None,
     advance: bool = True,
 ) -> MissionDeedRecord:
     """Resolve ``actor`` taking ``option`` at ``node``; return its deed.
@@ -290,12 +372,18 @@ def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
         return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK
-    check_type = _resolve_check_type(option, chosen_binding)
-    result = perform_check(
-        character,
-        check_type,
-        target_difficulty=instance.template.risk_tier,
-    )
+    if option.source_kind == OptionSource.CHALLENGE:
+        # The chosen ChallengeApproach supplies the check; the challenge's
+        # severity is the difficulty. Routing below is unchanged — it keys
+        # on the resulting CheckOutcome exactly like an authored CHECK.
+        result = _resolve_challenge_check(option, character, chosen_approach)
+    else:
+        check_type = _resolve_check_type(option, chosen_binding)
+        result = perform_check(
+            character,
+            check_type,
+            target_difficulty=instance.template.risk_tier,
+        )
 
     route = MissionOptionRoute.objects.filter(
         option=option,
