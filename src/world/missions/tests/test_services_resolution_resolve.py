@@ -235,6 +235,82 @@ class ResolveChallengeOptionTests(TestCase):
         with self.assertRaises(ValueError):
             resolve_option(self.instance, self.entry, self.option, self.actor)
 
+    def test_two_approaches_share_routes_by_outcome_tier(self) -> None:
+        # Two distinct non-auto approaches on the same CHALLENGE option,
+        # both forced to the failure tier, route through the SAME
+        # MissionOptionRoute keyed on that tier — routes hang off the
+        # MissionOption (not per-approach), so the rolled outcome is the
+        # only thing that picks the route.
+        other_approach = ChallengeApproachFactory(
+            challenge_template=self.challenge,
+            check_type=CheckTypeFactory(name="ChResolveScramble"),
+            is_default=True,
+        )
+        inst_1 = MissionInstanceFactory(template=self.template, current_node=self.entry)
+        actor_1 = MissionParticipantFactory(
+            instance=inst_1, character=self.character, is_contract_holder=True
+        )
+        char_2 = CharacterFactory()
+        CharacterSheetFactory(character=char_2)
+        inst_2 = MissionInstanceFactory(template=self.template, current_node=self.entry)
+        actor_2 = MissionParticipantFactory(
+            instance=inst_2, character=char_2, is_contract_holder=True
+        )
+
+        with force_check_outcome(self.failure):
+            resolve_option(
+                inst_1,
+                self.entry,
+                self.option,
+                actor_1,
+                chosen_approach=self.normal_approach,
+            )
+        with force_check_outcome(self.failure):
+            resolve_option(
+                inst_2,
+                self.entry,
+                self.option,
+                actor_2,
+                chosen_approach=other_approach,
+            )
+
+        inst_1.refresh_from_db()
+        inst_2.refresh_from_db()
+        # Both used the same fail_route → both landed at node_b.
+        self.assertEqual(inst_1.current_node, self.node_b)
+        self.assertEqual(inst_2.current_node, self.node_b)
+
+
+class AutoSuccessNoOutcomeTiersTest(TestCase):
+    """An auto_succeeds approach raises when no CheckOutcome rows exist."""
+
+    def test_raises_when_no_outcome_tiers(self) -> None:
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        template = MissionTemplateFactory(slug="no-outcomes-tmpl", risk_tier=1)
+        instance = MissionInstanceFactory(template=template)
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        actor = MissionParticipantFactory(
+            instance=instance, character=character, is_contract_holder=True
+        )
+        challenge = ChallengeTemplateFactory(name="AutoSuccessNoOutcomes")
+        approach = ChallengeApproachFactory(
+            challenge_template=challenge,
+            check_type=CheckTypeFactory(name="AutoSuccessNoOutcomesCheck"),
+            auto_succeeds=True,
+            is_default=True,
+        )
+        option = MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=challenge,
+        )
+        # No CheckOutcome rows created in this class's setup.
+        with self.assertRaises(ValueError):
+            resolve_option(instance, entry, option, actor, chosen_approach=approach)
+
 
 class ResolveBranchOptionTests(TestCase):
     """BRANCH path: no check, deed outcome None, routes via branch_target."""

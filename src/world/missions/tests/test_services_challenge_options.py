@@ -119,3 +119,18 @@ class ChallengeOptionsForCharacterTests(TestCase):
     def test_challenge_with_no_approaches_yields_no_options(self) -> None:
         empty_challenge = ChallengeTemplateFactory(name="Featureless Wall")
         self.assertEqual(challenge_options_for_character(empty_challenge, self.char_with), [])
+
+    def test_is_default_combined_with_auto_succeeds(self) -> None:
+        # The two flags are orthogonal: a is_default + auto_succeeds approach
+        # reaches everyone (capability gate skipped via is_default) AND
+        # carries the auto_succeeds flag forward to the resolver.
+        miracle = ChallengeApproachFactory(
+            challenge_template=self.challenge,
+            is_default=True,
+            auto_succeeds=True,
+            display_name="Miracle",
+        )
+        options = challenge_options_for_character(self.challenge, self.char_without)
+        by_approach = {o.approach.pk: o for o in options}
+        self.assertIn(miracle.pk, by_approach)
+        self.assertTrue(by_approach[miracle.pk].auto_succeeds)

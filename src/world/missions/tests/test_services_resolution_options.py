@@ -74,6 +74,7 @@ class BuildOptionListTests(TestCase):
         gated = [o for o in options if o.option == self.gated_option]
         self.assertEqual(len(gated), 1)
         self.assertEqual(gated[0].ic_framing, "The gated way.")
+        self.assertEqual(gated[0].owner, self.character)
 
     def test_empty_visibility_rule_authored_option_always_shown(self) -> None:
         options = build_option_list(self.instance, self.node, self.participant)

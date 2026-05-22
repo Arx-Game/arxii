@@ -24,6 +24,7 @@ from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import (
     ConflictMode,
     DeedRewardKind,
@@ -488,6 +489,44 @@ class GroupResolveJointTests(TestCase):
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.lose_node)
         self.assertEqual(instance.status, MissionStatus.ACTIVE)
+
+    def test_joint_with_challenge_holder_routes_via_option_routes(self) -> None:
+        # JOINT with a CHALLENGE-sourced holder option: each participant's
+        # pick fans out via challenge_options_for_character (an is_default
+        # approach reaches both characters without capability setup), and
+        # _approach_for_pick recovers the per-participant approach for the
+        # per-attempt resolve_option call. The combined-success decision
+        # routes via the CHALLENGE option's outcome-tier route, exactly
+        # like an AUTHORED option.
+        instance = MissionInstanceFactory(template=self.template)
+        holder, _p2 = self._setup_participants(instance)
+        node = self._make_joint_node(JointCombine.ALL)
+        challenge = ChallengeTemplateFactory(name="JointChallenge", severity=2)
+        ChallengeApproachFactory(
+            challenge_template=challenge,
+            check_type=self.sneak,
+            is_default=True,
+        )
+        opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=challenge,
+        )
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.success, target_node=self.win_node)
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.failure, target_node=self.lose_node)
+        picks = {holder: opt, _p2: opt}
+        with patch(
+            _PERFORM_CHECK,
+            side_effect=self._outcome_by_character(
+                {self.char_h: self.success, self.char_2: self.success}
+            ),
+        ):
+            deeds = group_resolve_node(instance, node, picks)
+        self.assertEqual(len(deeds), 2)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.win_node)
 
     def test_joint_never_transiently_terminates_instance(self) -> None:
         # Phase-5a I-1: JOINT per-attempt resolution must be routing-free
