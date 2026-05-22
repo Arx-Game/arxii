@@ -17,9 +17,10 @@ node→room binding (follow-up #2), or the sibling staff creation tools.
 
 The missions **engine** is merged: the graph model (`MissionTemplate` → `MissionNode` →
 `MissionOption` → `MissionOptionRoute` → rewards), the resolution engine, multi-person
-orchestration, the front/back door, affordance bindings. What does not exist is any way
-to *build* a mission — a graph today could only be constructed by hand-writing Django
-ORM calls.
+orchestration, the front/back door. (The merged Phase 1 `Affordance` / `AffordanceBinding`
+system is being **retired** — see §8.4 and §11.9.) What does not exist is any way to
+*build* a mission — a graph today could only be constructed by hand-writing Django ORM
+calls.
 
 Mission Studio fills that gap. It is a React tool on the staff frontend, backed by a DRF
 API over the missions models (extended where the authoring vision requires — see §11).
@@ -238,21 +239,22 @@ breadcrumb and a clean surface-back-up. Each level earns its own focused surface
 **The node page:**
 
 - **Node settings:** conflict mode (COINFLIP / VOTE / JOINT) and, for JOINT, the combine
-  rule + count; rider config (allowed riders / deny-all); **accepted affordances** —
-  which affordance-sourced options may surface here at runtime; **attached challenges**
-  (§8.4).
+  rule + count; rider config (allowed riders / deny-all); **attached challenges** (§8.4).
 - **Node flavor text** — the thin abstract description of the moment.
 - **The option list** — a scroll of authored options, each a card you delve into.
-  Alongside it, a read-only preview of what affordance- and challenge-sourced options
-  will surface at runtime.
+  Alongside it, a read-only preview of the **challenge-contributed options** the attached
+  challenges will surface at runtime (per the playing character's capabilities).
 
-**The option page:**
+A node's options come from exactly two sources: **authored options** (hand-placed here,
+optionally predicate-gated) and **challenge-contributed options** (from attached
+challenges — §8.4). There is no third "affordance" mechanism; see §8.4 and §11.
+
+**The option page** (authored options only — challenge-contributed options are configured
+on the challenge, in its sibling tool):
 
 - **Kind:** **Choice/Advance** (routes the graph, no dice — the engine's `BRANCH`) or
-  **Check**.
+  **Check** (an inline `CheckType`).
 - **Option text** — what the player sees as the choice.
-- For a Check, the **check-source** (§8.4): an inline `CheckType`, or a referenced
-  `Challenge`.
 - The **predicate gate** — the §7 requirements builder, deciding whether this option
   shows for a given character.
 - **Routes** — the structured heart (§8.3).
@@ -288,42 +290,49 @@ carry its own consequence, rewards, and outcome text (§11). Then any route — 
 tier-route or Choice route — has a "make this a random pool" toggle, and each weighted
 entry is a full self-contained outcome bundle, no extra nodes required.
 
-### 8.4 Check-source: `CheckType` or `Challenge`
+### 8.4 Attached challenges
 
-A Check option's check-source is one of two things:
+A node can **attach one or more `ChallengeTemplate`s**. Each attached challenge
+**contributes options** to the node — and this is the *only* automatic option mechanism.
+It replaces what missions Phase 1 built as the `Affordance` / `AffordanceBinding` system;
+that system is retired (see §11, and `docs/plans/2026-05-22-challenge-missions-integration-findings.md`
+for the full reasoning — it was an accidental reinvention of capability-driven option
+surfacing, built while missions were decoupled from `mechanics.ChallengeTemplate`).
 
-- An inline **`CheckType`** — a single check authored on the option.
-- A referenced **`Challenge`** — a reusable, named obstacle.
+A `ChallengeTemplate` is a reusable, named obstacle — authored in its own sibling tool
+(§2); Mission Studio only *references* it. It is a set of **capability-keyed approaches**
+plus a **universal default approach**. The pit-climb example:
 
-**A `Challenge`** is defined as a set of **capability-keyed approaches** plus a
-**universal default approach**, each approach resolving to the standard outcome-tier
-ladder. The pit-climb example:
-
-- (can fly) → "Fly out" → auto-success (an approach that always lands top-tier)
+- (can fly) → "Fly out" → auto-success
 - (has magical climbing) → "Magically run up the wall" → trivial check
 - (default, anyone) → "Climb bare-handed" → hard Dexterity + Athletics check
 
-**Attaching a challenge to a node populates the node with approach-options** — one per
-approach the playing character qualifies for, the default always included. The player
-sees every approach they are *capable* of and picks one; the tool lists capability, it
-does not editorialise about what is "smart." Each approach-option resolves and routes on
-the shared outcome ladder exactly like any check.
+**Attaching a challenge to a node populates the node with challenge-contributed options.**
+At runtime, each approach the playing character qualifies for surfaces as an option (the
+default always included). The player picks the approach they want; the tool lists
+capability, it does not editorialise about what is "smart."
 
-This dissolves two integration questions cleanly:
+**The division of ownership** — settled as the *data-source* integration shape (findings
+doc Q2):
 
-- *No challenge→outcome bridge needed.* A challenge never resolves "as a unit." Its
-  approaches **are** options; each is a check (or an auto-success — a degenerate check)
-  and already yields a normal `CheckOutcome`.
-- *Approach-vs-option overlap is resolved* — approaches simply *are* options. A challenge
-  is a curated, named bundle of capability-gated options dropped onto a node in one move;
-  authored options sit alongside.
+- The **challenge** contributes each option's *existence*, its *capability gate*, and its
+  *check* (the approach's `CheckType`, or auto-success).
+- The **mission** owns everything downstream of the outcome: the routes, consequences,
+  rewards, and outcome text, authored per §8.3 exactly like an authored option's. The
+  mission author wires routes for *every* approach the challenge defines; the runtime
+  surfaces the per-character subset.
+- Mission resolution stays entirely within `resolve_option`. `resolve_challenge`,
+  `ChallengeInstance`, and `CharacterChallengeRecord` are **not** invoked by missions — a
+  challenge is consumed as authored *data*, not run as an *engine*. A character on a
+  mission stays `engagement_type = MISSION`.
 
-**Open integration task (recorded, not hand-waved):** this is "challenges as described in
-this brainstorm." It must be reconciled against the **existing** `ChallengeTemplate` /
-`ChallengeApproach` models, which were built with combat/situation/reveal semantics. The
-approach-as-mission-option shape may not line up one-to-one. The implementation plan must
-treat "reconcile with the existing challenge models" as a real task. Challenge *authoring*
-itself is a separate sibling tool (§2); Mission Studio only *references* challenges.
+No "challenge→outcome bridge" is needed: a challenge approach already runs `perform_check`
+and yields a normal `CheckOutcome`, the same currency missions route on.
+
+**Still open (findings doc Q3, Q4), to settle before the implementation plan:** how an
+approach's *auto-success* ("fly out") is represented; and which `ChallengeTemplate` fields
+(`severity` → check difficulty looks right; `challenge_type`, `discovery_type`,
+`properties` — likely ignored in a missions context) are meaningful here.
 
 ---
 
@@ -366,11 +375,12 @@ Copying into an existing mission puts that mission into the editing state (§4).
 copied is ever auto-live.**
 
 **Copy carries everything — mechanics and flavor text.** The mechanical skeleton (option
-kinds, check-sources, route topology, bucket splits, random-pool structure and weights,
-reward scaffolding, predicate gates, conflict mode, riders, accepted affordances) comes
-across intact. So do the three flavor fields — node text, option text, per-outcome text —
-but **flagged** with a visible "inherited copy — rewrite me" marker. The old wording is
-present as reference and starting point; editing the field clears the flag.
+kinds, inline check types, route topology, bucket splits, random-pool structure and
+weights, reward scaffolding, predicate gates, conflict mode, riders, attached-challenge
+references) comes across intact. So do the three flavor fields — node text, option text,
+per-outcome text — but **flagged** with a visible "inherited copy — rewrite me" marker.
+The old wording is present as reference and starting point; editing the field clears the
+flag.
 
 The anti-same-y discipline is **non-destructive**: a nudge, not a blank. It gets teeth at
 publish — the tool can report "N flavor fields are still flagged as un-rewritten copy" so
@@ -411,11 +421,19 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
    rewards, and outcome text, so a single route can fan into fully-distinct random
    outcomes without a node per flavour.
 8. **Flavor-field "needs rewrite" flag** — on the three flavor fields. Authoring metadata.
-9. **Challenge integration** — a `MissionOption` Check check-source becomes a discriminated
-   `CheckType`-or-`Challenge`; nodes reference challenges that expand into approach-options.
-   Requires reconciliation with the existing `ChallengeTemplate`/`ChallengeApproach`
-   models (§8.4) — its own integration design task.
-10. **Predicate leaf-resolver registry expansion** — resolvers for level, org membership,
+9. **Retire `Affordance` / `AffordanceBinding`** — remove the missions Phase 1 affordance
+   system (`Affordance`, `AffordanceBinding`, `bindings_for_character`, the resolver
+   dispatch, their tests, a migration). It was an accidental reinvention of
+   capability-driven option surfacing; its job is now split between authored
+   predicate-gated options and challenge-contributed options. A node's `accepted_affordances`
+   becomes `attached_challenges` (a reference to `mechanics.ChallengeTemplate`). See the
+   findings doc for the full reasoning.
+10. **Challenge attachment** — a `MissionNode` references `ChallengeTemplate`(s); the engine
+    expands each attached challenge's approaches into challenge-contributed options at
+    runtime, resolved through `resolve_option` (data-source shape — §8.4). Two sub-items
+    remain open (Q3 auto-success representation, Q4 which `ChallengeTemplate` fields apply
+    in a missions context) — settle before the implementation plan.
+11. **Predicate leaf-resolver registry expansion** — resolvers for level, org membership,
     society/org reputation, achievement, codex entry, resonance type, giver standing, etc.
     Incremental; the requirements-builder palette reflects whatever is registered.
 
@@ -423,11 +441,20 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
 
 ## 12. Open questions & deferred work
 
+- **Challenge integration Q3 & Q4** — the two remaining reconciliation questions from the
+  findings doc: (Q3) how an approach's auto-success is represented; (Q4) which
+  `ChallengeTemplate` fields apply in a missions context. Settle before the implementation
+  plan. Q1 (the affordance/challenge duplication) and Q2/Q5 (data-source shape; missions
+  reference challenges) are **resolved** — see §8.4 and §11.9–10.
+- **"Social capability" derivation** — modelling achievement / reputation / NPC-affection
+  as derived capabilities (so a social challenge can have approaches keyed on them) is a
+  wanted *capability-system* enhancement, separate from missions authoring. Today
+  capabilities derive only from traits (`TraitCapabilityDerivation`); an
+  achievement/reputation→capability path would be new. When it exists, challenges and the
+  predicate builder both benefit automatically; missions authoring needs no special
+  knowledge of it.
 - **Node→room binding** — required for go-live, sequenced as the in-progress-persistence
   follow-up. Nodes are abstract in MVP authoring.
-- **Challenge ↔ missions integration design** — its own pass: reconcile this brainstorm's
-  challenge shape with the existing `ChallengeTemplate`/`ChallengeApproach` models, and
-  the `resolve_challenge` semantics.
 - **Giver-standing movement mechanic** — flirt/seduce checks against an NPC giver. Adjacent
   gameplay work; the authoring tool only needs to *express* standing as a requirement.
 - **Reward payload enrichment** — resonance-type and legend-range search facets depend on
@@ -436,9 +463,16 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
   Mission Studio is built to reference and hand off to them (§2).
 - **Category → path-aspect bonuses** — a future resolution-engine feature; the
   `MissionCategory` model is built so as not to block it.
+- **Missions vs. Situations long-term** — `mechanics.SituationTemplate` is itself a
+  scenario system. Missions and Situations coexist (both GM/staff scenario tooling, both
+  consuming `Challenge`s); whether that stays permanent is a broader architectural
+  question, out of scope here but recorded.
 
 ## Explicitly rejected
 
+- **The missions `Affordance` / `AffordanceBinding` system** — retired as an accidental
+  reinvention of capability-driven option surfacing (§11.9). Node options come from
+  authored predicate-gated options and challenge-contributed options only.
 - **A fragment palette** — reusable gameplay patterns are `Challenge`s, not missions-only
   node-sequence fragments (§10).
 - **A hard independent fire-% gate** — draw weight already gives probabilistic rarity (§7).
@@ -450,8 +484,9 @@ The authoring vision needs the merged missions engine to grow. Consolidated:
 
 ## Next step
 
-Turn this into an implementation plan (`superpowers:writing-plans`). The plan must
-sequence: the engine model extensions (§11) ahead of the tool that depends on them; the
-predicate leaf-resolver build-out; and treat the challenge-integration reconciliation
-(§8.4) as its own scoped task — possibly its own preceding design pass — since it touches
-an existing system.
+Settle the two remaining challenge-integration questions (findings doc Q3 & Q4), then turn
+this into an implementation plan (`superpowers:writing-plans`). The plan must sequence: the
+`Affordance`/`AffordanceBinding` retirement and the engine model extensions (§11) ahead of
+the tool that depends on them; the predicate leaf-resolver build-out; and the challenge
+attachment (§8.4) — now a concrete data-source integration, no longer an open architectural
+question.

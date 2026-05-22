@@ -1,9 +1,11 @@
 # Challenge ↔ Missions Integration — Findings & Gap Analysis
 
-**Status:** Investigation findings. Prepared overnight 2026-05-22 to ground the
-challenge↔missions integration design conversation, which is a prerequisite for the
-mission-authoring implementation plan (see
-`docs/plans/2026-05-22-mission-authoring-tooling-design.md` §8.4).
+**Status:** Investigation findings + resolution. Prepared overnight 2026-05-22; the
+reconciliation questions were discussed and decided the same day — see §4. **Q1, Q2, Q5
+resolved; Q3, Q4 remain open** and must be settled before the mission-authoring
+implementation plan. The authoring design doc
+(`docs/plans/2026-05-22-mission-authoring-tooling-design.md`) §8.4 / §11.9–10 / §12 has
+been updated to match the §4 resolutions.
 
 **Purpose:** The authoring design folded in "a mission node's CHECK option can reference a
 `Challenge` instead of a bare `CheckType`, and the challenge's capability-keyed approaches
@@ -216,77 +218,83 @@ is a *situation* for, and do they coexist permanently or does one subsume the ot
 
 ---
 
-## 4. Reconciliation questions for the morning
+## 4. Reconciliation questions — and their resolution
 
-**Q1 — The two capability systems (Divergence 1).** Do `Affordance`/`AffordanceBinding`
-and `Application`/`CapabilityType` get unified, or coexist?
-- *Option A — coexist.* A mission node surfaces options from both: affordance-bindings
-  *and* a referenced challenge's `Application`-keyed approaches. Least work; two systems
-  forever.
-- *Option B — converge.* Treat `Application` as one *kind* of affordance binding, or
-  re-express `ChallengeApproach` eligibility in affordance terms. Big, but kills the
-  duplication.
-- *Option C — challenge approaches define their own affordance bindings.* When a challenge
-  is authored, each approach's `(CapabilityType, Property)` is *also* registered as an
-  `AffordanceBinding`, so at runtime missions only ever see affordances.
+Discussed and decided 2026-05-22. **Q1, Q2, Q5 resolved; Q3, Q4 still open.**
 
-**Q2 — Data-source vs engine (Divergence 4).** Confirm integration shape (a): a node
-consumes a `ChallengeTemplate` as authored data (its approaches → options), and missions
-resolve through `resolve_option`. Recommended in §5.
+**Q1 — The two capability systems (Divergence 1). → RESOLVED: retire affordances.**
+The investigation found this is *accidental duplication*, not two valid concerns:
+`Affordance`'s own docstring describes serving "a mission challenge"; both systems do the
+identical capability→option job; both resolve identically. The missions `Affordance` /
+`AffordanceBinding` system was a missions-local reinvention built while missions were
+decoupled from `mechanics.ChallengeTemplate`.
+**Decision:** retire `Affordance` / `AffordanceBinding` / `bindings_for_character` / the
+resolver dispatch. A mission node's options come from exactly two sources — **authored
+options** (hand-placed, optionally predicate-gated via the §7 requirements builder) and
+**challenge-contributed options** (from attached `ChallengeTemplate`s). The one thing
+affordances did that this loses — an option auto-surfacing from a *non-capability*
+descriptor (achievement/distinction/condition) — is recovered as an *authored option with
+a predicate gate*, so nothing wanted is lost. (A separately-noted future enhancement:
+modelling achievement/reputation/affection as *derived social capabilities* so social
+challenges can key approaches on them — a capability-system change, not authoring.)
 
-**Q3 — Auto-success (Divergence 3.3 / 3.4).** Degenerate always-succeed `CheckType`, a
-missions-side auto-success flag on the option, or a new field on `ChallengeApproach`?
+**Q2 — Data-source vs engine (Divergence 4). → RESOLVED: data-source.**
+A mission node *references* a `ChallengeTemplate` and consumes its approaches as authored
+data — the options' existence, capability gates, and check types. Mission resolution stays
+entirely within `resolve_option`; `resolve_challenge` / `ChallengeInstance` /
+`CharacterChallengeRecord` are not invoked by missions. Everything downstream of the
+outcome (routes, consequences, rewards, flavor) is mission-authored. A character on a
+mission stays `engagement_type = MISSION`.
 
-**Q4 — Which challenge semantics ride along (Divergence 3).** `severity` → mission check
-difficulty seems right. `challenge_type`, `discovery_type`, `blocked_capability`,
-`properties` — ignored in a missions context, or meaningful? Likely ignored; confirm.
+**Q3 — Auto-success (Divergence 3.3 / 3.4). → STILL OPEN.** How is an approach's
+auto-success ("fly out of the pit") represented: a degenerate always-succeed `CheckType`,
+a missions-side auto-success flag, or a `ChallengeApproach` field? Settle before the
+implementation plan.
 
-**Q5 — Missions vs situations (Divergence 5).** What is the long-term relationship? Plausible
-framings: missions = the authored branching *narrative* graph (staff content); challenges
-= reusable *obstacle definitions* a mission node pulls in; situations = a GM-facing
-ad-hoc *placement* layer that may itself just consume challenges, OR may be superseded by
-missions over time. This question is bigger than authoring tooling and may deserve its own
-note — but the authoring implementation plan should not pretend it doesn't exist.
+**Q4 — Which challenge semantics ride along (Divergence 3). → STILL OPEN.** `severity` →
+mission check difficulty looks right. `challenge_type`, `discovery_type`,
+`blocked_capability`, `properties` — ignored in a missions context, or meaningful? Likely
+ignored; confirm before the implementation plan.
 
----
-
-## 5. Recommendation (a starting position, not a decision)
-
-- **Integration shape: data-source (Q2 → option a).** A mission node references a
-  `ChallengeTemplate`; the engine reads its `approaches` and expands them into node
-  options; resolution stays entirely within `resolve_option`. `resolve_challenge`,
-  `ChallengeInstance`, `CharacterChallengeRecord` are untouched by missions. This matches
-  §8.4, avoids a parallel record lifecycle, and keeps the `CharacterEngagement` model
-  honest (a character on a mission stays `engagement_type=MISSION`).
-- **Capability systems: lean toward Q1 option C** — challenge approaches register
-  affordance bindings — so missions only ever resolve options through one eligibility
-  system (`Affordance`). This contains the blast radius without a full convergence
-  project. Needs validation that `Application`'s `(capability, property)` eligibility can
-  be faithfully expressed as an affordance binding.
-- **Auto-success: a missions-side flag** on the approach-option, not a degenerate
-  `CheckType` (which would pollute the check catalogue) and not a `ChallengeApproach`
-  field (which would couple a missions concern into the challenge model).
-- **Challenge semantics: `severity` → difficulty; everything else ignored** in a missions
-  context until proven otherwise.
-- **Missions vs situations (Q5):** explicitly out of scope for the authoring
-  implementation plan — but record it as a known open architectural question, because it
-  determines whether effort later goes into situations at all.
-
-This is a **starting position for discussion**, deliberately conservative (reuse challenge
-*data*, change neither engine). The morning conversation should pressure-test it,
-especially Q1 and Q5.
+**Q5 — Missions vs situations (Divergence 5). → RESOLVED (in principle): coexist.**
+Missions, combat, and challenges are sibling engagement types (`CharacterEngagement`
+already models this). Missions are the authored branching *narrative* graph (staff
+content); `Challenge`s are reusable *obstacle definitions* both missions and GM Situations
+pull in. Missions and Situations coexist as parallel scenario tooling, both consuming
+challenges. Whether that stays permanent is a broader architectural question, recorded but
+out of scope for the authoring implementation plan.
 
 ---
 
-## 6. Suggested sequencing after the morning conversation
+## 5. Recommendation — superseded by the §4 resolutions
 
-1. **Settle Q1–Q5** in a short design conversation (this doc is its input).
-2. Fold the resolution into the authoring design doc's §8.4 and §11.9, replacing the
-   "recorded as open" placeholder.
-3. *Then* write the mission-authoring implementation plan (`superpowers:writing-plans`) —
-   with the challenge-integration piece now concrete rather than a TBD.
+This section was the pre-discussion starting position. The §4 discussion **adopted the
+data-source integration shape (Q2)** and **the coexist framing for missions vs. situations
+(Q5)** as recommended here. It **diverged on Q1**: rather than the conservative "challenge
+approaches register affordance bindings" (option C, which would have kept the `Affordance`
+model alive), the decision was to **retire the `Affordance` system outright** — the
+investigation showed it to be accidental duplication, and retiring it now (pre-players,
+pre-authoring-tool) is cheaper than carrying it. See §4 Q1 for the final decision.
+
+Q3 (auto-success) and Q4 (which challenge fields apply) remain open; the original
+recommendations stand as starting positions for that decision:
+- **Auto-success:** a missions-side flag on the option, not a degenerate `CheckType`
+  (pollutes the check catalogue) and not a `ChallengeApproach` field (couples a missions
+  concern into the challenge model).
+- **Challenge semantics:** `severity` → difficulty; `challenge_type` / `discovery_type` /
+  `blocked_capability` / `properties` ignored in a missions context until proven otherwise.
+
+---
+
+## 6. Remaining sequencing
+
+1. ~~Settle Q1–Q5~~ — Q1/Q2/Q5 done (§4); the authoring design doc is updated to match.
+2. **Settle Q3 (auto-success) and Q4 (which `ChallengeTemplate` fields apply).** Small;
+   §5 carries starting recommendations.
+3. *Then* write the mission-authoring implementation plan (`superpowers:writing-plans`),
+   with challenge attachment now a concrete data-source integration.
 
 Nothing in the rest of the authoring design (the working-draft/publish model, the giver,
 the predicate builder, the canvas, browse/search, copy, the testing loop, §11 extensions
-1–8 and 10) depends on Q1–Q5 — that ~85% of the plan is writable regardless. Only the
-check-source picker and the node-attached-challenge surface wait on this.
+1–8 and 11) depends on Q3/Q4 — most of the plan is writable regardless. Only the
+challenge-attachment surface and the `Affordance` retirement need Q3/Q4 settled.
