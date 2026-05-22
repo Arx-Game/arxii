@@ -87,7 +87,7 @@ class ClashModelTests(TestCase):
         self.resolution_pool = ConsequencePool.objects.create(name="ClashTestResolutionPool")
         self.per_round_pool = ConsequencePool.objects.create(name="ClashTestPerRoundPool")
 
-    def _make_clash(self, **kwargs):
+    def _make_clash(self, **kwargs) -> "Clash":
         """Helper: build a minimal CLASH-flavor Clash with required fields."""
         from world.combat.models import Clash
 
@@ -163,3 +163,59 @@ class ClashModelTests(TestCase):
             started_round=1,
         )
         self.assertEqual(clash.status, ClashStatus.ACTIVE)
+
+    # (e) WARD biconditional — missing ward_ends_on_round fails
+    def test_ward_flavor_requires_ward_ends_on_round(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        clash = self._make_clash(
+            flavor=ClashFlavor.WARD,
+            npc_win_threshold=None,
+            ward_ends_on_round=None,
+        )
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+
+    # (f) WARD biconditional — valid row passes
+    def test_ward_flavor_valid(self) -> None:
+        clash = self._make_clash(
+            flavor=ClashFlavor.WARD,
+            npc_win_threshold=None,
+            ward_ends_on_round=5,
+        )
+        clash.full_clean()
+        clash.save()
+
+    # (g) Non-WARD row with ward_ends_on_round set is rejected
+    def test_non_ward_with_ward_ends_on_round_rejected(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        # BREAK flavor has no flavored fields — add ward_ends_on_round to trigger error
+        clash = self._make_clash(
+            flavor=ClashFlavor.BREAK,
+            npc_win_threshold=None,
+            ward_ends_on_round=3,
+        )
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+
+    # (h) Valid BREAK row — all flavored fields null
+    def test_break_flavor_valid(self) -> None:
+        clash = self._make_clash(
+            flavor=ClashFlavor.BREAK,
+            npc_win_threshold=None,
+        )
+        clash.full_clean()
+        clash.save()
+
+    # (i) CLASH biconditional negative — non-CLASH row with npc_win_threshold set is rejected
+    def test_non_clash_with_npc_win_threshold_rejected(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        # BREAK flavor should not have npc_win_threshold
+        clash = self._make_clash(
+            flavor=ClashFlavor.BREAK,
+            npc_win_threshold=-5,
+        )
+        with self.assertRaises(ValidationError):
+            clash.full_clean()

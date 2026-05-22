@@ -995,6 +995,8 @@ class Clash(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="+",
+        help_text="Optional per-round consequence pool fired each round for incremental feedback; "
+        "omit for flavors with no per-round effects.",
     )
 
     flavor = models.CharField(
@@ -1067,9 +1069,9 @@ class Clash(SharedMemoryModel):
         errors: dict[str, str] = {}
 
         # lock_pc_role iff LOCK
-        if self.flavor == ClashFlavor.LOCK and not self.lock_pc_role:
+        if self.flavor == ClashFlavor.LOCK and self.lock_pc_role is None:
             errors["lock_pc_role"] = "flavor=LOCK requires lock_pc_role."
-        elif self.flavor != ClashFlavor.LOCK and self.lock_pc_role:
+        elif self.flavor != ClashFlavor.LOCK and self.lock_pc_role is not None:
             errors["lock_pc_role"] = "lock_pc_role must be null for non-LOCK flavors."
 
         # npc_win_threshold iff CLASH

@@ -2266,7 +2266,9 @@ def resolve_round(
 
 def get_strain_config() -> StrainConfig:
     """Get-or-create the StrainConfig singleton (pk=1)."""
-    from world.combat.models import StrainConfig  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+        StrainConfig,
+    )
 
     cfg, _ = StrainConfig.objects.get_or_create(pk=1)
     return cfg
@@ -2274,7 +2276,9 @@ def get_strain_config() -> StrainConfig:
 
 def get_clash_config() -> ClashConfig:
     """Get-or-create the ClashConfig singleton (pk=1)."""
-    from world.combat.models import ClashConfig  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+        ClashConfig,
+    )
 
     cfg, _ = ClashConfig.objects.get_or_create(pk=1)
     return cfg
