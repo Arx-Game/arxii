@@ -12,6 +12,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.checks.factories import CheckTypeFactory
+from world.mechanics.factories import ChallengeTemplateFactory
 from world.missions.constants import (
     ConflictMode,
     JointCombine,
@@ -250,3 +251,26 @@ class MissionOptionInvariantTests(TestCase):
         fetched = MissionOption.objects.get(pk=option.pk)
         self.assertEqual(fetched.authored_check_type, self.check_type)
         self.assertEqual(fetched.authored_base_risk, 4)
+
+
+class MissionNodeAttachedChallengesTests(TestCase):
+    """MissionNode.attached_challenges M2M to mechanics.ChallengeTemplate."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = MissionTemplateFactory(slug="attach-tmpl")
+        cls.node = MissionNodeFactory(template=cls.template, key="n", is_entry=True)
+        cls.challenge = ChallengeTemplateFactory(name="Pit Climb")
+
+    def test_attached_challenges_defaults_empty(self) -> None:
+        self.assertEqual(list(self.node.attached_challenges.all()), [])
+
+    def test_attach_challenge(self) -> None:
+        self.node.attached_challenges.add(self.challenge)
+        fetched = MissionNode.objects.get(pk=self.node.pk)
+        self.assertIn(self.challenge, fetched.attached_challenges.all())
+
+    def test_attached_challenges_cached(self) -> None:
+        node = MissionNodeFactory(template=self.template, key="cached", is_entry=False)
+        node.attached_challenges.add(self.challenge)
+        self.assertEqual(node.attached_challenges_cached, [self.challenge])

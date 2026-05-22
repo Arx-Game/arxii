@@ -16,6 +16,8 @@ to ``checks.CheckType`` / ``checks.Consequence``; this app introduces no new
 check or consequence models.
 """
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
@@ -36,6 +38,9 @@ from world.missions.constants import (
     OptionSource,
     RewardGroupRule,
 )
+
+if TYPE_CHECKING:
+    from world.mechanics.models import ChallengeTemplate
 
 # Discriminator value -> typed FK field name. Authored-once bindings point at
 # a single durable-descriptor model; the discriminator selects which typed FK
@@ -346,6 +351,12 @@ class MissionNode(SharedMemoryModel):
         default=False,
         help_text="When true, no consequence riders may attach at this node.",
     )
+    attached_challenges = models.ManyToManyField(
+        "mechanics.ChallengeTemplate",
+        blank=True,
+        related_name="+",
+        help_text="Challenges whose approaches surface as options on this node.",
+    )
 
     class Meta:
         constraints = [
@@ -398,6 +409,17 @@ class MissionNode(SharedMemoryModel):
     # expressed as a single-row invariant). Entry-node uniqueness is
     # row-level; route-set completeness is graph-level-deferred. See the
     # MissionOptionRoute DESIGN note. This split is intentional-on-record.
+
+    @cached_property
+    def attached_challenges_cached(self) -> list["ChallengeTemplate"]:
+        """Prefetch-friendly snapshot of this node's attached challenges.
+
+        Use with ``Prefetch("attached_challenges",
+        to_attr="attached_challenges_cached")`` so challenge-option
+        expansion reads the M2M once per request. Falls back to a fresh
+        ``attached_challenges.all()`` when no prefetch ran.
+        """
+        return list(self.attached_challenges.all())
 
     def __str__(self) -> str:
         return f"{self.template.slug}:{self.key}"
