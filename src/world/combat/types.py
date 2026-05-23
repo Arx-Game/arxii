@@ -11,8 +11,10 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import Consequence
     from world.checks.types import CheckResult
     from world.combat.models import (
+        Clash,
         ClashContribution,
         ClashRound,
         CombatOpponent,
@@ -220,3 +222,30 @@ class ClashRoundResult:
     pc_delta_sum: int
     npc_delta: int
     progress_after: int
+
+
+# ---------------------------------------------------------------------------
+# Clash resolution types (Task 4.2)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClashResolutionResult:
+    """Result of clash resolution.
+
+    Produced by ``resolve_clash``. Carries the resolved Clash row, the tier
+    that triggered resolution, and the consequence (if any) drawn from the
+    resolution pool.
+
+    Fields:
+        clash: The resolved ``Clash`` instance (status=RESOLVED,
+            resolution and resolved_round set).
+        resolution: The ``ClashResolution`` tier — echoed for caller
+            convenience so the round driver need not re-read the model field.
+        consequence_applied: The ``Consequence`` selected from the resolution
+            pool, or ``None`` when the pool had no matching tier entry.
+    """
+
+    clash: Clash
+    resolution: str  # ClashResolution value — str to avoid circular import at runtime
+    consequence_applied: Consequence | None

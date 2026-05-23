@@ -6,7 +6,7 @@ each function is unit-testable in isolation.  Higher-level orchestration
 (views, commands, flow steps) calls into this module rather than implementing
 Clash logic themselves.
 
-Current scope (Tasks 2.1–4.1):
+Current scope (Tasks 2.1–4.2):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
@@ -22,8 +22,10 @@ Current scope (Tasks 2.1–4.1):
     updates ``clash.progress`` per the flavor's sign convention.
   - ``fire_clash_per_round``: fires the per-round consequence pool, keyed on the
     current meter band. No-op when ``clash.per_round_consequence_pool`` is null.
+  - ``resolve_clash``: marks a clash as RESOLVED, fires the resolution-pool
+    consequence keyed on the resolution tier, returns a ``ClashResolutionResult``.
 
-Future tasks will add the full round driver, resolution-pool firing, and outcome helpers.
+Future tasks will add the full round driver (Phase 5).
 """
 
 from __future__ import annotations
@@ -32,9 +34,9 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.combat.constants import ClashFlavor, ClashResolution, LockPcRole
+from world.combat.constants import ClashFlavor, ClashResolution, ClashStatus, LockPcRole
 from world.combat.models import ClashConfig, ClashContribution, ClashRound, StrainConfig
-from world.combat.types import ClashContributionResult, ClashRoundResult
+from world.combat.types import ClashContributionResult, ClashResolutionResult, ClashRoundResult
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
@@ -645,6 +647,35 @@ def _check_break_flavor(*, clash: Clash, config: ClashConfig) -> ClashResolution
 # ---------------------------------------------------------------------------
 
 
+def _find_check_outcome_at_or_below(target_level: int) -> CheckOutcome:
+    """Return the closest available ``CheckOutcome`` with ``success_level <= target_level``.
+
+    Both ``_meter_band_to_check_outcome`` and ``_resolution_to_check_outcome``
+    use the same fallback strategy: find the authored row at or below the
+    desired level, so that a sparse configuration degrades gracefully without
+    leaving gaps that would raise hard errors at runtime.
+
+    Raises:
+        CheckOutcome.DoesNotExist: If no row exists at or below ``target_level``.
+            This always indicates incomplete configuration — every deployment
+            should have at least the baseline success tiers seeded.
+
+    Private helper — call only from within this module.
+    """
+    outcome = (
+        CheckOutcome.objects.filter(success_level__lte=target_level)
+        .order_by("-success_level")
+        .first()
+    )
+    if outcome is None:
+        msg = (
+            f"No CheckOutcome row exists at or below success_level={target_level}. "
+            "Configuration is incomplete — seed the CheckOutcome tier rows."
+        )
+        raise CheckOutcome.DoesNotExist(msg)
+    return outcome
+
+
 def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
     """Map the clash's current progress to a CheckOutcome by meter band.
 
@@ -661,10 +692,8 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
     both CLASH's signed meter (progress can be negative) and 0-to-N meters
     (WARD, LOCK, BREAK).
 
-    Fallback: returns the closest available ``CheckOutcome`` with
-    ``success_level <= target_level``. Raises ``CheckOutcome.DoesNotExist``
-    if no row at or below ``target_level`` exists — the configuration is
-    incomplete.
+    Fallback: delegates to ``_find_check_outcome_at_or_below`` — returns the
+    closest available ``CheckOutcome`` at or below the computed target level.
 
     Raises:
         ValueError: If ``clash.pc_win_threshold`` is 0 (division by zero guard).
@@ -694,21 +723,40 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
     else:
         target_level = -2
 
-    # Return the closest available row at or below the target tier.
-    outcome = (
-        CheckOutcome.objects.filter(success_level__lte=target_level)
-        .order_by("-success_level")
-        .first()
-    )
+    return _find_check_outcome_at_or_below(target_level)
 
-    if outcome is None:
-        msg = (
-            f"No CheckOutcome row exists at or below success_level={target_level} "
-            f"(clash pk={clash.pk}, ratio={ratio:.3f}). Configuration is incomplete."
-        )
-        raise CheckOutcome.DoesNotExist(msg)
 
-    return outcome
+def _resolution_to_check_outcome(resolution: ClashResolution) -> CheckOutcome:
+    """Map a ``ClashResolution`` tier to a ``CheckOutcome`` for pool filtering.
+
+    Tier -> success_level mapping:
+      PC_DECISIVE  -> 3  (critical success -- decisive PC win)
+      PC_MARGINAL  -> 2  (great success -- marginal PC win)
+      MUTUAL       -> 0  (partial -- stalemate)
+      NPC_MARGINAL -> -1 (failure -- marginal NPC win)
+      NPC_DECISIVE -> -2 (botch -- decisive NPC win)
+      ABANDONED    -> -1 (failure -- equivalent to a marginal NPC win)
+
+    Delegates to ``_find_check_outcome_at_or_below`` for the same
+    closest-tier-<=target fallback used by ``_meter_band_to_check_outcome``.
+
+    Raises:
+        CheckOutcome.DoesNotExist: If no ``CheckOutcome`` row exists at or
+            below the mapped ``success_level``. This always indicates
+            incomplete configuration.
+
+    Private helper -- call only from ``resolve_clash``.
+    """
+    _RESOLUTION_LEVEL: dict[str, int] = {
+        ClashResolution.PC_DECISIVE: 3,
+        ClashResolution.PC_MARGINAL: 2,
+        ClashResolution.MUTUAL: 0,
+        ClashResolution.NPC_MARGINAL: -1,
+        ClashResolution.NPC_DECISIVE: -2,
+        ClashResolution.ABANDONED: -1,
+    }
+    target_level = _RESOLUTION_LEVEL[resolution]
+    return _find_check_outcome_at_or_below(target_level)
 
 
 def fire_clash_per_round(
@@ -789,3 +837,105 @@ def fire_clash_per_round(
     apply_all_effects(selected, context)
 
     return selected
+
+
+# ---------------------------------------------------------------------------
+# Task 4.2 -- end-of-clash resolution pool firing
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def resolve_clash(
+    *,
+    clash: Clash,
+    resolution: ClashResolution,
+    round_number: int,
+) -> ClashResolutionResult:
+    """Mark a clash as RESOLVED and fire its resolution consequence pool.
+
+    Sets ``clash.status = RESOLVED``, ``clash.resolution = resolution``,
+    ``clash.resolved_round = round_number``, saves.
+
+    Fires the resolution pool (``clash.resolution_consequence_pool``):
+      - maps the ``resolution`` tier to a ``CheckOutcome`` via
+        ``_resolution_to_check_outcome``
+      - filters ``pool.cached_consequences`` to entries with matching
+        ``outcome_tier``
+      - weight-picks via ``select_weighted``
+      - applies effects via ``apply_all_effects``
+
+    If no pool entry matches the resolution tier, ``consequence_applied``
+    in the result is ``None`` and no effects are applied.
+
+    Effect context targets the NPC opponent's ObjectDB as both ``character``
+    and ``target``. If ``npc_opponent.objectdb`` is ``None`` (opponent has no
+    attached world object -- common for non-ephemeral persona-bearing
+    opponents in some setups), effect application is **skipped entirely**.
+    The selected ``Consequence`` is still returned so callers can see which
+    one was drawn, but no ``apply_all_effects`` call is made.  Callers that
+    need to distinguish "consequence drawn and applied" from "consequence
+    drawn but skipped" must check ``clash.npc_opponent.objectdb`` themselves
+    before calling this function.
+
+    Atomic -- all DB writes (Clash update + condition applications from effects)
+    happen in one transaction.
+
+    Args:
+        clash: The active Clash instance to resolve.
+        resolution: The ``ClashResolution`` tier determined by the round driver.
+        round_number: The round number at which the clash was resolved (1-indexed).
+
+    Returns:
+        A frozen ``ClashResolutionResult`` with the resolved clash, the
+        resolution tier, and the consequence applied (if any).
+    """
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+
+    # 1. Mark the clash resolved.
+    clash.status = ClashStatus.RESOLVED
+    clash.resolution = resolution
+    clash.resolved_round = round_number
+    clash.save(update_fields=["status", "resolution", "resolved_round"])
+
+    # 2. Fire the resolution pool.
+    pool = clash.resolution_consequence_pool
+
+    # Map the resolution tier -> CheckOutcome for pool filtering.
+    outcome = _resolution_to_check_outcome(resolution)
+
+    # Filter pool's consequences to those matching the outcome tier.
+    all_consequences = pool.cached_consequences
+    tier_entries = [wc for wc in all_consequences if wc.outcome_tier == outcome]
+
+    if not tier_entries:
+        return ClashResolutionResult(
+            clash=clash,
+            resolution=resolution,
+            consequence_applied=None,
+        )
+
+    # 3. Weighted selection.
+    selected_wc = select_weighted(tier_entries)
+    selected = selected_wc.consequence
+
+    # 4. Build ResolutionContext targeting the NPC's ObjectDB.
+    #    npc_opponent.objectdb may be None for opponents created without an ObjectDB
+    #    (e.g. in tests, or non-ephemeral persona-bearing opponents in some setups).
+    #    Effect application is skipped entirely when objectdb is None --
+    #    the selected Consequence is still returned for caller visibility.
+    npc_objectdb = clash.npc_opponent.objectdb
+
+    if npc_objectdb is not None:
+        context = ResolutionContext(
+            character=npc_objectdb,
+            target=npc_objectdb,
+        )
+        apply_all_effects(selected, context)
+
+    return ClashResolutionResult(
+        clash=clash,
+        resolution=resolution,
+        consequence_applied=selected,
+    )
