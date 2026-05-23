@@ -19,6 +19,7 @@ from world.missions.constants import (
     RewardGroupRule,
 )
 from world.missions.models import (
+    MissionCategory,
     MissionDeedRecord,
     MissionDeedRewardLine,
     MissionGiver,
@@ -34,6 +35,18 @@ from world.missions.models import (
     MissionRewardQueue,
     MissionTemplate,
 )
+
+
+class MissionCategoryFactory(DjangoModelFactory):
+    """Factory for the MissionCategory lookup model."""
+
+    class Meta:
+        model = MissionCategory
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"mission-category-{n}")
+    description = factory.Faker("sentence")
+
 
 # ---------------------------------------------------------------------------
 # Mission graph factories

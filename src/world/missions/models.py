@@ -19,6 +19,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
     MAX_PERCENT_REPLACE,
     ArcScope,
@@ -35,6 +36,30 @@ from world.missions.constants import (
 # ---------------------------------------------------------------------------
 # Mission graph data model
 # ---------------------------------------------------------------------------
+
+
+class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
+    """A content-type tag a :class:`MissionTemplate` can carry (multi-valued).
+
+    Examples: assassination, investigation, courtly, heist, social, combat.
+    Categories drive browse/filter in the authoring tool (Phase B–D) and
+    are designed so a future category→path-aspect-bonus mechanic can hang
+    off them without a schema change (design §11.1).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Mission categories"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class MissionTemplate(SharedMemoryModel):
@@ -96,6 +121,16 @@ class MissionTemplate(SharedMemoryModel):
         help_text="Phase 0 predicate tree gating front-door availability for this template.",
     )
     is_active = models.BooleanField(default=True)
+    categories = models.ManyToManyField(
+        MissionCategory,
+        blank=True,
+        related_name="templates",
+        help_text=(
+            "Content-type tags for this mission (multi-valued, e.g. "
+            "assassination, courtly, heist). Drives browse/filter in the "
+            "authoring tool."
+        ),
+    )
 
     def clean(self) -> None:
         super().clean()
