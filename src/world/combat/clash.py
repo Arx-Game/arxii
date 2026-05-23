@@ -797,9 +797,15 @@ def fire_clash_per_round(
         The selected Consequence, or None when there is no pool or no matching
         tier entry.
     """
-    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+    from world.checks.outcome_utils import (  # noqa: PLC0415 — local import avoids circular
+        select_weighted,
+    )
+    from world.checks.types import (  # noqa: PLC0415 — local import avoids circular
+        ResolutionContext,
+    )
+    from world.mechanics.effect_handlers import (  # noqa: PLC0415 — local import avoids circular
+        apply_all_effects,
+    )
 
     pool = clash.per_round_consequence_pool
     if pool is None:
@@ -892,9 +898,15 @@ def resolve_clash(
         A frozen ``ClashResolutionResult`` with the resolved clash, the
         resolution tier, and the consequence applied (if any).
     """
-    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+    from world.checks.outcome_utils import (  # noqa: PLC0415 — local import avoids circular
+        select_weighted,
+    )
+    from world.checks.types import (  # noqa: PLC0415 — local import avoids circular
+        ResolutionContext,
+    )
+    from world.mechanics.effect_handlers import (  # noqa: PLC0415 — local import avoids circular
+        apply_all_effects,
+    )
 
     # 1. Mark the clash resolved.
     clash.status = ClashStatus.RESOLVED
@@ -994,12 +1006,17 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
     threat entry.  If both sides are clash-capable and the PC technique has a
     resolution pool, form a CLASH.
 
-    Skips silently when the PC technique's ``clash_resolution_pool`` is None —
-    a Clash cannot be created without the non-nullable FK.
+    Skips silently when the PC technique's ``clash_resolution_pool`` is None — a
+    Clash without a resolution pool cannot fire its resolution effects and is a
+    content-authoring gap, not a runtime case.
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import Clash, CombatRoundAction  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+        Clash,
+        CombatOpponentAction,
+        CombatRoundAction,
+    )
 
     created: list[Clash] = []
 
@@ -1023,8 +1040,6 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
             continue
 
         # Find the matching NPC action this round for the same opponent.
-        from world.combat.models import CombatOpponentAction  # noqa: PLC0415
-
         try:
             npc_action = CombatOpponentAction.objects.select_related("threat_entry").get(
                 opponent=opponent,
@@ -1081,7 +1096,11 @@ def _detect_lock_sustaining(*, encounter: CombatEncounter, round_number: int) ->
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import Clash, CombatOpponentAction, CombatRoundAction  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+        Clash,
+        CombatOpponentAction,
+        CombatRoundAction,
+    )
 
     created: list[Clash] = []
 
@@ -1167,7 +1186,10 @@ def _detect_lock_escaping(*, encounter: CombatEncounter, round_number: int) -> l
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import Clash, CombatOpponentAction  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+        Clash,
+        CombatOpponentAction,
+    )
 
     created: list[Clash] = []
 
@@ -1219,7 +1241,10 @@ def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import Clash, CombatOpponentAction  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+        Clash,
+        CombatOpponentAction,
+    )
 
     created: list[Clash] = []
 
@@ -1284,13 +1309,17 @@ def _detect_break(*, encounter: CombatEncounter, round_number: int) -> list[Clas
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import Clash, CombatOpponent  # noqa: PLC0415
+    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+        Clash,
+        CombatOpponent,
+    )
 
     created: list[Clash] = []
 
     opponents = CombatOpponent.objects.filter(
         encounter=encounter,
         barrier_strength__isnull=False,
+        barrier_break_pool__isnull=False,
     ).select_related("barrier_break_pool")
 
     for opponent in opponents:

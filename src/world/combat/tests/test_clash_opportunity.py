@@ -32,10 +32,6 @@ from world.magic.factories import TechniqueFactory
 class DetectClashOpportunitiesTests(TestCase):
     """Test suite for detect_clash_opportunities — one test per flavor."""
 
-    def _make_encounter(self):
-        """Shared encounter for all tests."""
-        return CombatEncounterFactory()
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -101,7 +97,8 @@ class DetectClashOpportunitiesTests(TestCase):
         self.assertEqual(clash.status, ClashStatus.ACTIVE)
         self.assertEqual(clash.npc_opponent, opponent)
         self.assertEqual(clash.resolution_consequence_pool, pool)
-        self.assertIsNotNone(clash.npc_win_threshold)
+        self.assertEqual(clash.pc_win_threshold, 10)
+        self.assertEqual(clash.npc_win_threshold, 10)
         self.assertEqual(clash.started_round, 1)
 
     def test_lock_sustaining_from_lock_applying_pc_technique(self):
