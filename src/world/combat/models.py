@@ -1042,6 +1042,14 @@ class ClashConfig(SharedMemoryModel):
         default=12,
         help_text="Round cap after which a CLASH auto-resolves as MUTUAL.",
     )
+    decisive_overshoot = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Minimum overshoot past a threshold for a resolution to be DECISIVE (vs MARGINAL). "
+            "E.g. with default 3, crossing pc_win_threshold by 0-2 progress is MARGINAL; "
+            "by 3+ is DECISIVE."
+        ),
+    )
 
     # Progress-delta table — can be negative.
     delta_critical_success = models.IntegerField(default=3)

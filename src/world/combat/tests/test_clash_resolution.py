@@ -1,12 +1,18 @@
-"""Tests for npc_round_contribution, affinity_tilt, and aggregate_clash_round."""
+"""Tests for npc_round_contribution, affinity_tilt, aggregate_clash_round, and
+check_clash_threshold."""
 
 from decimal import Decimal
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.clash import affinity_tilt, aggregate_clash_round, npc_round_contribution
-from world.combat.constants import ClashActionSlot, ClashFlavor, LockPcRole
+from world.combat.clash import (
+    affinity_tilt,
+    aggregate_clash_round,
+    check_clash_threshold,
+    npc_round_contribution,
+)
+from world.combat.constants import ClashActionSlot, ClashFlavor, ClashResolution, LockPcRole
 from world.combat.factories import (
     BreakClashFactory,
     ClashConfigFactory,
@@ -418,3 +424,239 @@ class AggregateClashRoundTests(TestCase):
         db_count = ClashContribution.objects.filter(clash_round=result.clash_round).count()
         self.assertEqual(db_count, 0)
         self.assertEqual(len(result.contributions), 0)
+
+
+class CheckClashThresholdTests(TestCase):
+    """Unit tests for check_clash_threshold — one test per flavor and per branch.
+
+    Each test uses the clash factories with explicit progress/threshold overrides
+    and a ClashConfigFactory with explicit decisive_overshoot where needed.
+    """
+
+    # -------------------------------------------------------------------------
+    # CLASH flavor (8 tests)
+    # -------------------------------------------------------------------------
+
+    def test_clash_pc_decisive(self) -> None:
+        """CLASH: progress=12, pc_win_threshold=10, decisive_overshoot=2 → PC_DECISIVE.
+
+        Overshoot = 12 - 10 = 2. 2 >= 2 → DECISIVE.
+        """
+        config = ClashConfigFactory(decisive_overshoot=2, max_round_cap=12)
+        clash = ClashFactory(progress=12, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    def test_clash_pc_marginal(self) -> None:
+        """CLASH: progress=10, pc_win_threshold=10, decisive_overshoot=3 → PC_MARGINAL.
+
+        Overshoot = 10 - 10 = 0. 0 < 3 → MARGINAL.
+        """
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = ClashFactory(progress=10, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_MARGINAL)
+
+    def test_clash_npc_decisive(self) -> None:
+        """CLASH: progress=-12, npc_win_threshold=10, decisive_overshoot=2 → NPC_DECISIVE.
+
+        NPC threshold boundary = -10. Overshoot = -10 - (-12) = 2. 2 >= 2 → DECISIVE.
+        """
+        config = ClashConfigFactory(decisive_overshoot=2, max_round_cap=12)
+        clash = ClashFactory(progress=-12, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_DECISIVE)
+
+    def test_clash_npc_marginal(self) -> None:
+        """CLASH: progress=-10, npc_win_threshold=10, decisive_overshoot=3 → NPC_MARGINAL.
+
+        NPC threshold boundary = -10. Overshoot = -10 - (-10) = 0. 0 < 3 → MARGINAL.
+        """
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = ClashFactory(progress=-10, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_MARGINAL)
+
+    def test_clash_mutual_on_round_cap(self) -> None:
+        """CLASH: progress=0, round_number > max_round_cap → MUTUAL."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = ClashFactory(progress=0, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=13, config=config)
+        self.assertEqual(result, ClashResolution.MUTUAL)
+
+    def test_clash_ongoing(self) -> None:
+        """CLASH: progress within thresholds, round below cap → None (ongoing)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = ClashFactory(progress=5, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=6, config=config)
+        self.assertIsNone(result)
+
+    def test_clash_mutual_exactly_on_cap_is_ongoing(self) -> None:
+        """CLASH: round_number == max_round_cap (not yet exceeded) → None (ongoing)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = ClashFactory(progress=0, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=12, config=config)
+        self.assertIsNone(result)
+
+    def test_clash_decisive_overshoot_zero_is_always_decisive(self) -> None:
+        """CLASH: decisive_overshoot=0 means every crossing is DECISIVE (corner case)."""
+        config = ClashConfigFactory(decisive_overshoot=0, max_round_cap=12)
+        clash = ClashFactory(progress=10, pc_win_threshold=10, npc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    # -------------------------------------------------------------------------
+    # LOCK flavor (6 tests)
+    # -------------------------------------------------------------------------
+
+    def test_lock_sustaining_pc_decisive(self) -> None:
+        """LOCK/SUSTAINING: progress >= threshold + decisive_overshoot → PC_DECISIVE."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=13, threshold=10 → overshoot=3 >= 3 → DECISIVE
+        clash = LockClashFactory(
+            lock_pc_role=LockPcRole.SUSTAINING, progress=13, pc_win_threshold=10
+        )
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    def test_lock_sustaining_pc_marginal(self) -> None:
+        """LOCK/SUSTAINING: progress == threshold → PC_MARGINAL (overshoot=0 < decisive)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = LockClashFactory(
+            lock_pc_role=LockPcRole.SUSTAINING, progress=10, pc_win_threshold=10
+        )
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_MARGINAL)
+
+    def test_lock_sustaining_npc_wins_decisive(self) -> None:
+        """LOCK/SUSTAINING: progress <= 0 with overshoot >= decisive_overshoot → NPC_DECISIVE."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=-3 → overshoot = -(-3) = 3 >= 3 → NPC_DECISIVE
+        clash = LockClashFactory(
+            lock_pc_role=LockPcRole.SUSTAINING, progress=-3, pc_win_threshold=10
+        )
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_DECISIVE)
+
+    def test_lock_sustaining_npc_wins_marginal(self) -> None:
+        """LOCK/SUSTAINING: progress == 0 → NPC_MARGINAL (overshoot=0 < decisive)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = LockClashFactory(
+            lock_pc_role=LockPcRole.SUSTAINING, progress=0, pc_win_threshold=10
+        )
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_MARGINAL)
+
+    def test_lock_escaping_pc_decisive(self) -> None:
+        """LOCK/ESCAPING: progress <= -decisive_overshoot → PC_DECISIVE (escaped decisively)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=-3 → overshoot = -(-3) = 3 >= 3 → PC_DECISIVE
+        clash = LockClashFactory(lock_pc_role=LockPcRole.ESCAPING, progress=-3, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    def test_lock_escaping_pc_marginal(self) -> None:
+        """LOCK/ESCAPING: progress == 0 → PC_MARGINAL (barely escaped)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = LockClashFactory(lock_pc_role=LockPcRole.ESCAPING, progress=0, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_MARGINAL)
+
+    def test_lock_escaping_npc_wins_decisive(self) -> None:
+        """LOCK/ESCAPING: progress >= threshold + decisive_overshoot → NPC_DECISIVE."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=13, threshold=10 → overshoot=3 >= 3 → NPC_DECISIVE
+        clash = LockClashFactory(lock_pc_role=LockPcRole.ESCAPING, progress=13, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_DECISIVE)
+
+    def test_lock_escaping_npc_wins_marginal(self) -> None:
+        """LOCK/ESCAPING: progress == threshold → NPC_MARGINAL (lock hardened marginally)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = LockClashFactory(lock_pc_role=LockPcRole.ESCAPING, progress=10, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.NPC_MARGINAL)
+
+    def test_lock_ongoing(self) -> None:
+        """LOCK (either role): progress within bounds → None (ongoing)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=5, threshold=10: not at 0 or threshold yet
+        clash = LockClashFactory(
+            lock_pc_role=LockPcRole.SUSTAINING, progress=5, pc_win_threshold=10
+        )
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertIsNone(result)
+
+    # -------------------------------------------------------------------------
+    # WARD flavor (5 tests)
+    # -------------------------------------------------------------------------
+
+    def test_ward_collapsed_early(self) -> None:
+        """WARD: progress <= 0 before ward_ends_on_round → NPC_DECISIVE (ward collapsed)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # ward_ends_on_round=5, round_number=3 < 5, progress=0 → collapsed early
+        clash = WardClashFactory(progress=0, pc_win_threshold=10, ward_ends_on_round=5)
+        result = check_clash_threshold(clash=clash, round_number=3, config=config)
+        self.assertEqual(result, ClashResolution.NPC_DECISIVE)
+
+    def test_ward_endured_cleanly(self) -> None:
+        """WARD: progress >= pc_win_threshold at fire time → PC_DECISIVE (endured cleanly)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # ward_ends_on_round=5, round_number=6 > 5, progress=10 >= threshold=10
+        clash = WardClashFactory(progress=10, pc_win_threshold=10, ward_ends_on_round=5)
+        result = check_clash_threshold(clash=clash, round_number=6, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    def test_ward_barely_held(self) -> None:
+        """WARD: progress between half-threshold and threshold at fire time → PC_MARGINAL.
+
+        pc_win_threshold=10, half=5. progress=6 is >= 5 and < 10 → PC_MARGINAL.
+        """
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = WardClashFactory(progress=6, pc_win_threshold=10, ward_ends_on_round=5)
+        result = check_clash_threshold(clash=clash, round_number=6, config=config)
+        self.assertEqual(result, ClashResolution.PC_MARGINAL)
+
+    def test_ward_partial_collapse(self) -> None:
+        """WARD: progress between 0 and half-threshold at fire time → NPC_MARGINAL.
+
+        pc_win_threshold=10, half=5. progress=4 is < 5 (and > 0) → NPC_MARGINAL.
+        """
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = WardClashFactory(progress=4, pc_win_threshold=10, ward_ends_on_round=5)
+        result = check_clash_threshold(clash=clash, round_number=6, config=config)
+        self.assertEqual(result, ClashResolution.NPC_MARGINAL)
+
+    def test_ward_ongoing(self) -> None:
+        """WARD: round_number <= ward_ends_on_round, progress > 0 → None (still enduring)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # round_number=5 is not > 5, progress=7 > 0 → ongoing
+        clash = WardClashFactory(progress=7, pc_win_threshold=10, ward_ends_on_round=5)
+        result = check_clash_threshold(clash=clash, round_number=5, config=config)
+        self.assertIsNone(result)
+
+    # -------------------------------------------------------------------------
+    # BREAK flavor (3 tests)
+    # -------------------------------------------------------------------------
+
+    def test_break_decisive(self) -> None:
+        """BREAK: progress >= threshold + decisive_overshoot → PC_DECISIVE."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        # progress=13, threshold=10 → overshoot=3 >= 3 → DECISIVE
+        clash = BreakClashFactory(progress=13, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_DECISIVE)
+
+    def test_break_marginal(self) -> None:
+        """BREAK: progress == threshold → PC_MARGINAL (overshoot=0 < decisive_overshoot)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = BreakClashFactory(progress=10, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertEqual(result, ClashResolution.PC_MARGINAL)
+
+    def test_break_ongoing(self) -> None:
+        """BREAK: progress below threshold → None (ongoing)."""
+        config = ClashConfigFactory(decisive_overshoot=3, max_round_cap=12)
+        clash = BreakClashFactory(progress=7, pc_win_threshold=10)
+        result = check_clash_threshold(clash=clash, round_number=1, config=config)
+        self.assertIsNone(result)

@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.combat.constants import ClashFlavor, LockPcRole
+from world.combat.constants import ClashFlavor, ClashResolution, LockPcRole
 from world.combat.models import ClashConfig, ClashContribution, ClashRound, StrainConfig
 from world.combat.types import ClashContributionResult, ClashRoundResult
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
@@ -463,3 +463,175 @@ def aggregate_clash_round(
         npc_delta=npc_delta,
         progress_after=progress_after,
     )
+
+
+def check_clash_threshold(
+    *, clash: Clash, round_number: int, config: ClashConfig
+) -> ClashResolution | None:
+    """Inspect a clash's current state and return a ``ClashResolution`` if a
+    threshold or window has been crossed; else ``None`` (the clash is ongoing).
+
+    Pure read — no DB writes; no mutation of inputs.
+
+    Per-flavor logic:
+
+    **CLASH** (0-centered meter, ``pc_win_threshold`` and ``npc_win_threshold``
+    both populated, both positive):
+    - ``progress >= pc_win_threshold`` → PC win. Overshoot =
+      ``progress - pc_win_threshold``. ``PC_DECISIVE`` if
+      ``overshoot >= config.decisive_overshoot``, else ``PC_MARGINAL``.
+    - ``progress <= -npc_win_threshold`` → NPC win. Overshoot =
+      ``-npc_win_threshold - progress``. ``NPC_DECISIVE`` if
+      ``overshoot >= config.decisive_overshoot``, else ``NPC_MARGINAL``.
+    - ``round_number > config.max_round_cap`` → ``MUTUAL``.
+    - Otherwise → ``None`` (ongoing).
+
+    **LOCK** (meter 0 to ``pc_win_threshold``):
+    - SUSTAINING (PC holds): ``progress >= pc_win_threshold`` → PC wins;
+      ``progress <= 0`` → NPC wins. Overshoot from the crossed boundary
+      decides decisive/marginal.
+    - ESCAPING (PC escapes): ``progress <= 0`` → PC wins (escaped);
+      ``progress >= pc_win_threshold`` → NPC wins (lock hardened). Overshoot
+      from the crossed boundary decides decisive/marginal.
+    - Otherwise → ``None`` (ongoing).
+
+    **WARD** (meter is ward integrity; PCs strengthen, NPC drains):
+    - ``progress <= 0`` → ward collapsed early → ``NPC_DECISIVE``.
+    - ``round_number > clash.ward_ends_on_round`` → barrage expired; band by
+      final ``progress`` value relative to ``pc_win_threshold``:
+        - ``progress >= pc_win_threshold`` → ``PC_DECISIVE`` (endured cleanly).
+        - ``progress >= pc_win_threshold // 2`` → ``PC_MARGINAL``
+          (barely held; closer to intact than collapsed).
+        - Otherwise → ``NPC_MARGINAL`` (partial collapse; closer to 0 than intact).
+      Half-threshold uses integer division (``pc_win_threshold // 2``);
+      when ``pc_win_threshold`` is odd, the midpoint rounds down, meaning
+      exactly half goes to ``NPC_MARGINAL``.
+    - Otherwise → ``None`` (still enduring).
+
+    **BREAK** (one-way PC accumulation toward ``pc_win_threshold``; NPC never
+    wins via meter — ``ABANDONED`` is detected by the Phase 5 idle-rounds
+    rule, not here):
+    - ``progress >= pc_win_threshold`` → PC win. Overshoot =
+      ``progress - pc_win_threshold``. ``PC_DECISIVE`` if
+      ``overshoot >= config.decisive_overshoot``, else ``PC_MARGINAL``.
+    - Otherwise → ``None`` (ongoing).
+    """
+    if clash.flavor == ClashFlavor.CLASH:
+        return _check_clash_flavor(clash=clash, round_number=round_number, config=config)
+    if clash.flavor == ClashFlavor.LOCK:
+        return _check_lock_flavor(clash=clash, config=config)
+    if clash.flavor == ClashFlavor.WARD:
+        return _check_ward_flavor(clash=clash, round_number=round_number)
+    # BREAK
+    return _check_break_flavor(clash=clash, config=config)
+
+
+def _tier_from_overshoot(
+    overshoot: int,
+    decisive_tier: ClashResolution,
+    marginal_tier: ClashResolution,
+    config: ClashConfig,
+) -> ClashResolution:
+    """Return decisive_tier if overshoot meets the config threshold, else marginal_tier."""
+    if overshoot >= config.decisive_overshoot:
+        return decisive_tier
+    return marginal_tier
+
+
+def _check_clash_flavor(
+    *, clash: Clash, round_number: int, config: ClashConfig
+) -> ClashResolution | None:
+    """Threshold detection for CLASH-flavor clashes.
+
+    npc_win_threshold is non-null for CLASH flavor — enforced by Clash.clean()
+    and the DB CheckConstraint. The explicit guard converts it to a plain int
+    for arithmetic without triggering S101 (assert).
+    """
+    npc_threshold = clash.npc_win_threshold
+    if npc_threshold is None:
+        # Defensive guard: should never happen for a CLASH-flavor row.
+        return None  # pragma: no cover
+    if clash.progress >= clash.pc_win_threshold:
+        overshoot = clash.progress - clash.pc_win_threshold
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL, config
+        )
+    if clash.progress <= -npc_threshold:
+        overshoot = -npc_threshold - clash.progress
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.NPC_DECISIVE, ClashResolution.NPC_MARGINAL, config
+        )
+    if round_number > config.max_round_cap:
+        return ClashResolution.MUTUAL
+    return None
+
+
+def _check_lock_sustaining(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
+    """LOCK/SUSTAINING sub-branch: PC holds the lock; winning = sustaining to threshold."""
+    if clash.progress >= clash.pc_win_threshold:
+        overshoot = clash.progress - clash.pc_win_threshold
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL, config
+        )
+    if clash.progress <= 0:
+        overshoot = -clash.progress  # how far past 0
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.NPC_DECISIVE, ClashResolution.NPC_MARGINAL, config
+        )
+    return None
+
+
+def _check_lock_escaping(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
+    """LOCK/ESCAPING sub-branch: PC escapes; winning = progress reaching/crossing 0."""
+    if clash.progress <= 0:
+        overshoot = -clash.progress
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL, config
+        )
+    if clash.progress >= clash.pc_win_threshold:
+        overshoot = clash.progress - clash.pc_win_threshold
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.NPC_DECISIVE, ClashResolution.NPC_MARGINAL, config
+        )
+    return None
+
+
+def _check_lock_flavor(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
+    """Threshold detection for LOCK-flavor clashes."""
+    if clash.lock_pc_role == LockPcRole.SUSTAINING:
+        return _check_lock_sustaining(clash=clash, config=config)
+    # LockPcRole.ESCAPING
+    return _check_lock_escaping(clash=clash, config=config)
+
+
+def _check_ward_flavor(*, clash: Clash, round_number: int) -> ClashResolution | None:
+    """Threshold detection for WARD-flavor clashes.
+
+    ward_ends_on_round is non-null for WARD flavor — enforced by Clash.clean()
+    and the DB CheckConstraint. The explicit guard converts it to a plain int.
+    """
+    ward_ends_on_round = clash.ward_ends_on_round
+    if ward_ends_on_round is None:
+        return None  # pragma: no cover
+    if clash.progress <= 0:
+        # Ward collapsed early — barrage poured through.
+        return ClashResolution.NPC_DECISIVE
+    if round_number > ward_ends_on_round:
+        # Attack's duration expired — band by final progress relative to pc_win_threshold.
+        half_threshold = clash.pc_win_threshold // 2
+        if clash.progress >= clash.pc_win_threshold:
+            return ClashResolution.PC_DECISIVE
+        if clash.progress >= half_threshold:
+            return ClashResolution.PC_MARGINAL
+        return ClashResolution.NPC_MARGINAL
+    return None
+
+
+def _check_break_flavor(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
+    """Threshold detection for BREAK-flavor clashes."""
+    if clash.progress >= clash.pc_win_threshold:
+        overshoot = clash.progress - clash.pc_win_threshold
+        return _tier_from_overshoot(
+            overshoot, ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL, config
+        )
+    return None
