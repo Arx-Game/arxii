@@ -6,7 +6,7 @@ each function is unit-testable in isolation.  Higher-level orchestration
 (views, commands, flow steps) calls into this module rather than implementing
 Clash logic themselves.
 
-Current scope (Tasks 2.1–3.3):
+Current scope (Tasks 2.1–4.1):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
@@ -20,8 +20,10 @@ Current scope (Tasks 2.1–3.3):
   - ``aggregate_clash_round``: aggregates PC contributions and the NPC delta into
     a ``ClashRound`` row, writes per-PC ``ClashContribution`` audit rows, and
     updates ``clash.progress`` per the flavor's sign convention.
+  - ``fire_clash_per_round``: fires the per-round consequence pool, keyed on the
+    current meter band. No-op when ``clash.per_round_consequence_pool`` is null.
 
-Future tasks will add the full round driver, threshold detection, and outcome helpers.
+Future tasks will add the full round driver, resolution-pool firing, and outcome helpers.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import Consequence
     from world.combat.models import Clash
     from world.magic.models import Affinity, Technique
 
@@ -635,3 +638,141 @@ def _check_break_flavor(*, clash: Clash, config: ClashConfig) -> ClashResolution
             overshoot, ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL, config
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Task 4.1 — per-round consequence pool firing
+# ---------------------------------------------------------------------------
+
+
+def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
+    """Map the clash's current progress to a CheckOutcome by meter band.
+
+    Band mapping (ratio = progress / pc_win_threshold):
+      ratio >= 1.0  → success_level 3  (critical success — at/past target)
+      ratio >= 0.5  → success_level 2  (great success — well ahead)
+      ratio >= 0.0  → success_level 1  (success — ahead or even)
+      ratio >= -0.5 → success_level -1 (failure — behind)
+      else          → success_level -2 (botch — far behind)
+
+    ``pc_win_threshold`` is always populated and positive for all clash flavors
+    that carry a per-round pool. The ratio is a signed float so it works for
+    both CLASH's signed meter (progress can be negative) and 0-to-N meters
+    (WARD, LOCK, BREAK).
+
+    Falls back to the closest available ``success_level`` row when an exact
+    match is absent — different deployments may not seed every level.
+
+    Pure read — no DB writes, no mutation of inputs.
+
+    Private helper — call only from ``fire_clash_per_round``.
+    """
+    ratio: float = clash.progress / clash.pc_win_threshold
+
+    if ratio >= 1.0:
+        target_level = 3
+    elif ratio >= 0.5:  # noqa: PLR2004 — meter-band breakpoints are design constants
+        target_level = 2
+    elif ratio >= 0.0:
+        target_level = 1
+    elif ratio >= -0.5:  # noqa: PLR2004 — meter-band breakpoints are design constants
+        target_level = -1
+    else:
+        target_level = -2
+
+    # Exact lookup first; fall back to nearest lower level for robustness.
+    outcome = (
+        CheckOutcome.objects.filter(success_level__lte=target_level)
+        .order_by("-success_level")
+        .first()
+    )
+
+    if outcome is None:
+        # No row at or below target — take the minimum available.
+        outcome = CheckOutcome.objects.order_by("success_level").first()
+
+    if outcome is None:
+        msg = (
+            "No CheckOutcome rows exist in the database. "
+            f"Cannot map meter band for clash pk={clash.pk}."
+        )
+        raise ValueError(msg)
+
+    return outcome
+
+
+def fire_clash_per_round(
+    *,
+    clash: Clash,
+    clash_round: ClashRound,  # noqa: ARG001 — reserved for Phase 5 audit hooks; part of v1 contract
+) -> Consequence | None:
+    """Fire the per-round consequence pool, keyed on the current meter band.
+
+    No-op (returns None) when ``clash.per_round_consequence_pool`` is null.
+    Otherwise: maps the clash's ``progress`` to a ``CheckOutcome`` band, picks a
+    matching consequence from the pool (weighted), applies its effects, and
+    returns the chosen Consequence.
+
+    Effect context targets the NPC opponent's ObjectDB as both ``character`` and
+    ``target`` — per-round pool effects are NPC-side (damage absorption for WARD,
+    narrative stress for CLASH). If the opponent has no ObjectDB (non-ephemeral
+    opponents without an attached world object), effects are still fired but
+    ``ResolutionContext.character`` falls back to a fallback-safe no-op path
+    inside each handler.
+
+    The only side effects are those produced by ``apply_all_effects`` — this
+    function itself writes nothing to the database.
+
+    Args:
+        clash: The active Clash instance whose per-round pool to fire.
+        clash_round: The ClashRound that was just written (carried for future
+            audit/logging hooks; not read by v1 implementation).
+
+    Returns:
+        The selected Consequence, or None when there is no pool or no matching
+        tier entry.
+    """
+    from world.checks.models import Consequence as ConsequenceModel  # noqa: PLC0415
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+
+    pool = clash.per_round_consequence_pool
+    if pool is None:
+        return None
+
+    # 1. Map the meter to a CheckOutcome band.
+    outcome = _meter_band_to_check_outcome(clash=clash)
+
+    # 2. Filter the pool's consequences to those matching the outcome tier.
+    #    cached_consequences is a @cached_property returning list[WeightedConsequence].
+    all_consequences = pool.cached_consequences
+    tier_entries = [wc for wc in all_consequences if wc.outcome_tier == outcome]
+
+    if not tier_entries:
+        return None
+
+    # 3. Weighted selection — select_weighted works on any object with a .weight attr.
+    selected_wc = select_weighted(tier_entries)
+
+    # WeightedConsequence wraps the real Consequence model instance.
+    selected: ConsequenceModel = selected_wc.consequence
+
+    # 4. Build a minimal ResolutionContext using the NPC as actor/target.
+    #    npc_opponent.objectdb may be None for opponents created without an ObjectDB
+    #    (e.g. in tests). Handlers that need a real ObjectDB guard internally.
+    npc_objectdb = clash.npc_opponent.objectdb
+
+    if npc_objectdb is None:
+        # No ObjectDB to target — skip effect application.
+        return selected
+
+    context = ResolutionContext(
+        character=npc_objectdb,
+        target=npc_objectdb,
+    )
+
+    # 5. Apply all effects on the selected consequence.
+    apply_all_effects(selected, context)
+
+    return selected
