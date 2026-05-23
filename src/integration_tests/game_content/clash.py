@@ -252,6 +252,35 @@ class ClashContent:
             defaults={"execution_order": 0},
         )
 
+        # Also wire PC_MARGINAL (success_level=2) → boss_held, so that a marginal
+        # LOCK win also opens the combo window.  With default ClashConfig deltas
+        # (delta_critical_success=3, decisive_overshoot=3, threshold=10) the
+        # first threshold crossing produces PC_MARGINAL, not PC_DECISIVE.  Both
+        # tiers should apply the boss_held condition so integration tests pass
+        # regardless of the exact resolution tier.
+        marginal_outcome = check_outcomes[2]  # success_level=2 → PC_MARGINAL
+        lock_marginal_consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=marginal_outcome,
+            label="Lock Resolution: PC Marginal — Apply Boss Held (Clash Test)",
+            defaults={
+                "mechanical_description": (
+                    "Marginal lock win: boss is partially held, opening a combo window."
+                ),
+                "weight": 1,
+                "character_loss": False,
+            },
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=lock_resolution_pool,
+            consequence=lock_marginal_consequence,
+        )
+        ConsequenceEffect.objects.get_or_create(
+            consequence=lock_marginal_consequence,
+            effect_type=CheckEffectType.APPLY_CONDITION,
+            condition_template=boss_held_condition,
+            defaults={"execution_order": 0},
+        )
+
         # Add a minimal entry to each remaining pool so they're non-empty and
         # usable in tests without requiring additional wiring.
         _add_minimal_pool_entry(

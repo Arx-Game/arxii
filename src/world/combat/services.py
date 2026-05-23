@@ -1414,8 +1414,8 @@ def _prefetch_clash_state(
     """Prefetch clash-state data needed for combo prerequisite checks.
 
     Executes exactly two queries regardless of the number of combos or
-    opponents: one for active clash flavors, one for window-condition template
-    IDs on opponent ObjectDBs.
+    opponents: one for clash flavors (ACTIVE or RESOLVED), one for
+    window-condition template IDs on opponent ObjectDBs.
 
     Args:
         encounter: The combat encounter.
@@ -1423,17 +1423,28 @@ def _prefetch_clash_state(
 
     Returns:
         A 2-tuple of:
-        - ``active_clash_flavors``: set of flavor strings for ACTIVE clashes.
+        - ``active_clash_flavors``: set of flavor strings for ACTIVE **or
+          RESOLVED** clashes in this encounter.  A resolved clash still
+          enables combos that require its flavor — e.g. a LOCK clash that
+          resolved with a decisive PC win leaves boss_held on the NPC, and
+          the clash_window_combo (required_clash_flavor=LOCK) should still
+          be available.  The window-condition field on the combo is the
+          precise gate; this field is a coarse "has this encounter seen
+          this clash type" check.
         - ``active_window_condition_template_ids``: set of ``ConditionTemplate``
           PKs that are active on at least one opponent ObjectDB.
     """
     from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
+    # Include both ACTIVE and RESOLVED clashes: the window combo is available
+    # even after the LOCK resolves, as long as the boss_held window condition
+    # is still active on the NPC.
     active_clash_flavors: set[str] = set(
-        Clash.objects.filter(encounter=encounter, status=ClashStatus.ACTIVE).values_list(
-            "flavor", flat=True
-        )
+        Clash.objects.filter(
+            encounter=encounter,
+            status__in=(ClashStatus.ACTIVE, ClashStatus.RESOLVED),
+        ).values_list("flavor", flat=True)
     )
 
     opponent_objectdb_ids = {opp.objectdb_id for opp in active_opponents if opp.objectdb_id}

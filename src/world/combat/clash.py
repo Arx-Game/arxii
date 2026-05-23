@@ -586,7 +586,12 @@ def _check_clash_flavor(
 
 
 def _check_lock_sustaining(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
-    """LOCK/SUSTAINING sub-branch: PC holds the lock; winning = sustaining to threshold."""
+    """LOCK/SUSTAINING sub-branch: PC holds the lock; winning = sustaining to threshold.
+
+    PC wins when progress reaches or exceeds ``pc_win_threshold``.
+    NPC wins when progress drops to 0 or below (lock broken / released).
+    Overshoot from the crossed boundary decides decisive vs marginal.
+    """
     if clash.progress >= clash.pc_win_threshold:
         overshoot = clash.progress - clash.pc_win_threshold
         return _tier_from_overshoot(
@@ -601,7 +606,12 @@ def _check_lock_sustaining(*, clash: Clash, config: ClashConfig) -> ClashResolut
 
 
 def _check_lock_escaping(*, clash: Clash, config: ClashConfig) -> ClashResolution | None:
-    """LOCK/ESCAPING sub-branch: PC escapes; winning = progress reaching/crossing 0."""
+    """LOCK/ESCAPING sub-branch: PC escapes; winning = progress dropping to 0 or below.
+
+    PC wins when progress drops to or below 0 (escaped).
+    NPC wins when progress reaches ``pc_win_threshold`` (lock fully hardened).
+    Overshoot from the crossed boundary decides decisive vs marginal.
+    """
     if clash.progress <= 0:
         overshoot = -clash.progress
         return _tier_from_overshoot(
@@ -1489,20 +1499,35 @@ def run_clash_round(
     # -------------------------------------------------------------------------
     resolution: ClashResolution | None = None
 
-    # BREAK-specific abandonment: the normal threshold check does not detect
-    # ABANDONED (NPC never wins via the meter in BREAK clashes).  Detect it here
-    # by counting consecutive trailing idle (zero-PC-delta) rounds.
-    if clash.flavor == ClashFlavor.BREAK and len(pc_contributions) == 0:
-        idle_count = _consecutive_idle_rounds(clash)
-        if idle_count >= config_clash.break_abandon_idle_rounds:
-            resolution = ClashResolution.ABANDONED
+    # Skip the threshold check on the clash's creation round when PCs had no
+    # chance to declare contributions yet.
+    #
+    # When a clash is born mid-round (detect_clash_opportunities creates it and
+    # run_clash_round fires for it in the same post-pass), PCs have not had a
+    # chance to declare a ClashContributionDeclaration — the clash was formed in
+    # response to their *round action*, not from a pre-declared contribution.
+    # Checking the threshold on the creation round with pc_contributions=[] would
+    # resolve a LOCK/SUSTAINING or LOCK/ESCAPING clash immediately because progress
+    # starts at 0 and the ``<= 0`` boundary fires even when neither side has had a
+    # fair contest.  We only skip when contributions are empty; unit tests that
+    # pre-load progress and pass contributions still run the threshold normally.
+    is_uncontested_creation_round = round_number == clash.started_round and not pc_contributions
 
-    # If not already determined by the BREAK abandonment path, run the standard
-    # threshold check.
-    if resolution is None:
-        resolution = check_clash_threshold(
-            clash=clash, round_number=round_number, config=config_clash
-        )
+    if not is_uncontested_creation_round:
+        # BREAK-specific abandonment: the normal threshold check does not detect
+        # ABANDONED (NPC never wins via the meter in BREAK clashes).  Detect it
+        # here by counting consecutive trailing idle (zero-PC-delta) rounds.
+        if clash.flavor == ClashFlavor.BREAK and len(pc_contributions) == 0:
+            idle_count = _consecutive_idle_rounds(clash)
+            if idle_count >= config_clash.break_abandon_idle_rounds:
+                resolution = ClashResolution.ABANDONED
+
+        # If not already determined by the BREAK abandonment path, run the
+        # standard threshold check.
+        if resolution is None:
+            resolution = check_clash_threshold(
+                clash=clash, round_number=round_number, config=config_clash
+            )
 
     # If a resolution was determined, fire resolve_clash.
     if resolution is not None:
