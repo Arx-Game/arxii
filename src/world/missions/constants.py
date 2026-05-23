@@ -101,6 +101,20 @@ class MissionStatus(models.TextChoices):
     EXPIRED = "expired", "Expired"
 
 
+class GiverKind(models.TextChoices):
+    """How a :class:`~world.missions.models.MissionGiver` reaches the player.
+
+    NPC — abstract giver NPC the player talks to (carries ``npc`` FK);
+    ENVIRONMENTAL_DETAIL — examinable item or detail in a room (carries
+    ``environmental_detail`` FK); ROOM_TRIGGER — entering ``location`` rolls
+    the offer (no extra typed FK; ``location`` itself is the trigger).
+    """
+
+    NPC = "npc", "NPC"
+    ENVIRONMENTAL_DETAIL = "environmental_detail", "Environmental Detail"
+    ROOM_TRIGGER = "room_trigger", "Room Trigger"
+
+
 class DeedRewardKind(models.TextChoices):
     """When a :class:`~world.missions.models.MissionDeedRewardLine` pays out.
 

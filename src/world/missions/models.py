@@ -26,6 +26,7 @@ from world.missions.constants import (
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
+    GiverKind,
     JointCombine,
     MissionStatus,
     OptionKind,
@@ -747,18 +748,60 @@ class MissionGiver(SharedMemoryModel):
     It can be physically anchored (``location``) and/or org-anchored
     (``org``); both are optional and ``SET_NULL`` so giver rows survive their
     anchors being deleted. ``templates`` is the M2M draw pool consumed by
-    ``services.availability.offer_missions``; ``is_active`` is the master
-    on/off switch for the giver itself (staff toggle).
+    ``services.availability.offer_missions`` — backed by
+    :class:`MissionGiverOffering` which carries optional per-link odds /
+    requirements overrides. ``is_active`` is the master on/off switch for
+    the giver itself (staff toggle).
+
+    ``giver_kind`` discriminates how the giver reaches the player (NPC /
+    ENVIRONMENTAL_DETAIL / ROOM_TRIGGER) and gates the typed target FKs.
+    Validation is **loose**: clean() enforces consistency (e.g. an
+    environmental_detail FK is forbidden on an NPC-kind giver) but does NOT
+    require completeness — a giver authored without its kind-specific
+    target is a 'draft' that the runtime offering simply doesn't surface.
     """
 
     name = models.CharField(max_length=200)
+    giver_kind = models.CharField(
+        max_length=20,
+        choices=GiverKind.choices,
+        default=GiverKind.ROOM_TRIGGER,
+        help_text="How this giver reaches the player; gates the typed target FK below.",
+    )
     location = models.ForeignKey(
         "objects.ObjectDB",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        help_text="Optional Evennia room/location anchoring this giver.",
+        help_text=(
+            "Optional Evennia room/location anchoring this giver. For "
+            "ROOM_TRIGGER kind, this room IS the trigger (entering it rolls "
+            "the offer)."
+        ),
+    )
+    npc = models.ForeignKey(
+        "objects.ObjectDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "NPC kind: the abstract giver NPC the player talks to (not "
+            "piloted, not a sheet). Must be null for other kinds."
+        ),
+    )
+    environmental_detail = models.ForeignKey(
+        "objects.ObjectDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "ENVIRONMENTAL_DETAIL kind: the examinable thing in the room "
+            "(real item or room detail) that kicks off the offer. Must be "
+            "null for other kinds."
+        ),
     )
     org = models.ForeignKey(
         "societies.Organization",
@@ -770,14 +813,86 @@ class MissionGiver(SharedMemoryModel):
     )
     templates = models.ManyToManyField(
         MissionTemplate,
+        through="MissionGiverOffering",
         blank=True,
         related_name="givers",
-        help_text="Authored template draw pool — see services.availability.offer_missions.",
+        help_text=(
+            "Authored template draw pool — see services.availability.offer_missions. "
+            "Backed by MissionGiverOffering for per-link odds/requirements overrides."
+        ),
     )
     is_active = models.BooleanField(default=True)
 
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.giver_kind != GiverKind.NPC and self.npc_id is not None:
+            errors["npc"] = "Only NPC-kind givers may set npc."
+        if (
+            self.giver_kind != GiverKind.ENVIRONMENTAL_DETAIL
+            and self.environmental_detail_id is not None
+        ):
+            errors["environmental_detail"] = (
+                "Only ENVIRONMENTAL_DETAIL-kind givers may set environmental_detail."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return self.name
+
+
+class MissionGiverOffering(SharedMemoryModel):
+    """Per-(giver, template) link with optional offering-time overrides.
+
+    The default draw weight and availability requirements come from the
+    :class:`MissionTemplate` itself. A per-link override lets the same
+    template be offered with different odds or extra gating by a specific
+    giver — e.g. the guildmaster offers the standard 'rescue' template
+    with extra-favourable odds to VIP members.
+    """
+
+    giver = models.ForeignKey(
+        MissionGiver,
+        on_delete=models.CASCADE,
+        related_name="offerings",
+    )
+    template = models.ForeignKey(
+        MissionTemplate,
+        on_delete=models.CASCADE,
+        related_name="offerings",
+    )
+    weight_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional per-offering draw weight; null = use template.base_weight.",
+    )
+    # SANCTIONED DYNAMIC JSON: same shape as MissionTemplate.availability_rule
+    # — a Phase-0 predicate tree consumed by world.missions.predicates.evaluate.
+    # Empty {} = use the template's own availability_rule only.
+    requirements_override = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional per-offering predicate gate (Phase-0 tree shape). "
+            "Empty {} = use the template's own availability_rule only."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["giver", "template"],
+                name="unique_missiongiveroffering_giver_template",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.giver} → {self.template}"
 
 
 class MissionGiverCooldown(SharedMemoryModel):

@@ -13,6 +13,7 @@ from world.missions.constants import (
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
+    GiverKind,
     MissionStatus,
     OptionKind,
     OptionSource,
@@ -24,6 +25,7 @@ from world.missions.models import (
     MissionDeedRewardLine,
     MissionGiver,
     MissionGiverCooldown,
+    MissionGiverOffering,
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
@@ -187,15 +189,36 @@ class MissionDeedRecordFactory(DjangoModelFactory):
 
 
 class MissionGiverFactory(DjangoModelFactory):
-    """Factory for MissionGiver. Defaults to an active, location-less giver."""
+    """Factory for MissionGiver.
+
+    Defaults to an active, anchorless ROOM_TRIGGER-kind giver (the kind
+    with no required typed FK — both npc and environmental_detail stay
+    null and the giver is a valid, if drafty, row). Tests exercising a
+    specific kind pass ``giver_kind=`` + the matching typed FK.
+    """
 
     class Meta:
         model = MissionGiver
 
     name = factory.Sequence(lambda n: f"Giver {n}")
+    giver_kind = GiverKind.ROOM_TRIGGER
     location = None
+    npc = None
+    environmental_detail = None
     org = None
     is_active = True
+
+
+class MissionGiverOfferingFactory(DjangoModelFactory):
+    """Factory for the MissionGiver↔MissionTemplate through-model."""
+
+    class Meta:
+        model = MissionGiverOffering
+
+    giver = factory.SubFactory(MissionGiverFactory)
+    template = factory.SubFactory(MissionTemplateFactory)
+    weight_override = None
+    requirements_override = factory.LazyFunction(dict)
 
 
 class MissionGiverCooldownFactory(DjangoModelFactory):

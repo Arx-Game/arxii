@@ -10,17 +10,20 @@ consequence is the contract-holder's alone" cooldown).
 
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.missions.constants import GiverKind
 from world.missions.factories import (
     MissionGiverCooldownFactory,
     MissionGiverFactory,
+    MissionGiverOfferingFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionGiver, MissionGiverCooldown
+from world.missions.models import MissionGiver, MissionGiverCooldown, MissionGiverOffering
 from world.societies.factories import OrganizationFactory
 
 
@@ -121,3 +124,117 @@ class MissionGiverCooldownModelTests(TestCase):
         self.assertEqual(MissionGiverCooldown.objects.count(), 0)
         # Giver itself is gone.
         self.assertFalse(MissionGiver.objects.filter(pk=giver.pk).exists())
+
+
+class MissionGiverKindTests(TestCase):
+    """giver_kind discriminator (NPC / ENVIRONMENTAL_DETAIL / ROOM_TRIGGER).
+
+    Validation is intentionally loose: clean() enforces consistency (NPC
+    kind permits an npc FK and forbids environmental_detail; ENVIRONMENTAL_
+    DETAIL the reverse; ROOM_TRIGGER forbids both typed FKs) but does NOT
+    require completeness. A giver authored without its kind-specific FK is
+    a 'draft' that runtime offering simply doesn't surface.
+    """
+
+    def test_default_kind_is_room_trigger(self) -> None:
+        # Bare MissionGiverFactory() keeps existing callsites valid:
+        # ROOM_TRIGGER + everything else null is a valid (drafty) shape.
+        giver = MissionGiverFactory()
+        self.assertEqual(giver.giver_kind, GiverKind.ROOM_TRIGGER)
+        self.assertIsNone(giver.npc)
+        self.assertIsNone(giver.environmental_detail)
+
+    def test_npc_kind_with_npc_round_trips(self) -> None:
+        npc = ObjectDBFactory()
+        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, npc=npc)
+        self.assertEqual(giver.giver_kind, GiverKind.NPC)
+        self.assertEqual(giver.npc, npc)
+
+    def test_environmental_detail_kind_with_detail_round_trips(self) -> None:
+        detail = ObjectDBFactory()
+        giver = MissionGiverFactory(
+            giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
+            environmental_detail=detail,
+        )
+        self.assertEqual(giver.giver_kind, GiverKind.ENVIRONMENTAL_DETAIL)
+        self.assertEqual(giver.environmental_detail, detail)
+
+    def test_room_trigger_with_location_round_trips(self) -> None:
+        room = _make_room()
+        giver = MissionGiverFactory(giver_kind=GiverKind.ROOM_TRIGGER, location=room)
+        self.assertEqual(giver.giver_kind, GiverKind.ROOM_TRIGGER)
+        self.assertEqual(giver.location, room)
+
+    def test_npc_fk_forbidden_when_kind_is_not_npc(self) -> None:
+        npc = ObjectDBFactory()
+        giver = MissionGiverFactory.build(
+            giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
+            npc=npc,
+        )
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
+    def test_environmental_detail_fk_forbidden_when_kind_is_not_detail(self) -> None:
+        detail = ObjectDBFactory()
+        giver = MissionGiverFactory.build(
+            giver_kind=GiverKind.NPC,
+            environmental_detail=detail,
+        )
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
+    def test_room_trigger_kind_forbids_npc_and_detail(self) -> None:
+        npc = ObjectDBFactory()
+        giver = MissionGiverFactory.build(giver_kind=GiverKind.ROOM_TRIGGER, npc=npc)
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
+    def test_save_enforces_kind_invariants(self) -> None:
+        # clean() runs on the real factory/create write path (regression I1).
+        detail = ObjectDBFactory()
+        with self.assertRaises(ValidationError):
+            MissionGiverFactory(
+                giver_kind=GiverKind.NPC,
+                environmental_detail=detail,
+            )
+
+
+class MissionGiverOfferingTests(TestCase):
+    """Through-model: per-(giver, template) optional odds/requirements overrides."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.giver = MissionGiverFactory(name="offering-giver")
+        cls.template = MissionTemplateFactory(slug="offering-tmpl")
+
+    def test_offering_round_trips_with_overrides(self) -> None:
+        offering = MissionGiverOfferingFactory(
+            giver=self.giver,
+            template=self.template,
+            weight_override=5,
+            requirements_override={"leaf": "has_distinction", "params": {"slug": "vip"}},
+        )
+        fetched = MissionGiverOffering.objects.get(pk=offering.pk)
+        self.assertEqual(fetched.weight_override, 5)
+        self.assertEqual(fetched.requirements_override["leaf"], "has_distinction")
+
+    def test_offering_defaults_no_overrides(self) -> None:
+        offering = MissionGiverOfferingFactory(giver=self.giver, template=self.template)
+        self.assertIsNone(offering.weight_override)
+        self.assertEqual(offering.requirements_override, {})
+
+    def test_offering_unique_per_giver_template(self) -> None:
+        MissionGiverOfferingFactory(giver=self.giver, template=self.template)
+        with self.assertRaises(IntegrityError):
+            MissionGiverOffering.objects.create(giver=self.giver, template=self.template)
+
+    def test_templates_m2m_uses_through_model(self) -> None:
+        # The M2M's .add() creates MissionGiverOffering rows transparently
+        # because the through-model has no required fields beyond giver+template.
+        self.giver.templates.add(self.template)
+        offerings = list(
+            MissionGiverOffering.objects.filter(giver=self.giver, template=self.template)
+        )
+        self.assertEqual(len(offerings), 1)
+        self.assertIn(self.template, self.giver.templates.all())
+        self.assertIn(self.giver, self.template.givers.all())
