@@ -1,11 +1,13 @@
-"""Tests for the Phase-5a MissionGiver + MissionGiverCooldown models.
+"""Tests for the MissionGiver + MissionGiverStanding + MissionGiverOffering models.
 
 A ``MissionGiver`` is an abstracted offer point (location/NPC/org desk)
 that publishes a curated set of ``MissionTemplate`` rows; characters
 draw available templates from a giver (see ``services.availability``).
-A ``MissionGiverCooldown`` records when a given (giver, character) pair
-becomes available again after an accept (the design §10 "contractual
-consequence is the contract-holder's alone" cooldown).
+A ``MissionGiverStanding`` records (per giver, per character) both the
+cooldown available_at and an affection integer; cooldown is set by
+accept_mission (design §10 — contractual consequence is the
+contract-holder's alone), affection is moved by future flirt/seduce
+gameplay against the NPC.
 """
 
 from datetime import timedelta
@@ -18,12 +20,12 @@ from django.utils import timezone
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.missions.constants import GiverKind
 from world.missions.factories import (
-    MissionGiverCooldownFactory,
     MissionGiverFactory,
     MissionGiverOfferingFactory,
+    MissionGiverStandingFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionGiver, MissionGiverCooldown, MissionGiverOffering
+from world.missions.models import MissionGiver, MissionGiverOffering, MissionGiverStanding
 from world.societies.factories import OrganizationFactory
 
 
@@ -83,23 +85,38 @@ class MissionGiverModelTests(TestCase):
         self.assertIsNone(org_id)
 
 
-class MissionGiverCooldownModelTests(TestCase):
-    """MissionGiverCooldown: (giver, character) unique; available_at gated."""
+class MissionGiverStandingModelTests(TestCase):
+    """MissionGiverStanding: (giver, character) unique; cooldown + affection."""
 
-    def test_create_cooldown(self) -> None:
+    def test_create_standing(self) -> None:
         giver = MissionGiverFactory()
         character = CharacterFactory()
-        cd = MissionGiverCooldownFactory(giver=giver, character=character)
-        self.assertEqual(cd.giver, giver)
-        self.assertEqual(cd.character, character)
-        self.assertIsNotNone(cd.available_at)
+        standing = MissionGiverStandingFactory(giver=giver, character=character)
+        self.assertEqual(standing.giver, giver)
+        self.assertEqual(standing.character, character)
+        self.assertIsNotNone(standing.available_at)
+
+    def test_affection_defaults_to_zero(self) -> None:
+        standing = MissionGiverStandingFactory()
+        self.assertEqual(standing.affection, 0)
+
+    def test_affection_round_trips(self) -> None:
+        standing = MissionGiverStandingFactory(affection=42)
+        standing.refresh_from_db()
+        self.assertEqual(standing.affection, 42)
+
+    def test_affection_accepts_negative(self) -> None:
+        # IntegerField — affection can swing negative for disliked characters.
+        standing = MissionGiverStandingFactory(affection=-5)
+        standing.refresh_from_db()
+        self.assertEqual(standing.affection, -5)
 
     def test_giver_character_uniqueness(self) -> None:
         giver = MissionGiverFactory()
         character = CharacterFactory()
-        MissionGiverCooldownFactory(giver=giver, character=character)
+        MissionGiverStandingFactory(giver=giver, character=character)
         with self.assertRaises(IntegrityError):
-            MissionGiverCooldown.objects.create(
+            MissionGiverStanding.objects.create(
                 giver=giver,
                 character=character,
                 available_at=timezone.now() + timedelta(days=1),
@@ -109,19 +126,19 @@ class MissionGiverCooldownModelTests(TestCase):
         character = CharacterFactory()
         g1 = MissionGiverFactory(name="g1")
         g2 = MissionGiverFactory(name="g2")
-        MissionGiverCooldownFactory(giver=g1, character=character)
-        MissionGiverCooldownFactory(giver=g2, character=character)
+        MissionGiverStandingFactory(giver=g1, character=character)
+        MissionGiverStandingFactory(giver=g2, character=character)
         self.assertEqual(
-            MissionGiverCooldown.objects.filter(character=character).count(),
+            MissionGiverStanding.objects.filter(character=character).count(),
             2,
         )
 
-    def test_giver_cascade_deletes_cooldowns(self) -> None:
+    def test_giver_cascade_deletes_standings(self) -> None:
         giver = MissionGiverFactory()
-        MissionGiverCooldownFactory(giver=giver)
-        MissionGiverCooldownFactory(giver=giver)
+        MissionGiverStandingFactory(giver=giver)
+        MissionGiverStandingFactory(giver=giver)
         giver.delete()
-        self.assertEqual(MissionGiverCooldown.objects.count(), 0)
+        self.assertEqual(MissionGiverStanding.objects.count(), 0)
         # Giver itself is gone.
         self.assertFalse(MissionGiver.objects.filter(pk=giver.pk).exists())
 

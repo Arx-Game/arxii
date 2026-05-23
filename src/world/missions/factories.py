@@ -24,8 +24,8 @@ from world.missions.models import (
     MissionDeedRecord,
     MissionDeedRewardLine,
     MissionGiver,
-    MissionGiverCooldown,
     MissionGiverOffering,
+    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
@@ -221,20 +221,23 @@ class MissionGiverOfferingFactory(DjangoModelFactory):
     requirements_override = factory.LazyFunction(dict)
 
 
-class MissionGiverCooldownFactory(DjangoModelFactory):
-    """Factory for MissionGiverCooldown. Defaults to an already-elapsed cooldown.
+class MissionGiverStandingFactory(DjangoModelFactory):
+    """Factory for MissionGiverStanding. Defaults to an already-elapsed cooldown
+    and zero affection.
 
     Tests that need a *live* cooldown should override ``available_at`` with a
     future datetime; the default ``timezone.now() - 1s`` lets the row exist
-    without acting as a gate.
+    without acting as a gate. Tests exercising the standing/affection side
+    pass ``affection=`` explicitly.
     """
 
     class Meta:
-        model = MissionGiverCooldown
+        model = MissionGiverStanding
 
     giver = factory.SubFactory(MissionGiverFactory)
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
+    affection = 0
 
 
 class MissionDeedRewardLineFactory(DjangoModelFactory):

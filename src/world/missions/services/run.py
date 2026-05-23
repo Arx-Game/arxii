@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.missions.models import (
-    MissionGiverCooldown,
+    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionParticipant,
@@ -54,7 +54,9 @@ def accept_mission(
       * Create one :class:`MissionParticipant` with ``is_contract_holder=True``.
       * Call Phase-3 ``enter_node`` to write the entry-node snapshot and
         set ``instance.current_node``.
-      * Upsert the giver cooldown to ``now + template.cooldown``.
+      * Upsert the giver standing's ``available_at`` to
+        ``now + template.cooldown``. Affection is left untouched (defaults
+        to 0 on first accept; preserved on subsequent accepts).
 
     Returns the new instance.
     """
@@ -65,7 +67,7 @@ def accept_mission(
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
-    MissionGiverCooldown.objects.update_or_create(
+    MissionGiverStanding.objects.update_or_create(
         giver=giver,
         character=character,
         defaults={"available_at": timezone.now() + template.cooldown},

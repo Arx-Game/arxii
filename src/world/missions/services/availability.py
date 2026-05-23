@@ -122,9 +122,9 @@ def _eligible_templates(
     """
     now = timezone.now()
     qs = giver.templates.filter(is_active=True).exclude(
-        Q(givers__cooldowns__character=character)
-        & Q(givers__cooldowns__giver=giver)
-        & Q(givers__cooldowns__available_at__gt=now),
+        Q(givers__standings__character=character)
+        & Q(givers__standings__giver=giver)
+        & Q(givers__standings__available_at__gt=now),
     )
     if arc_filter and active_era is not None:
         qs = qs.filter(created_in_era=active_era)

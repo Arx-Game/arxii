@@ -23,8 +23,8 @@ from world.distinctions.factories import (
 )
 from world.missions.constants import ArcScope
 from world.missions.factories import (
-    MissionGiverCooldownFactory,
     MissionGiverFactory,
+    MissionGiverStandingFactory,
     MissionTemplateFactory,
 )
 from world.missions.services.availability import offer_missions
@@ -69,7 +69,7 @@ class OfferMissionsFilterTests(TestCase):
         giver.templates.add(cooled, fresh)
         character = _make_character_with_level(level=1)
 
-        MissionGiverCooldownFactory(
+        MissionGiverStandingFactory(
             giver=giver,
             character=character,
             available_at=timezone.now() + timedelta(days=1),
