@@ -290,6 +290,28 @@ class Technique(SharedMemoryModel):
             "Drives clash-opportunity detection."
         ),
     )
+    clash_resolution_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Resolution consequence pool for clashes opened by this technique "
+            "(CLASH or LOCK/Suppress). Null when no clash opens via this technique."
+        ),
+    )
+    clash_per_round_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Per-round incremental-feedback pool for clashes opened by this technique. "
+            "Null when no per-round feedback is authored."
+        ),
+    )
 
     source_cantrip = models.ForeignKey(
         "magic.Cantrip",

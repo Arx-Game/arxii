@@ -6,7 +6,7 @@ each function is unit-testable in isolation.  Higher-level orchestration
 (views, commands, flow steps) calls into this module rather than implementing
 Clash logic themselves.
 
-Current scope (Tasks 2.1–4.2):
+Current scope (Tasks 2.1–5.1):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
@@ -24,8 +24,11 @@ Current scope (Tasks 2.1–4.2):
     current meter band. No-op when ``clash.per_round_consequence_pool`` is null.
   - ``resolve_clash``: marks a clash as RESOLVED, fires the resolution-pool
     consequence keyed on the resolution tier, returns a ``ClashResolutionResult``.
+  - ``detect_clash_opportunities``: inspects the round's declared PC + NPC actions
+    and the opponents' state, and creates ``Clash`` rows for each opportunity that
+    emerges (CLASH, LOCK, WARD, BREAK flavors). Task 5.1.
 
-Future tasks will add the full round driver (Phase 5).
+Future tasks will add the full round driver (Task 5.2/5.3).
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
-    from world.combat.models import Clash
+    from world.combat.models import Clash, CombatEncounter
     from world.magic.models import Affinity, Technique
 
 
@@ -939,3 +942,401 @@ def resolve_clash(
         resolution=resolution,
         consequence_applied=selected,
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 5.1 — clash opportunity detection
+# ---------------------------------------------------------------------------
+
+_DEFAULT_THRESHOLD = 10  # TODO(tuning): replace with authored attack-power fields when available
+
+
+@transaction.atomic
+def detect_clash_opportunities(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Inspect the round's declared PC + NPC actions and the opponents' state,
+    and create ``Clash`` rows for each opportunity that emerges.
+
+    Detects four flavors:
+      - **CLASH** — opposed clash-capable PC attack vs clash-capable NPC action.
+      - **LOCK/SUSTAINING** — a lock-applying PC technique lands on the boss;
+        PC wins by sustaining the lock to its threshold.
+      - **LOCK/ESCAPING** — a lock-applying NPC action targets PCs; each targeted
+        PC must escape.
+      - **WARD** — a sustained NPC attack opens; one WARD per (opponent, entry)
+        pair, idempotent for the duration.
+      - **BREAK** — opponent has a standing barrier; one BREAK per opponent,
+        idempotent until breached.
+
+    Any flavor whose authored resolution pool is missing (None) is skipped rather
+    than crashing — a missing pool is a content authoring gap, not a bug.
+
+    Atomic — if any individual row write fails, none persist.
+
+    Returns the list of newly-created ``Clash`` rows (already-existing WARD/BREAK
+    rows are not included in the returned list).
+    """
+    created: list[Clash] = []
+
+    created.extend(_detect_clash_flavor(encounter=encounter, round_number=round_number))
+    created.extend(_detect_lock_sustaining(encounter=encounter, round_number=round_number))
+    created.extend(_detect_lock_escaping(encounter=encounter, round_number=round_number))
+    created.extend(_detect_ward(encounter=encounter, round_number=round_number))
+    created.extend(_detect_break(encounter=encounter, round_number=round_number))
+
+    return created
+
+
+def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Detect CLASH-flavor opportunities: opposed clash-capable attacks.
+
+    For each PC round action with a clash-capable technique targeting an opponent,
+    check whether the opponent's NPC action this round also has a clash_capable
+    threat entry.  If both sides are clash-capable and the PC technique has a
+    resolution pool, form a CLASH.
+
+    Skips silently when the PC technique's ``clash_resolution_pool`` is None —
+    a Clash cannot be created without the non-nullable FK.
+
+    Private helper — call only from ``detect_clash_opportunities``.
+    """
+    from world.combat.models import Clash, CombatRoundAction  # noqa: PLC0415
+
+    created: list[Clash] = []
+
+    pc_actions = CombatRoundAction.objects.filter(
+        participant__encounter=encounter,
+        round_number=round_number,
+        focused_action__clash_capable=True,
+        focused_opponent_target__isnull=False,
+    ).select_related(
+        "participant__character_sheet",
+        "focused_action",
+        "focused_opponent_target",
+    )
+
+    for pc_action in pc_actions:
+        technique = pc_action.focused_action
+        opponent = pc_action.focused_opponent_target
+
+        # Skip if no resolution pool — cannot create a non-nullable FK row.
+        if technique.clash_resolution_pool is None:
+            continue
+
+        # Find the matching NPC action this round for the same opponent.
+        from world.combat.models import CombatOpponentAction  # noqa: PLC0415
+
+        try:
+            npc_action = CombatOpponentAction.objects.select_related("threat_entry").get(
+                opponent=opponent,
+                round_number=round_number,
+            )
+        except CombatOpponentAction.DoesNotExist:
+            continue  # NPC has no action this round — no clash
+
+        if not npc_action.threat_entry.clash_capable:
+            continue  # NPC action is not clash-capable
+
+        # Determine thresholds from authored base_damage fields.
+        # Use TechniqueDamageProfile.base_damage if a profile exists; fall back to
+        # ThreatPoolEntry.base_damage; if neither side provides signal, use the
+        # design scaffold default.
+        pc_power = _technique_attack_power(technique)
+        npc_power = npc_action.threat_entry.base_damage or 0
+        threshold = max(pc_power, npc_power) or _DEFAULT_THRESHOLD
+
+        clash = Clash.objects.create(
+            encounter=encounter,
+            npc_opponent=opponent,
+            initiator=pc_action.participant.character_sheet,
+            resolution_consequence_pool=technique.clash_resolution_pool,
+            per_round_consequence_pool=technique.clash_per_round_pool,
+            flavor=ClashFlavor.CLASH,
+            progress=0,
+            pc_win_threshold=threshold,
+            npc_win_threshold=threshold,
+            started_round=round_number,
+            triggering_threat_entry=npc_action.threat_entry,
+        )
+        created.append(clash)
+
+    return created
+
+
+def _detect_lock_sustaining(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Detect LOCK/SUSTAINING opportunities: PC lock-applying techniques.
+
+    For each PC whose focused technique is lock-applying (``is_lock_applying``
+    cached_property — at least one applied condition with ``is_clash_lock=True``),
+    form a LOCK/SUSTAINING clash. The PC holds the lock; the NPC tries to break free.
+
+    pc_win_threshold is taken from the lock condition's ``clash_lock_strength``
+    (defaulting to ``_DEFAULT_THRESHOLD`` when null).
+
+    ``triggering_threat_entry`` is set to the NPC's round action's threat entry
+    (so ``npc_round_contribution`` can read ``clash_break_free_force``).  When
+    there is no NPC action this round, ``triggering_threat_entry`` is left null
+    (NPC contributes 0 that round).
+
+    Skips silently when the technique's ``clash_resolution_pool`` is None.
+
+    Private helper — call only from ``detect_clash_opportunities``.
+    """
+    from world.combat.models import Clash, CombatOpponentAction, CombatRoundAction  # noqa: PLC0415
+
+    created: list[Clash] = []
+
+    pc_actions = CombatRoundAction.objects.filter(
+        participant__encounter=encounter,
+        round_number=round_number,
+        focused_action__isnull=False,
+        focused_opponent_target__isnull=False,
+    ).select_related(
+        "participant__character_sheet",
+        "focused_action",
+        "focused_opponent_target",
+    )
+
+    for pc_action in pc_actions:
+        technique = pc_action.focused_action
+        if not technique.is_lock_applying:
+            continue
+
+        if technique.clash_resolution_pool is None:
+            continue
+
+        opponent = pc_action.focused_opponent_target
+
+        # Find the clash-lock condition to read its strength.
+        lock_application = (
+            technique.condition_applications.select_related("condition")
+            .filter(condition__is_clash_lock=True)
+            .first()
+        )
+        if lock_application is None:
+            # is_lock_applying returned True but no row found — data inconsistency;
+            # skip defensively.
+            continue
+        threshold = lock_application.condition.clash_lock_strength or _DEFAULT_THRESHOLD
+
+        # Find the NPC's round action for break-free pressure source.
+        triggering_entry = None
+        npc_action = (
+            CombatOpponentAction.objects.filter(
+                opponent=opponent,
+                round_number=round_number,
+            )
+            .select_related("threat_entry")
+            .first()
+        )
+        if npc_action is not None:
+            triggering_entry = npc_action.threat_entry
+
+        clash = Clash.objects.create(
+            encounter=encounter,
+            npc_opponent=opponent,
+            initiator=pc_action.participant.character_sheet,
+            resolution_consequence_pool=technique.clash_resolution_pool,
+            per_round_consequence_pool=technique.clash_per_round_pool,
+            flavor=ClashFlavor.LOCK,
+            lock_pc_role=LockPcRole.SUSTAINING,
+            progress=0,
+            pc_win_threshold=threshold,
+            npc_win_threshold=None,
+            started_round=round_number,
+            triggering_threat_entry=triggering_entry,
+        )
+        created.append(clash)
+
+    return created
+
+
+def _detect_lock_escaping(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Detect LOCK/ESCAPING opportunities: lock-applying NPC actions.
+
+    For each NPC round action whose threat entry is ``is_lock_applying``, and
+    for each targeted PC participant, form a LOCK/ESCAPING clash.  The PC must
+    escape; the NPC maintains the lock.
+
+    ``pc_win_threshold`` comes from the NPC threat entry's
+    ``clash_break_free_force`` (the BREAK-free meter max). The NPC's per-round
+    maintenance pressure is ``clash_npc_pressure``.
+
+    progress starts at 0; PCs must push it back to 0 (ESCAPING sign convention).
+
+    Skips silently when the threat entry has no ``clash_resolution_pool``.
+
+    Private helper — call only from ``detect_clash_opportunities``.
+    """
+    from world.combat.models import Clash, CombatOpponentAction  # noqa: PLC0415
+
+    created: list[Clash] = []
+
+    npc_actions = CombatOpponentAction.objects.filter(
+        opponent__encounter=encounter,
+        round_number=round_number,
+        threat_entry__is_lock_applying=True,
+    ).select_related("opponent", "threat_entry")
+
+    for npc_action in npc_actions:
+        entry = npc_action.threat_entry
+        if entry.clash_resolution_pool is None:
+            continue
+
+        threshold = entry.clash_break_free_force or _DEFAULT_THRESHOLD
+
+        for participant in npc_action.targets.select_related("character_sheet").all():
+            clash = Clash.objects.create(
+                encounter=encounter,
+                npc_opponent=npc_action.opponent,
+                initiator=participant.character_sheet,
+                resolution_consequence_pool=entry.clash_resolution_pool,
+                per_round_consequence_pool=entry.clash_per_round_pool,
+                flavor=ClashFlavor.LOCK,
+                lock_pc_role=LockPcRole.ESCAPING,
+                progress=0,
+                pc_win_threshold=threshold,
+                npc_win_threshold=None,
+                started_round=round_number,
+                triggering_threat_entry=entry,
+            )
+            created.append(clash)
+
+    return created
+
+
+def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Detect WARD opportunities: sustained NPC attacks.
+
+    For each NPC round action with a sustained-attack threat entry, create a
+    WARD clash — unless one already exists for that (opponent, threat entry)
+    pair (a sustained attack opens exactly one WARD for its duration).
+
+    ``ward_ends_on_round = round_number + sustained_duration_rounds``
+    ``progress`` starts at ``pc_win_threshold`` (full ward integrity; NPC drains it).
+    ``pc_win_threshold = sustained_duration_rounds * clash_npc_pressure``
+
+    Skips silently when the threat entry has no ``clash_resolution_pool``.
+
+    Private helper — call only from ``detect_clash_opportunities``.
+    """
+    from world.combat.models import Clash, CombatOpponentAction  # noqa: PLC0415
+
+    created: list[Clash] = []
+
+    npc_actions = CombatOpponentAction.objects.filter(
+        opponent__encounter=encounter,
+        round_number=round_number,
+        threat_entry__is_sustained_attack=True,
+    ).select_related("opponent", "threat_entry")
+
+    for npc_action in npc_actions:
+        entry = npc_action.threat_entry
+        if entry.clash_resolution_pool is None:
+            continue
+
+        # Idempotency: skip if an active WARD already exists for this pair.
+        already_active = Clash.objects.filter(
+            encounter=encounter,
+            npc_opponent=npc_action.opponent,
+            flavor=ClashFlavor.WARD,
+            status=ClashStatus.ACTIVE,
+            triggering_threat_entry=entry,
+        ).exists()
+        if already_active:
+            continue
+
+        duration = entry.sustained_duration_rounds or 1
+        pressure = entry.clash_npc_pressure or _DEFAULT_THRESHOLD
+        threshold = duration * pressure
+        ward_ends = round_number + duration
+
+        clash = Clash.objects.create(
+            encounter=encounter,
+            npc_opponent=npc_action.opponent,
+            initiator=None,
+            resolution_consequence_pool=entry.clash_resolution_pool,
+            per_round_consequence_pool=entry.clash_per_round_pool,
+            flavor=ClashFlavor.WARD,
+            lock_pc_role=None,
+            progress=threshold,  # starts at full integrity
+            pc_win_threshold=threshold,
+            npc_win_threshold=None,
+            ward_ends_on_round=ward_ends,
+            started_round=round_number,
+            triggering_threat_entry=entry,
+        )
+        created.append(clash)
+
+    return created
+
+
+def _detect_break(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
+    """Detect BREAK opportunities: opponents with a standing barrier.
+
+    For each CombatOpponent in the encounter with a non-null ``barrier_strength``,
+    create a BREAK clash — unless one already exists (the barrier is a standing
+    target until breached or the encounter ends).
+
+    ``pc_win_threshold = opponent.barrier_strength``
+    ``progress`` starts at 0 (PCs must accumulate up to threshold).
+
+    Skips silently when the opponent has no ``barrier_break_pool``.
+
+    Private helper — call only from ``detect_clash_opportunities``.
+    """
+    from world.combat.models import Clash, CombatOpponent  # noqa: PLC0415
+
+    created: list[Clash] = []
+
+    opponents = CombatOpponent.objects.filter(
+        encounter=encounter,
+        barrier_strength__isnull=False,
+    ).select_related("barrier_break_pool")
+
+    for opponent in opponents:
+        if opponent.barrier_break_pool is None:
+            continue
+
+        # Idempotency: skip if an active BREAK already exists for this opponent.
+        already_active = Clash.objects.filter(
+            encounter=encounter,
+            npc_opponent=opponent,
+            flavor=ClashFlavor.BREAK,
+            status=ClashStatus.ACTIVE,
+        ).exists()
+        if already_active:
+            continue
+
+        clash = Clash.objects.create(
+            encounter=encounter,
+            npc_opponent=opponent,
+            initiator=None,
+            resolution_consequence_pool=opponent.barrier_break_pool,
+            per_round_consequence_pool=None,
+            flavor=ClashFlavor.BREAK,
+            lock_pc_role=None,
+            progress=0,
+            pc_win_threshold=opponent.barrier_strength,
+            npc_win_threshold=None,
+            ward_ends_on_round=None,
+            started_round=round_number,
+            triggering_threat_entry=None,
+        )
+        created.append(clash)
+
+    return created
+
+
+def _technique_attack_power(technique: Technique) -> int:
+    """Return a representative attack-power value for a Technique.
+
+    Reads the first damage profile's ``base_damage`` if one exists.  Falls back
+    to 0 when no damage profile is attached (caller applies the design-scaffold
+    default).
+
+    Private helper — used only by ``_detect_clash_flavor``.
+    """
+    profile = technique.damage_profiles.first()
+    if profile is None:
+        return 0
+    return profile.base_damage
