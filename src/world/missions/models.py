@@ -483,7 +483,13 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
     """One weighted destination in a randomized :class:`MissionOptionRoute`.
 
     When the parent route's ``is_random_set`` is true the engine picks one
-    candidate by ``weight``.
+    candidate by ``weight``. Each candidate can optionally carry its OWN
+    ``consequence`` + ``outcome_text`` override so a random pool entry is
+    a full self-contained outcome bundle (design §8.3 — destination +
+    consequence + outcome text + (via :class:`MissionOptionRouteReward`
+    with ``candidate=`` set) reward lines). The overrides are STORED BUT
+    UNCONSUMED in Phase B; Phase D wires per-candidate emission. Until
+    then, null/blank values mean "fall back to the parent route's".
     """
 
     route = models.ForeignKey(
@@ -497,18 +503,42 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         related_name="+",
     )
     weight = models.PositiveSmallIntegerField(default=1)
+    consequence = models.ForeignKey(
+        "checks.Consequence",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Optional per-candidate consequence override; falls back to "
+            "the parent route's consequence when null. STORED BUT "
+            "UNCONSUMED in Phase B — Phase D wires per-candidate emission."
+        ),
+    )
+    outcome_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Optional per-candidate outcome text shown to the player. "
+            "STORED BUT UNCONSUMED in Phase B — Phase D wires it."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.route} → {self.target_node} ({self.weight})"
 
 
 class MissionOptionRouteReward(SharedMemoryModel):
-    """Authored reward template attached to a :class:`MissionOptionRoute`.
+    """Authored reward template attached to a route OR a route candidate.
 
-    Phase 5b.0 closes the Phase-3 gap that left no authored source for
-    structured rewards. When the engine resolves a TERMINAL route (a route
-    whose ``target_node`` is null), it walks this route's ``reward_templates``
-    and emits one :class:`MissionDeedRewardLine` per (template × participant)
+    Phase 5b.0 closed the Phase-3 gap that left no authored source for
+    structured rewards on routes. B4 extends the parent surface to also
+    allow per-candidate reward bundles (design §8.3 self-contained
+    outcome bundle) — exactly one of ``route``/``candidate`` is set.
+    Per-candidate rewards are STORED BUT UNCONSUMED in Phase B; Phase D
+    wires emission. The route-parented path is unchanged: when the engine
+    resolves a TERMINAL route (a route whose ``target_node`` is null), it
+    walks the route's ``reward_templates`` and emits one
+    :class:`MissionDeedRewardLine` per (template × participant)
     combination per the template's ``reward_group_rule``:
 
       * ``contract_holder_only=True`` rows emit exactly ONE line, recipient =
@@ -526,8 +556,27 @@ class MissionOptionRouteReward(SharedMemoryModel):
 
     route = models.ForeignKey(
         MissionOptionRoute,
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="reward_templates",
+        help_text=(
+            "Parent route (route-level reward). Exactly one of route / "
+            "candidate must be set; enforced in clean()."
+        ),
+    )
+    candidate = models.ForeignKey(
+        MissionOptionRouteCandidate,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="reward_templates",
+        help_text=(
+            "Parent candidate (per-candidate reward bundle — design §8.3). "
+            "STORED BUT UNCONSUMED in Phase B; Phase D wires emission "
+            "when a random candidate fires. Exactly one of route / "
+            "candidate must be set."
+        ),
     )
     kind = models.CharField(
         max_length=12,
@@ -557,6 +606,16 @@ class MissionOptionRouteReward(SharedMemoryModel):
             "distribute per the template's reward_group_rule."
         ),
     )
+
+    def clean(self) -> None:
+        super().clean()
+        set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
+        if set_count != 1:
+            raise ValidationError(
+                {
+                    "route": (f"Exactly one of route or candidate must be set (got {set_count})."),
+                }
+            )
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
