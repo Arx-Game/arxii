@@ -6,8 +6,11 @@ from factory import django as factory_django
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
+    ClashActionSlot,
+    ClashFlavor,
     ComboLearningMethod,
     EncounterType,
+    LockPcRole,
     OpponentTier,
     PaceMode,
     ParticipantStatus,
@@ -16,6 +19,10 @@ from world.combat.constants import (
 )
 from world.combat.models import (
     BossPhase,
+    Clash,
+    ClashConfig,
+    ClashContribution,
+    ClashRound,
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
@@ -25,6 +32,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -248,3 +256,132 @@ class CombatRoundActionFactory(factory_django.DjangoModelFactory):
     round_number = 1
     focused_opponent_target = None
     focused_ally_target = None
+
+
+# =============================================================================
+# Clash factories (Task 1.7)
+# =============================================================================
+
+
+class StrainConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for StrainConfig singleton (pk=1)."""
+
+    class Meta:
+        model = StrainConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
+class ClashConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for ClashConfig singleton (pk=1)."""
+
+    class Meta:
+        model = ClashConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
+class ClashFactory(factory_django.DjangoModelFactory):
+    """Factory for a CLASH-flavor Clash (the default flavor).
+
+    CLASH is the only flavor that requires ``npc_win_threshold``; the other
+    three flavors must have it null.  Per-flavor subclasses override the fields
+    that change so that every row passes ``Clash.clean()``.
+
+    Uses SubFactory for encounter and npc_opponent (mirrors CombatPullFactory).
+    The npc_opponent is created without an ObjectDB to avoid the setUpTestData
+    deepcopy restriction; this mirrors the inline creation pattern in
+    ClashModelTests.setUp().
+    """
+
+    class Meta:
+        model = Clash
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+
+    @factory.lazy_attribute
+    def npc_opponent(self) -> CombatOpponent:
+        return CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name=f"Clash NPC {self.encounter.pk}",
+            health=50,
+            max_health=50,
+        )
+
+    resolution_consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
+    flavor = ClashFlavor.CLASH
+    progress = 0
+    pc_win_threshold = 5
+    # CLASH flavor: npc_win_threshold required, lock_pc_role and ward_ends_on_round null
+    npc_win_threshold = -5
+    lock_pc_role = None
+    ward_ends_on_round = None
+    started_round = 1
+
+
+class LockClashFactory(ClashFactory):
+    """Factory for a LOCK-flavor Clash.
+
+    Overrides flavor-coupled fields so the row passes Clash.clean():
+    - flavor = LOCK
+    - lock_pc_role = SUSTAINING (required for LOCK)
+    - npc_win_threshold = None (must be null for non-CLASH flavors)
+    """
+
+    flavor = ClashFlavor.LOCK
+    lock_pc_role = LockPcRole.SUSTAINING
+    npc_win_threshold = None
+
+
+class WardClashFactory(ClashFactory):
+    """Factory for a WARD-flavor Clash.
+
+    Overrides flavor-coupled fields so the row passes Clash.clean():
+    - flavor = WARD
+    - ward_ends_on_round = 5 (required for WARD)
+    - npc_win_threshold = None (must be null for non-CLASH flavors)
+    """
+
+    flavor = ClashFlavor.WARD
+    ward_ends_on_round = 5
+    npc_win_threshold = None
+
+
+class BreakClashFactory(ClashFactory):
+    """Factory for a BREAK-flavor Clash.
+
+    BREAK has no flavored field of its own; only npc_win_threshold must be null.
+    """
+
+    flavor = ClashFlavor.BREAK
+    npc_win_threshold = None
+
+
+class ClashRoundFactory(factory_django.DjangoModelFactory):
+    """Factory for ClashRound."""
+
+    class Meta:
+        model = ClashRound
+
+    clash = factory.SubFactory(ClashFactory)
+    round_number = 1
+    pc_progress_delta = 1
+    npc_progress_delta = 0
+    progress_after = 1
+
+
+class ClashContributionFactory(factory_django.DjangoModelFactory):
+    """Factory for ClashContribution."""
+
+    class Meta:
+        model = ClashContribution
+
+    clash_round = factory.SubFactory(ClashRoundFactory)
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    action_slot = ClashActionSlot.FOCUSED
+    anima_committed = 10
+    check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    progress_delta = 1

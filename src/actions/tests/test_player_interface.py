@@ -845,3 +845,25 @@ class TestDispatchPlayerActionUnknownRef(django.test.TestCase):
             dispatch_player_action(self.character, ref, {})
 
         self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    def test_clash_contribution_ref_raises_unknown_action_ref(self) -> None:
+        """A COMBAT ref with clash_id set → ActionDispatchError(UNKNOWN_ACTION_REF).
+
+        Clash contribution dispatch is intentionally unimplemented (Task 7.x follow-up).
+        The guard makes the gap explicit: without it, the dispatch path would fall through
+        to a technique_id comparison with None and either match the wrong action or raise
+        a confusing DoesNotExist from Technique.objects.get(pk=None).
+        """
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+        from world.combat.constants import ClashActionSlot
+
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT,
+            clash_id=99999,
+            clash_action_slot=ClashActionSlot.FOCUSED.value,
+        )
+        with self.assertRaises(ActionDispatchError) as cm:
+            dispatch_player_action(self.character, ref, {})
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)

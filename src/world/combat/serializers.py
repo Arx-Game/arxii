@@ -8,15 +8,16 @@ from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
-from world.combat.constants import ActionCategory, OpponentTier
+from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
 from world.combat.models import (
+    Clash,
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
 )
 from world.fatigue.constants import EffortLevel
-from world.magic.models import Technique
+from world.magic.models import CharacterTechnique, Technique
 
 # ---------------------------------------------------------------------------
 # Nested read serializers
@@ -454,3 +455,77 @@ class AddOpponentSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class DeclareClashContributionSerializer(serializers.Serializer):
+    """Write serializer for declaring a PC's clash contribution for the current round.
+
+    Expects ``participant`` (a ``CombatParticipant`` instance) in serializer context.
+    Validates clash state, ownership, and the passive anima cap.  Resolves FK PKs to
+    model instances so the service function receives clean, typed inputs.
+    """
+
+    clash = serializers.IntegerField()
+    action_slot = serializers.ChoiceField(choices=ClashActionSlot.choices)
+    technique = serializers.IntegerField()
+    strain_commitment = serializers.IntegerField(min_value=0)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Resolve FKs and enforce clash-state, ownership, and passive-cap rules."""
+        from world.combat.services import get_clash_config  # noqa: PLC0415 — avoids circular import
+
+        participant: CombatParticipant = self.context["participant"]
+
+        # --- Resolve Clash ---
+        try:
+            clash = Clash.objects.get(pk=attrs["clash"])
+        except Clash.DoesNotExist as exc:
+            raise serializers.ValidationError({"clash": "Clash not found."}) from exc
+
+        # Clash must be ACTIVE.
+        if clash.status != ClashStatus.ACTIVE:
+            raise serializers.ValidationError(
+                {"clash": "Clash is not active and cannot accept contributions."}
+            )
+
+        # Clash must belong to the participant's encounter.
+        if clash.encounter_id != participant.encounter_id:
+            raise serializers.ValidationError(
+                {"clash": "Clash does not belong to the participant's encounter."}
+            )
+
+        # --- Resolve Technique ---
+        try:
+            technique = Technique.objects.get(pk=attrs["technique"])
+        except Technique.DoesNotExist as exc:
+            raise serializers.ValidationError({"technique": "Technique not found."}) from exc
+
+        # Participant must own the technique.
+        owns = CharacterTechnique.objects.filter(
+            character=participant.character_sheet,
+            technique=technique,
+        ).exists()
+        if not owns:
+            raise serializers.ValidationError({"technique": "You do not know this technique."})
+
+        # --- Passive anima cap ---
+        action_slot = attrs["action_slot"]
+        strain_commitment = attrs["strain_commitment"]
+        if action_slot == ClashActionSlot.PASSIVE:
+            config = get_clash_config()
+            if strain_commitment > config.passive_anima_cap:
+                raise serializers.ValidationError(
+                    {
+                        "strain_commitment": (
+                            f"Passive contributions may not commit more than "
+                            f"{config.passive_anima_cap} anima (got {strain_commitment})."
+                        )
+                    }
+                )
+
+        return {
+            "clash": clash,
+            "action_slot": action_slot,
+            "technique": technique,
+            "strain_commitment": strain_commitment,
+        }

@@ -343,36 +343,162 @@ Two deliverables in one branch:
 - Normally non-lethal PC vs PC sparring with pose integration
 - Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
 
-### Clash of Wills (future — needs a design pass; NOT yet specced)
+### Clash of Wills (SHIPPED — branch `clash-design`)
 
-**Status: undesigned planned feature.** The "clash" is the contested-power standoff
-in combat — two sides pouring magical energy (or locked swords / a struggle of wills)
-into overpowering each other, each escalating effort to win the exchange (the
-"beam-struggle" trope). Its *meaning and terminology reservation* are fixed (see
-"## Reserved terminology: 'clash'" at the top of this file); what does NOT exist is
-any mechanical design, spec, or implementation. This entry exists so the feature is
-tracked, not lost — it surfaced during the resonance-environment work (the 2026-05-16
-universal-path slice deliberately used "backfire" and avoided "clash" so this term
-stays free).
+**Status: SHIPPED**
+**Branch:** `clash-design`
+**Spec:** `docs/superpowers/specs/2026-05-22-clash-design.md`
+**Plan:** `docs/superpowers/plans/2026-05-22-clash.md`
 
-When prioritized, it gets its own design spec. Hard constraints already known:
+The reserved "clash" mechanic is built. A **Clash** is a multi-round contested
+struggle inside a `CombatEncounter`: PCs pour effort into overpowering — or enduring
+— a magical or physical force across multiple rounds while the opposition pushes back.
+It is the beam-struggle trope generalised: locked blades, wave against wave, holding a
+monster pinned while it thrashes, shielding the party from a sustained barrage,
+grinding through a fortress-wall of magic. The clash layer adds a progress meter,
+multi-PC aggregation, and threshold resolution on top of the existing `use_technique`
+pipeline — anima cost, overburn → Soulfray, mishap riders, reactive events, and
+corruption all fire normally for every clash contribution.
 
-- **Reuse the affinity-opposition substrate — do not author a parallel table.** The
-  shipped resonance-environment work models directed, asymmetric affinity opposition
-  as authored `AffinityInteraction` rows (the RPS cycle, per-pair `valence` / `kind` /
-  `severity_multiplier`) plus the `ResonanceEnvironmentConfig` tuning singleton and the
-  generic consequence-pool resolution pipeline. A combat clash between opposed-affinity
-  casters is the *caster-vs-caster* analogue of the *caster-vs-place* interaction: it
-  consumes the same `AffinityInteraction` matrix + tuning, adding only the
-  contested-escalation mechanic on top. See `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
-  (shipped) and the magic roadmap's "Resonance-Environment Interaction → Cross-reference:
-  combat clash-of-wills".
-- It is the only *symmetrical* magical exchange (both sides exerting/escalating), unlike
-  the caster-vs-place asymmetry — the design must define the escalation/commit loop and
-  resolution (who wins, at what cost) without re-deriving the opposition data.
+**The five flavors:**
 
-**Owner:** core combat + magic substrate (shared); needs a dedicated brainstorm/spec
-before any implementation.
+| Flavor | What it is | PC role |
+|---|---|---|
+| **Clash** (archetype) | Two forces head-on, each straining to overpower | offensive vs. offensive |
+| **Suppress** | PCs sustain a lock condition on the NPC while it tries to break free | PC sustaining |
+| **Break Free** | PCs push out of a lock the NPC placed on them | PC escaping |
+| **Ward** | PCs endure a sustained NPC attack across its duration | PC defending |
+| **Break** | PCs grind through a magical barrier around the NPC | PC offensive vs. static defense |
+
+All five share the same meter primitive (`Clash` model with a `flavor` discriminator
+over four meter shapes). Suppress and Break Free are the same LOCK meter viewed from
+opposite sides: `lock_pc_role` (`SUSTAINING` / `ESCAPING`) determines which threshold
+the PCs are driving toward.
+
+**Strain is the lever.** A clash is won by committing anima past the safety margin —
+gritting your teeth and pushing. The escalation cost is Soulfray and, ultimately, the
+Audere offer. This is the heroic-tragic arc the magic system is built around.
+
+**Models added:**
+
+- `Clash` — encounter FK, flavor, lock_pc_role (nullable), progress, pc_win_threshold,
+  npc_win_threshold (nullable), status (ACTIVE/RESOLVED), started_round, resolved_round,
+  resolution enum (PC_DECISIVE / PC_MARGINAL / MUTUAL / NPC_MARGINAL / NPC_DECISIVE /
+  ABANDONED), resolution_consequence_pool FK, per_round_consequence_pool FK (nullable),
+  npc_opponent FK to `CombatOpponent`, initiator FK to `CharacterSheet`. Discriminator
+  integrity enforced with `clean()` + DB `CheckConstraint`s.
+- `ClashRound` — child of `Clash` per round: pc_progress_delta, npc_progress_delta,
+  progress_after.
+- `ClashContribution` — child of `ClashRound` per PC: character FK, action_slot
+  (FOCUSED/PASSIVE), anima_committed, technique FK (nullable), check_outcome,
+  progress_delta, was_overburn, was_audere, soulfray_severity_accrued.
+  `UniqueConstraint(clash_round, character)` enforces one contribution per PC per round.
+- `ClashContributionDeclaration` — staging model: PCs declare clash intent before the
+  round resolves; cleared after `resolve_round`.
+- `StrainConfig` — singleton tuning surface for the diminishing-returns curve knobs
+  (per-anima base conversion, tier breakpoints). Staff-tunable via Django admin without
+  code changes.
+- `ClashConfig` — singleton: tier→delta table, per-flavor default thresholds, NPC
+  contribution weight per-round defaults.
+
+**Schema additions on existing models:**
+
+- `Technique.clash_capable` BooleanField — marks techniques that can be used as clash
+  contributions.
+- `ThreatPoolEntry` fields for NPC clash behavior: clash commitment weight and
+  per-flavor eligibility.
+- `CombatOpponent` FK to `Clash` (nullable) — tracks the active clash this opponent is
+  a side of.
+- `ComboDefinition.clash_prerequisite` FK (nullable) — a combo can require an active
+  clash on a specific opponent as its prerequisite gate.
+- `ConditionTemplate` clash-state fields — clash state as an authored condition gate;
+  combo prerequisite checking reads these.
+
+**Service layer (`src/world/combat/clash.py`):**
+
+- `strain_to_progress(anima_committed, config) -> int` — applies the diminishing-returns
+  curve to convert anima commitment to a progress delta.
+- `commit_to_clash(clash, participant, anima_committed, technique, action_slot) -> ClashContributionResult`
+  — runs the PC contribution through `use_technique` in clash-commit mode (a custom
+  `resolve_fn` that captures `CheckOutcome` rather than applying damage), records
+  `ClashContribution`.
+- `npc_round_contribution(clash, round_number) -> int` — derives NPC progress delta from
+  the opponent's threat pool entries and current boss phase; never snapshotted.
+- `affinity_tilt(clash, pc_sheet) -> Decimal` — applies the `AffinityInteraction` matrix
+  (the RPS cycle) to a signed severity multiplier on the PC's progress delta; reuses the
+  same authored `AffinityInteraction` rows as the resonance-environment work.
+- `aggregate_clash_round(clash, round_contributions, npc_delta) -> ClashRoundResult` —
+  sums PC deltas (with affinity tilt), subtracts NPC delta, advances the meter, writes
+  `ClashRound`, checks thresholds.
+- `fire_clash_per_round(clash, clash_round_result) -> None` — fires the per-round
+  consequence pool on threshold crossings and incremental milestones.
+- `resolve_clash(clash, resolution) -> ClashResolutionResult` — resolves the clash,
+  selects from the resolution consequence pool, marks `RESOLVED`.
+- `detect_clash_opportunities(encounter) -> list[ClashOpportunity]` — inspects active
+  opponents and their threat patterns to surface available clash flavor opportunities
+  to the declaration panel.
+- `run_clash_round(encounter, round_number) -> list[ClashRoundResult]` — top-level
+  orchestrator called from `resolve_round`'s clash post-pass.
+
+**`services.py` additions:**
+
+- `declare_clash_contribution(participant, clash, anima_committed, technique, action_slot)` —
+  writes a `ClashContributionDeclaration`; XOR-validated against focused-action declaration.
+- `_resolve_clashes(encounter, round_number)` — post-pass in `resolve_round` (mirrors
+  `_resolve_declared_challenges`); calls `run_clash_round` for every active clash.
+
+**Player-facing surface:** `_clash_contribution_actions(encounter, participant)` emits
+`PlayerAction` descriptors (backend=CLASH, `ActionRef` token) for the unified action
+interface. The dispatch handler is a flagged follow-up — the read path surfaces what is
+available, but the dispatch route is gated with `UNKNOWN_ACTION_REF` until the handler
+ships.
+
+**Affinity matrix integration:** `affinity_tilt` consumes the same 9 directed
+`AffinityInteraction` rows (the RPS cycle: Primal > Celestial > Abyssal > Primal) as
+the resonance-environment work — no parallel opposition table was authored.
+
+**Combo prerequisite gating:** `ComboDefinition.clash_prerequisite` is checked by the
+existing combo detection pipeline (`detect_available_combos`). A boss combo that can
+only land while a Clash is in progress is expressible in data — no code change to the
+detection logic.
+
+**End-to-end pipeline integration:** clash contributions run through the full
+`use_technique` → Soulfray accumulation → Audere offer → Mage Scar pipeline. The
+`TECHNIQUE_CAST` / `TECHNIQUE_PRE_CAST` reactive events fire for each contribution;
+`accrue_corruption_for_cast` runs. An Audere-during-clash scenario is exercised in the
+integration test suite.
+
+**Test coverage:**
+
+- `test_clash_models.py` — model unit tests: constants, `StrainConfig` / `ClashConfig`
+  singletons, `Clash` discriminator integrity (flavor/lock_pc_role CheckConstraints),
+  `ClashRound` / `ClashContribution` constraints, schema additions.
+- `test_clash_services.py` — service unit tests: strain conversion curve,
+  `affinity_tilt` (all 9 AffinityInteraction pairs), `commit_to_clash` overburn path,
+  `npc_round_contribution` threat-pool derivation, `aggregate_clash_round` meter
+  advancement, threshold detection, `resolve_clash` consequence-pool selection.
+- `test_clash_round_orchestration.py` — round orchestration: `run_clash_round`
+  multi-PC aggregation, `_resolve_clashes` post-pass in `resolve_round`, initiative
+  ordering, per-round consequence pool firing.
+- `test_clash_flavors.py` — per-flavor end-to-end scenarios: Clash (PC decisive / NPC
+  decisive / mutual), Suppress (sustained lock held vs. broken), Break Free (escape
+  succeeds / fails), Ward (ward endures / collapses), Break (barrier ground down /
+  abandoned).
+- `test_clash_audere.py` — Audere-during-clash: overburn triggers Audere offer, Audere
+  intensity bonus feeds into the contribution check, Soulfray accumulates.
+
+**Known follow-ups / deferred:**
+
+- **Clash-contribution dispatch handler** — the `PlayerAction` read surface (`_clash_contribution_actions`)
+  is live. The dispatch route is gated with `UNKNOWN_ACTION_REF`; a follow-up task wires
+  the handler so declarations can be made from the unified action interface.
+- **Positioning / zone-aware POV filtering** — clash visibility (who can see the meter,
+  which contributions are shown to which players) depends on the positioning/zones model
+  that is not yet settled. See `docs/plans/2026-05-21-positioning-zones-design-notes.md`.
+- **Fury lever** — the deliberate control-lowering / rage escalation alternative to Strain
+  (§11 of spec) is reserved and deferred. Strain is the only escalation lever for v1.
+- **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
+  clash visibility UI is a follow-up.
 
 ### Shared Future Work (combat-adjacent)
 - **Combat REST API** — endpoints for encounter lifecycle, action declaration, combo upgrade, round resolution
