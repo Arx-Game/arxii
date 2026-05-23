@@ -50,6 +50,14 @@ class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Browse ordering in the authoring tool (lower = earlier). "
+            "No Meta.ordering on the model — callers order explicitly via "
+            "``order_by('display_order', 'name')``."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -777,7 +785,7 @@ class MissionGiver(SharedMemoryModel):
         help_text=(
             "Optional Evennia room/location anchoring this giver. For "
             "ROOM_TRIGGER kind, this room IS the trigger (entering it rolls "
-            "the offer)."
+            "the offer). Should be a Room-typeclass ObjectDB."
         ),
     )
     npc = models.ForeignKey(
@@ -788,7 +796,9 @@ class MissionGiver(SharedMemoryModel):
         related_name="+",
         help_text=(
             "NPC kind: the abstract giver NPC the player talks to (not "
-            "piloted, not a sheet). Must be null for other kinds."
+            "piloted, not a sheet). Must be null for other kinds. Should "
+            "be a Character-typeclass ObjectDB (or a giver-NPC subclass — "
+            "staff convention not enforced at the model layer)."
         ),
     )
     environmental_detail = models.ForeignKey(
@@ -800,7 +810,8 @@ class MissionGiver(SharedMemoryModel):
         help_text=(
             "ENVIRONMENTAL_DETAIL kind: the examinable thing in the room "
             "(real item or room detail) that kicks off the offer. Must be "
-            "null for other kinds."
+            "null for other kinds. Should be an Item-typeclass ObjectDB "
+            "or a room-detail ObjectDB."
         ),
     )
     org = models.ForeignKey(
@@ -842,6 +853,26 @@ class MissionGiver(SharedMemoryModel):
         self.clean()
         super().save(*args, **kwargs)
 
+    @property
+    def is_publishable(self) -> bool:
+        """True when this giver has its kind-specific target FK populated.
+
+        A 'drafty' giver (kind set, target unset) passes ``clean()`` but
+        should not be surfaced by runtime offering or accepted by the
+        Phase-B7 ``publish()`` service. Use this in offering queries /
+        publish gates / authoring-UI 'needs-work' surfaces. NOT a
+        ``cached_property`` — the underlying FKs are mutable and
+        ``SharedMemoryModel`` keeps the instance long-lived; recomputing
+        on access is the safe choice.
+        """
+        if self.giver_kind == GiverKind.NPC:
+            return self.npc_id is not None
+        if self.giver_kind == GiverKind.ENVIRONMENTAL_DETAIL:
+            return self.environmental_detail_id is not None
+        if self.giver_kind == GiverKind.ROOM_TRIGGER:
+            return self.location_id is not None
+        return False
+
     def __str__(self) -> str:
         return self.name
 
@@ -869,7 +900,12 @@ class MissionGiverOffering(SharedMemoryModel):
     weight_override = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Optional per-offering draw weight; null = use template.base_weight.",
+        help_text=(
+            "Optional per-offering draw weight; null = use "
+            "template.base_weight. Must be >= 1 when set — 0 would silently "
+            "disable this offering, which is not the right tool (use the "
+            "template's is_active flag or delete the offering instead)."
+        ),
     )
     # SANCTIONED DYNAMIC JSON: same shape as MissionTemplate.availability_rule
     # — a Phase-0 predicate tree consumed by world.missions.predicates.evaluate.
@@ -879,7 +915,10 @@ class MissionGiverOffering(SharedMemoryModel):
         blank=True,
         help_text=(
             "Optional per-offering predicate gate (Phase-0 tree shape). "
-            "Empty {} = use the template's own availability_rule only."
+            "STORED BUT UNCONSUMED in Phase B — services.availability "
+            "reads only the template's availability_rule today; Phase D "
+            "wires this override in (semantic: AND-compose with the "
+            "template rule). Empty {} = no per-offering override."
         ),
     )
 
@@ -890,6 +929,23 @@ class MissionGiverOffering(SharedMemoryModel):
                 name="unique_missiongiveroffering_giver_template",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.weight_override is not None and self.weight_override < 1:
+            raise ValidationError(
+                {
+                    "weight_override": (
+                        "Must be >= 1; use null to fall back to "
+                        "template.base_weight. 0 would silently disable "
+                        "this offering."
+                    ),
+                }
+            )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.giver} → {self.template}"
@@ -925,8 +981,12 @@ class MissionGiverStanding(SharedMemoryModel):
         help_text=(
             "Per-character standing / affection with this giver. Authoring "
             "tool exposes 'giver_standing_at_least' predicate gates against "
-            "this value (Phase C). Movement mechanic (flirt/seduce checks "
-            "against the NPC) is adjacent gameplay work, not built here."
+            "this value (Phase C). Negative values are permitted and mean "
+            "disliked — the Phase-C 'giver_standing_at_least: N' gate uses "
+            "plain >= comparison so it works uniformly across the integer "
+            "range (e.g. 'at least -5' is True for affection=-3, False for "
+            "affection=-10). Movement mechanic (flirt/seduce checks against "
+            "the NPC) is adjacent gameplay work, not built here."
         ),
     )
 

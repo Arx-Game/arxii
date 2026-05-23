@@ -255,3 +255,79 @@ class MissionGiverOfferingTests(TestCase):
         self.assertEqual(len(offerings), 1)
         self.assertIn(self.template, self.giver.templates.all())
         self.assertIn(self.giver, self.template.givers.all())
+
+    def test_clean_rejects_zero_weight_override(self) -> None:
+        # weight_override=0 would silently disable the offering at draw time
+        # (select_weighted yields nothing for weight 0). clean() forbids it
+        # so authors use null (= fall back to template.base_weight) or >=1.
+        offering = MissionGiverOfferingFactory.build(
+            giver=self.giver,
+            template=self.template,
+            weight_override=0,
+        )
+        with self.assertRaises(ValidationError):
+            offering.full_clean()
+
+    def test_save_enforces_weight_override_invariant(self) -> None:
+        # clean() runs on the real factory/create write path (regression I1).
+        with self.assertRaises(ValidationError):
+            MissionGiverOfferingFactory(
+                giver=self.giver,
+                template=MissionTemplateFactory(slug="offering-save-tmpl"),
+                weight_override=0,
+            )
+
+
+class MissionGiverIsPublishableTests(TestCase):
+    """is_publishable: True iff the kind-specific target FK is set.
+
+    Drafty givers (kind set, target unset) pass clean() at the model layer
+    but fail is_publishable — Phase-B7's publish() service uses this to
+    refuse drafty givers, and runtime offering / authoring-UI surfaces use
+    it as a 'needs-work' signal.
+    """
+
+    def test_room_trigger_publishable_when_location_set(self) -> None:
+        room = _make_room()
+        giver = MissionGiverFactory(giver_kind=GiverKind.ROOM_TRIGGER, location=room)
+        self.assertTrue(giver.is_publishable)
+
+    def test_room_trigger_drafty_when_no_location(self) -> None:
+        # Factory default: ROOM_TRIGGER + location=None.
+        giver = MissionGiverFactory()
+        self.assertEqual(giver.giver_kind, GiverKind.ROOM_TRIGGER)
+        self.assertIsNone(giver.location)
+        self.assertFalse(giver.is_publishable)
+
+    def test_npc_publishable_when_npc_set(self) -> None:
+        npc = ObjectDBFactory()
+        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, npc=npc)
+        self.assertTrue(giver.is_publishable)
+
+    def test_npc_drafty_when_no_npc(self) -> None:
+        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, npc=None)
+        self.assertFalse(giver.is_publishable)
+
+    def test_environmental_detail_publishable_when_detail_set(self) -> None:
+        detail = ObjectDBFactory()
+        giver = MissionGiverFactory(
+            giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
+            environmental_detail=detail,
+        )
+        self.assertTrue(giver.is_publishable)
+
+    def test_environmental_detail_drafty_when_no_detail(self) -> None:
+        giver = MissionGiverFactory(
+            giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
+            environmental_detail=None,
+        )
+        self.assertFalse(giver.is_publishable)
+
+    def test_is_publishable_reflects_mutation(self) -> None:
+        # Plain @property (not cached_property) — re-computes each access so
+        # SharedMemoryModel instance reuse doesn't freeze a stale value.
+        giver = MissionGiverFactory()
+        self.assertFalse(giver.is_publishable)
+        giver.location = _make_room()
+        giver.save()
+        self.assertTrue(giver.is_publishable)

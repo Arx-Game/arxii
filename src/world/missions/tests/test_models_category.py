@@ -48,3 +48,13 @@ class MissionCategoryModelTests(TestCase):
         # MissionCategory.templates is the reverse accessor.
         self.template.categories.add(self.category)
         self.assertIn(self.template, self.category.templates.all())
+
+    def test_display_order_defaults_zero(self) -> None:
+        # No Meta.ordering on the model — callers explicitly
+        # order_by("display_order", "name"); default is 0.
+        self.assertEqual(self.category.display_order, 0)
+
+    def test_display_order_round_trips(self) -> None:
+        ordered = MissionCategoryFactory(name="ordered-cat", display_order=42)
+        ordered.refresh_from_db()
+        self.assertEqual(ordered.display_order, 42)
