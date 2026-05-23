@@ -151,6 +151,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
 
     actions.extend(_challenge_actions(character))
     actions.extend(_combat_actions(character))
+    actions.extend(_clash_contribution_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
     # — see module docstring.  When registry actions gain ActionTemplate backing,
     # uncomment and implement _registry_actions(character).
@@ -235,6 +236,113 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
                 action_template=template,
             )
         )
+
+    return result
+
+
+def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Return COMBAT ``PlayerAction``s for each active clash in the character's encounter.
+
+    For each ``ACTIVE`` clash the character's encounter contains, emits TWO descriptors:
+    one ``FOCUSED`` slot and one ``PASSIVE`` slot.  The PC picks which to commit at
+    declaration time (via ``declare_clash_contribution``); surfacing both lets the UI
+    present the choice.
+
+    If the PC has already submitted a ``ClashContributionDeclaration`` for a given
+    clash this round, we still emit both slot descriptors (v1: no suppression).
+    The frontend can highlight which slot is already declared and allow re-declaration
+    until the round resolves.
+
+    POV note (spec §4): every PC in the encounter sees every active clash.
+    v1 has no positioning, so this is intentional — all PCs are potential contributors.
+
+    ``check_type`` is ``None`` on these descriptors: the check type is determined by
+    whichever technique the PC selects at declaration time, not at opportunity-surfacing
+    time.  Clash contributions surface the *opportunity*, not the *mechanism*.
+
+    ActionRef encoding
+    ------------------
+    Each descriptor carries an ``ActionRef`` with ``backend=COMBAT``,
+    ``clash_id=<Clash.pk>``, and ``clash_action_slot=<ClashActionSlot value>``.
+    A future dispatcher reads these fields to route to ``declare_clash_contribution``.
+    """
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return []
+
+    # Deferred imports: keep the actions package free of combat models at the top level.
+    from world.combat.constants import (  # noqa: PLC0415
+        ClashActionSlot,
+        ClashStatus,
+        EncounterStatus,
+        ParticipantStatus,
+    )
+    from world.combat.models import Clash, CombatParticipant  # noqa: PLC0415
+
+    # Find an active participant in a non-completed encounter.
+    participant = (
+        CombatParticipant.objects.filter(
+            character_sheet=sheet,
+            status=ParticipantStatus.ACTIVE,
+            encounter__status__in={
+                EncounterStatus.DECLARING,
+                EncounterStatus.RESOLVING,
+                EncounterStatus.BETWEEN_ROUNDS,
+            },
+        )
+        .select_related("encounter")
+        .order_by("-encounter__created_at")
+        .first()
+    )
+    if participant is None:
+        return []
+
+    encounter = participant.encounter
+
+    active_clashes = list(
+        Clash.objects.filter(
+            encounter=encounter,
+            status=ClashStatus.ACTIVE,
+        ).select_related("npc_opponent")
+    )
+    if not active_clashes:
+        return []
+
+    result: list[PlayerAction] = []
+    for clash in active_clashes:
+        opponent_name = clash.npc_opponent.name
+        flavor_label = clash.get_flavor_display()
+        progress_summary = f"Progress: {clash.progress} / {clash.pc_win_threshold} (PC target)"
+
+        for slot in (ClashActionSlot.FOCUSED, ClashActionSlot.PASSIVE):
+            if slot == ClashActionSlot.FOCUSED:
+                display_name = f"Commit to {flavor_label}: {opponent_name}"
+                description = (
+                    f"Use your focused action slot to contribute to this clash. {progress_summary}."
+                )
+            else:
+                display_name = f"Lend strength to {flavor_label}: {opponent_name}"
+                description = (
+                    f"Use your passive action slot to support this clash. {progress_summary}."
+                )
+
+            ref = ActionRef(
+                backend=ActionBackend.COMBAT,
+                clash_id=clash.pk,
+                clash_action_slot=slot.value,
+            )
+            result.append(
+                PlayerAction(
+                    backend=ActionBackend.COMBAT,
+                    display_name=display_name,
+                    description=description,
+                    ref=ref,
+                    # check_type is None: technique chosen at declaration time determines the check.
+                    check_type=None,
+                    prerequisite_met=True,
+                    prerequisite_reasons=[],
+                )
+            )
 
     return result
 

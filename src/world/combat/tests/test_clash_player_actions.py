@@ -1,0 +1,329 @@
+"""Tests for Task 7.2: clash opportunities surfaced in get_player_actions.
+
+Covers:
+- (a) No active clashes → no clash-backed PlayerActions emitted.
+- (b) One active clash → two PlayerActions (FOCUSED + PASSIVE).
+- (c) Two active clashes → four PlayerActions (2 × FOCUSED + 2 × PASSIVE).
+- (d) Already-declared: if the PC has a ClashContributionDeclaration for the
+  clash this round, both slot descriptors are still emitted (v1 behavior: no
+  suppression; the UI can highlight the already-chosen slot).
+- (e) RESOLVED clash → not in get_player_actions.
+- (f) Clash in a different encounter → does not appear for this PC.
+
+ActionRef encoding contract:
+  Each clash-contribution PlayerAction carries
+  ActionRef(backend=COMBAT, clash_id=<pk>, clash_action_slot=<slot value>).
+  No technique_id.  A future dispatcher can decode (clash_id, action_slot) from
+  ref.clash_id and ref.clash_action_slot directly.
+"""
+
+from __future__ import annotations
+
+import django.test
+
+from actions.constants import ActionBackend
+from world.combat.constants import ClashActionSlot, ClashStatus, EncounterStatus, ParticipantStatus
+from world.combat.factories import (
+    ClashConfigFactory,
+    ClashFactory,
+    CombatEncounterFactory,
+    CombatParticipantFactory,
+)
+from world.combat.models import ClashContributionDeclaration
+from world.magic.factories import TechniqueFactory
+
+
+def _clash_contribution_actions_for(character: object) -> list:
+    """Return only the clash-contribution COMBAT PlayerActions for *character*.
+
+    Uses get_player_actions end-to-end and filters to COMBAT actions that carry
+    a clash_id (i.e. clash-contribution descriptors, not technique declarations).
+    """
+    from actions.player_interface import get_player_actions
+
+    all_actions = get_player_actions(character)  # type: ignore[arg-type]
+    return [
+        a for a in all_actions if a.backend == ActionBackend.COMBAT and a.ref.clash_id is not None
+    ]
+
+
+class ClashPlayerActionsNoClashesTests(django.test.TestCase):
+    """No active clashes → no clash PlayerActions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+
+    def test_no_active_clashes_returns_no_clash_actions(self) -> None:
+        """Encounter with no active clashes → get_player_actions has no clash-backed actions."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        self.assertEqual(
+            clash_actions,
+            [],
+            "No clash actions expected when the encounter has no active clashes",
+        )
+
+
+class ClashPlayerActionsOneClashTests(django.test.TestCase):
+    """One active clash → two PlayerActions (FOCUSED + PASSIVE)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+        cls.clash = ClashFactory(
+            encounter=cls.encounter,
+            status=ClashStatus.ACTIVE,
+        )
+
+    def test_active_clash_emits_focused_and_passive_actions(self) -> None:
+        """One active clash → get_player_actions contains one FOCUSED + one PASSIVE action."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+
+        slots = {a.ref.clash_action_slot for a in clash_actions}
+        self.assertEqual(
+            len(clash_actions),
+            2,
+            f"Expected 2 clash actions (FOCUSED + PASSIVE), got {len(clash_actions)}",
+        )
+        self.assertIn(ClashActionSlot.FOCUSED, slots)
+        self.assertIn(ClashActionSlot.PASSIVE, slots)
+
+    def test_clash_actions_reference_correct_clash(self) -> None:
+        """All clash-contribution actions reference the active clash by clash_id."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for action in clash_actions:
+            self.assertEqual(
+                action.ref.clash_id,
+                self.clash.pk,
+                f"ref.clash_id mismatch: expected {self.clash.pk}, got {action.ref.clash_id}",
+            )
+
+    def test_clash_actions_backend_is_combat(self) -> None:
+        """All clash-contribution actions have backend=COMBAT."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for action in clash_actions:
+            self.assertEqual(action.backend, ActionBackend.COMBAT)
+
+    def test_clash_actions_have_no_technique_id(self) -> None:
+        """Clash-contribution ActionRefs have no technique_id (slot-only refs)."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for action in clash_actions:
+            self.assertIsNone(
+                action.ref.technique_id,
+                "Clash-contribution ActionRef must not carry a technique_id",
+            )
+
+    def test_clash_actions_check_type_is_none(self) -> None:
+        """check_type is None for clash contributions — chosen at declaration time."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for action in clash_actions:
+            self.assertIsNone(
+                action.check_type,
+                "Clash-contribution PlayerAction.check_type must be None",
+            )
+
+    def test_clash_actions_prerequisite_met(self) -> None:
+        """v1: prerequisite_met is always True, prerequisite_reasons always empty."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for action in clash_actions:
+            self.assertTrue(action.prerequisite_met)
+            self.assertEqual(action.prerequisite_reasons, [])
+
+
+class ClashPlayerActionsTwoClashesTests(django.test.TestCase):
+    """Two active clashes → four PlayerActions (2 × FOCUSED + 2 × PASSIVE)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+
+        cls.clash_a = ClashFactory(
+            encounter=cls.encounter,
+            status=ClashStatus.ACTIVE,
+        )
+        cls.clash_b = ClashFactory(
+            encounter=cls.encounter,
+            status=ClashStatus.ACTIVE,
+        )
+
+    def test_two_active_clashes_emit_four_actions(self) -> None:
+        """Two active clashes → 4 clash-contribution PlayerActions total."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        self.assertEqual(
+            len(clash_actions),
+            4,
+            f"Expected 4 clash actions (2 clashes × 2 slots), got {len(clash_actions)}",
+        )
+
+    def test_both_clash_ids_represented(self) -> None:
+        """Both clash PKs appear in the emitted actions."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        clash_ids = {a.ref.clash_id for a in clash_actions}
+        self.assertIn(self.clash_a.pk, clash_ids)
+        self.assertIn(self.clash_b.pk, clash_ids)
+
+    def test_both_slots_represented_per_clash(self) -> None:
+        """For each clash, both FOCUSED and PASSIVE appear."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        for clash in (self.clash_a, self.clash_b):
+            clash_slots = {
+                a.ref.clash_action_slot for a in clash_actions if a.ref.clash_id == clash.pk
+            }
+            self.assertEqual(
+                clash_slots,
+                {ClashActionSlot.FOCUSED, ClashActionSlot.PASSIVE},
+                f"Clash {clash.pk} must surface both FOCUSED and PASSIVE slots",
+            )
+
+
+class ClashPlayerActionsAlreadyDeclaredTests(django.test.TestCase):
+    """PC with an existing ClashContributionDeclaration still sees both slot descriptors (v1).
+
+    v1 behavior: no suppression on already-declared. Both FOCUSED and PASSIVE
+    are still emitted so the UI can show the current declaration and allow
+    re-declaration (changing the slot or technique) until the round resolves.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=2,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+        cls.clash = ClashFactory(
+            encounter=cls.encounter,
+            status=ClashStatus.ACTIVE,
+        )
+
+    def test_already_declared_pc_still_sees_both_slots(self) -> None:
+        """v1: both FOCUSED and PASSIVE slots are emitted even when a declaration exists.
+
+        Design choice: v1 does not suppress already-declared actions because the
+        frontend should handle highlighting the active declaration and allowing
+        re-declaration (upsert via declare_clash_contribution) until the round
+        resolves. Suppressing here would require a re-query and adds no safety value
+        at the read path — the service layer enforces uniqueness at write time.
+        """
+        technique = TechniqueFactory()
+        ClashContributionDeclaration.objects.create(
+            encounter=self.encounter,
+            round_number=self.encounter.round_number,
+            participant=self.participant,
+            clash=self.clash,
+            action_slot=ClashActionSlot.FOCUSED,
+            technique=technique,
+            strain_commitment=0,
+        )
+
+        clash_actions = _clash_contribution_actions_for(self.character)
+        self.assertEqual(
+            len(clash_actions),
+            2,
+            "Both FOCUSED and PASSIVE must still appear even after a declaration is on file",
+        )
+        slots = {a.ref.clash_action_slot for a in clash_actions}
+        self.assertIn(ClashActionSlot.FOCUSED, slots)
+        self.assertIn(ClashActionSlot.PASSIVE, slots)
+
+
+class ClashPlayerActionsResolvedClashTests(django.test.TestCase):
+    """RESOLVED clash does not appear in get_player_actions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+        ClashFactory(
+            encounter=cls.encounter,
+            status=ClashStatus.RESOLVED,
+        )
+
+    def test_resolved_clash_does_not_appear(self) -> None:
+        """A RESOLVED clash must not produce PlayerActions."""
+        clash_actions = _clash_contribution_actions_for(self.character)
+        self.assertEqual(
+            clash_actions,
+            [],
+            "RESOLVED clash must not appear in get_player_actions",
+        )
+
+
+class ClashPlayerActionsOtherEncounterTests(django.test.TestCase):
+    """Clashes in another PC's encounter do not leak into this PC's action list."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ClashConfigFactory()
+
+        # PC A — the character under test
+        cls.encounter_a = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant_a = CombatParticipantFactory(
+            encounter=cls.encounter_a,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.character_a = cls.participant_a.character_sheet.character
+
+        # PC B — a different PC in a different encounter with an active clash
+        encounter_b = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        ClashFactory(encounter=encounter_b, status=ClashStatus.ACTIVE)
+
+    def test_clash_in_different_encounter_does_not_appear(self) -> None:
+        """Clashes in encounter_b must not surface in PC A's action list."""
+        clash_actions = _clash_contribution_actions_for(self.character_a)
+        self.assertEqual(
+            clash_actions,
+            [],
+            "Clash from another encounter must not appear in this PC's action list",
+        )
