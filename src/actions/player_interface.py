@@ -18,7 +18,10 @@ Backend resolution:
 - COMBAT      -- only when ``get_active_round_context`` returns a ``RoundContext``
   whose ``is_declaration_open`` is ``True``; enumerates the character's known
   techniques that have an ``action_template`` (= combat-usable techniques) and
-  emits one ``PlayerAction`` per technique.
+  emits one ``PlayerAction`` per technique.  Also emits clash-contribution
+  ``PlayerAction``s for each ``ACTIVE`` clash in the participant's encounter: one
+  ``FOCUSED`` slot and one ``PASSIVE`` slot per clash, per the design spec (§4 —
+  every PC in the encounter sees every active clash; POV-filter is post-positioning).
 - REGISTRY    -- ``get_actions_for_target_type`` returns registry ``Action`` singletons;
   these have no ``ActionTemplate`` / ``check_type`` so ALL current registry actions are
   excluded from ``get_player_actions``.  ``dispatch_player_action`` still handles REGISTRY
@@ -270,6 +273,12 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
     if sheet is None:
         return []
 
+    # Clash contribution declarations are only meaningful during DECLARING phase —
+    # same gate as _combat_actions.  Return early if the window is closed.
+    ctx = get_active_round_context(sheet)
+    if ctx is None or not ctx.is_declaration_open:
+        return []
+
     # Deferred imports: keep the actions package free of combat models at the top level.
     from world.combat.constants import (  # noqa: PLC0415
         ClashActionSlot,
@@ -339,6 +348,8 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
                     ref=ref,
                     # check_type is None: technique chosen at declaration time determines the check.
                     check_type=None,
+                    # v1: every PC in the encounter sees every active clash (POV-filter is
+                    # post-positioning; see spec §4).
                     prerequisite_met=True,
                     prerequisite_reasons=[],
                 )
@@ -437,6 +448,15 @@ def _find_combat_player_action_for_ref(character: ObjectDB, ref: ActionRef) -> P
     Raises:
         ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if no matching COMBAT action found.
     """
+    # Clash-contribution dispatch is deferred: the read path emits clash PlayerActions
+    # (via _clash_contribution_actions), but the write/dispatch path hasn't been wired
+    # yet — that is Task 7.x / Phase 8 work.  Guard here rather than falling through to
+    # the technique_id comparison, which would silently misfire when technique_id is None
+    # (all clash-contribution refs omit technique_id).
+    if ref.clash_id is not None:
+        # Clash contribution dispatch is intentionally unimplemented — see comment above.
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
     # Calls get_player_actions (which also computes challenge actions via _challenge_actions).
     # The redundant challenge computation on this dispatch path is acceptable; flag if it
     # becomes a measurable bottleneck.

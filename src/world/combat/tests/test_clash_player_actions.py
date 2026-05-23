@@ -327,3 +327,48 @@ class ClashPlayerActionsOtherEncounterTests(django.test.TestCase):
             [],
             "Clash from another encounter must not appear in this PC's action list",
         )
+
+
+class ClashPlayerActionsDeclarationClosedTests(django.test.TestCase):
+    """Clash contribution actions are not emitted when the declaration window is closed.
+
+    Verifies that _clash_contribution_actions respects the same is_declaration_open
+    gate as _combat_actions.  During RESOLVING and BETWEEN_ROUNDS phases the window
+    is closed and no clash contribution descriptors should surface, even if active
+    clashes exist in the encounter.
+    """
+
+    def _make_encounter_with_active_clash(self, status: str) -> object:
+        """Create an encounter in *status* with an ACTIVE participant and an ACTIVE clash.
+
+        Returns the participant's character ObjectDB.
+        """
+        encounter = CombatEncounterFactory(status=status, round_number=1)
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        ClashFactory(encounter=encounter, status=ClashStatus.ACTIVE)
+        return participant.character_sheet.character
+
+    def test_no_clash_actions_when_resolving(self) -> None:
+        """Encounter in RESOLVING → is_declaration_open is False → no clash contribution actions."""
+        ClashConfigFactory()
+        character = self._make_encounter_with_active_clash(EncounterStatus.RESOLVING)
+        clash_actions = _clash_contribution_actions_for(character)
+        self.assertEqual(
+            clash_actions,
+            [],
+            "Clash contribution actions must not appear when encounter is RESOLVING",
+        )
+
+    def test_no_clash_actions_when_between_rounds(self) -> None:
+        """Encounter in BETWEEN_ROUNDS → is_declaration_open is False → no clash actions."""
+        ClashConfigFactory()
+        character = self._make_encounter_with_active_clash(EncounterStatus.BETWEEN_ROUNDS)
+        clash_actions = _clash_contribution_actions_for(character)
+        self.assertEqual(
+            clash_actions,
+            [],
+            "Clash contribution actions must not appear when encounter is BETWEEN_ROUNDS",
+        )
