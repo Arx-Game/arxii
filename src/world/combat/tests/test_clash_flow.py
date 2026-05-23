@@ -1025,10 +1025,24 @@ class AudereDuringClashTests(TestCase):
         CharacterAnima.objects.filter(character=self.sheet.character).update(current=0)
 
     def _mock_check_return(self, outcome: object) -> object:
-        """Context manager: patch perform_check to return a deterministic outcome."""
+        """Context manager: patch perform_check to return a deterministic outcome.
+
+        The fallback outcome (``outcome``) is used for the soulfray resilience check
+        so that ``select_consequence_from_result`` finds the matching tier entry and
+        fires the MAGICAL_SCARS consequence.
+
+        Respects ``force_check_outcome``'s thread-local override on first access:
+        when the clash contribution's check runs BEFORE the soulfray resilience check
+        within the same ``resolve_round`` call, ``force_check_outcome`` consumes the
+        thread-local on the first call and returns the forced (critical) outcome.
+        The second call (soulfray resilience check) finds no thread-local override
+        and falls through to the fallback ``outcome``.  This prevents the soulfray
+        mock from shadowing the clash check's forced outcome.
+        """
+        from world.checks.test_helpers import _consume_forced_outcome
         from world.checks.types import CheckResult
 
-        mock_result = CheckResult(
+        fallback_result = CheckResult(
             check_type=self.resilience_check_type,
             outcome=outcome,
             chart=None,
@@ -1039,7 +1053,24 @@ class AudereDuringClashTests(TestCase):
             aspect_bonus=0,
             total_points=0,
         )
-        return patch("world.checks.services.perform_check", return_value=mock_result)
+
+        def _smart_perform_check(*args: object, **kwargs: object) -> CheckResult:
+            forced = _consume_forced_outcome()
+            if forced is not None:
+                return CheckResult(
+                    check_type=self.resilience_check_type,
+                    outcome=forced,
+                    chart=None,
+                    roller_rank=None,
+                    target_rank=None,
+                    rank_difference=0,
+                    trait_points=0,
+                    aspect_bonus=0,
+                    total_points=0,
+                )
+            return fallback_result
+
+        return patch("world.checks.services.perform_check", side_effect=_smart_perform_check)
 
     # -------------------------------------------------------------------------
     # Test: heroic-tragic arc

@@ -688,7 +688,7 @@ def _find_check_outcome_at_or_below(target_level: int) -> CheckOutcome:
     """
     outcome = (
         CheckOutcome.objects.filter(success_level__lte=target_level)
-        .order_by("-success_level")
+        .order_by("-success_level", "pk")
         .first()
     )
     if outcome is None:

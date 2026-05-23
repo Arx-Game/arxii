@@ -78,7 +78,7 @@ class ClashContent:
     """
 
     @staticmethod
-    def create_all() -> ClashContentResult:
+    def create_all() -> ClashContentResult:  # noqa: PLR0915 — sequential seed factory; each statement is a get_or_create; splitting into helpers adds indirection without clarity
         """Idempotently create the seed content; returns the populated result.
 
         Creates (in dependency order):
@@ -121,6 +121,12 @@ class ClashContent:
         # ------------------------------------------------------------------ #
         # 1. Ensure CheckOutcome rows exist for all success_level tiers used  #
         #    by the clash consequence pipeline (success_level -2 … 3).        #
+        #                                                                     #
+        # IMPORTANT: reuse any existing row at each success_level (lowest pk) #
+        # rather than always creating new rows with distinct names.  The      #
+        # production lookup (_find_check_outcome_at_or_below) returns the     #
+        # lowest-pk row at each level; Consequence.outcome_tier FKs must      #
+        # point to that same row or pool filtering will find zero matches.    #
         # ------------------------------------------------------------------ #
         _OUTCOME_SPECS: list[tuple[str, int]] = [
             ("Clash: Critical Failure", -2),
@@ -132,14 +138,23 @@ class ClashContent:
         ]
         check_outcomes: dict[int, CheckOutcome] = {}
         for outcome_name, success_level in _OUTCOME_SPECS:
-            outcome, _ = CheckOutcome.objects.get_or_create(
-                name=outcome_name,
-                defaults={
-                    "success_level": success_level,
-                    "description": f"Clash test outcome: {outcome_name}.",
-                    "display_template": outcome_name,
-                },
+            # Prefer any already-existing row at this success_level (lowest pk).
+            # This ensures the Consequence FK matches what _find_check_outcome_at_or_below
+            # returns when called with the same level during resolve_clash.
+            existing = (
+                CheckOutcome.objects.filter(success_level=success_level).order_by("pk").first()
             )
+            if existing is not None:
+                outcome = existing
+            else:
+                outcome, _ = CheckOutcome.objects.get_or_create(
+                    name=outcome_name,
+                    defaults={
+                        "success_level": success_level,
+                        "description": f"Clash test outcome: {outcome_name}.",
+                        "display_template": outcome_name,
+                    },
+                )
             check_outcomes[success_level] = outcome
 
         # ------------------------------------------------------------------ #
