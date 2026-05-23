@@ -2167,6 +2167,7 @@ def _resolve_clashes(
             "clash",
             "participant__character_sheet",
             "technique",
+            "technique__action_template",
         )
     )
     decls_by_clash: dict[int, list[ClashContributionDeclaration]] = defaultdict(list)
@@ -2247,6 +2248,12 @@ def resolve_round(
        declarations are skipped. Bridge rows for the round are deleted inside
        the same atomic block. Resolved outcomes populate ``challenge_outcomes``
        on the return value.
+    4b. Post-pass: resolve clashes — detect new clash opportunities from the
+       round's declared PC + NPC actions (creates Clash rows), then drive one
+       round per active Clash. Gather ClashContributionDeclaration rows,
+       build PreparedClashContribution objects, and call run_clash_round for
+       each. Clean up all declarations for the round. Clash round outcomes
+       populate ``clash_outcomes`` on the return value.
     5. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
     6. After all actions: check boss phase transitions for boss-tier opponents.
     7. Check encounter completion (all opponents defeated or all PCs down).

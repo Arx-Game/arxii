@@ -410,57 +410,68 @@ class ResolveRoundClashIntegrationTests(TestCase):
     # ---------------------------------------------------------------------------
 
     def test_atomic_rollback_on_run_clash_round_failure(self) -> None:
-        """If run_clash_round raises, the entire resolve_round rolls back."""
+        """Atomic rollback: detect creates a Clash, run_clash_round raises, all rolls back."""
         encounter = self._make_encounter()
         participant = self._make_participant(encounter)
-        opponent = self._make_opponent(encounter)
 
-        self._add_npc_action(opponent, round_number=1)
-
-        pool_consequence = ConsequencePoolFactory()
-        clash = ClashFactory(
-            encounter=encounter,
-            npc_opponent=opponent,
-            status=ClashStatus.ACTIVE,
-            progress=0,
-            pc_win_threshold=20,
-            npc_win_threshold=20,
-            resolution_consequence_pool=pool_consequence,
+        # Create an opponent with a clash-capable pool entry.
+        pool = ThreatPoolFactory()
+        npc_entry = ThreatPoolEntryFactory(
+            pool=pool,
+            clash_capable=True,
+            base_damage=10,
         )
-
-        technique = self._make_technique()
-
-        ClashContributionDeclaration.objects.create(
+        opponent = CombatOpponentFactory(
             encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            threat_pool=pool,
+        )
+        # NPC action: clash-capable.
+        CombatOpponentAction.objects.create(
+            opponent=opponent,
+            threat_entry=npc_entry,
             round_number=1,
-            participant=participant,
-            clash=clash,
-            action_slot=ClashActionSlot.FOCUSED,
-            technique=technique,
-            strain_commitment=0,
         )
 
+        # Build a clash-capable PC technique.
+        pool_consequence = ConsequencePoolFactory()
+        technique = self._make_technique()
+        technique.clash_capable = True
+        technique.clash_resolution_pool = pool_consequence
+        technique.save(update_fields=["clash_capable", "clash_resolution_pool"])
+
+        # PC action: clash-capable technique aimed at the opponent.
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
+            focused_action=technique,
+            focused_opponent_target=opponent,
         )
 
+        # Record the clash count before the failure.
+        initial_clash_count = Clash.objects.count()
+
+        # Patch run_clash_round to simulate failure AFTER detection runs.
         with patch(
-            "world.combat.services._resolve_clashes",
-            side_effect=RuntimeError("simulated failure"),
+            "world.combat.clash.run_clash_round",
+            side_effect=RuntimeError("simulated clash failure"),
         ):
             with self.assertRaises(RuntimeError):
                 resolve_round(encounter)
 
-        # No ClashRound row should have been written (transaction rolled back).
-        self.assertFalse(
-            ClashRound.objects.filter(clash=clash).exists(),
-            "No ClashRound should be written when resolve_round rolls back.",
+        # The transaction should have rolled back entirely.
+        # No new Clash rows should exist (detection's creation was rolled back).
+        final_clash_count = Clash.objects.count()
+        self.assertEqual(
+            final_clash_count,
+            initial_clash_count,
+            "Clash rows created by detection should be rolled back.",
         )
 
-        # Declarations must NOT have been deleted (they can be retried on next round).
-        remaining = ClashContributionDeclaration.objects.filter(
-            encounter=encounter,
-            round_number=1,
-        ).count()
-        self.assertEqual(remaining, 1, "Declarations should survive a rollback.")
+        # No ClashRound rows should exist.
+        self.assertFalse(
+            ClashRound.objects.exists(),
+            "No ClashRound should be written when resolve_round rolls back.",
+        )
