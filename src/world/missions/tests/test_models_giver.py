@@ -282,9 +282,10 @@ class MissionGiverIsPublishableTests(TestCase):
     """is_publishable: True iff the kind-specific target FK is set.
 
     Drafty givers (kind set, target unset) pass clean() at the model layer
-    but fail is_publishable — Phase-B7's publish() service uses this to
-    refuse drafty givers, and runtime offering / authoring-UI surfaces use
-    it as a 'needs-work' signal.
+    but fail is_publishable — the authoring UI / admin surface uses this
+    as the gate before flipping a template from STAFF_ONLY to OPEN
+    (Phase-B7 access_tier transition), and as a 'needs-work' signal.
+    Runtime enforcement in offer_missions is deferred to Phase D.
     """
 
     def test_room_trigger_publishable_when_location_set(self) -> None:

@@ -1036,13 +1036,18 @@ class MissionGiver(SharedMemoryModel):
     def is_publishable(self) -> bool:
         """True when this giver has its kind-specific target FK populated.
 
-        A 'drafty' giver (kind set, target unset) passes ``clean()`` but
-        should not be surfaced by runtime offering or accepted by the
-        Phase-B7 ``publish()`` service. Use this in offering queries /
-        publish gates / authoring-UI 'needs-work' surfaces. NOT a
-        ``cached_property`` — the underlying FKs are mutable and
-        ``SharedMemoryModel`` keeps the instance long-lived; recomputing
-        on access is the safe choice.
+        A 'drafty' giver (kind set, target unset) passes ``clean()`` —
+        the model layer intentionally allows partial in-progress rows so
+        authoring tools can save mid-edit state. ``is_publishable`` is the
+        boolean signal that an authoring UI / admin surface uses to gate
+        the "ready for live audience" transition (e.g. the operator flipping
+        ``MissionTemplate.access_tier`` from ``STAFF_ONLY`` to ``OPEN``).
+        Runtime enforcement in ``offer_missions`` is deferred until the
+        Phase-D offering surface and the broader visibility/permission
+        brainstorm — today this property is consumed only by the
+        authoring layer. NOT a ``cached_property`` — the underlying FKs
+        are mutable and ``SharedMemoryModel`` keeps the instance
+        long-lived; recomputing on access is the safe choice.
         """
         if self.giver_kind == GiverKind.NPC:
             return self.npc_id is not None

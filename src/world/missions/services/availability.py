@@ -131,6 +131,12 @@ def _eligible_templates(
     )
     if not is_staff_observer(character):
         qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
+    # DESIGN: a staff character testing a STAFF_ONLY template will pass
+    # this audience filter but can still be silently dropped by the per-
+    # template predicate / level-band / cooldown filters below — with no
+    # in-band signal to the author about which gate ate the template.
+    # Phase D's Mission Studio is the right place for a debug overlay
+    # surfacing "why doesn't this template show for me?" — see design §8.1.
     if arc_filter and active_era is not None:
         qs = qs.filter(created_in_era=active_era)
     elif arc_filter:

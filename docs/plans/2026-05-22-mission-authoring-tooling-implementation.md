@@ -178,19 +178,30 @@ Run `echo "yes" | uv run arx test --postgres world.missions world.mechanics` fre
 2. Add the flags. Migration. (The copy operation in Phase D sets them `True`; editing clears them.)
 3. Commit: `feat(missions): flavor-field needs-rewrite flags`.
 
-### Task B7: draft/publish working-draft mechanism
+### Task B7: access-tier audience gate (deviation from original plan)
 
-**Files:** `src/world/missions/models.py`, `src/world/missions/services/publishing.py` (new), migration, `test_services_publishing.py`.
+> **DEVIATION (2026-05-23 — landed):** The original plan called for a full
+> draft/publish working-copy fork (separate draft + live `MissionTemplate`
+> rows, `publish()` promotion, `open_for_edit()` to create a working copy).
+> The user redirected to a simpler shape: a single `MissionTemplate.access_tier`
+> audience-tier field (`OPEN`/`STAFF_ONLY`, default `STAFF_ONLY`).
+> Per-author in-flight protection is already provided by `MissionNodeSnapshot`
+> (every accepted mission pins its node graph), so the only remaining need
+> is "let staff test an authored mission before players see it" — handled
+> cleanly by audience gating without forking the graph. Richer tiers
+> (society, GM-level, distinction-gated) defer to a dedicated permission
+> brainstorm. See `docs/roadmap/missions.md` deviation note.
 
-**This is the most complex task in Phase B.** Design §4: a mission has a draft graph (always what the editor edits) and, once published, a live version; editing is a session; publish atomically updates the live version; in-flight instances are pinned to their version.
+**Files (as landed):** `src/world/missions/constants.py` (new `AccessTier` TextChoices), `src/world/missions/models.py` (`access_tier` field on `MissionTemplate`), `src/world/missions/services/availability.py` (filter), `src/world/missions/factories.py` (factory default override), migration `0021`, `tests/test_models_template.py` + `tests/test_services_availability.py`.
 
-**Steps:**
-1. Failing tests for the behavioural contract: (a) a new mission is draft-only and `offer_missions` never returns it; (b) editing a published mission's draft does not change what `offer_missions`/new instances see until `publish`; (c) `publish` atomically swaps; (d) an in-flight `MissionInstance` is unaffected by a re-publish.
-2. Choose the mechanism (design §4 flagged this fork): recommended — a `MissionTemplate.status` (DRAFT/PUBLISHED) plus, for editing a published mission, a working-copy draft `MissionTemplate` linked to the live one; `publish` promotes. `MissionInstance` gains a FK to the exact template version it was created from (it likely already FKs the template — confirm it pins correctly). Implement `publish(template)` and `open_for_edit(template)` services.
-3. Run the contract tests — green.
-4. Commit: `feat(missions): draft/publish working-draft mechanism`.
+**Shape that landed (one commit, `4b46378f`):**
+1. `AccessTier(TextChoices)`: `OPEN` / `STAFF_ONLY`. Intentionally minimal.
+2. `MissionTemplate.access_tier`: `CharField`, `db_index=True`, model default `STAFF_ONLY` (production-safe; new templates start in testing).
+3. `_eligible_templates` excludes `STAFF_ONLY` templates when `is_staff_observer(character)` is False; staff see both tiers; other filters (predicate/cooldown/level-band/arc-scope) apply unchanged for everyone.
+4. `MissionTemplateFactory.access_tier = AccessTier.OPEN` (test ergonomics; keeps the 300+ pre-B7 tests working without touching every caller).
+5. Migration `0021` is a single `AddField` with the default — trivial forward.
 
-> **Executor note:** this task may itself want splitting into 3–4 commits (status field; working-copy fork; publish service; instance version-pinning). Break it down when you reach it.
+Tests cover: OPEN visible to non-staff, STAFF_ONLY hidden from non-staff, STAFF_ONLY visible to staff, staff seeing both tiers; factory default vs model default split.
 
 ### Task B8: Phase-B regression gate
 
@@ -248,11 +259,14 @@ For each of: character level, org membership, society reputation tier, org reput
 
 CRUD for `MissionGiver` (+ `giver_kind` discriminated targets), `MissionGiverOffering`, `MissionGiverStanding`. TDD per endpoint.
 
-### Task D4: draft/publish + copy + staff-power actions
+### Task D4: access-tier flip + copy + staff-power actions
 
-- `publish` / `open-for-edit` actions wrapping the Phase B7 services.
-- `copy` action(s): copy node / sub-branch / whole mission — re-point internal routes, flag external routes, set every flavor field's `needs_rewrite=True`, land result as draft (design §10).
-- Staff-power endpoints: assign a mission (draft or live) to a character; remove a mission instance. These wrap existing missions services where possible.
+> **DEVIATION (post-B7):** Originally "draft/publish + open-for-edit" wrapping
+> Phase-B7 services that no longer exist. Reshape to the audience-tier shape.
+
+- `access-tier` flip — a `PATCH` action on `MissionTemplateViewSet` that toggles `MissionTemplate.access_tier` between `OPEN` and `STAFF_ONLY`. Server-side guard: refuse the flip to `OPEN` if the template's primary giver isn't `is_publishable` (or surface the failed gates as a 400 with a list of "needs-work" items — TBD when the Studio UX lands). No graph fork; no working-copy creation.
+- `copy` action(s): copy node / sub-branch / whole mission — re-point internal routes, flag external routes, set every flavor field's `needs_rewrite=True`, land result with `access_tier=STAFF_ONLY` (design §10).
+- Staff-power endpoints: assign a mission (any access tier) to a character; remove a mission instance. These wrap existing missions services where possible.
 - TDD per action.
 
 ### Task D5: predicate-tree API + schema regen
