@@ -96,7 +96,7 @@ class SoloTerminalBeatSeamTests(TestCase):
         instance, entry, actor, option = self._make_terminal_run(source_beat=beat)
 
         # BRANCH option with no branch_target / null-tier route → terminal.
-        resolve_option(instance, entry, option, actor, None)
+        resolve_option(instance, entry, option, actor)
 
         triggers = beat_service.get_triggers()
         self.assertEqual(len(triggers), 1)
@@ -106,7 +106,7 @@ class SoloTerminalBeatSeamTests(TestCase):
     def test_solo_terminal_of_free_instance_records_no_trigger(self) -> None:
         instance, entry, actor, option = self._make_terminal_run(source_beat=None)
 
-        resolve_option(instance, entry, option, actor, None)
+        resolve_option(instance, entry, option, actor)
 
         self.assertEqual(beat_service.get_triggers(), ())
 

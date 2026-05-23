@@ -11,7 +11,7 @@ Two invariants this module enforces:
   * **Moral consequence follows the actor.** The deed ``actor`` is always
     the participant whose option actually performed. COINFLIP/VOTE resolve
     to ONE acting participant; JOINT runs every participant's own pick so
-    each participant's per-act consequences/riders attach to *their own*
+    each participant's per-act consequences attach to *their own*
     deed (Phase-3 ``resolve_option(actor=participant)`` already records
     that participant — no cross-attribution).
   * **Contractual consequence is the contract-holder's alone.** Phase 4
@@ -34,8 +34,6 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch
-
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
@@ -50,8 +48,8 @@ from world.missions.types import GroupChoice
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
-        AffordanceBinding,
         MissionDeedRecord,
         MissionInstance,
         MissionNode,
@@ -95,31 +93,16 @@ def build_group_option_list(
     additive — players still pick; conflicting picks are arbitrated later
     by :func:`select_group_choice`.
 
-    The node's options + their accepted affordances are fetched ONCE here
-    (one ordered queryset with ``Prefetch(... to_attr=
-    "accepted_affordances_cached")``) and reused across every participant
-    via :func:`present_options_for_character`, so the per-participant
-    union does NOT re-issue the options / accepted-affordances queries per
-    participant (Phase-3 review Minor-1). This is the behavior-preserving
-    shared-prefetch refactor the Phase-4 plan permits: Phase-3
+    The node's options are fetched ONCE and reused across every participant
+    via :func:`present_options_for_character`, so the per-participant union
+    does NOT re-issue the options query per participant. Phase-3
     ``build_option_list``'s single-participant behavior is unchanged (it
-    now delegates to the same extracted helper).
+    delegates to the same extracted helper).
     """
-    # M-1: Safe to leak on the SharedMemoryModel instance:
-    # accepted_affordances is immutable authored graph data, not per-request
-    # state. The Prefetch(to_attr="accepted_affordances_cached") attribute
-    # would only be a leak hazard if its content varied across requests for
-    # the same model row; the authored graph is shared and stable.
-    options = list(
-        node.options.all()
-        .order_by("order", "pk")
-        .prefetch_related(
-            Prefetch(
-                "accepted_affordances",
-                to_attr="accepted_affordances_cached",
-            )
-        )
-    )
+    # select_related("challenge") so the CHALLENGE-branch FK walk in
+    # present_options_for_character doesn't fire one query per option per
+    # participant (the options list is built once and reused).
+    options = list(node.options.select_related("challenge").order_by("order", "pk"))
 
     participants = instance.participants.all().order_by("pk")
     presented: list[PresentedOption] = []
@@ -234,23 +217,23 @@ def select_group_choice(
     return _coinflip_choice(picks)
 
 
-def _binding_for_pick(
+def _approach_for_pick(
     presented: list[PresentedOption],
     participant: MissionParticipant,
     option: MissionOption,
-) -> AffordanceBinding | None:
-    """The AffordanceBinding ``participant``'s pick of ``option`` uses.
+) -> ChallengeApproach | None:
+    """The ``ChallengeApproach`` ``participant``'s pick of ``option`` uses.
 
-    Recovered from the already-built group option list (the same union
-    the participant picked from) — the first entry for ``option`` owned by
-    this participant's character. AUTHORED picks carry no binding (None);
-    an AFFORDANCE pick resolves through its binding's check_type / rider
-    exactly as Phase-3 single-participant resolution does. No re-query: we
-    walk the list ``build_group_option_list`` already produced.
+    Recovered from the already-built group option list (the same union the
+    participant picked from) — the first entry for ``option`` owned by this
+    participant's character. AUTHORED picks carry no approach (None); a
+    CHALLENGE pick carries the approach the runtime fan-out selected for
+    this participant. No re-query: we walk the list
+    :func:`build_group_option_list` already produced.
     """
     for entry in presented:
         if entry.option.pk == option.pk and entry.owner.pk == participant.character_id:
-            return entry.binding
+            return entry.approach
     return None
 
 
@@ -347,7 +330,7 @@ def group_resolve_node(
 
     JOINT — every participant runs their OWN pick via Phase-3
     ``resolve_option(actor=participant)`` so each participant's check and
-    per-act consequences/riders attach to their own deed (no
+    per-act consequences attach to their own deed (no
     cross-attribution). The combined success is then computed per
     ``joint_combine``/``joint_count`` and the node ROUTING/terminal is
     performed ONCE — based on that combined boolean — by reusing the
@@ -369,7 +352,7 @@ def group_resolve_node(
     if not gc.is_joint:
         # COINFLIP / VOTE: exactly one option resolves once, as the
         # selected acting participant — Phase-3 resolve_option performs
-        # the check, applies the route consequence + permitted rider, and
+        # the check, applies the route consequence, and
         # advances/terminates the run. We do NOT reimplement any of that.
         # select_group_choice guarantees option+actor are set when
         # is_joint is False (only JOINT leaves them None).
@@ -378,14 +361,14 @@ def group_resolve_node(
         if actor is None or winning_option is None:
             msg = "non-JOINT GroupChoice must carry option and actor"
             raise ValueError(msg)
-        binding = _binding_for_pick(presented, actor, winning_option)
-        deed = resolve_option(instance, node, winning_option, actor, binding)
+        approach = _approach_for_pick(presented, actor, winning_option)
+        deed = resolve_option(instance, node, winning_option, actor, chosen_approach=approach)
         return [deed]
 
     # JOINT: run every participant's own pick via Phase-3 resolve_option
     # in the routing-free mode (advance=False — Phase-5a I-1). Each call
     # records that participant as the deed actor and applies that
-    # participant's own check + per-act consequences/riders — per-actor
+    # participant's own check + per-act consequences — per-actor
     # moral consequence is correct by construction (no cross-attribution).
     # Crucially, NO per-attempt routing or terminal write touches the
     # instance: the only thing that routes/terminates is the combined
@@ -398,14 +381,14 @@ def group_resolve_node(
     for participant, option in gc.attempts:
         if participant.pk == holder.pk:
             holder_option = option
-        binding = _binding_for_pick(presented, participant, option)
+        approach = _approach_for_pick(presented, participant, option)
         deeds.append(
             resolve_option(
                 instance,
                 node,
                 option,
                 participant,
-                binding,
+                chosen_approach=approach,
                 advance=False,
             )
         )

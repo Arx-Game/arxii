@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
-    from world.checks.models import CheckType, Consequence
+    from world.checks.models import CheckType
+    from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
-        AffordanceBinding,
         MissionOption,
         MissionParticipant,
         MissionRewardQueue,
@@ -66,24 +66,29 @@ class DeedRewardLine:
 
 
 @dataclass(frozen=True)
-class ResolvedOption:
-    """One surfaced player option produced from an owned descriptor binding.
+class ChallengeOption:
+    """One challenge-contributed option surfaced at a node for a character.
 
-    Built by ``world.missions.services.bindings_for_character`` for each
-    :class:`~world.missions.models.AffordanceBinding` whose affordance the
-    challenge accepts AND whose descriptor the acting character owns. Fields
-    are flattened off the binding so resolution callers never re-walk the FK
-    side. ``owner`` is the acting character (an ``ObjectDB``); Phase 4
-    generalizes this to per-participant owners and the default stays the
-    acting character.
+    Built by
+    ``world.missions.services.challenge_options.challenge_options_for_character``
+    for each ``mechanics.ChallengeApproach`` of a node's attached challenges
+    that the acting character qualifies for — they hold the approach's
+    ``Application.capability`` (decided by the Phase-0 ``has_capability``
+    resolver) — or that is ``is_default`` (offered to everyone). Fields are
+    flattened off the approach/challenge so resolution callers never re-walk
+    the FK side.
+
+    The challenge↔missions integration is *data-source* (findings doc Q2): a
+    challenge is consumed as authored data, never run as an engine. Of the
+    ``ChallengeTemplate`` fields only ``severity`` rides along — it is
+    ``difficulty`` here (design §8.4 Q4). ``auto_succeeds`` mirrors the
+    approach flag; an auto-success option skips the roll at resolution time.
     """
 
-    binding: AffordanceBinding
-    produces: str
-    check_type: CheckType | None
-    base_risk: int
-    ic_framing: str
-    rider: Consequence | None
+    approach: ChallengeApproach
+    check_type: CheckType
+    auto_succeeds: bool
+    difficulty: int
     owner: ObjectDB
 
 
@@ -234,14 +239,14 @@ class MissionBeatTriggerRecord:
 class PresentedOption:
     """One player-facing option surfaced at a node for the acting participant.
 
-    Built by ``world.missions.services.resolution.build_option_list``. An
-    AFFORDANCE-sourced :class:`~world.missions.models.MissionOption` fans out
-    into one ``PresentedOption`` per owned descriptor binding (``binding`` set,
-    ``owner`` the acting character); an AUTHORED option produces a single entry
-    (``binding`` None) when its visibility predicate passes. Fields are
-    flattened off the binding/option so resolution callers never re-walk the
-    FK side. Phase 3 is single-participant — ``owner`` is the acting
-    participant's character; Phase 4 generalizes to per-participant owners.
+    Built by ``world.missions.services.resolution.build_option_list``. A
+    CHALLENGE-sourced :class:`~world.missions.models.MissionOption` fans out
+    into one ``PresentedOption`` per qualifying ``ChallengeApproach``
+    (``approach`` set); an AUTHORED option produces a single entry
+    (``approach`` None) when its visibility predicate passes. Fields are
+    flattened off the approach/option so resolution callers never re-walk
+    the FK side. ``owner`` is the acting participant's character (Phase 4
+    generalizes to per-participant owners in the multi-participant union).
     """
 
     option: MissionOption
@@ -250,4 +255,4 @@ class PresentedOption:
     base_risk: int
     ic_framing: str
     owner: ObjectDB
-    binding: AffordanceBinding | None
+    approach: ChallengeApproach | None = None
