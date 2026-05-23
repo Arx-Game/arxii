@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 from world.combat.constants import ClashFlavor, LockPcRole
 from world.combat.models import ClashConfig, StrainConfig
 from world.combat.types import ClashContributionResult
+from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
+from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
 from world.traits.models import CheckOutcome
 
@@ -32,7 +34,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import Clash
-    from world.magic.models import Technique
+    from world.magic.models import Affinity, Technique
 
 
 def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
@@ -263,3 +265,81 @@ def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: 
         return entry.clash_break_free_force or 0
     # LockPcRole.ESCAPING: PC is escaping; NPC is maintaining the lock.
     return entry.clash_npc_pressure or 0
+
+
+def _get_technique_affinity(technique: Technique) -> Affinity | None:
+    """Derive the dominant affinity for a technique from its gift's first resonance.
+
+    Walks ``technique.gift.resonances.first()`` and returns its ``.affinity``.
+    Returns ``None`` if the gift has no resonances (no affinity signal).
+
+    This is the simplest defensible derivation: one technique → one gift →
+    first resonance → affinity.  A richer "majority vote" approach would require
+    loading all resonances; the first-resonance proxy is sufficient for the
+    RPS tilt calculation and mirrors the existing corruption path in
+    ``world.magic.services.resonance_environment``.
+
+    Private helper — call only from within this module.
+    """
+    first_resonance = technique.gift.resonances.select_related("affinity").first()
+    if first_resonance is None:
+        return None
+    return first_resonance.affinity
+
+
+def affinity_tilt(
+    *,
+    contributor_technique: Technique,
+    npc_attack_affinity: Affinity | None,
+    config: ClashConfig,
+) -> int:
+    """Compute the per-contributor check-modifier tilt for a clash contribution.
+
+    Reads the existing ``AffinityInteraction`` matrix as a directed
+    (contributor-affinity, NPC-affinity) pair — the caster-vs-caster analogue of
+    the shipped caster-vs-place interaction.  Returns:
+
+      - ``0`` if ``npc_attack_affinity`` is ``None`` (non-magical NPC attack)
+      - ``0`` if the contributor's technique has no derivable affinity
+      - ``0`` if no ``AffinityInteraction`` row exists for the pair
+      - ``0`` for ALIGNED matchups (same-affinity diagonal — the AMPLIFY
+        semantics are caster-vs-place only and do not transfer to
+        caster-vs-caster)
+      - For OPPOSED matchups: ``±round(severity_multiplier × config.affinity_tilt_coefficient)``,
+        positive when the contributor's affinity dominates (``aggressor=CASTER``),
+        negative when the NPC's dominates (``aggressor=ENVIRONMENT``).
+
+    Magnitude uses Python's built-in ``round()``, which applies banker's
+    (round-half-to-even) rounding for deterministic, bias-free behaviour when
+    the product lands exactly on a half-integer.
+
+    Pure read — no DB writes, no mutation of inputs.
+    """
+    # 1. Non-magical NPC attack → no tilt.
+    if npc_attack_affinity is None:
+        return 0
+
+    # 2. Derive the contributor's affinity; no affinity signal → no tilt.
+    tech_affinity = _get_technique_affinity(contributor_technique)
+    if tech_affinity is None:
+        return 0
+
+    # 3. Look up the directed (tech, npc) pair in the matrix; no row → no tilt.
+    interaction = AffinityInteraction.objects.interaction_for(tech_affinity, npc_attack_affinity)
+    if interaction is None:
+        return 0
+
+    # 4. ALIGNED (same-affinity diagonal) → no tilt; AMPLIFY semantics are
+    #    caster-vs-place only and do not apply here.
+    if interaction.valence == ResonanceValence.ALIGNED:
+        return 0
+
+    # 5. OPPOSED: compute magnitude from authored severity × tuning coefficient.
+    #    Both are Decimal; round() returns a plain int.
+    magnitude: int = round(interaction.severity_multiplier * config.affinity_tilt_coefficient)
+
+    # 6. Sign: CASTER aggressor means the contributor's affinity dominates → positive.
+    if interaction.aggressor == AffinityInteractionAggressor.CASTER:
+        return magnitude
+    # ENVIRONMENT aggressor: NPC's affinity dominates → negative.
+    return -magnitude
