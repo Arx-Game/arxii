@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.clash import commit_to_clash, outcome_to_delta, strain_to_modifier
 from world.combat.factories import ClashConfigFactory, ClashFactory, StrainConfigFactory
@@ -30,10 +31,20 @@ class CommitToClashTests(TestCase):
         cls.clash = ClashFactory()
 
     def _make_character_with_anima(self, current: int = 20, maximum: int = 20) -> tuple:
-        """Create a character with a CharacterAnima pool and engagement record."""
-        anima = CharacterAnimaFactory(current=current, maximum=maximum)
-        CharacterEngagementFactory(character=anima.character)
-        return anima.character, anima
+        """Create a character with a CharacterAnima pool and engagement record.
+
+        Returns (CharacterSheet, anima).  commit_to_clash now takes a CharacterSheet;
+        the ObjectDB is resolved internally via CharacterSheet.character.
+
+        CharacterSheetFactory creates the ObjectDB (CharacterFactory) and
+        CharacterSheet together.  We then attach an anima pool and engagement
+        record to the same ObjectDB.
+        """
+        sheet = CharacterSheetFactory()
+        anima = CharacterAnimaFactory(character=sheet.character, current=current, maximum=maximum)
+        # CharacterEngagementFactory expects an ObjectDB.
+        CharacterEngagementFactory(character=sheet.character)
+        return sheet, anima
 
     def _make_technique_with_template(
         self, intensity: int = 5, control: int = 10, anima_cost: int = 3
@@ -53,12 +64,12 @@ class CommitToClashTests(TestCase):
 
     def test_basic_commit_writes_contribution_result(self) -> None:
         """Zero strain commitment + plenty of anima → valid ClashContributionResult."""
-        character, _anima = self._make_character_with_anima(current=20, maximum=20)
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
         technique = self._make_technique_with_template(anima_cost=3)
 
         with force_check_outcome(self.success_outcome):
             result = commit_to_clash(
-                character=character,
+                character_sheet=character_sheet,
                 technique=technique,
                 clash=self.clash,
                 strain_commitment=0,
@@ -90,7 +101,7 @@ class CommitToClashTests(TestCase):
         modifier (i.e. a better outcome) when forced outcomes are the same, OR just
         verify anima_committed matches the commitment and the result is valid.
         """
-        character, _anima = self._make_character_with_anima(current=20, maximum=20)
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
         technique = self._make_technique_with_template(anima_cost=3)
 
         strain_n = 10
@@ -103,7 +114,7 @@ class CommitToClashTests(TestCase):
 
         with force_check_outcome(self.success_outcome):
             result = commit_to_clash(
-                character=character,
+                character_sheet=character_sheet,
                 technique=technique,
                 clash=self.clash,
                 strain_commitment=strain_n,
@@ -132,13 +143,13 @@ class CommitToClashTests(TestCase):
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
 
         # Give the character very little anima
-        character, _anima = self._make_character_with_anima(current=2, maximum=10)
+        character_sheet, _anima = self._make_character_with_anima(current=2, maximum=10)
         # Technique with minimal base cost so only the strain causes overburn
         technique = self._make_technique_with_template(intensity=3, control=10, anima_cost=1)
 
         with force_check_outcome(self.success_outcome):
             result = commit_to_clash(
-                character=character,
+                character_sheet=character_sheet,
                 technique=technique,
                 clash=self.clash,
                 strain_commitment=20,  # far exceeds current=2
@@ -161,12 +172,12 @@ class CommitToClashTests(TestCase):
 
     def test_technique_without_action_template_raises(self) -> None:
         """A technique with action_template=None must raise ValueError."""
-        character, _anima = self._make_character_with_anima()
+        character_sheet, _anima = self._make_character_with_anima()
         technique = TechniqueFactory(action_template=None)
 
         with self.assertRaises(ValueError):
             commit_to_clash(
-                character=character,
+                character_sheet=character_sheet,
                 technique=technique,
                 clash=self.clash,
                 strain_commitment=0,

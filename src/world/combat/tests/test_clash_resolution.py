@@ -1,11 +1,12 @@
-"""Tests for npc_round_contribution and affinity_tilt in world.combat.clash."""
+"""Tests for npc_round_contribution, affinity_tilt, and aggregate_clash_round."""
 
 from decimal import Decimal
 
 from django.test import TestCase
 
-from world.combat.clash import affinity_tilt, npc_round_contribution
-from world.combat.constants import ClashFlavor, LockPcRole
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.clash import affinity_tilt, aggregate_clash_round, npc_round_contribution
+from world.combat.constants import ClashActionSlot, ClashFlavor, LockPcRole
 from world.combat.factories import (
     BreakClashFactory,
     ClashConfigFactory,
@@ -14,6 +15,8 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     WardClashFactory,
 )
+from world.combat.models import ClashContribution, ClashRound
+from world.combat.types import ClashContributionResult
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -27,6 +30,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.resonance_environment import AffinityInteraction
+from world.traits.factories import CheckOutcomeFactory
 
 
 class NpcRoundContributionTests(TestCase):
@@ -231,3 +235,186 @@ class AffinityTiltTests(TestCase):
         )
         self.assertEqual(result, 0)
         self.assertIsInstance(result, int)
+
+
+class AggregateClashRoundTests(TestCase):
+    """Unit tests for aggregate_clash_round — one test per flavor branch and audit invariant."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.check_outcome = CheckOutcomeFactory(name="aggr_success", success_level=1)
+        cls.technique = TechniqueFactory()
+        cls.character_a = CharacterSheetFactory()
+        cls.character_b = CharacterSheetFactory()
+
+    def _make_contribution(
+        self,
+        *,
+        character: object = None,
+        progress_delta: int = 1,
+        action_slot: str = ClashActionSlot.FOCUSED,
+    ) -> ClashContributionResult:
+        """Construct a ClashContributionResult directly (no magic pipeline needed)."""
+        from unittest.mock import MagicMock
+
+        return ClashContributionResult(
+            character=character if character is not None else self.character_a,
+            action_slot=action_slot,
+            technique=self.technique,
+            check_outcome=self.check_outcome,
+            progress_delta=progress_delta,
+            anima_committed=5,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+            technique_use_result=MagicMock(),
+        )
+
+    # -------------------------------------------------------------------------
+    # Sign-convention tests (one per flavor / sub-case)
+    # -------------------------------------------------------------------------
+
+    def test_clash_meter_pc_pushes_positive_npc_negative(self) -> None:
+        """CLASH: progress_after = clash.progress + pc_delta_sum - npc_delta."""
+        clash = ClashFactory(progress=10)
+        contributions = [self._make_contribution(progress_delta=5)]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=3,
+        )
+        # 10 + 5 - 3 = 12
+        self.assertEqual(result.progress_after, 12)
+        self.assertEqual(result.pc_delta_sum, 5)
+        self.assertEqual(result.npc_delta, 3)
+
+    def test_lock_sustaining_pc_pushes_up_npc_down(self) -> None:
+        """LOCK/SUSTAINING: progress_after = clash.progress + pc_delta_sum - npc_delta."""
+        clash = LockClashFactory(lock_pc_role=LockPcRole.SUSTAINING, progress=0)
+        contributions = [self._make_contribution(progress_delta=4)]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=1,
+        )
+        # 0 + 4 - 1 = 3
+        self.assertEqual(result.progress_after, 3)
+
+    def test_lock_escaping_pc_pushes_down_npc_up(self) -> None:
+        """LOCK/ESCAPING: progress_after = clash.progress - pc_delta_sum + npc_delta."""
+        clash = LockClashFactory(lock_pc_role=LockPcRole.ESCAPING, progress=10)
+        contributions = [self._make_contribution(progress_delta=4)]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=1,
+        )
+        # 10 - 4 + 1 = 7
+        self.assertEqual(result.progress_after, 7)
+
+    def test_ward_pc_strengthens_npc_drains(self) -> None:
+        """WARD: progress_after = clash.progress + pc_delta_sum - npc_delta."""
+        clash = WardClashFactory(progress=5)
+        contributions = [self._make_contribution(progress_delta=2)]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=3,
+        )
+        # 5 + 2 - 3 = 4
+        self.assertEqual(result.progress_after, 4)
+
+    def test_break_npc_delta_is_zero(self) -> None:
+        """BREAK: npc_delta is always 0; progress_after = clash.progress + pc_delta_sum."""
+        clash = BreakClashFactory(progress=0)
+        contributions = [self._make_contribution(progress_delta=3)]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=0,
+        )
+        # 0 + 3 - 0 = 3
+        self.assertEqual(result.progress_after, 3)
+
+    # -------------------------------------------------------------------------
+    # DB write and audit invariants
+    # -------------------------------------------------------------------------
+
+    def test_writes_clash_round_and_contributions(self) -> None:
+        """2 PC contributions → 1 ClashRound row and 2 ClashContribution rows."""
+        clash = ClashFactory(progress=0)
+        contributions = [
+            self._make_contribution(character=self.character_a, progress_delta=3),
+            self._make_contribution(character=self.character_b, progress_delta=2),
+        ]
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=1,
+        )
+
+        # One ClashRound row.
+        self.assertIsNotNone(result.clash_round.pk)
+        db_round = ClashRound.objects.get(pk=result.clash_round.pk)
+        self.assertEqual(db_round.clash_id, clash.pk)
+        self.assertEqual(db_round.round_number, 1)
+        self.assertEqual(db_round.pc_progress_delta, 5)  # 3 + 2
+        self.assertEqual(db_round.npc_progress_delta, 1)
+        self.assertEqual(db_round.progress_after, 4)  # 0 + 5 - 1
+
+        # Two ClashContribution rows.
+        self.assertEqual(len(result.contributions), 2)
+        db_count = ClashContribution.objects.filter(clash_round=result.clash_round).count()
+        self.assertEqual(db_count, 2)
+
+        # Spot-check the first contribution row.
+        contrib = ClashContribution.objects.get(
+            clash_round=result.clash_round,
+            character=self.character_a,
+        )
+        self.assertEqual(contrib.progress_delta, 3)
+        self.assertEqual(contrib.action_slot, ClashActionSlot.FOCUSED)
+        self.assertEqual(contrib.anima_committed, 5)
+        self.assertFalse(contrib.was_overburn)
+        self.assertFalse(contrib.was_audere)
+        self.assertEqual(contrib.soulfray_severity_accrued, 0)
+
+    def test_clash_progress_persists(self) -> None:
+        """After aggregation, clash.refresh_from_db() reflects the updated progress."""
+        clash = ClashFactory(progress=0)
+        contributions = [self._make_contribution(progress_delta=7)]
+        aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=contributions,
+            npc_delta=2,
+        )
+        clash.refresh_from_db()
+        self.assertEqual(clash.progress, 5)  # 0 + 7 - 2
+
+    def test_empty_contributions_only_npc_moves_meter(self) -> None:
+        """Empty PC contributions, npc_delta=5, CLASH → progress_after = clash.progress - 5."""
+        clash = ClashFactory(progress=10)
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[],
+            npc_delta=5,
+        )
+        # 10 + 0 - 5 = 5
+        self.assertEqual(result.progress_after, 5)
+        self.assertEqual(result.pc_delta_sum, 0)
+
+        # One ClashRound row written.
+        self.assertTrue(ClashRound.objects.filter(pk=result.clash_round.pk).exists())
+
+        # Zero ClashContribution rows.
+        db_count = ClashContribution.objects.filter(clash_round=result.clash_round).count()
+        self.assertEqual(db_count, 0)
+        self.assertEqual(len(result.contributions), 0)

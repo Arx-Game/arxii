@@ -10,14 +10,18 @@ from world.vitals.types import DamageConsequenceResult
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.combat.models import (
+        ClashContribution,
+        ClashRound,
         CombatOpponent,
         CombatParticipant,
         CombatRoundAction,
         ComboDefinition,
     )
     from world.conditions.models import ConditionTemplate
+    from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
     from world.traits.models import CheckOutcome
@@ -160,6 +164,14 @@ class ClashContributionResult:
     round-resolution engine can aggregate progress without re-running the cast.
 
     Fields:
+        character: The ``CharacterSheet`` that made this contribution — echoes
+            back the ``character`` argument passed to ``commit_to_clash`` so
+            the aggregator can write the ``ClashContribution`` audit row without
+            re-resolving the identity.
+        action_slot: The ``ClashActionSlot`` value (``"FOCUSED"`` or
+            ``"PASSIVE"``) — echoes back the ``action_slot`` argument.
+        technique: The ``Technique`` used for this contribution — echoes back
+            the ``technique`` argument.
         check_outcome: The ``CheckOutcome`` that the contribution roll produced.
         progress_delta: Change in clash progress this contribution contributes,
             derived from ``outcome_to_delta``.
@@ -174,6 +186,9 @@ class ClashContributionResult:
             pipeline for callers that need lower-level details.
     """
 
+    character: CharacterSheet
+    action_slot: str
+    technique: Technique
     check_outcome: CheckOutcome
     progress_delta: int
     anima_committed: int
@@ -181,3 +196,27 @@ class ClashContributionResult:
     was_audere: bool
     soulfray_severity_accrued: int
     technique_use_result: TechniqueUseResult
+
+
+@dataclass(frozen=True)
+class ClashRoundResult:
+    """Result of one round of clash aggregation.
+
+    Produced by ``aggregate_clash_round``. Carries the persisted DB rows and
+    the numeric values that drove the meter update so the caller can surface
+    feedback to players without re-querying.
+
+    Fields:
+        clash_round: The persisted ``ClashRound`` row written this round.
+        contributions: The persisted ``ClashContribution`` rows — one per PC
+            contribution passed in.
+        pc_delta_sum: The raw sum of all PC contribution deltas this round.
+        npc_delta: The NPC push magnitude (non-negative) passed in by the caller.
+        progress_after: The updated ``clash.progress`` value after this round.
+    """
+
+    clash_round: ClashRound
+    contributions: list[ClashContribution]
+    pc_delta_sum: int
+    npc_delta: int
+    progress_after: int

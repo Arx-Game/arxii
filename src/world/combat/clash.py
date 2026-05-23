@@ -6,7 +6,7 @@ each function is unit-testable in isolation.  Higher-level orchestration
 (views, commands, flow steps) calls into this module rather than implementing
 Clash logic themselves.
 
-Current scope (Tasks 2.1–2.3):
+Current scope (Tasks 2.1–3.3):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
@@ -14,17 +14,25 @@ Current scope (Tasks 2.1–2.3):
     delta, driven by the six ``ClashConfig.delta_*`` tuning knobs.
   - ``commit_to_clash``: routes a PC's per-round clash contribution through
     the ``use_technique`` magic pipeline and returns a ``ClashContributionResult``.
+  - ``npc_round_contribution``: returns the NPC's per-round progress contribution.
+  - ``affinity_tilt``: computes a per-contributor check-modifier tilt from the
+    AffinityInteraction matrix.
+  - ``aggregate_clash_round``: aggregates PC contributions and the NPC delta into
+    a ``ClashRound`` row, writes per-PC ``ClashContribution`` audit rows, and
+    updates ``clash.progress`` per the flavor's sign convention.
 
-Future tasks will add round-resolution, NPC contribution, and outcome helpers here.
+Future tasks will add the full round driver, threshold detection, and outcome helpers.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.combat.constants import ClashFlavor, LockPcRole
-from world.combat.models import ClashConfig, StrainConfig
-from world.combat.types import ClashContributionResult
+from world.combat.models import ClashConfig, ClashContribution, ClashRound, StrainConfig
+from world.combat.types import ClashContributionResult, ClashRoundResult
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
@@ -33,6 +41,7 @@ from world.traits.models import CheckOutcome
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.combat.models import Clash
     from world.magic.models import Affinity, Technique
 
@@ -92,11 +101,11 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int
 
 def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of the v1 contract
     *,
-    character: ObjectDB,
+    character_sheet: CharacterSheet,
     technique: Technique,
     clash: Clash,  # noqa: ARG001 — carried for future round-aggregation context; not used in v1
     strain_commitment: int,
-    action_slot: str,  # noqa: ARG001 — carried for future FOCUSED/PASSIVE lane logic; not used in v1
+    action_slot: str,
     config_clash: ClashConfig,
     config_strain: StrainConfig,
     targets: list | None = None,
@@ -110,13 +119,15 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     the resolve closure performs only the check roll.
 
     Args:
-        character: The PC performing the contribution (ObjectDB).
-        technique: The technique being cast for the contribution.
+        character_sheet: The PC performing the contribution (CharacterSheet).
+            The underlying ObjectDB is resolved internally via
+            ``character_sheet.character`` for the magic pipeline calls.
         clash: The active Clash instance this contribution belongs to (reserved for
             future round-aggregation context; not used in v1).
         strain_commitment: Extra anima committed on top of the effective cost floor.
         action_slot: ``ClashActionSlot`` value (``"FOCUSED"`` or ``"PASSIVE"``);
-            reserved for future FOCUSED/PASSIVE lane logic (not used in v1).
+            echoed into the returned ``ClashContributionResult`` for audit use by
+            the round aggregator.
         config_clash: Clash tuning knobs for ``outcome_to_delta``.
         config_strain: Strain curve knobs for ``strain_to_modifier``.
         targets: Optional explicit targets forwarded to the magic pipeline.
@@ -133,6 +144,19 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     """
     from world.checks.services import perform_check  # noqa: PLC0415 — local import avoids circular
     from world.checks.types import CheckResult  # noqa: PLC0415 — local import avoids circular
+
+    # 0. Resolve the ObjectDB from the CharacterSheet for the magic pipeline.
+    #    CharacterSheet.character is a OneToOneField to ObjectDB (primary_key=True).
+    #    A CharacterSheet without an ObjectDB is a data integrity violation, not a
+    #    normal operational case — raise loudly rather than silently proceeding.
+    objectdb: ObjectDB = character_sheet.character
+    if objectdb is None:
+        msg = (
+            f"CharacterSheet pk={character_sheet.pk!r} has no associated ObjectDB. "
+            "This is a data integrity violation — CharacterSheet.character is a "
+            "non-nullable OneToOneField and should never be None."
+        )
+        raise ValueError(msg)
 
     # 1. Derive the check type from the technique's action_template (mirrors
     #    _resolve_pc_action in services.py: ``template.check_type``).
@@ -157,7 +181,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     #    value as resolution_result; we return a CheckResult directly.
     def resolve_fn() -> object:
         return perform_check(
-            character,
+            objectdb,
             check_type,
             target_difficulty=0,
             extra_modifiers=strain_modifier,
@@ -166,7 +190,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,
     #    reactive events, corruption, resonance environment).
     technique_use_result = use_technique(
-        character=character,
+        character=objectdb,
         technique=technique,
         resolve_fn=resolve_fn,
         strain_commitment=strain_commitment,
@@ -206,6 +230,9 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     )
 
     return ClashContributionResult(
+        character=character_sheet,
+        action_slot=action_slot,
+        technique=technique,
         check_outcome=check_outcome,
         progress_delta=progress_delta,
         anima_committed=strain_commitment,
@@ -344,3 +371,95 @@ def affinity_tilt(
         return magnitude
     # ENVIRONMENT aggressor: NPC's affinity dominates → negative.
     return -magnitude
+
+
+@transaction.atomic
+def aggregate_clash_round(
+    *,
+    clash: Clash,
+    round_number: int,
+    pc_contributions: list[ClashContributionResult],
+    npc_delta: int,
+) -> ClashRoundResult:
+    """Aggregate per-round PC contributions and the NPC delta into a ClashRound.
+
+    Writes one ``ClashRound`` row and one ``ClashContribution`` row per PC
+    contribution.  Updates ``clash.progress`` according to the flavor's sign
+    convention.  The whole operation is atomic: if any DB write fails, none persist.
+
+    Sign convention by flavor:
+
+    - ``CLASH``: PCs push positive, NPC pushes against.
+      ``progress_after = clash.progress + pc_delta_sum - npc_delta``
+    - ``LOCK / SUSTAINING`` (Suppress — PCs hold, NPC breaks):
+      ``progress_after = clash.progress + pc_delta_sum - npc_delta``
+    - ``LOCK / ESCAPING`` (Break Free — PCs escape, NPC holds):
+      ``progress_after = clash.progress - pc_delta_sum + npc_delta``
+    - ``WARD``: PCs strengthen, NPC drains.
+      ``progress_after = clash.progress + pc_delta_sum - npc_delta``
+    - ``BREAK``: PC-only push; ``npc_delta`` is always 0.
+      ``progress_after = clash.progress + pc_delta_sum - npc_delta``
+
+    Args:
+        clash: The active ``Clash`` instance whose progress meter to update.
+        round_number: The round of the Clash being aggregated (1-indexed).
+        pc_contributions: List of ``ClashContributionResult`` objects, one per
+            PC that contributed this round.  May be empty (NPC-only push).
+        npc_delta: The NPC's raw per-round push magnitude (non-negative integer).
+
+    Returns:
+        A frozen ``ClashRoundResult`` with the persisted rows and updated meter value.
+    """
+    # 1. Sum all PC contribution deltas.
+    pc_delta_sum = sum(c.progress_delta for c in pc_contributions)
+
+    # 2. Apply the flavor's sign convention to compute progress_after.
+    if clash.flavor == ClashFlavor.LOCK and clash.lock_pc_role == LockPcRole.ESCAPING:
+        # LOCK / ESCAPING: PCs push to escape (reduces progress toward NPC win);
+        # NPC maintains the lock (increases progress back toward NPC win).
+        progress_after = clash.progress - pc_delta_sum + npc_delta
+    else:
+        # CLASH, LOCK/SUSTAINING, WARD, BREAK — all follow the same convention:
+        # PCs push positive, NPC pushes against.
+        progress_after = clash.progress + pc_delta_sum - npc_delta
+
+    # 3. Write the ClashRound row.
+    clash_round = ClashRound.objects.create(
+        clash=clash,
+        round_number=round_number,
+        pc_progress_delta=pc_delta_sum,
+        npc_progress_delta=npc_delta,
+        progress_after=progress_after,
+    )
+
+    # 4. Bulk-create one ClashContribution row per PC contribution.
+    contribution_rows = ClashContribution.objects.bulk_create(
+        [
+            ClashContribution(
+                clash_round=clash_round,
+                character=c.character,
+                action_slot=c.action_slot,
+                anima_committed=c.anima_committed,
+                technique=c.technique,
+                check_outcome=c.check_outcome,
+                progress_delta=c.progress_delta,
+                was_overburn=c.was_overburn,
+                was_audere=c.was_audere,
+                soulfray_severity_accrued=c.soulfray_severity_accrued,
+            )
+            for c in pc_contributions
+        ]
+    )
+
+    # 5. Update clash.progress with the new value.
+    clash.progress = progress_after
+    clash.save(update_fields=["progress"])
+
+    # 6. Return the aggregated result.
+    return ClashRoundResult(
+        clash_round=clash_round,
+        contributions=contribution_rows,
+        pc_delta_sum=pc_delta_sum,
+        npc_delta=npc_delta,
+        progress_after=progress_after,
+    )
