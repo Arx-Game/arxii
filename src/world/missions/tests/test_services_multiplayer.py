@@ -24,6 +24,7 @@ from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import (
     ConflictMode,
     DeedRewardKind,
@@ -31,12 +32,9 @@ from world.missions.constants import (
     JointCombine,
     MissionStatus,
     OptionKind,
-    OptionProduces,
     OptionSource,
 )
 from world.missions.factories import (
-    AffordanceBindingFactory,
-    AffordanceFactory,
     MissionInstanceFactory,
     MissionNodeFactory,
     MissionOptionFactory,
@@ -45,7 +43,7 @@ from world.missions.factories import (
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionDeedRewardLine
+from world.missions.models import MissionDeedRewardLine, MissionOptionRouteReward
 from world.missions.services import (
     build_group_option_list,
     build_option_list,
@@ -91,59 +89,57 @@ class BuildGroupOptionListTests(TestCase):
         )
         cls.p_b = MissionParticipantFactory(instance=cls.instance, character=cls.char_b)
 
-        # AFFORDANCE option; A owns dist_a, B owns dist_b (disjoint).
-        cls.aff = AffordanceFactory(name="sneak-aff")
+        # A owns dist_a, B owns dist_b (disjoint).
         cls.dist_a = DistinctionFactory(slug="grp-dist-a")
         cls.dist_b = DistinctionFactory(slug="grp-dist-b")
         CharacterDistinctionFactory(character=cls.char_a, distinction=cls.dist_a)
         CharacterDistinctionFactory(character=cls.char_b, distinction=cls.dist_b)
-        for dist, framing in (
-            (cls.dist_a, "A-only path."),
-            (cls.dist_b, "B-only path."),
-        ):
-            AffordanceBindingFactory(
-                source_kind="distinction",
-                source_distinction=dist,
-                affordance=cls.aff,
-                produces=OptionProduces.BRANCH,
-                ic_framing=framing,
-            )
-        cls.aff_option = MissionOptionFactory(
-            node=cls.node,
-            order=0,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AFFORDANCE,
-        )
-        cls.aff_option.accepted_affordances.add(cls.aff)
 
         # AUTHORED option visible only to A (requires dist_a).
-        cls.authored = MissionOptionFactory(
+        cls.a_only = MissionOptionFactory(
             node=cls.node,
-            order=1,
+            order=0,
             option_kind=OptionKind.BRANCH,
             source_kind=OptionSource.AUTHORED,
             visibility_rule={
                 "leaf": "has_distinction",
                 "params": {"slug": "grp-dist-a"},
             },
-            authored_ic_framing="A's authored way.",
+            authored_ic_framing="A-only path.",
+        )
+        # AUTHORED option visible only to B (requires dist_b).
+        cls.b_only = MissionOptionFactory(
+            node=cls.node,
+            order=1,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            visibility_rule={
+                "leaf": "has_distinction",
+                "params": {"slug": "grp-dist-b"},
+            },
+            authored_ic_framing="B-only path.",
+        )
+        # Ungated AUTHORED option visible to both.
+        cls.open_option = MissionOptionFactory(
+            node=cls.node,
+            order=2,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            authored_ic_framing="Open path.",
         )
 
     def test_union_has_both_disjoint_owned_sets_owner_tagged(self) -> None:
         options = build_group_option_list(self.instance, self.node)
         a_framings = {o.ic_framing for o in options if o.owner == self.char_a}
         b_framings = {o.ic_framing for o in options if o.owner == self.char_b}
-        # A: A-only affordance + A's authored. B: B-only affordance.
-        self.assertEqual(a_framings, {"A-only path.", "A's authored way."})
-        self.assertEqual(b_framings, {"B-only path."})
+        self.assertEqual(a_framings, {"A-only path.", "Open path."})
+        self.assertEqual(b_framings, {"B-only path.", "Open path."})
 
-    def test_authored_option_appears_once_owned_by_passing_participant(
-        self,
-    ) -> None:
+    def test_gated_option_appears_once_owned_by_passing_participant(self) -> None:
         options = build_group_option_list(self.instance, self.node)
-        authored_entries = [o for o in options if o.option == self.authored]
-        self.assertEqual(len(authored_entries), 1)
-        self.assertEqual(authored_entries[0].owner, self.char_a)
+        a_only_entries = [o for o in options if o.option == self.a_only]
+        self.assertEqual(len(a_only_entries), 1)
+        self.assertEqual(a_only_entries[0].owner, self.char_a)
 
     def test_stable_order_by_participant_then_per_viewer_order(self) -> None:
         options = build_group_option_list(self.instance, self.node)
@@ -157,7 +153,7 @@ class BuildGroupOptionListTests(TestCase):
         single = build_option_list(self.instance, self.node, self.p_a)
         self.assertEqual(
             {o.ic_framing for o in single},
-            {"A-only path.", "A's authored way."},
+            {"A-only path.", "Open path."},
         )
 
 
@@ -494,6 +490,44 @@ class GroupResolveJointTests(TestCase):
         self.assertEqual(instance.current_node, self.lose_node)
         self.assertEqual(instance.status, MissionStatus.ACTIVE)
 
+    def test_joint_with_challenge_holder_routes_via_option_routes(self) -> None:
+        # JOINT with a CHALLENGE-sourced holder option: each participant's
+        # pick fans out via challenge_options_for_character (an is_default
+        # approach reaches both characters without capability setup), and
+        # _approach_for_pick recovers the per-participant approach for the
+        # per-attempt resolve_option call. The combined-success decision
+        # routes via the CHALLENGE option's outcome-tier route, exactly
+        # like an AUTHORED option.
+        instance = MissionInstanceFactory(template=self.template)
+        holder, _p2 = self._setup_participants(instance)
+        node = self._make_joint_node(JointCombine.ALL)
+        challenge = ChallengeTemplateFactory(name="JointChallenge", severity=2)
+        ChallengeApproachFactory(
+            challenge_template=challenge,
+            check_type=self.sneak,
+            is_default=True,
+        )
+        opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=challenge,
+        )
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.success, target_node=self.win_node)
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.failure, target_node=self.lose_node)
+        picks = {holder: opt, _p2: opt}
+        with patch(
+            _PERFORM_CHECK,
+            side_effect=self._outcome_by_character(
+                {self.char_h: self.success, self.char_2: self.success}
+            ),
+        ):
+            deeds = group_resolve_node(instance, node, picks)
+        self.assertEqual(len(deeds), 2)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.win_node)
+
     def test_joint_never_transiently_terminates_instance(self) -> None:
         # Phase-5a I-1: JOINT per-attempt resolution must be routing-free
         # (advance=False). The instance must never be touched (status,
@@ -566,6 +600,16 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         cls.success = CheckOutcomeFactory(name="JTermSuccess", success_level=3)
         cls.failure = CheckOutcomeFactory(name="JTermFailure", success_level=-3)
         cls.sneak = CheckTypeFactory(name="JTermSneak")
+
+    def setUp(self) -> None:
+        # SharedMemoryModel idmap hygiene: each test in this class creates
+        # fresh MissionOptionRouteReward + MissionDeedRewardLine rows whose
+        # PKs collide with prior tests' rows on the SQLite tier (PK
+        # autoincrement resets after rollback; PG sequences don't). Without
+        # a flush, ``route.reward_templates.all()`` returns stale cached
+        # instances with the prior test's amount / recipient_id values.
+        MissionOptionRouteReward.flush_instance_cache()
+        MissionDeedRewardLine.flush_instance_cache()
 
     def _outcome_by_character(self, mapping: dict[object, object]) -> object:
         def _side_effect(character: object, check_type: object, **_kw: object):

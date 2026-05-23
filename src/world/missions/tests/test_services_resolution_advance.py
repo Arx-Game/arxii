@@ -1,7 +1,7 @@
 """Tests for the Phase-5a I-1 routing-free check primitive.
 
 ``resolve_option(..., advance=False)`` must perform the check + per-act
-consequence/rider application + emit the ``MissionDeedRecord`` exactly as
+consequence application + emit the ``MissionDeedRecord`` exactly as
 ``advance=True`` does, but MUST NOT route the graph or terminate the run:
 ``instance.current_node`` / ``status`` / ``completed_at`` are left
 untouched. ``advance=True`` (the default) is unchanged Phase-3 behavior.
@@ -19,16 +19,12 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
-from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.missions.constants import (
     MissionStatus,
     OptionKind,
-    OptionProduces,
     OptionSource,
 )
 from world.missions.factories import (
-    AffordanceBindingFactory,
-    AffordanceFactory,
     MissionInstanceFactory,
     MissionNodeFactory,
     MissionOptionFactory,
@@ -88,7 +84,6 @@ class ResolveOptionAdvanceFalseTests(TestCase):
                 self.entry,
                 self.check_option,
                 self.actor,
-                None,
                 advance=False,
             )
         self.instance.refresh_from_db()
@@ -129,43 +124,12 @@ class ResolveOptionAdvanceFalseTests(TestCase):
                 self.entry,
                 term_option,
                 self.actor,
-                None,
                 advance=False,
             )
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.status, MissionStatus.ACTIVE)
         self.assertIsNone(self.instance.completed_at)
         self.assertEqual(self.instance.current_node, self.entry)
-
-    def test_advance_false_applies_permitted_rider(self) -> None:
-        rider = ConsequenceFactory(outcome_tier=self.success)
-        self.entry.allowed_riders.add(rider)
-        dist = DistinctionFactory(slug="adv-rider-dist")
-        CharacterDistinctionFactory(character=self.character, distinction=dist)
-        aff = AffordanceFactory(name="adv-rider-aff")
-        binding = AffordanceBindingFactory(
-            source_kind="distinction",
-            source_distinction=dist,
-            affordance=aff,
-            produces=OptionProduces.CHECK,
-            check_type=self.sneak,
-            rider=rider,
-        )
-        with force_check_outcome(self.success), patch(_APPLY) as mocked:
-            resolve_option(
-                self.instance,
-                self.entry,
-                self.check_option,
-                self.actor,
-                binding,
-                advance=False,
-            )
-        # Route consequence THEN rider — additive composition unchanged.
-        self.assertEqual(mocked.call_count, 2)
-        self.assertEqual(
-            mocked.call_args_list[1].args[0].selected_consequence,
-            rider,
-        )
 
     def test_advance_true_default_still_routes(self) -> None:
         # Regression guard: the default path is unchanged Phase-3 behavior.
@@ -175,7 +139,6 @@ class ResolveOptionAdvanceFalseTests(TestCase):
                 self.entry,
                 self.check_option,
                 self.actor,
-                None,
             )
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.dest)
@@ -194,7 +157,6 @@ class ResolveOptionAdvanceFalseTests(TestCase):
                 self.entry,
                 branch_option,
                 self.actor,
-                None,
                 advance=False,
             )
         pc.assert_not_called()

@@ -43,24 +43,26 @@ jobs:
           # Run `grep -rc "def test_" src/<app>/tests/ | awk -F: '{s+=$2} END {print s}'`
           # per app to refresh counts after adding significant test suites.
           #
-          # shard-1 (~1,215): world.magic (887) + world.combat (328)
+          # shard-1 (~1,461): world.magic (887) + world.combat (328) + world.missions (246)
           - name: shard-1
-            apps: "world.magic world.combat"
-          # shard-2 (~1,405): world.stories (759) + world.mechanics (258)
+            apps: "world.magic world.combat world.missions"
+          # shard-2 (~1,465): world.stories (759) + world.mechanics (258)
           #                   + world.conditions (190) + world.items (198)
+          #                   + world.areas (39) + world.instances (21)
           - name: shard-2
-            apps: "world.stories world.mechanics world.conditions world.items"
-          # shard-3 (~1,378): flows (259) + world.progression (255) + world.scenes (227)
+            apps: "world.stories world.mechanics world.conditions world.items world.areas world.instances"
+          # shard-3 (~1,604): flows (259) + world.progression (255) + world.scenes (227)
           #                   + world.character_sheets (202) + world.character_creation (200)
-          #                   + world.gm (120) + actions (115)
+          #                   + world.gm (120) + actions (115) + world.locations (187)
+          #                   + world.traits (39)
           - name: shard-3
-            apps: "flows world.progression world.scenes world.character_sheets world.character_creation world.gm actions"
-          # shard-4 (~1,422): all remaining apps — roster, societies, game_clock, fatigue,
+            apps: "flows world.progression world.scenes world.character_sheets world.character_creation world.gm actions world.locations world.traits"
+          # shard-4 (~1,447): all remaining apps — roster, societies, game_clock, fatigue,
           #                   events, skills, relationships, distinctions, codex, goals, checks,
           #                   web, integration_tests, core_management, action_points, narrative,
           #                   journals, achievements, forms, commands, covenants, tarot, vitals,
           #                   player_submissions, classes, staff_inbox, typeclasses, consent,
-          #                   behaviors
+          #                   behaviors, evennia_extensions (25), realms (0), species (0)
           - name: shard-4
             apps: >-
               world.roster world.societies world.game_clock world.fatigue world.events
@@ -71,6 +73,7 @@ jobs:
               web web.admin web.api
               integration_tests.pipeline integration_tests.game_content
               core_management commands typeclasses behaviors
+              evennia_extensions world.realms world.species
     services:
       postgres:
         image: postgres:15

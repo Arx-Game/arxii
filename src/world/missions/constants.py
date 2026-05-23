@@ -1,25 +1,13 @@
-"""Shared constants and choices for the Missions system (Phase 1).
+"""Shared constants and choices for the Missions system.
 
 TextChoices live here (not as nested model classes) so serializers and the
-affordance-resolution service can reference them without circular imports.
+resolution service can reference them without circular imports.
 """
 
 from django.db import models
 
 # Upper bound for MissionTemplate.percent_replace (a percentage).
 MAX_PERCENT_REPLACE = 100
-
-
-class OptionProduces(models.TextChoices):
-    """What an :class:`~world.missions.models.AffordanceBinding` yields.
-
-    A binding either surfaces a narrative BRANCH (no dice — the descriptor
-    simply unlocks a path) or a CHECK (resolved by a ``checks.CheckType``
-    with an authored base risk).
-    """
-
-    BRANCH = "branch", "Branch"
-    CHECK = "check", "Check"
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +71,9 @@ class OptionKind(models.TextChoices):
     """Whether a :class:`~world.missions.models.MissionOption` branches the
     graph directly or resolves a dice check first.
 
-    Mirrors :class:`OptionProduces` but is the *node-graph* spelling; an
-    affordance-sourced option inherits its kind from the binding's
-    ``produces`` while an authored option declares it explicitly.
+    An authored option declares its kind explicitly; a CHALLENGE-sourced
+    option is always CHECK (every ``ChallengeApproach`` resolves a check or
+    auto-succeeds).
     """
 
     BRANCH = "branch", "Branch"
@@ -95,12 +83,13 @@ class OptionKind(models.TextChoices):
 class OptionSource(models.TextChoices):
     """Where a :class:`~world.missions.models.MissionOption` comes from.
 
-    AFFORDANCE — surfaced from a character's owned descriptor bindings;
-    AUTHORED — hand-written by the mission author on this node.
+    AUTHORED — hand-written by the mission author on this node;
+    CHALLENGE — references a ``mechanics.ChallengeTemplate`` whose approaches
+    fan out into challenge-contributed options at runtime.
     """
 
-    AFFORDANCE = "affordance", "Affordance"
     AUTHORED = "authored", "Authored"
+    CHALLENGE = "challenge", "Challenge"
 
 
 class MissionStatus(models.TextChoices):

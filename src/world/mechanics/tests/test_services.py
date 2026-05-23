@@ -1,6 +1,6 @@
 """Tests for mechanics service functions."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import (
@@ -355,8 +355,20 @@ class TestUpdateDistinctionRank(TestCase):
         assert get_modifier_total(self.character, self.allure) == 15
 
 
+@tag("postgres")
 class PassiveFacetBonusesTests(TestCase):
-    """Tests for passive_facet_bonuses (Spec D §5.2)."""
+    """Tests for passive_facet_bonuses (Spec D §5.2).
+
+    PG-only: the equipment-walk path traverses
+    ``sheet.character.threads`` and ``sheet.character.equipped_items``
+    cached handlers, plus the per-instance ``cached_item_facets`` list on
+    each ``ItemInstance``. On the SQLite tier, PKs reset between tests but
+    the SharedMemoryModel idmap keeps stale handler / cached_item_facets
+    state across the rollback boundary — ``item_facets_for(facet)`` then
+    matches against stale ``facet_id`` values and returns the wrong (or
+    empty) set. PG sequences don't reset across tests, so the pk
+    collision can't fire; the parity tier covers this.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -697,8 +709,15 @@ class CovenantRoleBonusTests(TestCase):
 
         assert result == 15  # max(2, 15)
 
+    @tag("postgres")
     def test_two_items_aggregate(self) -> None:
-        """Patched helpers (role=5, gear=2). One compatible, one not → (5+2) + max(5,2) = 12."""
+        """Patched helpers (role=5, gear=2). One compatible, one not → (5+2) + max(5,2) = 12.
+
+        PG-only: same equipment-walk SharedMemoryModel idmap pollution path
+        as ``PassiveFacetBonusesTests`` (see that class's docstring). The
+        single-item variants above stay on both tiers; this is the only
+        method that walks two items at once.
+        """
 
         from unittest.mock import patch
 

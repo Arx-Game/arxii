@@ -197,29 +197,69 @@ arx manage makemigrations traits
 
 ### Running Tests
 
-**IMPORTANT: Always use `arx test` to run tests.** Never use `uv run python -m`, `python manage.py test`, sourcing venvs to find binaries, or any other method. The `arx` CLI is always available and is the only correct way to run tests.
+**IMPORTANT: Always use `arx test` (or its `just` wrappers) to run tests.** Never use `uv run python -m`, `python manage.py test`, sourcing venvs to find binaries, or any other method.
+
+#### Two-tier model: SQLite for the inner loop, Postgres for parity
+
+Production runs Postgres exclusively. Tests run in TWO tiers:
+
+1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
+2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. Use before pushing, and for apps the SQLite tier can't cover. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
+
+#### Working app set for `--sqlite`
+
+| Tier | Apps |
+|---|---|
+| **SQLite-clean** | action_points, forms, achievements, game_clock, skills, relationships, flows, checks, events, missions, journals, mechanics, progression, conditions |
+| **SQLite with caveats** (5-15% broken, partial tagging) | combat, items, vitals, actions |
+| **PG only — `just test-parity` required** | roster, character_sheets, magic, scenes, codex, areas, societies |
+
+For the PG-only apps, `--sqlite` either fails immediately (carved out via `MIGRATION_MODULES = None` in settings) or the fixture chain hits PG-vs-SQLite FK timing differences.
+
+#### Recipes
 
 ```bash
-# During development — run targeted tests for fast feedback:
-arx test <app>                           # all tests in an app
-arx test <app>.tests.test_module         # specific test module
-arx test <app>.tests.test_module -k name # specific test by name
+# Inner-loop (SQLite tier — fast, excludes @tag("postgres")):
+just test-fast <app>                     # one app
+just test-fast <app>.tests.test_module   # one module
 
-# Before claiming work is complete — run ALL affected test suites:
-arx test world.mechanics world.magic flows --keepdb  # example: all suites that could be affected
+# Parity tier (PG, parallel; what CI runs):
+just test-parity <app>                   # one app
+just test-parity                         # full suite, ~30+ min
 
-# Use --keepdb to reuse the test database (faster, avoids migration issues)
+# Generic pass-through (PG, no parallel):
+just test <args>
+
+# Full-suite parity gate (matches CI exactly):
+just regression                          # echo "yes" | arx test
 ```
+
+```bash
+# Direct arx test (when you need exact CLI control):
+arx test <app>                                 # PG, serial (default)
+arx test --sqlite <app>                        # SQLite inner loop
+arx test --parallel <app>                      # PG, parallel — use for large suites
+arx test --exclude-tag postgres --sqlite ...   # skip @tag("postgres") explicitly on SQLite
+```
+
+#### When tests fail on SQLite but pass on PG
+
+The two-tier model exposes a small set of patterns:
+
+- **Tag with `@tag("postgres")`** when the failure is genuinely PG-required: queries a materialized view, uses `DISTINCT ON`, uses raw `REFRESH MATERIALIZED VIEW`, or hits Evennia-internal `DbHolder` copy issues. The PG tier still runs them.
+- **Fix the test** when the failure is a test-design issue PG happened to mask: `assertEqual(queryset[0].field, expected)` without `order_by`, direct ID comparison (`[2, 3] != [1, 2]`), or SharedMemoryModel identity-map pollution from other tests in the class. Fix via `order_by("pk")`, set comparison, or `from evennia.utils.idmapper.models import SharedMemoryModel; SharedMemoryModel.flush_instance_cache()` in setUp.
+
+See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canonical `@tag("postgres")` pattern.
 
 **Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
 
 **Run without `--keepdb` before pushing.** `--keepdb` preserves the test DB across runs, which means objects created by Evennia's initial setup (Limbo room #2, default Account #1, etc.) and objects created by prior test runs persist into your current run. CI always starts from a fresh DB, so tests that implicitly depend on that preserved state will pass locally but fail in CI. Before pushing anything that touches migrations, factories, service functions that call `create_object`, typeclass initialization, or test settings, run the full suite WITHOUT `--keepdb`:
 
 ```
-echo "yes" | uv run arx test          # no --keepdb — fresh DB, matches CI
+just regression                        # echo "yes" | arx test — fresh DB, matches CI
 ```
 
-This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
+This catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
 
 **Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
 
@@ -228,19 +268,16 @@ This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` 
 ```bash
 just                        # list recipes
 just test flows --keepdb    # arx test pass-through
-just test-scratch name args # capture output to .claude/scratch/<name>
+just test-fast world.foo    # SQLite inner loop
+just test-parity world.foo  # PG parity tier (parallel)
 just regression             # full no-keepdb regression run
 just lint                   # ruff check
 just manage migrate flows   # arx manage pass-through
 ```
 
-Prefer `just <recipe>` over:
-- Raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
-- Direct `bash .claude/scripts/<name>.sh` — still works (covered by `Bash(bash .claude/scripts/*)`) but use the just recipe if one exists so all invocation forms converge on one canonical form.
+Prefer `just <recipe>` over raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
 
-**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries. Wrappers in `.claude/scripts/` that need input validation (path traversal, etc.) still live there and are called from justfile recipes — `set -o pipefail` / `PIPESTATUS` preserves exit codes. Document new recipes in this section.
-
-**Scratch workspace.** Test output capture: `just test-scratch <filename> <arx test args...>` (wraps `.claude/scripts/arx-test-scratch.sh`). Files land in `.claude/scratch/<filename>`, which is inside the working directory so `Read` works without prompts, and the whole `.claude/` tree is gitignored. Do NOT use `/tmp/...`, `$TMPDIR`, or `%TEMP%` paths. Propagate the `just test-scratch` convention into subagent prompts when you dispatch them.
+**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries.
 
 ### Proactive Quality Checks
 
@@ -290,7 +327,9 @@ When a feature branch or logical unit of work is finished:
 - **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
 - **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
 - **Preserve the Dev Database**: The dev database contains fixture data and test state that is time-consuming to reconstruct. Do NOT drop, flush, or destroy the database except in dire circumstances. For migration work: use `arx manage migrate app_name zero` to fake-migrate down, then regenerate — this preserves the database while resetting an app's migration state. Never delete the database as a shortcut to fix migration issues.
-- **PostgreSQL Only**: This project uses PostgreSQL exclusively. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Never add SQLite compatibility — tests run against Postgres via the Evennia test runner. If you find yourself writing database-agnostic workarounds, stop and use the Postgres feature directly.
+- **PostgreSQL Only (production)**: This project uses PostgreSQL exclusively in production. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Don't write database-agnostic workarounds in production code; use the Postgres feature directly.
+
+  **For tests, see the two-tier model in "Running Tests" above.** The SQLite inner-loop tier is a developer convenience that exposes PG-specific features as `@tag("postgres")` skips; the Postgres parity tier (every CI run, `just test-parity` locally) always runs the full chain. New tests should pass on both tiers unless they exercise PG-specific code, in which case `@tag("postgres")` is the correct decoration.
 - **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`, `CACHED_PROPERTY_IMPORT`
 - **SharedMemoryModel Default**: All concrete Django models should use `SharedMemoryModel`. Both lookup tables and per-instance data benefit from the identity-map cache. Only suppress with `# noqa: SHARED_MEMORY` and a justification
 - **Prefetch with to_attr**: Always use `Prefetch()` objects with `to_attr=` in `prefetch_related()`. Never use bare strings. The `to_attr` should point to a `cached_property` on the model for cache-safe access
