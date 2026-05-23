@@ -10,7 +10,7 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from world.missions.constants import ArcScope
+from world.missions.constants import AccessTier, ArcScope
 from world.missions.factories import MissionTemplateFactory
 from world.missions.models import MissionTemplate
 from world.stories.factories import EraFactory
@@ -85,6 +85,32 @@ class MissionTemplateModelTests(TestCase):
                 name="Save Bad Pct",
                 percent_replace=101,
             )
+
+    def test_factory_defaults_to_open_tier(self) -> None:
+        # The factory defaults to OPEN so the entire pre-Phase-B-7 test
+        # suite (which never specified access_tier) keeps surfacing
+        # templates to non-staff characters. Production templates default
+        # to STAFF_ONLY at the MODEL level — see the next test.
+        self.assertEqual(self.template.access_tier, AccessTier.OPEN)
+
+    def test_model_default_is_staff_only(self) -> None:
+        # Production-safe default: new templates start in testing
+        # (staff-only audience) and the author flips access_tier=OPEN when
+        # they're ready to publish. The factory overrides this for test
+        # ergonomics.
+        bare = MissionTemplate(
+            name="Bare-Default",
+            slug="bare-default",
+            summary="x",
+            level_band_min=1,
+            level_band_max=5,
+            risk_tier=1,
+            arc_scope=ArcScope.GLOBAL,
+            cooldown=timedelta(hours=1),
+        )
+        # Don't save — the access_tier default is the field default;
+        # just inspect the unsaved instance's attribute.
+        self.assertEqual(bare.access_tier, AccessTier.STAFF_ONLY)
 
     def test_era_set_null_on_era_delete(self) -> None:
         template_pk = self.template.pk

@@ -23,6 +23,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
     MAX_PERCENT_REPLACE,
+    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
@@ -138,6 +139,21 @@ class MissionTemplate(SharedMemoryModel):
         help_text="Phase 0 predicate tree gating front-door availability for this template.",
     )
     is_active = models.BooleanField(default=True)
+    access_tier = models.CharField(
+        max_length=16,
+        choices=AccessTier.choices,
+        default=AccessTier.STAFF_ONLY,
+        db_index=True,
+        help_text=(
+            "Audience gate: STAFF_ONLY hides the template from all but "
+            "is_staff_observer characters (the 'in testing' state — the "
+            "production-safe default for new templates). OPEN lets the "
+            "usual predicate / cooldown / level-band filters take over. "
+            "Phase B-7 intentionally ships only two tiers; richer tiers "
+            "(society, GM-level, etc.) follow after a permission-design "
+            "brainstorm."
+        ),
+    )
     categories = models.ManyToManyField(
         MissionCategory,
         blank=True,

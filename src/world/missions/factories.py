@@ -9,6 +9,7 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.missions.constants import (
+    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
@@ -76,6 +77,13 @@ class MissionTemplateFactory(DjangoModelFactory):
     cooldown = timedelta(days=1)
     reward_group_rule = RewardGroupRule.ALL_EQUAL
     is_active = True
+    # Factory default differs from MODEL default: the model defaults to
+    # STAFF_ONLY (production-safe — new authored templates are in testing
+    # until staff publishes them). The factory defaults to OPEN so the
+    # entire test suite keeps surfacing templates to non-staff characters
+    # without every caller passing access_tier. Tests covering the
+    # STAFF_ONLY tier set access_tier explicitly.
+    access_tier = AccessTier.OPEN
 
 
 class MissionNodeFactory(DjangoModelFactory):

@@ -24,8 +24,9 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 from django.utils import timezone
 
+from core_management.permissions import is_staff_observer
 from world.checks.outcome_utils import select_weighted
-from world.missions.constants import ArcScope
+from world.missions.constants import AccessTier, ArcScope
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.stories.models import Era
 
@@ -119,6 +120,8 @@ def _eligible_templates(
       * level band (widened by ``risk_dial``); skipped when level is None
       * (arc_filter only) ``created_in_era == active_era`` AND
         ``_arc_scope_matches(template, giver)``
+      * audience gate (``access_tier``): non-staff characters never see
+        STAFF_ONLY templates; staff see both tiers
     """
     now = timezone.now()
     qs = giver.templates.filter(is_active=True).exclude(
@@ -126,6 +129,8 @@ def _eligible_templates(
         & Q(givers__standings__giver=giver)
         & Q(givers__standings__available_at__gt=now),
     )
+    if not is_staff_observer(character):
+        qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
     if arc_filter and active_era is not None:
         qs = qs.filter(created_in_era=active_era)
     elif arc_filter:

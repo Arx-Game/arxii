@@ -101,6 +101,26 @@ class MissionStatus(models.TextChoices):
     EXPIRED = "expired", "Expired"
 
 
+class AccessTier(models.TextChoices):
+    """Who is allowed to be offered a :class:`~world.missions.models.MissionTemplate`.
+
+    Intentionally minimal — Phase B-7 ships just the two values the
+    in-testing/live workflow needs. Future tiers (e.g. members of a giver's
+    org, GMs at a minimum level, distinction-gated) will land after a
+    dedicated permission-design brainstorm; the enum is the expansion seam.
+
+    OPEN — anyone the existing predicate / cooldown / level-band / arc-scope
+    filters allow (current default behavior).
+    STAFF_ONLY — only ``is_staff_observer`` characters; the "in testing"
+    state. Other filters still apply for staff; this is purely the audience
+    gate. Production default for new templates: every mission is testing-only
+    until the author flips it to OPEN.
+    """
+
+    OPEN = "open", "Open"
+    STAFF_ONLY = "staff_only", "Staff Only"
+
+
 class GiverKind(models.TextChoices):
     """How a :class:`~world.missions.models.MissionGiver` reaches the player.
 
