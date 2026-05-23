@@ -231,6 +231,24 @@ class MissionNode(SharedMemoryModel):
             "so authors can pan to negative coords."
         ),
     )
+    flavor_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Thin abstract description of the moment shown to the player "
+            "when they enter this node (design §8.2). The rich narration "
+            "is the player-authored Legend Entry; this is just the "
+            "engine's framing line."
+        ),
+    )
+    flavor_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy operation sets True (inherited copy reads as "
+            "'rewrite me'); editing flavor_text clears it. Surfaces in "
+            "the Studio's 'N flavor fields are still flagged as un-rewritten "
+            "copy' counter (design §10)."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -335,6 +353,15 @@ class MissionOption(SharedMemoryModel):
     )
     authored_base_risk = models.PositiveSmallIntegerField(default=0)
     authored_ic_framing = models.CharField(max_length=200, blank=True)
+    authored_ic_framing_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy operation sets True (inherited copy reads as "
+            "'rewrite me'); editing authored_ic_framing clears it. Surfaces "
+            "in the Studio's 'N flavor fields are still flagged as un-rewritten "
+            "copy' counter (design §10)."
+        ),
+    )
     branch_target = models.ForeignKey(
         MissionNode,
         null=True,
@@ -489,6 +516,22 @@ class MissionOptionRoute(SharedMemoryModel):
             "tier is rolled; null = pure routing/no effect."
         ),
     )
+    outcome_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Player-facing outcome text shown when this route's tier is "
+            "rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the "
+            "resolution engine doesn't surface outcome_text today; Phase D "
+            "wires it into the player message."
+        ),
+    )
+    outcome_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy operation sets True (inherited copy reads as "
+            "'rewrite me'); editing outcome_text clears it."
+        ),
+    )
 
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"
@@ -536,6 +579,13 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         help_text=(
             "Optional per-candidate outcome text shown to the player. "
             "STORED BUT UNCONSUMED in Phase B — Phase D wires it."
+        ),
+    )
+    outcome_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy operation sets True (inherited copy reads as "
+            "'rewrite me'); editing outcome_text clears it."
         ),
     )
 

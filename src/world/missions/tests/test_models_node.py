@@ -147,6 +147,36 @@ class MissionNodeInvariantTests(TestCase):
             )
 
 
+class MissionNodeFlavorTextTests(TestCase):
+    """B6: MissionNode flavor_text + flavor_text_needs_rewrite.
+
+    The node's thin abstract description of the moment (design §8.2). The
+    needs_rewrite flag is set True by the Phase-D copy operation (so
+    inherited copy reads as 'rewrite me') and cleared on edit; default
+    False for fresh nodes.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = MissionTemplateFactory(slug="flavor-tmpl")
+
+    def test_flavor_text_defaults_blank(self) -> None:
+        node = MissionNodeFactory(template=self.template, key="flav-default", is_entry=True)
+        self.assertEqual(node.flavor_text, "")
+        self.assertFalse(node.flavor_text_needs_rewrite)
+
+    def test_flavor_text_round_trip(self) -> None:
+        node = MissionNodeFactory(
+            template=self.template,
+            key="flav-set",
+            flavor_text="The throne room hushes as you enter.",
+            flavor_text_needs_rewrite=True,
+        )
+        node.refresh_from_db()
+        self.assertEqual(node.flavor_text, "The throne room hushes as you enter.")
+        self.assertTrue(node.flavor_text_needs_rewrite)
+
+
 class MissionNodeEditorLayoutTests(TestCase):
     """B5: editor_x / editor_y persist canvas position for the authoring tool.
 
@@ -248,6 +278,31 @@ class MissionOptionInvariantTests(TestCase):
         fetched = MissionOption.objects.get(pk=option.pk)
         self.assertEqual(fetched.authored_check_type, self.check_type)
         self.assertEqual(fetched.authored_base_risk, 4)
+
+    def test_authored_ic_framing_needs_rewrite_defaults_false(self) -> None:
+        # B6: companion needs_rewrite flag on the option's text field.
+        option = MissionOptionFactory(
+            node=self.node,
+            order=10,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            branch_target=self.target,
+            authored_ic_framing="Step through.",
+        )
+        self.assertFalse(option.authored_ic_framing_needs_rewrite)
+
+    def test_authored_ic_framing_needs_rewrite_round_trips(self) -> None:
+        option = MissionOptionFactory(
+            node=self.node,
+            order=11,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            branch_target=self.target,
+            authored_ic_framing="Inherited copy — rewrite me.",
+            authored_ic_framing_needs_rewrite=True,
+        )
+        option.refresh_from_db()
+        self.assertTrue(option.authored_ic_framing_needs_rewrite)
 
 
 class MissionOptionChallengeSourceTests(TestCase):

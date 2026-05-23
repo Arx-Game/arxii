@@ -240,3 +240,59 @@ class MissionOptionRouteRewardParentTests(TestCase):
             MissionOptionRouteReward.objects.filter(candidate=self.candidate.pk).count(),
             0,
         )
+
+
+class MissionOptionRouteOutcomeTextTests(TestCase):
+    """B6: per-route outcome_text + outcome_text_needs_rewrite.
+
+    Design §8.3 — the route says 'show the player this outcome text' when
+    its tier is rolled. Both route AND candidate have outcome_text (B4
+    added the candidate's; B6 lifts the route to parity). The
+    needs_rewrite flag mirrors the node/option flag — Phase D's copy
+    operation sets it True; editing clears it.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = MissionTemplateFactory(slug="route-outcome-tmpl")
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.option = MissionOptionFactory(
+            node=cls.entry,
+            order=0,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+        )
+
+    def test_route_outcome_text_defaults_blank(self) -> None:
+        route = MissionOptionRouteFactory(option=self.option, outcome_tier=None)
+        self.assertEqual(route.outcome_text, "")
+        self.assertFalse(route.outcome_text_needs_rewrite)
+
+    def test_route_outcome_text_round_trips(self) -> None:
+        route = MissionOptionRouteFactory(
+            option=self.option,
+            outcome_tier=None,
+            outcome_text="You step through into the great hall.",
+            outcome_text_needs_rewrite=True,
+        )
+        route.refresh_from_db()
+        self.assertEqual(route.outcome_text, "You step through into the great hall.")
+        self.assertTrue(route.outcome_text_needs_rewrite)
+
+    def test_candidate_outcome_text_needs_rewrite_defaults_false(self) -> None:
+        # B6 also flags the per-candidate outcome_text (added in B4) for
+        # consistency — Phase D's copy operation needs to mark it too.
+        route = MissionOptionRouteFactory(option=self.option, outcome_tier=None, is_random_set=True)
+        candidate = MissionOptionRouteCandidateFactory(route=route, target_node=self.entry)
+        self.assertFalse(candidate.outcome_text_needs_rewrite)
+
+    def test_candidate_outcome_text_needs_rewrite_round_trips(self) -> None:
+        route = MissionOptionRouteFactory(option=self.option, outcome_tier=None, is_random_set=True)
+        candidate = MissionOptionRouteCandidateFactory(
+            route=route,
+            target_node=self.entry,
+            outcome_text="Inherited copy — rewrite me.",
+            outcome_text_needs_rewrite=True,
+        )
+        candidate.refresh_from_db()
+        self.assertTrue(candidate.outcome_text_needs_rewrite)
