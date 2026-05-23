@@ -9,6 +9,7 @@ random-pool entry can carry its own reward bundle (design §8.3).
 """
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
@@ -240,6 +241,32 @@ class MissionOptionRouteRewardParentTests(TestCase):
             MissionOptionRouteReward.objects.filter(candidate=self.candidate.pk).count(),
             0,
         )
+
+    def test_check_constraint_rejects_queryset_update_to_both_null(self) -> None:
+        # clean() only fires on .save(); QuerySet.update bypasses it. The
+        # CHECK constraint catches the orphan at the DB level so a bulk path
+        # cannot silently leave a both-null row.
+        reward = MissionOptionRouteRewardFactory(
+            route=self.route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MissionOptionRouteReward.objects.filter(pk=reward.pk).update(route=None)
+
+    def test_check_constraint_rejects_queryset_update_to_both_set(self) -> None:
+        # Same DB-level defense for the both-set bypass.
+        reward = MissionOptionRouteRewardFactory(
+            route=self.route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MissionOptionRouteReward.objects.filter(pk=reward.pk).update(
+                candidate=self.candidate,
+            )
 
 
 class MissionOptionRouteOutcomeTextTests(TestCase):

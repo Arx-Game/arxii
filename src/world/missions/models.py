@@ -17,6 +17,7 @@ models.
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -33,6 +34,13 @@ from world.missions.constants import (
     OptionSource,
     RewardGroupRule,
 )
+
+# MissionOptionRouteReward XOR (route, candidate) — module-level so the
+# clean() messages stay readable and the magic 2 has a name.
+_ERR_REWARD_NO_PARENT = "Exactly one of route or candidate must be set; both are null."
+_ERR_REWARD_BOTH_PARENTS = "Cannot set both route and candidate — pick one."
+_REWARD_BOTH_PARENTS_SET = 2
+
 
 # ---------------------------------------------------------------------------
 # Mission graph data model
@@ -235,18 +243,21 @@ class MissionNode(SharedMemoryModel):
         blank=True,
         help_text=(
             "Thin abstract description of the moment shown to the player "
-            "when they enter this node (design §8.2). The rich narration "
-            "is the player-authored Legend Entry; this is just the "
-            "engine's framing line."
+            "when they enter this node (design §8.2). Paragraph-style "
+            "(TextField, unbounded) — the short per-option label is the "
+            "option's authored_ic_framing (CharField/200). The rich "
+            "narration is the player-authored Legend Entry; this is just "
+            "the engine's framing line."
         ),
     )
     flavor_text_needs_rewrite = models.BooleanField(
         default=False,
         help_text=(
-            "Phase-D copy operation sets True (inherited copy reads as "
-            "'rewrite me'); editing flavor_text clears it. Surfaces in "
-            "the Studio's 'N flavor fields are still flagged as un-rewritten "
-            "copy' counter (design §10)."
+            "Phase-D copy service sets True (inherited copy reads as "
+            "'rewrite me'); the Phase-D edit service clears it on save. "
+            "Surfaces in the Studio's 'N flavor fields are still flagged "
+            "as un-rewritten copy' counter (design §10). NOT cleared "
+            "automatically at the model layer — service responsibility."
         ),
     )
 
@@ -352,14 +363,23 @@ class MissionOption(SharedMemoryModel):
         help_text="AUTHORED+CHECK: the check resolved by this option.",
     )
     authored_base_risk = models.PositiveSmallIntegerField(default=0)
-    authored_ic_framing = models.CharField(max_length=200, blank=True)
+    authored_ic_framing = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Short option-row label shown in the choice list (CharField/200). "
+            "Keep terse; the longer 'what happens at this node' narration "
+            "belongs in MissionNode.flavor_text."
+        ),
+    )
     authored_ic_framing_needs_rewrite = models.BooleanField(
         default=False,
         help_text=(
-            "Phase-D copy operation sets True (inherited copy reads as "
-            "'rewrite me'); editing authored_ic_framing clears it. Surfaces "
-            "in the Studio's 'N flavor fields are still flagged as un-rewritten "
-            "copy' counter (design §10)."
+            "Phase-D copy service sets True (inherited copy reads as "
+            "'rewrite me'); the Phase-D edit service clears it on save. "
+            "Surfaces in the Studio's 'N flavor fields are still flagged "
+            "as un-rewritten copy' counter (design §10). NOT cleared "
+            "automatically at the model layer — service responsibility."
         ),
     )
     branch_target = models.ForeignKey(
@@ -528,8 +548,9 @@ class MissionOptionRoute(SharedMemoryModel):
     outcome_text_needs_rewrite = models.BooleanField(
         default=False,
         help_text=(
-            "Phase-D copy operation sets True (inherited copy reads as "
-            "'rewrite me'); editing outcome_text clears it."
+            "Phase-D copy service sets True; the Phase-D edit service "
+            "clears it on save. NOT cleared automatically at the model "
+            "layer — service responsibility."
         ),
     )
 
@@ -584,8 +605,9 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
     outcome_text_needs_rewrite = models.BooleanField(
         default=False,
         help_text=(
-            "Phase-D copy operation sets True (inherited copy reads as "
-            "'rewrite me'); editing outcome_text clears it."
+            "Phase-D copy service sets True; the Phase-D edit service "
+            "clears it on save. NOT cleared automatically at the model "
+            "layer — service responsibility."
         ),
     )
 
@@ -673,14 +695,30 @@ class MissionOptionRouteReward(SharedMemoryModel):
         ),
     )
 
+    class Meta:
+        constraints = [
+            # Database-level XOR enforcement: bulk_create / QuerySet.update
+            # bypass clean(), and a row with both FKs null would be a
+            # permanently orphaned reward (invisible to either reverse
+            # manager). CHECK constraint catches that at the row level.
+            models.CheckConstraint(
+                check=(
+                    (Q(route__isnull=False) & Q(candidate__isnull=True))
+                    | (Q(route__isnull=True) & Q(candidate__isnull=False))
+                ),
+                name="missionoptionroutereward_exactly_one_parent",
+            ),
+        ]
+
     def clean(self) -> None:
         super().clean()
         set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
-        if set_count != 1:
+        if set_count == 0:
+            # Non-field error — neither side is the "wrong" one.
+            raise ValidationError(_ERR_REWARD_NO_PARENT)
+        if set_count == _REWARD_BOTH_PARENTS_SET:
             raise ValidationError(
-                {
-                    "route": (f"Exactly one of route or candidate must be set (got {set_count})."),
-                }
+                {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
             )
 
     def save(self, *args: object, **kwargs: object) -> None:
