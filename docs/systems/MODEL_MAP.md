@@ -12,6 +12,7 @@
   - entries <- actions.ConsequencePoolEntry
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
+  - resonance_interactions <- magic.AffinityInteraction
   - mishap_tiers <- magic.MishapPoolTier
   - success_beats <- stories.Beat
   - failure_beats <- stories.Beat
@@ -131,6 +132,7 @@
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
   - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -808,6 +810,7 @@
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
   - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -928,7 +931,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>, default_factory=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -1404,10 +1407,18 @@
 **Foreign Keys:**
   - source_affinity -> magic.Affinity [FK]
   - environment_affinity -> magic.Affinity [FK]
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+**Pointed to by:**
+  - alignment_boon_tiers <- magic.ResonanceAlignmentBoonTier
 
 ### ResonanceEnvironmentConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### ResonanceAlignmentBoonTier
+**Foreign Keys:**
+  - affinity_interaction -> magic.AffinityInteraction [FK]
+  - condition_template -> conditions.ConditionTemplate [FK]
 
 ### RitualSceneActionConfig
 **Foreign Keys:**
@@ -1717,6 +1728,7 @@
 **Pointed to by:**
   - consequences <- mechanics.ApproachConsequence
   - character_records <- mechanics.CharacterChallengeRecord
+  - combat_declarations <- combat.RoundChallengeDeclaration
 
 ### ApproachConsequence
 **Foreign Keys:**
@@ -1756,6 +1768,7 @@
 **Pointed to by:**
   - granted_properties <- mechanics.ObjectProperty
   - character_records <- mechanics.CharacterChallengeRecord
+  - combat_declarations <- combat.RoundChallengeDeclaration
 
 ### CharacterChallengeRecord
 **Foreign Keys:**
@@ -2438,13 +2451,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001AC8190C390>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x0000027A63F4F3B0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001AC8190C390>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x0000027A63F4F3B0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2685,6 +2698,7 @@
   - referenced_story -> stories.Story [FK] (nullable)
   - referenced_chapter -> stories.Chapter [FK] (nullable)
   - referenced_episode -> stories.Episode [FK] (nullable)
+  - required_mission -> missions.MissionTemplate [FK] (nullable)
   - success_consequences -> actions.ConsequencePool [FK] (nullable)
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
