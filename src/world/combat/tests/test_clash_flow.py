@@ -46,10 +46,12 @@ from world.combat.models import (
     CombatOpponent,
     CombatOpponentAction,
     CombatRoundAction,
+    ComboSlot,
 )
 from world.combat.services import (
     begin_declaration_phase,
     declare_clash_contribution,
+    detect_available_combos,
     resolve_round,
 )
 from world.conditions.models import ConditionInstance
@@ -423,9 +425,6 @@ class SuppressFlowTests(TestCase):
         # ------------------------------------------------------------------ #
         # Verify the clash_window_combo is now detectable.                   #
         # ------------------------------------------------------------------ #
-        from world.combat.models import ComboSlot
-        from world.combat.services import detect_available_combos
-
         _start_next_round(self.encounter)
         self.encounter.refresh_from_db()
         rn = self.encounter.round_number

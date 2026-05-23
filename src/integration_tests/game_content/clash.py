@@ -252,6 +252,11 @@ class ClashContent:
             defaults={"execution_order": 0},
         )
 
+        # TODO(tuning): the PC_MARGINAL wiring is a test-numerics workaround. With default
+        # ClashConfig (decisive_overshoot=3), the first threshold crossing produces overshoot=2,
+        # which maps to PC_MARGINAL. When tuning settles, decide whether marginal LOCK wins
+        # should grant the boss_held window-state at full strength or a weaker/shorter variant.
+        #
         # Also wire PC_MARGINAL (success_level=2) → boss_held, so that a marginal
         # LOCK win also opens the combo window.  With default ClashConfig deltas
         # (delta_critical_success=3, decisive_overshoot=3, threshold=10) the

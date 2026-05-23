@@ -1423,7 +1423,7 @@ def _prefetch_clash_state(
 
     Returns:
         A 2-tuple of:
-        - ``active_clash_flavors``: set of flavor strings for ACTIVE **or
+        - ``encounter_clash_flavors``: set of flavor strings for ACTIVE **or
           RESOLVED** clashes in this encounter.  A resolved clash still
           enables combos that require its flavor — e.g. a LOCK clash that
           resolved with a decisive PC win leaves boss_held on the NPC, and
@@ -1440,7 +1440,7 @@ def _prefetch_clash_state(
     # Include both ACTIVE and RESOLVED clashes: the window combo is available
     # even after the LOCK resolves, as long as the boss_held window condition
     # is still active on the NPC.
-    active_clash_flavors: set[str] = set(
+    encounter_clash_flavors: set[str] = set(
         Clash.objects.filter(
             encounter=encounter,
             status__in=(ClashStatus.ACTIVE, ClashStatus.RESOLVED),
@@ -1456,12 +1456,12 @@ def _prefetch_clash_state(
             ).values_list("condition_id", flat=True)
         )
 
-    return active_clash_flavors, active_window_condition_template_ids
+    return encounter_clash_flavors, active_window_condition_template_ids
 
 
 def _combo_passes_clash_prereqs(
     combo: ComboDefinition,
-    active_clash_flavors: set[str],
+    encounter_clash_flavors: set[str],
     active_window_condition_template_ids: set[int],
 ) -> bool:
     """Return True iff the combo's clash-state prerequisites are satisfied.
@@ -1470,11 +1470,14 @@ def _combo_passes_clash_prereqs(
 
     Args:
         combo: The combo definition to check.
-        active_clash_flavors: Set of flavor strings for ACTIVE clashes in the encounter.
+        encounter_clash_flavors: Set of clash-flavor strings for any clash (ACTIVE or
+            RESOLVED) in the encounter. RESOLVED clashes are included because combo
+            eligibility runs after ``_resolve_clashes`` and a combo gated on
+            ``required_clash_flavor`` should still see the just-resolved clash's flavor.
         active_window_condition_template_ids: Set of ``ConditionTemplate`` PKs active
             on any opponent ObjectDB in the encounter.
     """
-    if combo.required_clash_flavor and combo.required_clash_flavor not in active_clash_flavors:
+    if combo.required_clash_flavor and combo.required_clash_flavor not in encounter_clash_flavors:
         return False
     if (
         combo.required_clash_window_condition_id
@@ -1575,7 +1578,7 @@ def detect_available_combos(  # noqa: C901 — sequential pipeline of independen
         max_probing = max(max_probing, opp.probing_current)
 
     # Prefetch clash-state for combo prerequisite checks (two queries total).
-    active_clash_flavors, active_window_condition_template_ids = _prefetch_clash_state(
+    encounter_clash_flavors, active_window_condition_template_ids = _prefetch_clash_state(
         encounter, active_opponents
     )
 
@@ -1598,7 +1601,7 @@ def detect_available_combos(  # noqa: C901 — sequential pipeline of independen
 
         # Check clash-state prerequisites (flavor + window condition)
         if not _combo_passes_clash_prereqs(
-            combo, active_clash_flavors, active_window_condition_template_ids
+            combo, encounter_clash_flavors, active_window_condition_template_ids
         ):
             continue
 
