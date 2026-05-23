@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         ComboDefinition,
     )
     from world.conditions.models import ConditionTemplate
+    from world.magic.models import Affinity
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
@@ -249,3 +250,35 @@ class ClashResolutionResult:
     clash: Clash
     resolution: str  # ClashResolution value — str to avoid circular import at runtime
     consequence_applied: Consequence | None
+
+
+# ---------------------------------------------------------------------------
+# Clash round driver types (Task 5.2)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PreparedClashContribution:
+    """One PC's prepared input to ``run_clash_round``.
+
+    Bundles everything the round driver needs to call ``commit_to_clash``
+    for a single PC participant and compute the affinity tilt for that
+    participant's technique against the NPC's attack affinity.
+
+    Fields:
+        character_sheet: The ``CharacterSheet`` of the PC making this
+            contribution.
+        action_slot: ``ClashActionSlot`` value (``"FOCUSED"`` or
+            ``"PASSIVE"``).
+        technique: The ``Technique`` the PC is using for this contribution.
+        strain_commitment: Extra anima committed on top of the technique's
+            effective cost floor.
+        npc_attack_affinity: The ``Affinity`` of the NPC's attack (for the
+            affinity tilt computation), or ``None`` for non-magical attacks.
+    """
+
+    character_sheet: CharacterSheet
+    action_slot: str
+    technique: Technique
+    strain_commitment: int
+    npc_attack_affinity: Affinity | None

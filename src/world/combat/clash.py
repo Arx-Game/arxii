@@ -27,8 +27,9 @@ Current scope (Tasks 2.1–5.1):
   - ``detect_clash_opportunities``: inspects the round's declared PC + NPC actions
     and the opponents' state, and creates ``Clash`` rows for each opportunity that
     emerges (CLASH, LOCK, WARD, BREAK flavors). Task 5.1.
-
-Future tasks will add the full round driver (Task 5.2/5.3).
+  - ``run_clash_round``: drives one full round of a clash — per-PC commit (with
+    affinity tilt) → aggregate → per-round pool → threshold check → resolve if
+    crossed. Task 5.2.
 """
 
 from __future__ import annotations
@@ -39,7 +40,12 @@ from django.db import transaction
 
 from world.combat.constants import ClashFlavor, ClashResolution, ClashStatus, LockPcRole
 from world.combat.models import ClashConfig, ClashContribution, ClashRound, StrainConfig
-from world.combat.types import ClashContributionResult, ClashResolutionResult, ClashRoundResult
+from world.combat.types import (
+    ClashContributionResult,
+    ClashResolutionResult,
+    ClashRoundResult,
+    PreparedClashContribution,
+)
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
@@ -117,6 +123,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     config_clash: ClashConfig,
     config_strain: StrainConfig,
     targets: list | None = None,
+    check_modifier_extra: int = 0,
 ) -> ClashContributionResult:
     """Run a PC's per-round clash contribution through the cast pipeline.
 
@@ -139,6 +146,10 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
         config_clash: Clash tuning knobs for ``outcome_to_delta``.
         config_strain: Strain curve knobs for ``strain_to_modifier``.
         targets: Optional explicit targets forwarded to the magic pipeline.
+        check_modifier_extra: Additional flat modifier applied to the check on top
+            of the strain modifier.  Default 0 (no effect).  Used by the round
+            driver to thread the affinity tilt through without changing the
+            strain computation.
 
     Returns:
         A frozen ``ClashContributionResult`` with the check outcome, progress
@@ -192,7 +203,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
             objectdb,
             check_type,
             target_difficulty=0,
-            extra_modifiers=strain_modifier,
+            extra_modifiers=strain_modifier + check_modifier_extra,
         )
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,
@@ -1369,3 +1380,132 @@ def _technique_attack_power(technique: Technique) -> int:
     if profile is None:
         return 0
     return profile.base_damage
+
+
+# ---------------------------------------------------------------------------
+# Task 5.2 — per-clash round driver
+# ---------------------------------------------------------------------------
+
+
+def _consecutive_idle_rounds(clash: Clash) -> int:
+    """Count trailing consecutive rounds where ``pc_progress_delta == 0``.
+
+    Reads the persisted ``ClashRound`` rows for this clash ordered newest-first.
+    Iterates until a non-idle round is hit (or all rows are exhausted).
+
+    Pure read — no DB writes, no mutation of inputs.
+
+    Private helper — called only by ``run_clash_round``.
+    """
+    count = 0
+    for round_row in clash.rounds.order_by("-round_number").iterator():
+        if round_row.pc_progress_delta == 0:
+            count += 1
+        else:
+            break
+    return count
+
+
+@transaction.atomic
+def run_clash_round(
+    *,
+    clash: Clash,
+    round_number: int,
+    pc_contributions: list[PreparedClashContribution],
+    config_clash: ClashConfig,
+    config_strain: StrainConfig,
+) -> ClashRoundResult:
+    """Drive one round of a clash: per-PC commit (with affinity tilt) → aggregate
+    → per-round pool → threshold check (resolve if crossed).
+
+    Composes the Phase 2–4 service functions into a single atomic round driver.
+    If any inner step raises, the entire round (ClashRound row, ClashContribution
+    rows, and ``clash.progress`` update) rolls back via the outer ``@transaction.atomic``.
+
+    Args:
+        clash: The active ``Clash`` instance to advance by one round.
+        round_number: The 1-indexed round being processed.
+        pc_contributions: List of ``PreparedClashContribution`` objects, one per
+            PC participating this round.  May be empty (NPC-only push or idle round).
+        config_clash: Clash tuning knobs (thresholds, deltas, abandon window, etc.).
+        config_strain: Strain-to-modifier curve knobs for per-PC commit calls.
+
+    Returns:
+        A frozen ``ClashRoundResult`` with the persisted ``ClashRound`` row and
+        the updated meter state.  The clash's ``status`` may be ``RESOLVED`` on
+        return if a threshold was crossed.
+
+    Raises:
+        Any exception from the inner service functions propagates after rolling
+        back the transaction.
+    """
+    # -------------------------------------------------------------------------
+    # 1. Per-PC commit — call commit_to_clash once per contribution, threading
+    #    the affinity tilt as ``check_modifier_extra``.
+    # -------------------------------------------------------------------------
+    contribution_results: list[ClashContributionResult] = []
+    for contrib in pc_contributions:
+        tilt = affinity_tilt(
+            contributor_technique=contrib.technique,
+            npc_attack_affinity=contrib.npc_attack_affinity,
+            config=config_clash,
+        )
+        result = commit_to_clash(
+            character_sheet=contrib.character_sheet,
+            technique=contrib.technique,
+            clash=clash,
+            strain_commitment=contrib.strain_commitment,
+            action_slot=contrib.action_slot,
+            config_clash=config_clash,
+            config_strain=config_strain,
+            check_modifier_extra=tilt,
+        )
+        contribution_results.append(result)
+
+    # -------------------------------------------------------------------------
+    # 2. NPC contribution for this round.
+    # -------------------------------------------------------------------------
+    npc_delta = npc_round_contribution(clash=clash, round_number=round_number)
+
+    # -------------------------------------------------------------------------
+    # 3. Aggregate — writes ClashRound + ClashContribution rows and updates
+    #    clash.progress.  Reload after to ensure subsequent reads see the update.
+    # -------------------------------------------------------------------------
+    round_result = aggregate_clash_round(
+        clash=clash,
+        round_number=round_number,
+        pc_contributions=contribution_results,
+        npc_delta=npc_delta,
+    )
+    clash.refresh_from_db()
+
+    # -------------------------------------------------------------------------
+    # 4. Per-round consequence pool — fires incremental feedback effects.
+    # -------------------------------------------------------------------------
+    fire_clash_per_round(clash=clash, clash_round=round_result.clash_round)
+
+    # -------------------------------------------------------------------------
+    # 5. Threshold / abandon check — determine whether the clash should resolve.
+    # -------------------------------------------------------------------------
+    resolution: ClashResolution | None = None
+
+    # BREAK-specific abandonment: the normal threshold check does not detect
+    # ABANDONED (NPC never wins via the meter in BREAK clashes).  Detect it here
+    # by counting consecutive trailing idle (zero-PC-delta) rounds.
+    if clash.flavor == ClashFlavor.BREAK and len(pc_contributions) == 0:
+        idle_count = _consecutive_idle_rounds(clash)
+        if idle_count >= config_clash.break_abandon_idle_rounds:
+            resolution = ClashResolution.ABANDONED
+
+    # If not already determined by the BREAK abandonment path, run the standard
+    # threshold check.
+    if resolution is None:
+        resolution = check_clash_threshold(
+            clash=clash, round_number=round_number, config=config_clash
+        )
+
+    # If a resolution was determined, fire resolve_clash.
+    if resolution is not None:
+        resolve_clash(clash=clash, resolution=resolution, round_number=round_number)
+
+    return round_result
