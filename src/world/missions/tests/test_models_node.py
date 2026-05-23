@@ -147,6 +147,36 @@ class MissionNodeInvariantTests(TestCase):
             )
 
 
+class MissionNodeEditorLayoutTests(TestCase):
+    """B5: editor_x / editor_y persist canvas position for the authoring tool.
+
+    Pure authoring metadata, no engine meaning — Mission Studio (Phase E)
+    reads/writes these via a dedicated layout endpoint. Defaults are 0/0.
+    Negatives permitted so authors can pan a canvas to negative coords.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = MissionTemplateFactory(slug="layout-tmpl")
+
+    def test_editor_coordinates_default_zero(self) -> None:
+        node = MissionNodeFactory(template=self.template, key="default-layout", is_entry=True)
+        self.assertEqual(node.editor_x, 0)
+        self.assertEqual(node.editor_y, 0)
+
+    def test_editor_coordinates_round_trip(self) -> None:
+        node = MissionNodeFactory(
+            template=self.template,
+            key="explicit-layout",
+            is_entry=False,
+            editor_x=120,
+            editor_y=-45,
+        )
+        node.refresh_from_db()
+        self.assertEqual(node.editor_x, 120)
+        self.assertEqual(node.editor_y, -45)
+
+
 class MissionOptionInvariantTests(TestCase):
     """Source/kind invariants on MissionOption."""
 

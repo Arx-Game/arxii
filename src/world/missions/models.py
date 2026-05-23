@@ -215,6 +215,22 @@ class MissionNode(SharedMemoryModel):
             "consumed by the engine in Phase A; reserved for future use."
         ),
     )
+    editor_x = models.IntegerField(
+        default=0,
+        help_text=(
+            "Mission Studio (Phase E) canvas X coordinate. Pure authoring "
+            "metadata — no engine meaning. IntegerField (negatives allowed) "
+            "so authors can pan to negative coords."
+        ),
+    )
+    editor_y = models.IntegerField(
+        default=0,
+        help_text=(
+            "Mission Studio (Phase E) canvas Y coordinate. Pure authoring "
+            "metadata — no engine meaning. IntegerField (negatives allowed) "
+            "so authors can pan to negative coords."
+        ),
+    )
 
     class Meta:
         constraints = [
