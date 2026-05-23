@@ -276,8 +276,9 @@ def _get_technique_affinity(technique: Technique) -> Affinity | None:
     This is the simplest defensible derivation: one technique → one gift →
     first resonance → affinity.  A richer "majority vote" approach would require
     loading all resonances; the first-resonance proxy is sufficient for the
-    RPS tilt calculation and mirrors the existing corruption path in
-    ``world.magic.services.resonance_environment``.
+    RPS tilt calculation. The per-contributor tilt is a per-action decision; the
+    first-resonance derivation is deterministic within a session and avoids the
+    authoring cost of a richer aggregation rule until playtesting demands it.
 
     Private helper — call only from within this module.
     """

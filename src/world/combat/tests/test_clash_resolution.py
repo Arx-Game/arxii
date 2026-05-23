@@ -218,3 +218,16 @@ class AffinityTiltTests(TestCase):
         )
         self.assertEqual(result, 1)
         self.assertIsInstance(result, int)
+
+    def test_no_technique_affinity_returns_zero(self) -> None:
+        """Technique gift has no resonances → tech_affinity=None → 0."""
+        npc_affinity = AffinityFactory()
+        gift = GiftFactory()  # no resonances added
+        technique = TechniqueFactory(gift=gift)
+        result = affinity_tilt(
+            contributor_technique=technique,
+            npc_attack_affinity=npc_affinity,
+            config=self.config,
+        )
+        self.assertEqual(result, 0)
+        self.assertIsInstance(result, int)
