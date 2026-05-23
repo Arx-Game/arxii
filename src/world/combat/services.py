@@ -1407,7 +1407,73 @@ def _try_match_all_slots(
     ]
 
 
-def detect_available_combos(
+def _prefetch_clash_state(
+    encounter: CombatEncounter,
+    active_opponents: list[CombatOpponent],
+) -> tuple[set[str], set[int]]:
+    """Prefetch clash-state data needed for combo prerequisite checks.
+
+    Executes exactly two queries regardless of the number of combos or
+    opponents: one for active clash flavors, one for window-condition template
+    IDs on opponent ObjectDBs.
+
+    Args:
+        encounter: The combat encounter.
+        active_opponents: Already-fetched list of ACTIVE ``CombatOpponent`` rows.
+
+    Returns:
+        A 2-tuple of:
+        - ``active_clash_flavors``: set of flavor strings for ACTIVE clashes.
+        - ``active_window_condition_template_ids``: set of ``ConditionTemplate``
+          PKs that are active on at least one opponent ObjectDB.
+    """
+    from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    active_clash_flavors: set[str] = set(
+        Clash.objects.filter(encounter=encounter, status=ClashStatus.ACTIVE).values_list(
+            "flavor", flat=True
+        )
+    )
+
+    opponent_objectdb_ids = {opp.objectdb_id for opp in active_opponents if opp.objectdb_id}
+    active_window_condition_template_ids: set[int] = set()
+    if opponent_objectdb_ids:
+        active_window_condition_template_ids = set(
+            ConditionInstance.objects.filter(
+                target_id__in=opponent_objectdb_ids,
+            ).values_list("condition_id", flat=True)
+        )
+
+    return active_clash_flavors, active_window_condition_template_ids
+
+
+def _combo_passes_clash_prereqs(
+    combo: ComboDefinition,
+    active_clash_flavors: set[str],
+    active_window_condition_template_ids: set[int],
+) -> bool:
+    """Return True iff the combo's clash-state prerequisites are satisfied.
+
+    Both fields are optional; a null field imposes no constraint.
+
+    Args:
+        combo: The combo definition to check.
+        active_clash_flavors: Set of flavor strings for ACTIVE clashes in the encounter.
+        active_window_condition_template_ids: Set of ``ConditionTemplate`` PKs active
+            on any opponent ObjectDB in the encounter.
+    """
+    if combo.required_clash_flavor and combo.required_clash_flavor not in active_clash_flavors:
+        return False
+    if (
+        combo.required_clash_window_condition_id
+        and combo.required_clash_window_condition_id not in active_window_condition_template_ids
+    ):
+        return False
+    return True
+
+
+def detect_available_combos(  # noqa: C901 — sequential pipeline of independent eligibility checks; splitting further would harm readability
     encounter: CombatEncounter,
     round_number: int,
 ) -> list[AvailableCombo]:
@@ -1419,6 +1485,12 @@ def detect_available_combos(
       opponent in the encounter.
     - At least one participating PC knows the combo (``ComboLearning``) **or**
       the combo is ``discoverable_via_combat``.
+    - Clash-state prerequisites are satisfied (two prefetches per call, not per combo):
+      - If ``required_clash_flavor`` is set, an active ``Clash`` of that flavor
+        must exist in the encounter.
+      - If ``required_clash_window_condition`` is set, a ``ConditionInstance`` of
+        that ``ConditionTemplate`` must be active on at least one opponent in the
+        encounter.
 
     Args:
         encounter: The combat encounter.
@@ -1482,12 +1554,20 @@ def detect_available_combos(
 
     # Max probing across active opponents for minimum_probing check
     max_probing = 0
-    active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
+    active_opponents = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        )
     )
     for opp in active_opponents:
         max_probing = max(max_probing, opp.probing_current)
+
+    # Prefetch clash-state for combo prerequisite checks (two queries total).
+    active_clash_flavors, active_window_condition_template_ids = _prefetch_clash_state(
+        encounter, active_opponents
+    )
+
     available: list[AvailableCombo] = []
 
     for combo in combos:
@@ -1503,6 +1583,12 @@ def detect_available_combos(
         knowers = known_map.get(combo.pk, set())
         known_by_any = bool(knowers & participant_sheet_ids)
         if not known_by_any and not combo.discoverable_via_combat:
+            continue
+
+        # Check clash-state prerequisites (flavor + window condition)
+        if not _combo_passes_clash_prereqs(
+            combo, active_clash_flavors, active_window_condition_template_ids
+        ):
             continue
 
         # Backtracking slot matching: each slot must be filled by a distinct action
