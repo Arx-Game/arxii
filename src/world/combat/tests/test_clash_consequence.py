@@ -20,8 +20,9 @@ class FireClashPerRoundTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        # Two CheckOutcome tiers: success (level=1) and failure (level=-1)
+        # Three CheckOutcome tiers: success (1), partial (0), failure (-1)
         cls.outcome_success = CheckOutcomeFactory(name="PerRound_Success", success_level=1)
+        cls.outcome_partial = CheckOutcomeFactory(name="PerRound_Partial", success_level=0)
         cls.outcome_failure = CheckOutcomeFactory(name="PerRound_Failure", success_level=-1)
 
     def _make_clash_no_pool(self) -> object:
@@ -72,11 +73,15 @@ class FireClashPerRoundTests(TestCase):
         self.assertIsNone(result)
 
     # ------------------------------------------------------------------
-    # test_pc_ahead_picks_success_tier
+    # test_pc_ahead_selects_success_tier_consequence
     # ------------------------------------------------------------------
 
-    def test_pc_ahead_picks_success_tier(self) -> None:
-        """Meter well ahead (ratio >= 0.5) selects from the success-tier consequences."""
+    def test_pc_ahead_selects_success_tier_consequence(self) -> None:
+        """Meter well ahead (ratio >= 0.5) selects from the success-tier consequences.
+
+        The factory-built clash opponent has no ObjectDB, so effect application is
+        skipped.  This test exercises consequence *selection* only.
+        """
         pool = ConsequencePoolFactory(name="Mixed")
         c_success = ConsequenceFactory(
             outcome_tier=self.outcome_success, label="Success Consequence", weight=10
@@ -87,9 +92,12 @@ class FireClashPerRoundTests(TestCase):
         ConsequencePoolEntryFactory(pool=pool, consequence=c_success)
         ConsequencePoolEntryFactory(pool=pool, consequence=c_failure)
 
-        # progress=3, threshold=5 → ratio=0.6 → success band
+        # progress=3, threshold=5 → ratio=0.6 → success band (level=1)
         clash = self._make_clash_with_pool(progress=3, pc_win_threshold=5, pool=pool)
-        # NPC has no ObjectDB → effect application skipped; pure selection tested here
+        self.assertIsNone(
+            clash.npc_opponent.objectdb,
+            "factory-built opponent must have no ObjectDB — this test exercises selection only",
+        )
         clash_round = ClashRoundFactory(clash=clash)
         result = fire_clash_per_round(clash=clash, clash_round=clash_round)
 
@@ -97,11 +105,15 @@ class FireClashPerRoundTests(TestCase):
         self.assertEqual(result.outcome_tier, self.outcome_success)
 
     # ------------------------------------------------------------------
-    # test_pc_behind_picks_failure_tier
+    # test_pc_behind_selects_failure_tier_consequence
     # ------------------------------------------------------------------
 
-    def test_pc_behind_picks_failure_tier(self) -> None:
-        """Meter behind (negative progress) selects from the failure-tier consequences."""
+    def test_pc_behind_selects_failure_tier_consequence(self) -> None:
+        """Meter behind (ratio in [-0.5, -0.25)) selects from the failure-tier consequences.
+
+        The factory-built clash opponent has no ObjectDB, so effect application is
+        skipped.  This test exercises consequence *selection* only.
+        """
         pool = ConsequencePoolFactory(name="NegativeMeter")
         c_success = ConsequenceFactory(
             outcome_tier=self.outcome_success, label="Success Consequence Neg", weight=10
@@ -112,8 +124,12 @@ class FireClashPerRoundTests(TestCase):
         ConsequencePoolEntryFactory(pool=pool, consequence=c_success)
         ConsequencePoolEntryFactory(pool=pool, consequence=c_failure)
 
-        # progress=-1, threshold=5 → ratio=-0.2 → failure band (>= -0.5)
-        clash = self._make_clash_with_pool(progress=-1, pc_win_threshold=5, pool=pool)
+        # progress=-2, threshold=5 → ratio=-0.4 → failure band (-0.5 <= ratio < -0.25)
+        clash = self._make_clash_with_pool(progress=-2, pc_win_threshold=5, pool=pool)
+        self.assertIsNone(
+            clash.npc_opponent.objectdb,
+            "factory-built opponent must have no ObjectDB — this test exercises selection only",
+        )
         clash_round = ClashRoundFactory(clash=clash)
         result = fire_clash_per_round(clash=clash, clash_round=clash_round)
 

@@ -649,24 +649,36 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
     """Map the clash's current progress to a CheckOutcome by meter band.
 
     Band mapping (ratio = progress / pc_win_threshold):
-      ratio >= 1.0  → success_level 3  (critical success — at/past target)
-      ratio >= 0.5  → success_level 2  (great success — well ahead)
-      ratio >= 0.0  → success_level 1  (success — ahead or even)
-      ratio >= -0.5 → success_level -1 (failure — behind)
-      else          → success_level -2 (botch — far behind)
+      ratio >= 1.0   → success_level  3  (critical success — at/past target)
+      ratio >= 0.5   → success_level  2  (great success — well ahead)
+      ratio >= 0.0   → success_level  1  (success — distinctly ahead)
+      ratio >= -0.25 → success_level  0  (partial — basically even)
+      ratio >= -0.5  → success_level -1  (failure — behind)
+      else           → success_level -2  (botch — far behind)
 
     ``pc_win_threshold`` is always populated and positive for all clash flavors
     that carry a per-round pool. The ratio is a signed float so it works for
     both CLASH's signed meter (progress can be negative) and 0-to-N meters
     (WARD, LOCK, BREAK).
 
-    Falls back to the closest available ``success_level`` row when an exact
-    match is absent — different deployments may not seed every level.
+    Fallback: returns the closest available ``CheckOutcome`` with
+    ``success_level <= target_level``. Raises ``CheckOutcome.DoesNotExist``
+    if no row at or below ``target_level`` exists — the configuration is
+    incomplete.
+
+    Raises:
+        ValueError: If ``clash.pc_win_threshold`` is 0 (division by zero guard).
+        CheckOutcome.DoesNotExist: If no ``CheckOutcome`` row exists at or
+            below the computed ``target_level``.
 
     Pure read — no DB writes, no mutation of inputs.
 
     Private helper — call only from ``fire_clash_per_round``.
     """
+    if clash.pc_win_threshold == 0:
+        msg = f"clash {clash.pk} has pc_win_threshold=0; cannot compute meter band."
+        raise ValueError(msg)
+
     ratio: float = clash.progress / clash.pc_win_threshold
 
     if ratio >= 1.0:
@@ -675,12 +687,14 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
         target_level = 2
     elif ratio >= 0.0:
         target_level = 1
+    elif ratio >= -0.25:  # noqa: PLR2004 — meter-band breakpoints are design constants
+        target_level = 0
     elif ratio >= -0.5:  # noqa: PLR2004 — meter-band breakpoints are design constants
         target_level = -1
     else:
         target_level = -2
 
-    # Exact lookup first; fall back to nearest lower level for robustness.
+    # Return the closest available row at or below the target tier.
     outcome = (
         CheckOutcome.objects.filter(success_level__lte=target_level)
         .order_by("-success_level")
@@ -688,15 +702,11 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
     )
 
     if outcome is None:
-        # No row at or below target — take the minimum available.
-        outcome = CheckOutcome.objects.order_by("success_level").first()
-
-    if outcome is None:
         msg = (
-            "No CheckOutcome rows exist in the database. "
-            f"Cannot map meter band for clash pk={clash.pk}."
+            f"No CheckOutcome row exists at or below success_level={target_level} "
+            f"(clash pk={clash.pk}, ratio={ratio:.3f}). Configuration is incomplete."
         )
-        raise ValueError(msg)
+        raise CheckOutcome.DoesNotExist(msg)
 
     return outcome
 
@@ -715,10 +725,14 @@ def fire_clash_per_round(
 
     Effect context targets the NPC opponent's ObjectDB as both ``character`` and
     ``target`` — per-round pool effects are NPC-side (damage absorption for WARD,
-    narrative stress for CLASH). If the opponent has no ObjectDB (non-ephemeral
-    opponents without an attached world object), effects are still fired but
-    ``ResolutionContext.character`` falls back to a fallback-safe no-op path
-    inside each handler.
+    narrative stress for CLASH). If ``npc_opponent.objectdb`` is None (opponent
+    has no attached world object — common for non-ephemeral persona-bearing
+    opponents in some setups), effect application is **skipped entirely**. The
+    selected ``Consequence`` is still returned so the caller can see which one
+    was drawn, but no ``apply_all_effects`` call is made. Callers that need to
+    distinguish "consequence drawn and applied" from "consequence drawn but
+    skipped" must check ``clash.npc_opponent.objectdb`` themselves before
+    calling this function.
 
     The only side effects are those produced by ``apply_all_effects`` — this
     function itself writes nothing to the database.
@@ -732,7 +746,6 @@ def fire_clash_per_round(
         The selected Consequence, or None when there is no pool or no matching
         tier entry.
     """
-    from world.checks.models import Consequence as ConsequenceModel  # noqa: PLC0415
     from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
@@ -756,7 +769,7 @@ def fire_clash_per_round(
     selected_wc = select_weighted(tier_entries)
 
     # WeightedConsequence wraps the real Consequence model instance.
-    selected: ConsequenceModel = selected_wc.consequence
+    selected = selected_wc.consequence
 
     # 4. Build a minimal ResolutionContext using the NPC as actor/target.
     #    npc_opponent.objectdb may be None for opponents created without an ObjectDB
