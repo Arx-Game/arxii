@@ -1367,3 +1367,80 @@ class ClashContribution(SharedMemoryModel):
             f"ClashContribution(round={self.clash_round_id} "
             f"character={self.character_id} slot={self.action_slot})"
         )
+
+
+# =============================================================================
+# ClashContributionDeclaration model (Task 5.3a) — per-round bridge for the
+# clash post-pass
+# =============================================================================
+
+
+class ClashContributionDeclaration(SharedMemoryModel):
+    """A PC's declared clash contribution for one round, awaiting resolve_round's post-pass.
+
+    Written by Task 7.1's player-facing surface (``declare_clash_contribution``)
+    and consumed by ``_resolve_clashes`` in services.py after all combat-action
+    resolution for the round.  Deleted atomically after all clashes are processed.
+
+    One PC can declare to multiple distinct Clashes in a round (e.g., participating
+    in both a BREAK and a CLASH), but may only make ONE contribution per
+    (clash, round) — enforced by the UniqueConstraint.
+
+    ``npc_attack_affinity`` is NOT stored here — it is resolved at post-pass time
+    from ``clash.triggering_threat_entry`` so the declaration is agnostic to the
+    affinity resolution strategy.
+    """
+
+    encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        related_name="clash_declarations",
+        help_text="The encounter this declaration belongs to.",
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="The encounter round this declaration is for (1-indexed).",
+    )
+    participant = models.ForeignKey(
+        "combat.CombatParticipant",
+        on_delete=models.CASCADE,
+        related_name="clash_declarations",
+        help_text="The PC participant making this contribution.",
+    )
+    clash = models.ForeignKey(
+        "combat.Clash",
+        on_delete=models.CASCADE,
+        related_name="declarations",
+        help_text="The active Clash this contribution is directed at.",
+    )
+    action_slot = models.CharField(
+        max_length=16,
+        choices=ClashActionSlot.choices,
+        help_text="Which action slot the PC commits: FOCUSED (primary) or PASSIVE (secondary).",
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The Technique the PC is using for this clash contribution.",
+    )
+    strain_commitment = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra anima committed on top of the technique's effective cost floor.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "round_number", "participant", "clash"],
+                name="unique_clash_declaration_per_round_per_participant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashContributionDeclaration("
+            f"encounter={self.encounter_id} "
+            f"round={self.round_number} "
+            f"participant={self.participant_id} "
+            f"clash={self.clash_id})"
+        )

@@ -103,6 +103,7 @@ class RoundResolutionResult:
     encounter_completed: bool = False
     available_combos: list[AvailableCombo] = field(default_factory=list)
     challenge_outcomes: list[ChallengeResolutionResult] = field(default_factory=list)
+    clash_outcomes: list[ClashRoundResult] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
