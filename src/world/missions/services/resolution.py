@@ -67,8 +67,7 @@ if TYPE_CHECKING:
     )
 
 _ERR_CHECK_NO_TYPE = (
-    "OptionKind.CHECK option {option_pk} has no resolvable check_type "
-    "(neither a chosen binding's check_type nor authored_check_type) — "
+    "OptionKind.CHECK option {option_pk} has no authored_check_type — "
     "authoring/configuration error."
 )
 _ERR_CHALLENGE_NO_APPROACH = (

@@ -305,3 +305,18 @@ class MissionOptionChallengeSourceTests(TestCase):
                 source_kind=OptionSource.CHALLENGE,
                 challenge=None,
             )
+
+    def test_challenge_option_forbids_branch_target(self) -> None:
+        # CHALLENGE options always route via outcome-tier MissionOptionRoutes
+        # on the option; branch_target is an AUTHORED-BRANCH concept and
+        # must be null for CHALLENGE source.
+        option = MissionOptionFactory.build(
+            node=self.node,
+            order=6,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=self.challenge,
+            branch_target=self.node,
+        )
+        with self.assertRaises(ValidationError):
+            option.full_clean()

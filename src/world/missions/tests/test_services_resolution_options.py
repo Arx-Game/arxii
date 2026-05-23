@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.mechanics.factories import (
@@ -88,6 +89,27 @@ class BuildOptionListTests(TestCase):
             [o.option for o in options],
             [self.gated_option, self.ungated_option],
         )
+
+    def test_authored_check_option_field_flow(self) -> None:
+        # An AUTHORED CHECK option's authored_check_type / authored_base_risk
+        # / authored_ic_framing all flow onto the PresentedOption.
+        check_type = CheckTypeFactory(name="opt-flow-lockpick")
+        authored_check = MissionOptionFactory(
+            node=self.node,
+            order=2,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=check_type,
+            authored_base_risk=4,
+            authored_ic_framing="Pick the lock.",
+        )
+        options = build_option_list(self.instance, self.node, self.participant)
+        presented = next(o for o in options if o.option == authored_check)
+        self.assertEqual(presented.check_type, check_type)
+        self.assertEqual(presented.base_risk, 4)
+        self.assertEqual(presented.ic_framing, "Pick the lock.")
+        self.assertEqual(presented.kind, OptionKind.CHECK)
+        self.assertEqual(presented.owner, self.character)
 
 
 class BuildOptionListChallengeTests(TestCase):
