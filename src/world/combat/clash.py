@@ -1388,18 +1388,19 @@ def _technique_attack_power(technique: Technique) -> int:
 
 
 def _consecutive_idle_rounds(clash: Clash) -> int:
-    """Count trailing consecutive rounds where ``pc_progress_delta == 0``.
+    """Count consecutive trailing ``ClashRound``s with no ``ClashContribution`` rows.
 
+    The canonical BREAK-abandonment signal: PCs stopped declaring contributions.
     Reads the persisted ``ClashRound`` rows for this clash ordered newest-first.
-    Iterates until a non-idle round is hit (or all rows are exhausted).
+    Iterates until a round with contributions is hit, or all rows are exhausted.
 
     Pure read — no DB writes, no mutation of inputs.
 
     Private helper — called only by ``run_clash_round``.
     """
     count = 0
-    for round_row in clash.rounds.order_by("-round_number").iterator():
-        if round_row.pc_progress_delta == 0:
+    for round_row in clash.rounds.order_by("-round_number"):
+        if not round_row.contributions.exists():
             count += 1
         else:
             break
@@ -1469,7 +1470,7 @@ def run_clash_round(
 
     # -------------------------------------------------------------------------
     # 3. Aggregate — writes ClashRound + ClashContribution rows and updates
-    #    clash.progress.  Reload after to ensure subsequent reads see the update.
+    #    clash.progress. The in-memory instance is kept fully in sync.
     # -------------------------------------------------------------------------
     round_result = aggregate_clash_round(
         clash=clash,
@@ -1477,7 +1478,6 @@ def run_clash_round(
         pc_contributions=contribution_results,
         npc_delta=npc_delta,
     )
-    clash.refresh_from_db()
 
     # -------------------------------------------------------------------------
     # 4. Per-round consequence pool — fires incremental feedback effects.
