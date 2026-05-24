@@ -40,19 +40,24 @@ class EncounterDetailClashesFieldTests(TestCase):
             account=cls.account,
             is_gm=False,
         )
-        cls.encounter = CombatEncounterFactory(
-            scene=cls.scene,
+
+    def setUp(self) -> None:
+        # Create a fresh encounter per test so the SharedMemoryModel
+        # identity-map never returns a stale clashes_cached from a
+        # previous test's prefetch run.
+        self.encounter = CombatEncounterFactory(
+            scene=self.scene,
             status=EncounterStatus.DECLARING,
         )
-        cls.participant = CombatParticipantFactory(
-            encounter=cls.encounter,
-            character_sheet=cls.sheet,
+        CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.sheet,
         )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
 
     def _get_detail(self) -> dict:
-        client = APIClient()
-        client.force_authenticate(user=self.account)
-        response = client.get(f"/api/combat/{self.encounter.pk}/")
+        response = self.client.get(f"/api/combat/{self.encounter.pk}/")
         self.assertEqual(response.status_code, 200)
         return response.data  # type: ignore[return-value]
 

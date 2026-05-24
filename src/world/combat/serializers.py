@@ -386,12 +386,23 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
         rail section. Returns only ACTIVE clashes so resolved ones don't litter
         the UI after the clash is done.
+
+        Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
+        ``_base_queryset`` so no extra query fires during detail serialization.
+        Falls back to a direct filter for callers that don't use the viewset
+        (e.g. unit tests that call the serializer directly).
         """
-        active_clashes = Clash.objects.filter(
-            encounter=obj,
-            status=ClashStatus.ACTIVE,
-        ).select_related("npc_opponent")
-        return ClashStateSerializer(active_clashes, many=True).data  # type: ignore[return-value]
+        clashes = getattr(obj, "clashes_cached", None)
+        if clashes is None:
+            clashes = (
+                Clash.objects.filter(
+                    encounter=obj,
+                    status=ClashStatus.ACTIVE,
+                )
+                .select_related("npc_opponent")
+                .all()
+            )
+        return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
