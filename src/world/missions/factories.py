@@ -210,10 +210,10 @@ class MissionDeedRecordFactory(DjangoModelFactory):
 class MissionGiverFactory(DjangoModelFactory):
     """Factory for MissionGiver.
 
-    Defaults to an active, anchorless ROOM_TRIGGER-kind giver (the kind
-    with no required typed FK — both npc and environmental_detail stay
-    null and the giver is a valid, if drafty, row). Tests exercising a
-    specific kind pass ``giver_kind=`` + the matching typed FK.
+    Defaults to an active, target-less ROOM_TRIGGER-kind giver — a
+    drafty row (passes ``clean()``, fails ``is_publishable``). Tests
+    exercising a specific kind pass ``giver_kind=`` + a matching
+    ``target=`` (whose typeclass clean() validates).
     """
 
     class Meta:
@@ -221,9 +221,7 @@ class MissionGiverFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Giver {n}")
     giver_kind = GiverKind.ROOM_TRIGGER
-    location = None
-    npc = None
-    environmental_detail = None
+    target = None
     org = None
     is_active = True
 

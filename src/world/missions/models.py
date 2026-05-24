@@ -932,20 +932,21 @@ class MissionGiver(SharedMemoryModel):
 
     A giver is the player-facing "front door" (a guild-hall guildmaster, a
     notice-board, a society fixer) and is intentionally NOT a piloted NPC.
-    It can be physically anchored (``location``) and/or org-anchored
-    (``org``); both are optional and ``SET_NULL`` so giver rows survive their
-    anchors being deleted. ``templates`` is the M2M draw pool consumed by
-    ``services.availability.offer_missions`` — backed by
-    :class:`MissionGiverOffering` which carries optional per-link odds /
-    requirements overrides. ``is_active`` is the master on/off switch for
-    the giver itself (staff toggle).
+    The giver is bound to one Evennia object — its ``target`` — and the
+    ``giver_kind`` enum says how to interpret that object: NPC means
+    ``target`` is the giver-NPC Character; ROOM_TRIGGER means ``target`` is
+    the trigger room itself; ENVIRONMENTAL_DETAIL means ``target`` is the
+    examinable item / detail. (All three end up as ``ObjectDB`` rows in
+    Evennia — the discrimination happens at the typeclass level, not the
+    schema, which is why there is one FK rather than three.) ``org`` is
+    optional and used by ORG arc-scope filtering. ``is_active`` is the
+    master on/off switch for the giver itself (staff toggle).
 
-    ``giver_kind`` discriminates how the giver reaches the player (NPC /
-    ENVIRONMENTAL_DETAIL / ROOM_TRIGGER) and gates the typed target FKs.
-    Validation is **loose**: clean() enforces consistency (e.g. an
-    environmental_detail FK is forbidden on an NPC-kind giver) but does NOT
-    require completeness — a giver authored without its kind-specific
-    target is a 'draft' that the runtime offering simply doesn't surface.
+    Validation is **loose**: ``clean()`` enforces that ``target`` has the
+    typeclass matching ``giver_kind`` when set, but a giver without its
+    target is a 'draft' that ``is_publishable`` reports unready. The
+    runtime offering surface intentionally doesn't gate on
+    ``is_publishable`` today (Phase D's offering surface will).
     """
 
     name = models.CharField(max_length=200)
@@ -953,44 +954,22 @@ class MissionGiver(SharedMemoryModel):
         max_length=20,
         choices=GiverKind.choices,
         default=GiverKind.ROOM_TRIGGER,
-        help_text="How this giver reaches the player; gates the typed target FK below.",
+        help_text="How this giver reaches the player; selects the target's expected typeclass.",
     )
-    location = models.ForeignKey(
+    target = models.ForeignKey(
         "objects.ObjectDB",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
         help_text=(
-            "Optional Evennia room/location anchoring this giver. For "
-            "ROOM_TRIGGER kind, this room IS the trigger (entering it rolls "
-            "the offer). Should be a Room-typeclass ObjectDB."
-        ),
-    )
-    npc = models.ForeignKey(
-        "objects.ObjectDB",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text=(
-            "NPC kind: the abstract giver NPC the player talks to (not "
-            "piloted, not a sheet). Must be null for other kinds. Should "
-            "be a Character-typeclass ObjectDB (or a giver-NPC subclass — "
-            "staff convention not enforced at the model layer)."
-        ),
-    )
-    environmental_detail = models.ForeignKey(
-        "objects.ObjectDB",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text=(
-            "ENVIRONMENTAL_DETAIL kind: the examinable thing in the room "
-            "(real item or room detail) that kicks off the offer. Must be "
-            "null for other kinds. Should be an Item-typeclass ObjectDB "
-            "or a room-detail ObjectDB."
+            "The Evennia object this giver is bound to. Its typeclass must "
+            "match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → "
+            "Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/"
+            "Exit Object (an examinable item or room detail). Null = draft "
+            "(see is_publishable). All FK targets land in ObjectDB; the "
+            "kind enum + clean() typeclass check enforce semantic shape "
+            "without the wasted nullable columns of a discriminator."
         ),
     )
     org = models.ForeignKey(
@@ -1015,18 +994,54 @@ class MissionGiver(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        errors: dict[str, str] = {}
-        if self.giver_kind != GiverKind.NPC and self.npc_id is not None:
-            errors["npc"] = "Only NPC-kind givers may set npc."
-        if (
-            self.giver_kind != GiverKind.ENVIRONMENTAL_DETAIL
-            and self.environmental_detail_id is not None
-        ):
-            errors["environmental_detail"] = (
-                "Only ENVIRONMENTAL_DETAIL-kind givers may set environmental_detail."
-            )
-        if errors:
-            raise ValidationError(errors)
+        if self.target_id is None:
+            super().clean()
+            return
+        # Lazy typeclass imports — typeclasses pull in Evennia object
+        # machinery and would create circular imports at module load.
+        from typeclasses.characters import Character  # noqa: PLC0415
+        from typeclasses.exits import Exit  # noqa: PLC0415
+        from typeclasses.rooms import Room  # noqa: PLC0415
+
+        target = self.target
+        if self.giver_kind == GiverKind.NPC:
+            if not target.is_typeclass(Character, exact=False):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"NPC-kind giver's target must be a Character-typeclass "
+                            f"ObjectDB; got {target.typeclass_path}."
+                        )
+                    }
+                )
+        elif self.giver_kind == GiverKind.ROOM_TRIGGER:
+            if not target.is_typeclass(Room, exact=False):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"ROOM_TRIGGER-kind giver's target must be a Room-typeclass "
+                            f"ObjectDB; got {target.typeclass_path}."
+                        )
+                    }
+                )
+        elif self.giver_kind == GiverKind.ENVIRONMENTAL_DETAIL:
+            # An examinable detail / item — must NOT be a Character, Room,
+            # or Exit. (Any other Object subclass is fair game: weapons,
+            # books, props, room details.)
+            if (
+                target.is_typeclass(Character, exact=False)
+                or target.is_typeclass(Room, exact=False)
+                or target.is_typeclass(Exit, exact=False)
+            ):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"ENVIRONMENTAL_DETAIL-kind giver's target must be a "
+                            f"non-Character/Room/Exit Object (an examinable item or "
+                            f"detail); got {target.typeclass_path}."
+                        )
+                    }
+                )
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -1034,7 +1049,7 @@ class MissionGiver(SharedMemoryModel):
 
     @property
     def is_publishable(self) -> bool:
-        """True when this giver has its kind-specific target FK populated.
+        """True when this giver has its ``target`` populated.
 
         A 'drafty' giver (kind set, target unset) passes ``clean()`` —
         the model layer intentionally allows partial in-progress rows so
@@ -1045,17 +1060,11 @@ class MissionGiver(SharedMemoryModel):
         Runtime enforcement in ``offer_missions`` is deferred until the
         Phase-D offering surface and the broader visibility/permission
         brainstorm — today this property is consumed only by the
-        authoring layer. NOT a ``cached_property`` — the underlying FKs
-        are mutable and ``SharedMemoryModel`` keeps the instance
-        long-lived; recomputing on access is the safe choice.
+        authoring layer. NOT a ``cached_property`` — ``target`` is
+        mutable and ``SharedMemoryModel`` keeps the instance long-lived;
+        recomputing on access is the safe choice.
         """
-        if self.giver_kind == GiverKind.NPC:
-            return self.npc_id is not None
-        if self.giver_kind == GiverKind.ENVIRONMENTAL_DETAIL:
-            return self.environmental_detail_id is not None
-        if self.giver_kind == GiverKind.ROOM_TRIGGER:
-            return self.location_id is not None
-        return False
+        return self.target_id is not None
 
     def __str__(self) -> str:
         return self.name

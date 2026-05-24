@@ -131,15 +131,23 @@ Run `echo "yes" | uv run arx test --postgres world.missions world.mechanics` fre
 3. `makemigrations missions`. Factory. Run tests.
 4. Commit: `feat(missions): MissionCategory + MissionTemplate.categories`.
 
-### Task B2: giver model extension
+### Task B2: giver model extension (deviation from plan)
 
-**Files:** `src/world/missions/models.py` (`MissionGiver`, new through-model), `constants.py` (`GiverKind` TextChoices), migration, factories, `test_models_giver.py`.
+> **DEVIATION (post-merge-review):** The original plan called for three
+> typed FKs (`npc`, `environmental_detail`, room-trigger) gated by a
+> `DiscriminatorMixin`. Senior-dev review on the Phase B PR pointed out
+> that all three FKs target the same table (`objects.ObjectDB`), so the
+> "discriminator" was just three nullable columns where one would do.
+> Refactored to a single `target = FK(ObjectDB)` with `clean()`-time
+> typeclass validation. See `docs/roadmap/missions.md` deviation note.
 
-**Steps:**
-1. Failing tests: a `MissionGiver` has a `giver_kind` (NPC / ENVIRONMENTAL_DETAIL / ROOM_TRIGGER) selecting which target FK is meaningful, validated by `DiscriminatorMixin`; the giver↔mission link is a through-model carrying optional per-link `weight`/requirements overrides.
-2. Add `GiverKind` to `constants.py`. Extend `MissionGiver` with the discriminator + the typed target FKs (NPC `ObjectDB`, environmental-detail `ObjectDB`, room-trigger — confirm what a room-entry trigger references; likely `flows.Trigger` or a room FK — raise if unclear). Convert the `templates` M2M to an explicit through-model `MissionGiverOffering(giver, template, weight_override, ...)`.
-3. `makemigrations missions`. Factories. Run tests (RED-first per the `DiscriminatorMixin` `save()`→`clean()` pattern).
-4. Commit: `feat(missions): giver kind discriminator + giver-offering through-model`.
+**Files (as landed):** `src/world/missions/models.py` (`MissionGiver`, `MissionGiverOffering` through-model), `constants.py` (`GiverKind` TextChoices), migrations `0014` + `0022`, factories, `test_models_giver.py`.
+
+**Shape that landed:**
+1. `GiverKind(TextChoices)`: `NPC` / `ENVIRONMENTAL_DETAIL` / `ROOM_TRIGGER`.
+2. `MissionGiver.target = FK(ObjectDB, null=True, SET_NULL)` — the single bound object. Null = drafty (see `is_publishable`).
+3. `clean()` validates target's typeclass against `giver_kind`: NPC → Character-or-subclass; ROOM_TRIGGER → Room-or-subclass; ENVIRONMENTAL_DETAIL → any Object except Character/Room/Exit.
+4. `MissionGiverOffering(giver, template, weight_override, requirements_override)` is the explicit through-model on the `templates` M2M; `weight_override=0` rejected at clean (use null = template.base_weight or >=1).
 
 ### Task B3: `MissionGiverStanding`
 
