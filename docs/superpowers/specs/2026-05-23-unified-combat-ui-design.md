@@ -130,6 +130,71 @@ Three rendering states per unit:
 - Pose without action (prep pose) — narrative only, no chip.
 - Action without pose — chip only with placeholder text *("Mirelle hasn't posed yet")*.
 
+### Action outcome details — expandable
+
+The terse action chip on a pose unit is a one-line summary. The *actual*
+outcome of an action can be rich:
+
+- Damage results per target (PCs hurt, NPCs killed, sub-tier "scratched"
+  outcomes)
+- Conditions applied per target (Burning ×2, Held, Probed +1)
+- Achievement progress fired
+- Discoveries triggered (a persona unmasked, a covenant-role revealed)
+- Reactive trigger fires (Soul Tether redirect drained N from the Hollow, a
+  resonance environment AMPLIFY proc'd, Soulfray severity accrued)
+- Resource changes (anima spent, fatigue accrued, resonance spent on pulls)
+- Clash meter contribution + tier
+- Combo upgrade triggered (and its own bundle of effects)
+
+Surfacing all of this inline would overwhelm the pose log. Hiding it entirely
+loses context players actively want. The rule:
+
+- **Default:** the chip alone (terse one-line summary). Pose log stays
+  scannable.
+- **Expandable:** a small ▾ affordance on the chip (or on the pose unit's
+  header) toggles an inline detail panel listing all outcome effects.
+- **Per-effect deep links:** each effect row in the expanded view can link to
+  a focused modal (the wound detail, the condition's source explanation, the
+  achievement's full description, the discovery's narrative reveal). Effects
+  that don't have a meaningful deeper view are display-only.
+- **Pose-level vs chip-level expand:** when a pose has multiple linked
+  actions, the pose-level expand reveals every action's detail panel; each
+  chip can also be expanded individually. Both behaviors point at the same
+  per-action detail block — only the entry point differs.
+- **State persistence:** expand/collapse state is local UI state, not
+  persisted server-side. Refreshing the page returns to the collapsed default.
+
+#### Data path
+
+The ACTION-mode `Interaction.content` stays terse (the format
+`ActionResult.tsx` already parses). The detail panel is fetched on-demand
+from the underlying mechanical models via the bridge:
+
+- Frontend asks: "give me outcome details for action records [N, M, …]"
+- Backend returns a structured shape: a list of effects per action, each
+  effect tagged with kind (`damage`, `condition`, `achievement`,
+  `discovery`, `trigger_fire`, `resource_change`, …), a one-line label, an
+  optional deep-link target (URL or modal-key + ID).
+
+The per-effect shape is enumerated in the plan phase — see the existing
+`ActionOutcome` / `ParticipantDamageResult` / `AppliedConditionResult` etc.
+types in `world/combat/types.py` for the source shapes. The API serializes
+those into a display-friendly shape with stable kind tags the frontend
+renders consistently.
+
+Lazy-fetch: detail data is requested only when the player expands the chip
+(or the pose). The pose log payload stays light by default.
+
+#### Skim-vs-detail UX
+
+Players reading scene history primarily want narrative. The terse chip
+preserves that. When something feels load-bearing ("wait, what did Aerande
+actually do to the Knight in round 3?") the expand affordance gives them the
+full mechanical picture without taking them away from the scene flow. Critical
+events (KO, death, dramatic conditions) may also surface auto-expanded the
+first time they render in a session — TBD by player preference settings in
+implementation; default is collapsed.
+
 ### Composer
 
 Standard scene composer (existing `SceneInteractionPanel`) plus an
@@ -576,7 +641,10 @@ neither owns the abstraction and either can adopt.
   toggle reveals inapplicable rows with reason chips. Verify tier selection
   updates the cost line. Verify unaffordable tiers are disabled with tooltips.
   Verify auto-revert when context changes drop a pull's applicability.
-- Combined pose-unit rendering — pose+action linked, pose-only, action-only states.
+- Combined pose-unit rendering — pose+action linked, pose-only, action-only
+  states; collapsed (chip-only) and expanded (full effect list) states for
+  pose-level and per-chip expand triggers; lazy fetch verification (detail
+  data is not fetched until expand).
 
 **Integration:**
 
@@ -619,7 +687,19 @@ neither owns the abstraction and either can adopt.
 4. **Long-pose threshold** (§1) — what triggers "click to expand"? Probably
    character count or rendered-height. Defer to implementation.
 
-5. **Scene-action passive declaration in non-combat scenes** — does the scene
+5. **Per-effect deep-link enumeration** (§1) — the set of effect kinds that
+   carry meaningful deep links (damage → wound detail, condition → source,
+   achievement → progress page, discovery → narrative reveal, trigger →
+   reactive event explanation). The plan should enumerate the kinds from
+   `world/combat/types.py` (`ActionOutcome`, `ParticipantDamageResult`,
+   `AppliedConditionResult`, `DamageConsequenceResult`, etc.) and decide
+   which targets exist as modals/pages today vs which need new surfaces.
+
+6. **Auto-expand on critical events** (§1) — whether KO / death / dramatic
+   condition fires should auto-expand the first time they render. Probably
+   yes, behind a player preference (default on). Defer to implementation.
+
+7. **Scene-action passive declaration in non-combat scenes** — does the scene
    wrapper allow multiple action cards (one per category) like combat, or is it
    always a single card? Defer to the scene-side spec.
 
