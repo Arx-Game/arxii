@@ -114,9 +114,14 @@ collapsible.
 
 Each log entry is one combined unit (card) containing:
 
-- **Attribution header** — persona name + scene timestamp + optional round/phase
-  context. Player-attributed (blue accent), GM-attributed (amber accent),
-  system-attributed (grey, lower opacity).
+- **Attribution header** — persona **thumbnail** + name + scene timestamp +
+  optional round/phase context. Player-attributed (blue accent),
+  GM-attributed (amber accent), system-attributed (grey, lower opacity).
+  Thumbnail source: `Persona.thumbnail` FK (to `evennia_extensions.PlayerMedia`)
+  takes precedence over `Persona.thumbnail_url` (legacy URLField). Fallback
+  when neither is set: initial-letter avatar with persona-name-derived color.
+  Both fields already exist on the model
+  (`world/scenes/models.py:193-201`); no schema change.
 - **Action chip(s)** — when the entry has linked actions: one chip per action
   showing technique name + outcome tier + delta (e.g., `Tidal Fury · GREAT · +4 to clash`).
   Color-coded by outcome (success tiers in greens, mishaps in oranges/reds).
@@ -240,10 +245,19 @@ actions cost extra"). Health bar shifts to amber when wounded.
 ### Combatants
 
 List of all participants (PCs and NPCs visually distinct), each with:
-- Compact name badge
+- Compact persona **thumbnail** (same source resolution as the pose log:
+  `Persona.thumbnail` → `Persona.thumbnail_url` → initial-letter avatar).
+  NPCs use whatever portrait/asset their `CombatOpponent` carries; if none,
+  fall back to the initial-letter avatar with NPC color treatment.
+- Name
 - HP mini-bar (color-coded; NPC HP in orange tones to match enemy framing)
 - Condition icon row (clickable for details)
 - Active-clash indicator (⚡)
+
+Reuse note: the thumbnail rendering is the **same component** used by the
+pose log attribution header. Both surfaces (and any future scene UI showing
+a persona) share one `<PersonaAvatar>` component so the source-resolution
+order and fallback behavior stays consistent.
 
 ### Active state
 
@@ -699,7 +713,13 @@ neither owns the abstraction and either can adopt.
    condition fires should auto-expand the first time they render. Probably
    yes, behind a player preference (default on). Defer to implementation.
 
-7. **Scene-action passive declaration in non-combat scenes** — does the scene
+7. **NPC thumbnail source** (§2 Combatants) — `CombatOpponent` doesn't
+   currently carry a portrait FK. The plan should decide whether to add one
+   (small migration), wire to existing opponent-asset infrastructure if it
+   exists, or stick with initial-letter avatar for v1 and add the field
+   later. PCs use `Persona.thumbnail` and have no equivalent gap.
+
+8. **Scene-action passive declaration in non-combat scenes** — does the scene
    wrapper allow multiple action cards (one per category) like combat, or is it
    always a single card? Defer to the scene-side spec.
 
