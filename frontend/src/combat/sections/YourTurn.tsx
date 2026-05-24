@@ -201,7 +201,7 @@ export function YourTurn({
   const [focusedContext, setFocusedContext] = useState<ActionContext>(
     () => initialContext('focused')
   );
-  const [passiveContexts, setPassiveContexts] = useState<Record<ActionSlot, ActionContext>>(
+  const [passiveContexts, setPassiveContexts] = useState<Partial<Record<ActionSlot, ActionContext>>>(
     () => ({
       'passive-physical': initialContext('passive-physical'),
       'passive-social': initialContext('passive-social'),
@@ -242,7 +242,7 @@ export function YourTurn({
   // ---------------------------------------------------------------------------
 
   const clashActions = availableActions.filter(
-    (a) => a.ref.backend === 'COMBAT' && a.ref.clash_id !== null
+    (a) => a.ref.backend === 'COMBAT' && a.ref.clash_id != null
   );
 
   // ---------------------------------------------------------------------------
@@ -287,7 +287,7 @@ export function YourTurn({
     // 2. Passive actions (for each visible passive slot that has a technique)
     for (const slot of visiblePassiveSlots) {
       const ctx = passiveContexts[slot];
-      if (ctx.techniqueId !== undefined) {
+      if (ctx != null && ctx.techniqueId !== undefined) {
         dispatchJobs.push(() =>
           dispatchAction({
             ref: {
@@ -303,7 +303,7 @@ export function YourTurn({
     // 3. Clash contributions — technique_id goes in kwargs (NOT on the ref).
     // Per plan Task 7.3: ActionRef.__post_init__ rejects both clash_id and
     // technique_id being set; see src/actions/types.py:137-155.
-    if (selectedClashRef !== null && selectedClashRef.clash_id !== null) {
+    if (selectedClashRef !== null && selectedClashRef.clash_id != null) {
       const clashId = selectedClashRef.clash_id;
       const strain = strainByClash[clashId] ?? 0;
       dispatchJobs.push(() =>
@@ -380,7 +380,7 @@ export function YourTurn({
           </p>
           {clashActions.map((action) => {
             const clashId = action.ref.clash_id;
-            if (clashId === null) return null;
+            if (clashId == null) return null;
             return (
               <ClashContributionRow
                 key={clashId}
@@ -419,7 +419,7 @@ export function YourTurn({
               key={slot}
               characterId={characterId}
               characterSheetId={characterSheetId}
-              actionContext={passiveContexts[slot]}
+              actionContext={passiveContexts[slot] ?? initialContext(slot)}
               onContextChange={(next) => {
                 setSubmitError(null);
                 setPassiveContexts((prev) => ({ ...prev, [slot]: next }));

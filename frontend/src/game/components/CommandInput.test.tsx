@@ -11,7 +11,7 @@ vi.mock('@/hooks/useGameSocket', () => ({
 }));
 
 vi.mock('@/scenes/queries', () => ({
-  submitPose: (...args: unknown[]) => submitPoseMock(...args),
+  submitPose: (...args: unknown[]) => submitPoseMock(...(args as [])),
 }));
 
 vi.mock('@/store/hooks', () => ({

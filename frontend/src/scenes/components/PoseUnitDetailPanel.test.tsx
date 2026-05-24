@@ -43,7 +43,7 @@ describe('PoseUnitDetailPanel', () => {
     mockUseOutcomeDetails.mockReturnValue({
       data: undefined,
       isLoading: true,
-    } as ReturnType<typeof useOutcomeDetails>);
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
 
     render(
       <Wrapper>
@@ -60,7 +60,7 @@ describe('PoseUnitDetailPanel', () => {
         { action_interaction_id: 1, effects: [] },
       ],
       isLoading: false,
-    } as ReturnType<typeof useOutcomeDetails>);
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
 
     render(
       <Wrapper>
@@ -89,7 +89,7 @@ describe('PoseUnitDetailPanel', () => {
         },
       ],
       isLoading: false,
-    } as ReturnType<typeof useOutcomeDetails>);
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
 
     render(
       <Wrapper>
@@ -108,7 +108,7 @@ describe('PoseUnitDetailPanel', () => {
       data: undefined,
       isLoading: false,
       isError: true,
-    } as ReturnType<typeof useOutcomeDetails>);
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
 
     render(
       <Wrapper>
@@ -123,7 +123,7 @@ describe('PoseUnitDetailPanel', () => {
     mockUseOutcomeDetails.mockReturnValue({
       data: [],
       isLoading: false,
-    } as ReturnType<typeof useOutcomeDetails>);
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
 
     render(
       <Wrapper>
