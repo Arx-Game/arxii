@@ -506,6 +506,21 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_reactions') to set this."""
         self._cached_reactions = value
 
+    @property
+    def cached_action_links(self) -> "list[InteractionAction]":
+        """InteractionAction bridge rows for this POSE. Uses Prefetch(to_attr=) when available."""
+        try:
+            return self._cached_action_links  # type: ignore[attr-defined]
+        except AttributeError:
+            return list(
+                InteractionAction.objects.filter(pose=self).select_related("action_interaction")
+            )
+
+    @cached_action_links.setter
+    def cached_action_links(self, value: "list[InteractionAction]") -> None:
+        """Allow Prefetch(to_attr='cached_action_links') to set this."""
+        self._cached_action_links = value  # type: ignore[attr-defined]
+
 
 class InteractionFavorite(SharedMemoryModel):
     """Private bookmark for a cherished RP moment.

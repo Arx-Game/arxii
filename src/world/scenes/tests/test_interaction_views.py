@@ -346,3 +346,78 @@ class PoseSubmitViewTests(APITestCase):
         assert data["is_favorited"] is False
         assert "reactions" in data
         assert data["reactions"] == []
+        # action_links — newly-created pose has no links yet (empty list injected)
+        assert "action_links" in data
+        assert data["action_links"] == []
+
+
+class ActionLinksSerializerTests(APITestCase):
+    """action_links field is populated by the list endpoint for POSE interactions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+
+    def test_list_includes_action_links_for_pose_with_linked_actions(self) -> None:
+        """GET /api/interactions/ returns action_links populated for a POSE with linked actions."""
+        scene = SceneFactory()
+        action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(url, {"scene": scene.pk})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data["results"]
+
+        pose_row = next((r for r in results if r["id"] == pose.pk), None)
+        assert pose_row is not None, "POSE interaction not found in results"
+        assert "action_links" in pose_row
+        assert len(pose_row["action_links"]) == 1
+        link = pose_row["action_links"][0]
+        assert link["ordering"] == 0
+        assert link["action_interaction"]["id"] == action.pk
+        assert link["action_interaction"]["mode"] == "action"
+
+    def test_list_includes_empty_action_links_for_pose_without_actions(self) -> None:
+        """GET /api/interactions/ returns action_links=[] for a POSE with no linked actions."""
+        pose = InteractionFactory(
+            persona=self.persona,
+            mode=InteractionMode.POSE,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(url, {"persona": self.persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data["results"]
+
+        pose_row = next((r for r in results if r["id"] == pose.pk), None)
+        assert pose_row is not None
+        assert pose_row["action_links"] == []

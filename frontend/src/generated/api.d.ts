@@ -11662,6 +11662,11 @@ export interface components {
              *     Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
              *     rail section. Returns only ACTIVE clashes so resolved ones don't litter
              *     the UI after the clash is done.
+             *
+             *     Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
+             *     ``_base_queryset`` so no extra query fires during detail serialization.
+             *     Falls back to a direct filter for callers that don't use the viewset
+             *     (e.g. unit tests that call the serializer directly).
              */
             readonly clashes: {
                 [key: string]: unknown;
@@ -12675,6 +12680,53 @@ export interface components {
             /** @description The minimum tier number that must be reached on this track */
             readonly minimum_tier: number;
         };
+        /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
+        InlineActionInteraction: {
+            readonly id: number;
+            /** @description The actual written text of the interaction */
+            content: string;
+            /**
+             * @description The type of IC interaction
+             *
+             *     * `pose` - Pose
+             *     * `emit` - Emit
+             *     * `say` - Say
+             *     * `whisper` - Whisper
+             *     * `shout` - Shout
+             *     * `action` - Action
+             */
+            mode?: components["schemas"]["Mode3e5Enum"];
+            /** Format: date-time */
+            readonly timestamp: string;
+        };
+        /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
+        InlineActionInteractionRequest: {
+            /** @description The actual written text of the interaction */
+            content: string;
+            /**
+             * @description The type of IC interaction
+             *
+             *     * `pose` - Pose
+             *     * `emit` - Emit
+             *     * `say` - Say
+             *     * `whisper` - Whisper
+             *     * `shout` - Shout
+             *     * `action` - Action
+             */
+            mode?: components["schemas"]["Mode3e5Enum"];
+        };
+        /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
+        InteractionActionLink: {
+            readonly id: number;
+            /** @description Display order within the pose (low values render first). */
+            ordering?: number;
+            readonly action_interaction: components["schemas"]["InlineActionInteraction"];
+        };
+        /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
+        InteractionActionLinkRequest: {
+            /** @description Display order within the pose (low values render first). */
+            ordering?: number;
+        };
         InteractionDetail: {
             readonly id: number;
             /** @description Persona data embedded in interaction payloads. */
@@ -12719,6 +12771,7 @@ export interface components {
             readonly receiver_persona_ids: number[];
             readonly place_name: string | null;
             readonly target_persona_ids: number[];
+            readonly action_links: components["schemas"]["InteractionActionLink"][];
             readonly receivers: components["schemas"]["InteractionReceiver"][];
         };
         InteractionFavorite: {
@@ -12776,6 +12829,7 @@ export interface components {
             readonly receiver_persona_ids: number[];
             readonly place_name: string | null;
             readonly target_persona_ids: number[];
+            readonly action_links: components["schemas"]["InteractionActionLink"][];
         };
         InteractionListRequest: {
             /** @description Scene container if one was active */

@@ -106,6 +106,11 @@ class InteractionViewSet(
                 queryset=InteractionReaction.objects.all(),
                 to_attr="cached_reactions",
             ),
+            Prefetch(
+                "action_links",
+                queryset=InteractionAction.objects.select_related("action_interaction"),
+                to_attr="cached_action_links",
+            ),
         )
 
         persona_ids = get_account_personas(self.request)
@@ -284,6 +289,7 @@ class InteractionViewSet(
         interaction.cached_target_personas = []
         interaction.cached_favorites = []
         interaction.cached_reactions = []
+        interaction.cached_action_links = []
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )

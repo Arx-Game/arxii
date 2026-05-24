@@ -4,6 +4,7 @@ from world.scenes.constants import InteractionMode
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
+    InteractionAction,
     InteractionFavorite,
     InteractionReaction,
     Persona,
@@ -11,6 +12,24 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import PersonaPayload, ReactionAggregation
+
+
+class InlineActionInteractionSerializer(serializers.ModelSerializer):
+    """Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip."""
+
+    class Meta:
+        model = Interaction
+        fields = ["id", "content", "mode", "timestamp"]
+
+
+class InteractionActionLinkSerializer(serializers.ModelSerializer):
+    """Serializes the InteractionAction bridge for the action_links field on a POSE."""
+
+    action_interaction = InlineActionInteractionSerializer(read_only=True)
+
+    class Meta:
+        model = InteractionAction
+        fields = ["id", "ordering", "action_interaction"]
 
 
 class InteractionReceiverSerializer(serializers.ModelSerializer):
@@ -29,6 +48,11 @@ class InteractionListSerializer(serializers.ModelSerializer):
     receiver_persona_ids = serializers.SerializerMethodField()
     place_name = serializers.SerializerMethodField()
     target_persona_ids = serializers.SerializerMethodField()
+    action_links = InteractionActionLinkSerializer(
+        many=True,
+        read_only=True,
+        source="cached_action_links",
+    )
 
     class Meta:
         model = Interaction
@@ -46,6 +70,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "receiver_persona_ids",
             "place_name",
             "target_persona_ids",
+            "action_links",
         ]
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:

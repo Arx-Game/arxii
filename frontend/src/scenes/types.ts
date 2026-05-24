@@ -51,6 +51,21 @@ export interface InteractionReaction {
   reacted: boolean;
 }
 
+/** Minimal ACTION Interaction embedded inside an action-link chip. */
+export interface InlineActionInteraction {
+  id: number;
+  content: string;
+  mode: string;
+  timestamp: string;
+}
+
+/** Bridge row linking a POSE Interaction to a linked ACTION Interaction. */
+export interface ActionLink {
+  id: number;
+  ordering: number;
+  action_interaction: InlineActionInteraction;
+}
+
 export interface Interaction {
   id: number;
   persona: InteractionPersona;
@@ -67,4 +82,6 @@ export interface Interaction {
   receiver_persona_ids: number[];
   /** IDs of personas this action is directed at (threading/narrative — visible to everyone). */
   target_persona_ids: number[];
+  /** ACTION Interactions linked to this POSE (populated only for POSE-mode rows). */
+  action_links?: ActionLink[];
 }
