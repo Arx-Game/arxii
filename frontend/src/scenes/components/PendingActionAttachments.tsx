@@ -10,9 +10,22 @@ interface PendingActionAttachmentsProps {
   onUndoDetach: (id: number) => void;
 }
 
-/** Truncate action content to a short summary for chip display. */
+/** Truncate action content to a short summary for chip display.
+ *
+ * The summary is rendered as JSX text content (React escapes), so this is
+ * for readability not security — but CodeQL flags a single-pass HTML-tag
+ * strip as bypassable (e.g., `<scr<x>ipt>` survives one pass). Strip in a
+ * loop until stable, then drop any stray angle brackets so no `<script`
+ * substring can survive.
+ */
 function terseSummary(content: string, maxLength: number = 60): string {
-  const stripped = content.replace(/<[^>]*>/g, '').trim();
+  let stripped = content;
+  let prev: string;
+  do {
+    prev = stripped;
+    stripped = stripped.replace(/<[^<>]*>?/g, '');
+  } while (stripped !== prev);
+  stripped = stripped.replace(/[<>]/g, '').trim();
   if (stripped.length <= maxLength) return stripped;
   return stripped.slice(0, maxLength - 1) + '…';
 }

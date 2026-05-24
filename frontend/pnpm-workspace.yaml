@@ -7,6 +7,8 @@
 #      which is the bind mount. Slow, eats host disk. Put it on the container
 #      writable layer instead. Lost on container recreation, regenerated on
 #      next install.
+packages:
+  - '.'
 store-dir: /home/vscode/.local/share/pnpm/store
 allowBuilds:
   esbuild: true
