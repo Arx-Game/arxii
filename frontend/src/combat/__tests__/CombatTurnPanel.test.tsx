@@ -1,16 +1,19 @@
 /**
- * Tests for CombatTurnPanel — Task 7.1 scaffold + slot composition.
+ * Tests for CombatTurnPanel — Phase 7 scaffold + Phase 8 section composition.
  *
  * Mocks:
  * - @/combat/queries (useCombatEncounter, useAvailableCombos, useUpgradeCombo,
  *   useDispatchPlayerAction)
  * - @/scenes/actionQueries (fetchAvailableActions)
  * - @tanstack/react-query (useQuery — for the inline available-actions query)
- * - @/combat/sections/YourTurn (stub to isolate panel smoke tests)
+ * - Section stubs: YourTurn, ResonanceBudget, VitalPools, CombatantsList,
+ *   ActiveState, RoundFlow — to isolate panel smoke tests
  * - @/actions/ActionDeclarationCard (stub to keep tests fast)
+ * - @/magic/queries (useCharacterResonances, useCharacterAnima)
+ * - @/components/PersonaAvatar (stub)
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -41,6 +44,29 @@ vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
 }));
 
+// Stub magic hooks used by rail sections
+vi.mock('@/magic/queries', () => ({
+  useCharacterResonances: vi.fn().mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
+  useCharacterAnima: vi.fn().mockReturnValue({
+    data: null,
+    isLoading: false,
+  }),
+  useApplicablePulls: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+  useTechnique: vi.fn().mockReturnValue({ data: undefined, isLoading: false }),
+  useThreads: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+}));
+
+// Stub PersonaAvatar to avoid color computation in section tests
+vi.mock('@/components/PersonaAvatar', () => ({
+  PersonaAvatar: ({ source }: { source: { name: string } }) => (
+    <span data-testid="persona-avatar">{source.name[0]?.toUpperCase()}</span>
+  ),
+}));
+
 // Stub YourTurn to prevent full render complexity
 vi.mock('../sections/YourTurn', () => ({
   YourTurn: ({ encounterId, roundNumber }: { encounterId: number; roundNumber: number }) => (
@@ -48,6 +74,11 @@ vi.mock('../sections/YourTurn', () => ({
       YourTurn enc={encounterId} round={roundNumber}
     </div>
   ),
+}));
+
+// Stub ActionDeclarationCard
+vi.mock('@/actions/ActionDeclarationCard', () => ({
+  ActionDeclarationCard: () => <div data-testid="action-declaration-card-stub" />,
 }));
 
 import * as combatQueries from '@/combat/queries';
@@ -78,6 +109,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     participants: [],
     opponents: [],
     current_round_actions: [],
+    clashes: [],
     created_at: '2026-05-24T00:00:00Z',
     ...overrides,
   };
@@ -95,6 +127,23 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (combatQueries.useAvailableActions as ReturnType<typeof vi.fn>).mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+  });
+  (combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>).mockReturnValue({
+    data: [],
+    isLoading: false,
+  });
+  (combatQueries.useUpgradeCombo as ReturnType<typeof vi.fn>).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  });
+  (combatQueries.useDispatchPlayerAction as ReturnType<typeof vi.fn>).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -168,5 +217,74 @@ describe('CombatTurnPanel — render smoke', () => {
 
     expect(screen.getByTestId('your-turn-stub')).toHaveTextContent('enc=7');
     expect(screen.getByTestId('your-turn-stub')).toHaveTextContent('round=5');
+  });
+});
+
+describe('CombatTurnPanel — Phase 8 rail sections', () => {
+  it('renders all six sections in spec order', () => {
+    mockEncounter({ is_participant: true });
+
+    render(
+      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
+      { wrapper: createWrapper() }
+    );
+
+    const panel = screen.getByTestId('combat-turn-panel');
+
+    // All section testids must be present
+    expect(within(panel).getByTestId('your-turn-stub')).toBeInTheDocument();
+    expect(within(panel).getByTestId('resonance-budget-section')).toBeInTheDocument();
+    expect(within(panel).getByTestId('vital-pools-section')).toBeInTheDocument();
+    expect(within(panel).getByTestId('combatants-list-section')).toBeInTheDocument();
+    expect(within(panel).getByTestId('active-state-section')).toBeInTheDocument();
+    expect(within(panel).getByTestId('round-flow-section')).toBeInTheDocument();
+  });
+
+  it('sections appear in the correct top-to-bottom DOM order', () => {
+    mockEncounter({ is_participant: true });
+
+    render(
+      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
+      { wrapper: createWrapper() }
+    );
+
+    const panel = screen.getByTestId('combat-turn-panel');
+    const allChildren = Array.from(panel.querySelectorAll('[data-testid]'));
+    const sectionOrder = allChildren
+      .map((el) => el.getAttribute('data-testid'))
+      .filter((id) =>
+        [
+          'your-turn-stub',
+          'resonance-budget-section',
+          'vital-pools-section',
+          'combatants-list-section',
+          'active-state-section',
+          'round-flow-section',
+        ].includes(id ?? '')
+      );
+
+    expect(sectionOrder).toEqual([
+      'your-turn-stub',
+      'resonance-budget-section',
+      'vital-pools-section',
+      'combatants-list-section',
+      'active-state-section',
+      'round-flow-section',
+    ]);
+  });
+
+  it('all sections start expanded by default', () => {
+    mockEncounter({ is_participant: true });
+
+    render(
+      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
+      { wrapper: createWrapper() }
+    );
+
+    // All toggle buttons should report aria-expanded=true
+    const toggles = screen.getAllByRole('button', { name: /round flow|resonance budget|vital pools|combatants|active state/i });
+    toggles.forEach((toggle) => {
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 });
