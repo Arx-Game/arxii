@@ -71,6 +71,34 @@ export async function postUpgradeCombo(
 // Dispatch player action
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Outcome details
+// ---------------------------------------------------------------------------
+
+export interface OutcomeEffectRow {
+  kind: string;
+  label: string;
+  deep_link: { modal: string; id: number } | null;
+}
+
+export interface ActionOutcomeDetail {
+  action_interaction_id: number;
+  effects: OutcomeEffectRow[];
+}
+
+/**
+ * Fetch outcome details for a set of ACTION Interactions (lazy).
+ * GET /api/combat/action-outcome-details/?action_interaction_ids=N,M,...
+ */
+export async function fetchOutcomeDetails(
+  actionInteractionIds: number[]
+): Promise<ActionOutcomeDetail[]> {
+  const ids = actionInteractionIds.join(',');
+  const res = await apiFetch(`/api/combat/action-outcome-details/?action_interaction_ids=${ids}`);
+  if (!res.ok) throw new Error('Failed to load outcome details');
+  return res.json() as Promise<ActionOutcomeDetail[]>;
+}
+
 /**
  * Dispatch a player action — the unified write path for all action types.
  * POST /api/actions/characters/{characterId}/dispatch/

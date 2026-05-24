@@ -24,6 +24,8 @@ export const combatKeys = {
 
   availableActions: (characterId: number) =>
     [...combatKeys.all, 'available-actions', characterId] as const,
+
+  outcomeDetails: (ids: number[]) => [...combatKeys.all, 'outcome-details', ids] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -118,6 +120,27 @@ export function useAvailableActions(characterId: number): {
     isLoading: result.isLoading,
     isError: result.isError,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch player action mutation hook
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Outcome details hook (lazy fetch for PoseUnitDetailPanel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch outcome details for a set of ACTION Interactions.
+ * Disabled when no IDs are provided.
+ */
+export function useOutcomeDetails(actionInteractionIds: number[]) {
+  return useQuery({
+    queryKey: combatKeys.outcomeDetails(actionInteractionIds),
+    queryFn: () => api.fetchOutcomeDetails(actionInteractionIds),
+    enabled: actionInteractionIds.length > 0,
+    staleTime: 30_000,
+  });
 }
 
 // ---------------------------------------------------------------------------
