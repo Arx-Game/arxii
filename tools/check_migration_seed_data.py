@@ -16,21 +16,13 @@ SRC_DIR = PROJECT_ROOT / "src"
 # Migrations that are allowed to have data insertion
 # These are typically essential system configurations, not seed data
 ALLOWED_MIGRATIONS: set[str] = {
-    # Data migration: backfills Persona.character_sheet FK from character_identity chain
-    "world/scenes/migrations/0014_populate_persona_character_sheet.py",
-    # Data migration: backfills RosterEntry.character_sheet FK from character chain
-    "world/roster/migrations/0003_populate_roster_entry_character_sheet.py",
-    # System configuration: KudosSourceCategory lookup table for social_engagement
-    "world/progression/migrations/0002_social_engagement_kudos_category.py",
-    # Data migration: placeholder PathRitualGrants for accept_soul_tether preserve visibility
-    # while CharacterRitualKnowledge gating is in effect (Phase 8).
-    "world/magic/migrations/0052_accept_soul_tether_placeholder_grants.py",
-    # Data migration: backfills RoomResonance tag rows into LocationStatModifier
-    # cascade rows during the room-cascade-resonance-unification refactor.
-    "world/magic/migrations/0058_migrate_roomresonance_to_cascade.py",
-    # Data migration: backfills ResonanceGrant.source_room_profile from the
-    # legacy source_room_aura_profile FK.
-    "world/magic/migrations/0059_backfill_resonancegrant_source_room_profile.py",
+    # System configuration: KudosSourceCategory lookup table for social_engagement.
+    # Re-numbered 0003 after the 2026-05-24 migration rebuild.
+    "world/progression/migrations/0003_social_engagement_kudos_category.py",
+    # Data migration: placeholder PathRitualGrants for accept_soul_tether
+    # preserve visibility while CharacterRitualKnowledge gating is in effect.
+    # Re-numbered 0003 after the 2026-05-24 migration rebuild.
+    "world/magic/migrations/0003_accept_soul_tether_placeholder_grants.py",
 }
 
 # Patterns that suggest seed data in migrations

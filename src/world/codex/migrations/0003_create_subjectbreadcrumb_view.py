@@ -1,8 +1,9 @@
 """Create the codex_subjectbreadcrumb materialized view.
 
+Ported from main's original after the 2026-05-24 migration rebuild.
 This view must be created via RunSQL because it's a managed=False model.
 Django's makemigrations won't auto-generate it. The SQL lives in
-codex/sql/subjectbreadcrumb.sql and must be re-referenced after any migration squash.
+codex/sql/subjectbreadcrumb.sql.
 """
 
 from pathlib import Path

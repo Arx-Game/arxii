@@ -1,8 +1,9 @@
 """Create the areas_areaclosure materialized view.
 
+Ported from main's original 0002 after the 2026-05-24 migration rebuild.
 This view must be created via RunSQL because it's a managed=False model.
 Django's makemigrations won't auto-generate it. The SQL lives in
-areas/sql/areaclosure.sql and must be re-referenced after any migration squash.
+areas/sql/areaclosure.sql.
 """
 
 from pathlib import Path

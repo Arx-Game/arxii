@@ -24,11 +24,16 @@ ALTER TABLE scenes_interaction_old ALTER COLUMN id DROP IDENTITY IF EXISTS;
 -- 2. Create the partitioned table with composite PK and its own sequence
 CREATE SEQUENCE scenes_interaction_id_seq;
 
+-- IMPORTANT: column list must match world.scenes.models.Interaction.
+-- This SQL rewrites the table from scratch — anything not listed here is
+-- dropped during partition setup. Adding a model column requires adding
+-- it here AND an index below if db_index=True.
 CREATE TABLE scenes_interaction (
     id          bigint NOT NULL DEFAULT nextval('scenes_interaction_id_seq'),
     content     text NOT NULL,
     mode        varchar(20) NOT NULL,
     visibility  varchar(20) NOT NULL,
+    pose_kind   varchar(16) NOT NULL DEFAULT 'standard',
     vote_count  integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
     "timestamp" timestamptz NOT NULL,
     persona_id  bigint NOT NULL,
@@ -131,6 +136,8 @@ CREATE INDEX IF NOT EXISTS interaction_very_private_idx
 CREATE INDEX IF NOT EXISTS interaction_no_scene_idx
     ON scenes_interaction ("timestamp")
     WHERE scene_id IS NULL;
+CREATE INDEX IF NOT EXISTS scenes_interaction_pose_kind_idx
+    ON scenes_interaction (pose_kind);
 
 -- 7. BRIN index for efficient time-range scans on the high-volume table
 CREATE INDEX IF NOT EXISTS interaction_ts_brin
