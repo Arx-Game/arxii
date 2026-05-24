@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
   AcceptTeachingOfferRequest,
+  ApplicablePullsRequest,
   CrossXPLockRequest,
   DissolveRequest,
   PatchThreadRequest,
@@ -54,6 +55,9 @@ export const magicKeys = {
   teachingOffers: () => [...magicKeys.all, 'teaching-offers', 'list'] as const,
 
   technique: (id: number) => [...magicKeys.all, 'technique', id] as const,
+
+  applicablePulls: (context: ApplicablePullsRequest | null) =>
+    [...magicKeys.all, 'applicable-pulls', context] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -436,5 +440,25 @@ export function useAcceptTeachingOffer() {
       void qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() });
       void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls read hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch per-thread applicability rows for the given action context.
+ *
+ * Disabled when context is null (no action context available yet).
+ * staleTime: 5_000 — context changes are user-driven and quick;
+ * short stale time keeps the picker reactive.
+ */
+export function useApplicablePulls(context: ApplicablePullsRequest | null) {
+  return useQuery({
+    queryKey: magicKeys.applicablePulls(context),
+    queryFn: () => api.fetchApplicablePulls(context!),
+    enabled: context !== null,
+    staleTime: 5_000,
   });
 }

@@ -17,6 +17,7 @@ import type { components } from '@/generated/api';
 import type {
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
+  ApplicablePullsRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -46,6 +47,7 @@ import type {
   StageAdvanceRespondRequest,
   TetherBond,
   Thread,
+  ThreadApplicability,
   ThreadHubSummary,
   WeaveThreadRequest,
 } from './types';
@@ -682,4 +684,31 @@ export async function getTechnique(id: number): Promise<Technique> {
   const res = await apiFetch(`${TECHNIQUES_URL}/${id}/`);
   if (!res.ok) throw new Error(`Failed to load technique ${id}`);
   return res.json() as Promise<Technique>;
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls
+// ---------------------------------------------------------------------------
+
+const APPLICABLE_PULLS_URL = '/api/magic/applicable-pulls/';
+
+/**
+ * POST /api/magic/applicable-pulls/
+ *
+ * Returns per-thread applicability rows for the given action context.
+ * Each row: { thread_id, applicable, inapplicable_reason }.
+ * Designed to be called from useApplicablePulls; do not call directly in components.
+ */
+export async function fetchApplicablePulls(
+  body: ApplicablePullsRequest
+): Promise<ThreadApplicability[]> {
+  const res = await apiFetch(APPLICABLE_PULLS_URL, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to fetch applicable pulls');
+  }
+  return res.json() as Promise<ThreadApplicability[]>;
 }

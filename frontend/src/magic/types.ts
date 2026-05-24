@@ -295,3 +295,18 @@ export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingO
 // ---------------------------------------------------------------------------
 
 export type RoomBrief = components['schemas']['RoomBrief'];
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls
+//
+// POST /api/magic/applicable-pulls/ — schema is in generated types.
+// Re-export generated shapes.
+// ApplicablePullsRequestRequest (note: backend naming with "Request" suffix)
+// is re-exported as ApplicablePullsRequest for the frontend convention.
+// ---------------------------------------------------------------------------
+
+/** Request body for POST /api/magic/applicable-pulls/ */
+export type ApplicablePullsRequest = components['schemas']['ApplicablePullsRequestRequest'];
+
+/** One row in the applicable-pulls response: per-thread applicability status. */
+export type ThreadApplicability = components['schemas']['ThreadApplicability'];
