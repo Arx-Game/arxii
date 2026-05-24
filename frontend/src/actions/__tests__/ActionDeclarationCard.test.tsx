@@ -3,10 +3,13 @@
  *
  * Mocks:
  * - @/scenes/actionQueries.fetchAvailableActions  (technique list)
- * - @/magic/queries.useTechnique                  (I/C chip + cost preview)
+ * - @/magic/queries.useTechnique + useApplicablePulls + useThreads
+ * - @/magic/components/threads/ThreadPullPicker   (stub to isolate card tests)
  *
  * The card uses useTechnique (a React Query hook), so we mock the queries
  * module directly to control what technique detail the card sees synchronously.
+ * ThreadPullPicker is stubbed so Phase 5 tests don't break due to Phase 6
+ * threading complexity.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -25,20 +28,30 @@ vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
 }));
 
-// Mock useTechnique so we control what technique detail the card sees.
+// Mock the entire magic queries module to control useTechnique, useApplicablePulls,
+// and useThreads synchronously. The card now uses all three.
 vi.mock('@/magic/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/magic/queries')>();
   return {
     ...actual,
     useTechnique: vi.fn(),
+    useApplicablePulls: vi.fn(),
+    useThreads: vi.fn(),
   };
 });
+
+// Stub ThreadPullPicker to prevent it from rendering full complexity in card tests.
+vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
+  ThreadPullPicker: () => <div data-testid="thread-pull-picker-stub">Thread pulls stub</div>,
+}));
 
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import * as magicQueries from '@/magic/queries';
 
 const mockedFetchActions = fetchAvailableActions as ReturnType<typeof vi.fn>;
 const mockedUseTechnique = magicQueries.useTechnique as ReturnType<typeof vi.fn>;
+const mockedUseApplicablePulls = magicQueries.useApplicablePulls as ReturnType<typeof vi.fn>;
+const mockedUseThreads = magicQueries.useThreads as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -131,6 +144,16 @@ function mockUseTechnique(data: typeof TECHNIQUE_OVERBURN | null) {
   mockedUseTechnique.mockReturnValue({ data, isLoading: false, isError: false });
 }
 
+function mockPickerHooks() {
+  // Provide stub returns for Phase 6 hooks so card tests don't break.
+  mockedUseApplicablePulls.mockReturnValue({ data: [], isLoading: false, isError: false });
+  mockedUseThreads.mockReturnValue({
+    data: { results: [], count: 0, next: null, previous: null },
+    isLoading: false,
+    isError: false,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Task 5.1 — skeleton + empty-state tests
 // ---------------------------------------------------------------------------
@@ -139,12 +162,14 @@ describe('ActionDeclarationCard — Task 5.1 skeleton', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
     mockUseTechnique(null);
+    mockPickerHooks();
   });
 
   it('renders with empty context (no technique picked yet)', async () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -161,6 +186,7 @@ describe('ActionDeclarationCard — Task 5.1 skeleton', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -171,13 +197,14 @@ describe('ActionDeclarationCard — Task 5.1 skeleton', () => {
     expect(screen.getByText(/^target$/i)).toBeInTheDocument();
     expect(screen.getByText(/^effort$/i)).toBeInTheDocument();
     expect(screen.getByText(/^cost$/i)).toBeInTheDocument();
-    expect(screen.getByText(/thread pulls/i)).toBeInTheDocument();
+    expect(screen.getByText(/^thread pulls$/i)).toBeInTheDocument();
   });
 
   it('renders the slot name in the header', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ slot: 'passive-physical' })}
         onContextChange={() => {}}
       />,
@@ -201,12 +228,14 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
       results: MOCK_TECHNIQUES,
     });
     mockUseTechnique(null);
+    mockPickerHooks();
   });
 
   it('lists available techniques for selection', async () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -224,6 +253,7 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={onContextChange}
       />,
@@ -242,6 +272,7 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 101 })}
         onContextChange={() => {}}
       />,
@@ -263,12 +294,14 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
     mockUseTechnique(null);
+    mockPickerHooks();
   });
 
   it('renders all five effort pills', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -286,6 +319,7 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ effort: 'HIGH' })}
         onContextChange={() => {}}
       />,
@@ -301,6 +335,7 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ effort: 'MEDIUM' })}
         onContextChange={onContextChange}
       />,
@@ -326,6 +361,7 @@ describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
       previous: null,
       results: MOCK_TECHNIQUES,
     });
+    mockPickerHooks();
   });
 
   it('shows warning chip when intensity exceeds control', () => {
@@ -334,6 +370,7 @@ describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 101 })}
         onContextChange={() => {}}
       />,
@@ -352,6 +389,7 @@ describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 102 })}
         onContextChange={() => {}}
       />,
@@ -369,6 +407,7 @@ describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -391,6 +430,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
       previous: null,
       results: MOCK_TECHNIQUES,
     });
+    mockPickerHooks();
   });
 
   it('hides the cost line when no technique is selected', () => {
@@ -399,6 +439,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext()}
         onContextChange={() => {}}
       />,
@@ -415,6 +456,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 102 })}
         onContextChange={() => {}}
       />,
@@ -431,6 +473,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 101 })}
         onContextChange={() => {}}
       />,
@@ -446,6 +489,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 101 })}
         onContextChange={() => {}}
       />,
@@ -462,6 +506,7 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     render(
       <ActionDeclarationCard
         characterId={1}
+        characterSheetId={1}
         actionContext={emptyContext({ techniqueId: 101 })}
         onContextChange={() => {}}
       />,
@@ -469,5 +514,66 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     );
 
     expect(screen.queryByTestId('ic-chip')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6.4 — ThreadPullPicker integration
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — Task 6.4 ThreadPullPicker section', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({
+      count: MOCK_TECHNIQUES.length,
+      next: null,
+      previous: null,
+      results: MOCK_TECHNIQUES,
+    });
+    mockUseTechnique(null);
+    mockPickerHooks();
+  });
+
+  it('renders the ThreadPullPicker stub inside the Thread Pulls section', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
+  });
+
+  it('does not render the picker when characterSheetId is 0', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={0}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('thread-pull-picker-stub')).not.toBeInTheDocument();
+    expect(screen.getByText(/no sheet context/i)).toBeInTheDocument();
+  });
+
+  it('renders with a technique selected and provides characterSheetId context', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={5}
+        actionContext={emptyContext({ techniqueId: 101 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // The stubbed picker should be visible
+    expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
   });
 });

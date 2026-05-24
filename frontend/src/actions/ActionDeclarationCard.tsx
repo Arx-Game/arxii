@@ -4,23 +4,28 @@
  * Used by both scenes and combat. Contract per spec §4 of
  * docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
  *
- * Props note: the card takes `characterId` (Evennia ObjectDB pk), NOT
- * `characterSheetId`. The caller handles the characterSheet → ObjectDB pk
- * mapping. This keeps the card thin and consistent with the existing
- * fetchAvailableActions(characterId) API in scenes/actionQueries.ts.
+ * Props:
+ * - characterId     — Evennia ObjectDB pk. NOT characterSheetId. Used with
+ *                     fetchAvailableActions (scenes/actionQueries).
+ * - characterSheetId — CharacterSheet pk. Used by the applicable-pulls API
+ *                      (POST /api/magic/applicable-pulls/). The two IDs are
+ *                      different objects; the parent supplies both. Phase 7
+ *                      CombatTurnPanel knows both.
  *
  * Deferred (not in this phase):
  * - `onCommitPulls` — wired by the combat panel in Phase 7 (CombatTurnPanel).
  * - `onSubmit` — wired by the combat panel in Phase 7.
  * - Real target picker with combatants list — deferred to Phase 7.
- * - ThreadPullPicker embedding — deferred to Phase 6.4.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery as useTQQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { useTechnique } from '@/magic/queries';
+import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
+import type { ApplicablePullsRequest } from '@/magic/types';
 import type { ActionContext, EffortLevel } from './types';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +35,11 @@ import type { ActionContext, EffortLevel } from './types';
 export interface ActionDeclarationCardProps {
   /** Evennia ObjectDB pk for the character. NOT characterSheetId. */
   characterId: number;
+  /**
+   * CharacterSheet pk. Used by the applicable-pulls API. Different from
+   * characterId (ObjectDB). Phase 7 CombatTurnPanel supplies both.
+   */
+  characterSheetId: number;
   actionContext: ActionContext;
   onContextChange: (next: ActionContext) => void;
   readOnly?: boolean;
@@ -255,21 +265,19 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 export function ActionDeclarationCard({
   characterId,
+  characterSheetId,
   actionContext,
   onContextChange,
   readOnly = false,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
-  // The API returns all PlayerActions; we filter to those with a technique_id
-  // so pure-combat actions without a technique are excluded.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useTQQuery({
     queryKey: ['available-actions', characterId],
     queryFn: () => fetchAvailableActions(characterId),
     enabled: characterId > 0,
   });
 
-  // Fetch technique detail for I/C chip and cost preview (Task 5.3).
-  // Route: GET /api/magic/techniques/<id>/ via useTechnique (magic/queries.ts).
+  // Fetch technique detail for I/C chip and cost preview.
   const {
     data: techniqueDetail,
     isLoading: techniqueLoading,
@@ -277,6 +285,37 @@ export function ActionDeclarationCard({
   } = useTechnique(actionContext.techniqueId);
 
   const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
+
+  // Thread pull state (local — Phase 7 can lift or add onPullsChange prop)
+  const [selectedPulls, setSelectedPulls] = useState<Record<number, 0 | 1 | 2 | 3>>({});
+  const [showInapplicable, setShowInapplicable] = useState(false);
+  const [revertNotice, setRevertNotice] = useState<string | null>(null);
+
+  // Build applicable-pulls context from current card state.
+  const pullsContext = useMemo<ApplicablePullsRequest | null>(() => {
+    if (characterSheetId <= 0) return null;
+    return {
+      character_sheet_id: characterSheetId,
+      technique_id: actionContext.techniqueId ?? null,
+      target_persona_id:
+        actionContext.targetKind === 'social' || actionContext.targetKind === 'ally'
+          ? actionContext.targetId ?? null
+          : null,
+      target_object_id:
+        actionContext.targetKind === 'opponent'
+          ? actionContext.targetId ?? null
+          : null,
+      scene_id: null, // wired in Phase 7 when CombatTurnPanel passes scene context
+      effect_type_id: null,
+    };
+  }, [characterSheetId, actionContext.techniqueId, actionContext.targetKind, actionContext.targetId]);
+
+  // Clear revert notice after 4 seconds
+  useEffect(() => {
+    if (!revertNotice) return;
+    const t = setTimeout(() => setRevertNotice(null), 4_000);
+    return () => clearTimeout(t);
+  }, [revertNotice]);
 
   function handleTechniqueSelect(techniqueId: number) {
     onContextChange({ ...actionContext, techniqueId });
@@ -371,11 +410,27 @@ export function ActionDeclarationCard({
         )}
       </Section>
 
-      {/* Thread pulls placeholder — wired in Phase 6.4 */}
+      {/* Thread pulls section — Phase 6.4 */}
       <Section label="Thread Pulls">
-        <p className="text-xs text-muted-foreground">
-          Thread pull picker — Phase 6
-        </p>
+        {/* Auto-revert notice */}
+        {revertNotice && (
+          <p className="text-xs text-amber-400 mb-1" data-testid="revert-notice">
+            {revertNotice}
+          </p>
+        )}
+        {pullsContext !== null ? (
+          <ThreadPullPicker
+            characterSheetId={characterSheetId}
+            actionContext={pullsContext}
+            selectedPulls={selectedPulls}
+            onPullsChange={setSelectedPulls}
+            showInapplicable={showInapplicable}
+            onToggleInapplicable={setShowInapplicable}
+            onAutoRevertNotice={setRevertNotice}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">— no sheet context —</p>
+        )}
       </Section>
     </div>
   );
