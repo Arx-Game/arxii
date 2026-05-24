@@ -24,10 +24,16 @@ vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
+  useAvailableActions: vi.fn().mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
     combos: (id: number) => ['combat', 'combos', id],
+    availableActions: (id: number) => ['combat', 'available-actions', id],
   },
 }));
 

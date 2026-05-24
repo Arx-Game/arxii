@@ -9,12 +9,9 @@
  * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §6
  */
 
-import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
-import { useCombatEncounter } from './queries';
+import { useAvailableActions, useCombatEncounter } from './queries';
 import { YourTurn } from './sections/YourTurn';
-import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -42,18 +39,8 @@ export function CombatTurnPanel({
     isError: encounterError,
   } = useCombatEncounter(encounterId);
 
-  // Available actions for the character (includes COMBAT + clash refs)
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId),
-    enabled: characterId > 0,
-    staleTime: 10_000,
-  });
-
-  // Filter to COMBAT backend actions only for the combat panel.
-  const combatActions: PlayerAction[] = (actionsData?.results ?? []).filter(
-    (a) => a.ref.backend === 'COMBAT'
-  );
+  // Available COMBAT-backend actions for the character (includes clash refs).
+  const { data: combatActions } = useAvailableActions(characterId);
 
   // ---------------------------------------------------------------------------
   // Loading / error states
