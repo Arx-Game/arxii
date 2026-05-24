@@ -1,11 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
-import { postInteractionReaction } from '../queries';
+import { PoseUnit } from './PoseUnit';
 import type { Interaction } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
-import { ActionResult } from './ActionResult';
-import { FormattedContent } from '@/components/FormattedContent';
-import { PersonaContextMenu } from './PersonaContextMenu';
 
 interface Props {
   sceneId: string;
@@ -14,106 +9,42 @@ interface Props {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
 }
 
-/** Format content based on interaction mode. */
-function formatContent(content: string, mode: string) {
-  switch (mode) {
-    case 'say':
-      return (
-        <p>
-          &ldquo;
-          <FormattedContent content={content} />
-          &rdquo;
-        </p>
-      );
-    case 'whisper':
-      return (
-        <p className="italic text-muted-foreground">
-          <FormattedContent content={content} />
-        </p>
-      );
-    case 'action':
-      return (
-        <div className="mt-1">
-          <ActionResult content={content} />
-        </div>
-      );
-    default:
-      return (
-        <p>
-          <FormattedContent content={content} />
-        </p>
-      );
-  }
-}
-
 export function SceneMessages({
   sceneId,
   filteredInteractions,
   onAddTarget,
   onAttachAction,
 }: Props) {
-  const queryClient = useQueryClient();
-  const interactionIdRef = useRef<number>(0);
-
-  const reactionMutation = useMutation({
-    mutationFn: (emoji: string) => postInteractionReaction(interactionIdRef.current, emoji),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
-  });
+  // Collect the set of ACTION interaction IDs that are already embedded inside
+  // a POSE via action_links. These are rendered inside their parent PoseUnit
+  // and should be skipped at the top-level iteration to avoid duplication.
+  const linkedActionIds = new Set<number>();
+  for (const msg of filteredInteractions) {
+    if (msg.action_links && msg.action_links.length > 0) {
+      for (const link of msg.action_links) {
+        linkedActionIds.add(link.action_interaction.id);
+      }
+    }
+  }
 
   return (
     <div>
-      {filteredInteractions.map((msg) => (
-        <div key={msg.id} className="border-b py-2">
-          <div className="flex items-center gap-2">
-            {msg.persona.thumbnail_url && (
-              <img src={msg.persona.thumbnail_url} alt={msg.persona.name} className="h-6 w-6" />
-            )}
-            <PersonaContextMenu
-              personaId={msg.persona.id}
-              personaName={msg.persona.name}
-              sceneId={sceneId}
-              onAttachAction={onAttachAction}
-            >
-              <span
-                onDoubleClick={() => onAddTarget?.(msg.persona.name)}
-                className="cursor-pointer"
-                title="Double-click to add as target"
-              >
-                {msg.persona.name}
-              </span>
-            </PersonaContextMenu>
-            <span className="text-xs text-muted-foreground">
-              {new Date(msg.timestamp).toLocaleString()}
-            </span>
-          </div>
+      {filteredInteractions.map((msg) => {
+        // Skip ACTION rows that are embedded in a POSE via action_links.
+        if (msg.mode === 'action' && linkedActionIds.has(msg.id)) {
+          return null;
+        }
 
-          {formatContent(msg.content, msg.mode)}
-
-          <div className="flex gap-2">
-            {msg.reactions.map((r) => (
-              <button
-                key={r.emoji}
-                className="text-sm"
-                onClick={() => {
-                  interactionIdRef.current = msg.id;
-                  reactionMutation.mutate(r.emoji);
-                }}
-              >
-                {r.emoji} {r.count}
-              </button>
-            ))}
-            <button
-              className="text-sm"
-              onClick={() => {
-                interactionIdRef.current = msg.id;
-                reactionMutation.mutate('\u{1F44D}');
-              }}
-            >
-              {'\u{1F44D}'}
-            </button>
-          </div>
-        </div>
-      ))}
+        return (
+          <PoseUnit
+            key={msg.id}
+            interaction={msg}
+            sceneId={sceneId}
+            onAddTarget={onAddTarget}
+            onAttachAction={onAttachAction}
+          />
+        );
+      })}
     </div>
   );
 }
