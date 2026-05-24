@@ -2678,3 +2678,45 @@ class RitualSessionAcceptSerializer(serializers.Serializer):
     def validate_references(self, value: list[dict]) -> list:  # type: ignore[override]
         """Validate reference spec shape (well-formedness only)."""
         return _parse_reference_specs(value)
+
+
+# =============================================================================
+# Applicable-pulls API (unified combat UI §5)
+# =============================================================================
+
+
+class ApplicablePullsRequestSerializer(serializers.Serializer):
+    """Request serializer for POST /api/magic/applicable-pulls/.
+
+    ``character_sheet_id`` is required and must identify a CharacterSheet the
+    requesting account owns (staff may pass any sheet). All other fields are
+    optional context that narrows which threads are applicable.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    technique_id = serializers.IntegerField(required=False, allow_null=True)
+    effect_type_id = serializers.IntegerField(required=False, allow_null=True)
+    target_object_id = serializers.IntegerField(required=False, allow_null=True)
+    target_persona_id = serializers.IntegerField(required=False, allow_null=True)
+    scene_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check the caller-supplied character_sheet_id."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+
+class ThreadApplicabilitySerializer(serializers.Serializer):
+    """One row in the applicable-pulls response.
+
+    Response shape: ``{thread_id, applicable, inapplicable_reason}``.
+    ``inapplicable_reason`` is null when ``applicable`` is true.
+    """
+
+    thread_id = serializers.IntegerField(source="thread.pk")
+    applicable = serializers.BooleanField()
+    inapplicable_reason = serializers.CharField(
+        source="reason",
+        allow_null=True,
+        required=False,
+    )

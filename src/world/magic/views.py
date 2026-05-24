@@ -79,6 +79,7 @@ from world.magic.serializers import (
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
     AlterationResolutionSerializer,
+    ApplicablePullsRequestSerializer,
     CantripSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
@@ -106,6 +107,7 @@ from world.magic.serializers import (
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
+    ThreadApplicabilitySerializer,
     ThreadHubSummarySerializer,
     ThreadPullCommitRequestSerializer,
     ThreadPullCommitResponseSerializer,
@@ -121,6 +123,7 @@ from world.magic.services import (
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet
+from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -1612,3 +1615,47 @@ class RoomsByPropertyView(APIView):
             .values("id", "name")
         )
         return Response(list(rooms))
+
+
+class ApplicablePullsView(APIView):
+    """POST /api/magic/applicable-pulls/ → per-thread applicability rows.
+
+    Returns one row per active (non-retired) thread owned by the requested
+    character sheet. Each row carries ``{thread_id, applicable, inapplicable_reason}``.
+    ``inapplicable_reason`` is null when ``applicable`` is true.
+
+    Permission: requester must own the character sheet (staff bypass).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=ApplicablePullsRequestSerializer,
+        responses={200: ThreadApplicabilitySerializer(many=True)},
+    )
+    def post(self, request: Request) -> Response:
+        """Compute and return per-thread applicability for the given action context."""
+        serializer = ApplicablePullsRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # character_sheet_id was resolved + ownership-checked by the serializer.
+        sheet: CharacterSheet = data["character_sheet_id"]
+
+        technique = None
+        technique_id = data.get("technique_id")
+        if technique_id:
+            technique = Technique.objects.filter(pk=technique_id).first()
+
+        context = PullActionContext(
+            technique=technique,
+            effect_type_id=data.get("effect_type_id"),
+            target_object_id=data.get("target_object_id"),
+            target_persona_id=data.get("target_persona_id"),
+            scene_id=data.get("scene_id"),
+        )
+        rows = compute_thread_applicability(sheet, context)
+        return Response(ThreadApplicabilitySerializer(rows, many=True).data)

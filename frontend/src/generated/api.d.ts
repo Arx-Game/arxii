@@ -4767,6 +4767,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/interactions/submit-pose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Create a POSE Interaction and auto-link prior ACTION Interactions.
+     *
+     *     Accepts ``action_link_ids`` for an explicit override:
+     *     - Absent (key missing): auto-link is run.
+     *     - Present as a list (even empty): exact links are created; auto-link skipped.
+     */
+    post: operations['interactions_submit_pose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -5175,6 +5198,23 @@ export interface paths {
     get: operations['journals_entries_mine_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/applicable-pulls/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Compute and return per-thread applicability for the given action context. */
+    post: operations['magic_applicable_pulls_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -9947,6 +9987,8 @@ export interface components {
       approach_id?: number | null;
       technique_id?: number | null;
       registry_key?: string | null;
+      clash_id?: number | null;
+      clash_action_slot?: string | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -9968,6 +10010,21 @@ export interface components {
       readonly source_note: string;
       /** Format: date-time */
       readonly recorded_at: string;
+    };
+    /**
+     * @description Request serializer for POST /api/magic/applicable-pulls/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet the
+     *     requesting account owns (staff may pass any sheet). All other fields are
+     *     optional context that narrows which threads are applicable.
+     */
+    ApplicablePullsRequestRequest: {
+      character_sheet_id: number;
+      technique_id?: number | null;
+      effect_type_id?: number | null;
+      target_object_id?: number | null;
+      target_persona_id?: number | null;
+      scene_id?: number | null;
     };
     /**
      * @description * `major` - Major Arcana
@@ -17095,6 +17152,17 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /**
+     * @description One row in the applicable-pulls response.
+     *
+     *     Response shape: ``{thread_id, applicable, inapplicable_reason}``.
+     *     ``inapplicable_reason`` is null when ``applicable`` is true.
+     */
+    ThreadApplicability: {
+      thread_id: number;
+      applicable: boolean;
+      inapplicable_reason?: string | null;
+    };
     /** @description Response serializer for GET /api/magic/thread-hub-summary/. */
     ThreadHubSummary: {
       balances: components['schemas']['_ResonanceBalance'][];
@@ -24063,6 +24131,29 @@ export interface operations {
       };
     };
   };
+  interactions_submit_pose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionListRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionList'];
+        };
+      };
+    };
+  };
   items_equipped_items_list: {
     parameters: {
       query: {
@@ -24741,6 +24832,29 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_applicable_pulls_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ApplicablePullsRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadApplicability'][];
+        };
       };
     };
   };

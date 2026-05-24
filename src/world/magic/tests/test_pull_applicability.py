@@ -1,11 +1,16 @@
-"""Tests for pull applicability computation.
+"""Tests for pull applicability computation and the applicable-pulls API.
 
-See world/magic/services/pull_applicability.py.
+See world/magic/services/pull_applicability.py and
+world/magic/views.py:ApplicablePullsView.
 """
 
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
 
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import InapplicabilityReason, TargetKind
 from world.magic.factories import ResonanceFactory, TechniqueFactory, ThreadFactory
@@ -187,3 +192,111 @@ class AnchoredOnOtherTechniqueRuleTests(TestCase):
         self.assertEqual(
             inapplicable[0].reason, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value
         )
+
+
+# =============================================================================
+# View tests
+# =============================================================================
+
+_APPLICABLE_PULLS_URL = "/api/magic/applicable-pulls/"
+
+
+def _link_account_to_sheet(account, character, sheet):
+    """Tie an AccountDB to a CharacterSheet via an active RosterTenure."""
+    from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+    character.account = account
+    account.characters.add(character)
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
+    RosterTenureFactory(
+        roster_entry=RosterEntryFactory(character_sheet=sheet),
+        player_data=player_data,
+    )
+
+
+class ApplicablePullsViewTests(APITestCase):
+    """Tests for POST /api/magic/applicable-pulls/."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory(username="applicable_pulls_test")
+        cls.character = CharacterFactory(db_key="ApplicablePullsChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        _link_account_to_sheet(cls.account, cls.character, cls.sheet)
+        cls.thread = ThreadFactory(owner=cls.sheet)
+
+    def test_post_returns_applicability_rows(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        resp = self.client.post(
+            _APPLICABLE_PULLS_URL,
+            {"character_sheet_id": self.sheet.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        rows = resp.data
+        self.assertIsInstance(rows, list)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertIn("thread_id", row)
+        self.assertIn("applicable", row)
+        self.assertIn("inapplicable_reason", row)
+        self.assertEqual(row["thread_id"], self.thread.pk)
+        self.assertTrue(row["applicable"])
+        self.assertIsNone(row["inapplicable_reason"])
+
+    def test_post_rejects_unowned_sheet(self) -> None:
+        other_account = AccountFactory(username="applicable_pulls_other")
+        other_char = CharacterFactory(db_key="ApplicablePullsOther")
+        other_sheet = CharacterSheetFactory(character=other_char)
+        _link_account_to_sheet(other_account, other_char, other_sheet)
+
+        self.client.force_authenticate(user=self.account)
+        resp = self.client.post(
+            _APPLICABLE_PULLS_URL,
+            {"character_sheet_id": other_sheet.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_rejects_unauthenticated(self) -> None:
+        resp = self.client.post(
+            _APPLICABLE_PULLS_URL,
+            {"character_sheet_id": self.sheet.pk},
+            format="json",
+        )
+        # Project returns 403 for unauthenticated requests (Evennia session auth).
+        self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+
+    def test_post_excludes_retired_threads(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        # Create a retired thread for this sheet — it should be excluded.
+        ThreadFactory(owner=self.sheet, retired_at=timezone.now())
+        resp = self.client.post(
+            _APPLICABLE_PULLS_URL,
+            {"character_sheet_id": self.sheet.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        # Only the non-retired thread from setUpTestData.
+        self.assertEqual(len(resp.data), 1)
+
+    def test_post_with_technique_id_marks_technique_thread_applicable(self) -> None:
+        technique = TechniqueFactory()
+        resonance = ResonanceFactory()
+        technique_thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+        )
+        self.client.force_authenticate(user=self.account)
+        resp = self.client.post(
+            _APPLICABLE_PULLS_URL,
+            {"character_sheet_id": self.sheet.pk, "technique_id": technique.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        rows = {r["thread_id"]: r for r in resp.data}
+        self.assertTrue(rows[technique_thread.pk]["applicable"])
+        self.assertIsNone(rows[technique_thread.pk]["inapplicable_reason"])
