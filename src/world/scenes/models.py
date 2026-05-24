@@ -667,8 +667,9 @@ class InteractionAction(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        from world.scenes.constants import InteractionMode  # noqa: PLC0415
-
+        # NOTE: Django does not call clean() on save(). Callers (e.g. the
+        # Phase 2 auto-link service) must invoke full_clean() before save()
+        # to enforce these mode invariants.
         if self.pose_id is not None and self.pose.mode != InteractionMode.POSE:
             raise ValidationError({"pose": "Bridge pose must be a POSE-mode Interaction."})
         if (
