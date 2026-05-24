@@ -52,6 +52,8 @@ export const magicKeys = {
   characterResonanceList: () => [...magicKeys.characterResonances(), 'list'] as const,
 
   teachingOffers: () => [...magicKeys.all, 'teaching-offers', 'list'] as const,
+
+  technique: (id: number) => [...magicKeys.all, 'technique', id] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -414,7 +416,7 @@ export function useCommitPull() {
  */
 export function useTechnique(id: number | undefined) {
   return useQuery({
-    queryKey: ['magic', 'technique', id ?? 0],
+    queryKey: magicKeys.technique(id ?? 0),
     queryFn: () => api.getTechnique(id!),
     enabled: id !== undefined && id > 0,
     staleTime: 60_000,

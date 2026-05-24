@@ -439,4 +439,35 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
 
     expect(screen.getByText(/overburn/i)).toBeInTheDocument();
   });
+
+  it('shows "Cost unavailable" when useTechnique errors instead of "Loading cost..."', () => {
+    mockedUseTechnique.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 101 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByText(/cost unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText(/loading cost/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render I/C chip when useTechnique errors', () => {
+    mockedUseTechnique.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 101 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('ic-chip')).not.toBeInTheDocument();
+  });
 });

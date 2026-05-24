@@ -270,7 +270,11 @@ export function ActionDeclarationCard({
 
   // Fetch technique detail for I/C chip and cost preview (Task 5.3).
   // Route: GET /api/magic/techniques/<id>/ via useTechnique (magic/queries.ts).
-  const { data: techniqueDetail } = useTechnique(actionContext.techniqueId);
+  const {
+    data: techniqueDetail,
+    isLoading: techniqueLoading,
+    isError: techniqueError,
+  } = useTechnique(actionContext.techniqueId);
 
   const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
 
@@ -298,8 +302,8 @@ export function ActionDeclarationCard({
         <h3 className="text-sm font-semibold capitalize">
           {actionContext.slot.replace(/-/g, ' ')}
         </h3>
-        {/* I/C chip — shown when technique detail is loaded */}
-        {techniqueDetail && (
+        {/* I/C chip — shown when technique detail is loaded; hidden on error */}
+        {techniqueDetail && !techniqueError && (
           <ICChip
             intensity={techniqueDetail.intensity ?? 0}
             control={techniqueDetail.control ?? 0}
@@ -358,9 +362,11 @@ export function ActionDeclarationCard({
             control={techniqueDetail.control ?? 0}
             animaCost={techniqueDetail.anima_cost}
           />
+        ) : techniqueError ? (
+          <p className="text-xs text-muted-foreground">Cost unavailable</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {hasTechnique ? 'Loading cost...' : '— select a technique first —'}
+            {hasTechnique && techniqueLoading ? 'Loading cost...' : '— select a technique first —'}
           </p>
         )}
       </Section>
