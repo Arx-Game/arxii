@@ -72,6 +72,7 @@ nosetests.xml
 .claude
 .mcp.json
 .worktrees/
+.superpowers/
 .chainlink
 
 # Frontend dependencies and build artifacts
