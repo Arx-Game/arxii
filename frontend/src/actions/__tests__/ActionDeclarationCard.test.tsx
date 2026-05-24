@@ -29,7 +29,7 @@ vi.mock('@/scenes/actionQueries', () => ({
 }));
 
 // Mock the entire magic queries module to control useTechnique, useApplicablePulls,
-// and useThreads synchronously. The card now uses all three.
+// useThreads, and useCharacterResonances synchronously.
 vi.mock('@/magic/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/magic/queries')>();
   return {
@@ -37,6 +37,7 @@ vi.mock('@/magic/queries', async (importOriginal) => {
     useTechnique: vi.fn(),
     useApplicablePulls: vi.fn(),
     useThreads: vi.fn(),
+    useCharacterResonances: vi.fn(),
   };
 });
 
@@ -52,6 +53,7 @@ const mockedFetchActions = fetchAvailableActions as ReturnType<typeof vi.fn>;
 const mockedUseTechnique = magicQueries.useTechnique as ReturnType<typeof vi.fn>;
 const mockedUseApplicablePulls = magicQueries.useApplicablePulls as ReturnType<typeof vi.fn>;
 const mockedUseThreads = magicQueries.useThreads as ReturnType<typeof vi.fn>;
+const mockedUseCharacterResonances = magicQueries.useCharacterResonances as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -152,6 +154,7 @@ function mockPickerHooks() {
     isLoading: false,
     isError: false,
   });
+  mockedUseCharacterResonances.mockReturnValue({ data: [], isLoading: false, isError: false });
 }
 
 // ---------------------------------------------------------------------------

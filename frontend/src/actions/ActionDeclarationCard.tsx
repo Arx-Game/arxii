@@ -23,7 +23,7 @@ import { useQuery as useTQQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
-import { useTechnique } from '@/magic/queries';
+import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import type { ApplicablePullsRequest } from '@/magic/types';
 import type { ActionContext, EffortLevel } from './types';
@@ -291,6 +291,17 @@ export function ActionDeclarationCard({
   const [showInapplicable, setShowInapplicable] = useState(false);
   const [revertNotice, setRevertNotice] = useState<string | null>(null);
 
+  // Resonance balances — used by ThreadPullPicker to display unaffordable-tier tooltips.
+  const { data: resonances } = useCharacterResonances(
+    characterSheetId > 0 ? characterSheetId : undefined
+  );
+  const balanceByResonanceId = useMemo<Record<number, number>>(() => {
+    if (!resonances) return {};
+    return Object.fromEntries(
+      resonances.map((cr) => [cr.resonance, cr.balance ?? 0])
+    );
+  }, [resonances]);
+
   // Build applicable-pulls context from current card state.
   const pullsContext = useMemo<ApplicablePullsRequest | null>(() => {
     if (characterSheetId <= 0) return null;
@@ -427,6 +438,7 @@ export function ActionDeclarationCard({
             showInapplicable={showInapplicable}
             onToggleInapplicable={setShowInapplicable}
             onAutoRevertNotice={setRevertNotice}
+            balanceByResonanceId={balanceByResonanceId}
           />
         ) : (
           <p className="text-xs text-muted-foreground">— no sheet context —</p>

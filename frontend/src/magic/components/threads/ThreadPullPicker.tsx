@@ -12,16 +12,19 @@
  * Data flow:
  *   - useApplicablePulls(actionContext) → which threads are applicable
  *   - useThreads() → full thread list for names/anchors/levels
- *   - For each applicable row with a paid tier selected, debounced previewPull call
+ *   - For each applicable row, previewPull is called for all 3 paid tiers on
+ *     mount (no debounce) so unaffordable tiers can be greyed before the user
+ *     clicks them (spec §5).
  *
  * Auto-revert: when actionContext changes, drops paid pulls whose threads are
  * no longer applicable, and surfaces a notice via onAutoRevertNotice if provided.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useApplicablePulls, useThreads } from '@/magic/queries';
 import { previewPull } from '@/magic/api';
+import { PullDetailModal } from './PullDetailModal';
 import type {
   ApplicablePullsRequest,
   PullPreviewResponse,
@@ -29,17 +32,12 @@ import type {
   ThreadApplicability,
 } from '@/magic/types';
 
-// Lazy-load PullDetailModal to avoid build-time import ordering issues when
-// both files live in the same directory and each references the other.
-const PullDetailModal = lazy(() =>
-  import('./PullDetailModal').then((m) => ({ default: m.PullDetailModal }))
-);
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 type TierValue = 0 | 1 | 2 | 3;
+type PaidTier = 1 | 2 | 3;
 
 export interface ThreadPullPickerProps {
   characterSheetId: number;
@@ -49,6 +47,12 @@ export interface ThreadPullPickerProps {
   showInapplicable: boolean;
   onToggleInapplicable: (next: boolean) => void;
   onAutoRevertNotice?: (msg: string) => void;
+  /**
+   * Map from resonance_id → current spendable balance.
+   * Used by TierStrip to build "Need X Sworn; have Y" tooltips for
+   * unaffordable tiers (spec §5).
+   */
+  balanceByResonanceId?: Record<number, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,49 +65,51 @@ function anchorDescription(thread: Thread): string {
 }
 
 // ---------------------------------------------------------------------------
-// Per-row preview hook (debounced, manual)
+// Per-row tier-previews hook
+//
+// Fires previewPull for all three paid tiers (1, 2, 3) on mount — no debounce,
+// one-shot per tier — so TierStrip can grey unaffordable tiers before the user
+// clicks them (spec §5: "unaffordable tiers are greyed with a tooltip").
+//
+// An `ignore` flag guards against stale responses: if the effect re-runs (e.g.
+// characterSheetId change), the earlier in-flight response is discarded.
 // ---------------------------------------------------------------------------
 
-interface RowPreviewState {
-  preview: PullPreviewResponse | null;
-  loading: boolean;
-}
+type TierPreviews = Record<PaidTier, PullPreviewResponse | null>;
 
-function useRowPreview(
+function useRowTierPreviews(
   thread: Thread,
-  tier: TierValue,
   characterSheetId: number
-): RowPreviewState {
-  const [state, setState] = useState<RowPreviewState>({ preview: null, loading: false });
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+): TierPreviews {
+  const [previews, setPreviews] = useState<TierPreviews>({ 1: null, 2: null, 3: null });
 
   useEffect(() => {
-    // Tier 0 is always-on passive — no cost preview needed.
-    if (tier === 0) {
-      setState({ preview: null, loading: false });
-      return;
-    }
+    let ignore = false;
 
-    setState((prev) => ({ ...prev, loading: true }));
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    debounceRef.current = setTimeout(() => {
+    const PAID_TIERS: PaidTier[] = [1, 2, 3];
+    for (const tier of PAID_TIERS) {
       previewPull({
         character_sheet_id: characterSheetId,
         resonance_id: thread.resonance,
         tier,
         thread_ids: [thread.id],
       })
-        .then((result) => setState({ preview: result, loading: false }))
-        .catch(() => setState({ preview: null, loading: false }));
-    }, 250);
+        .then((result) => {
+          if (!ignore) {
+            setPreviews((prev) => ({ ...prev, [tier]: result }));
+          }
+        })
+        .catch(() => {
+          // Leave null on error — tier remains tentatively enabled.
+        });
+    }
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      ignore = true;
     };
-  }, [thread.id, thread.resonance, tier, characterSheetId]);
+  }, [thread.id, thread.resonance, characterSheetId]);
 
-  return state;
+  return previews;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,20 +118,25 @@ function useRowPreview(
 
 interface TierStripProps {
   threadId: number;
+  resonanceId: number;
+  resonanceName: string;
   selectedTier: TierValue;
   onSelectTier: (tier: TierValue) => void;
-  preview: PullPreviewResponse | null;
-  previewLoading: boolean;
+  tierPreviews: TierPreviews;
+  balanceByResonanceId: Record<number, number>;
 }
 
 function TierStrip({
   threadId,
+  resonanceId,
+  resonanceName,
   selectedTier,
   onSelectTier,
-  preview,
-  previewLoading,
+  tierPreviews,
+  balanceByResonanceId,
 }: TierStripProps) {
   const tiers: TierValue[] = [0, 1, 2, 3];
+  const currentBalance = balanceByResonanceId[resonanceId] ?? 0;
 
   return (
     <div
@@ -137,32 +148,38 @@ function TierStrip({
       {tiers.map((tier) => {
         const isSelected = selectedTier === tier;
         const isTier0 = tier === 0;
-        const isUnaffordable =
-          tier > 0 && isSelected && preview !== null && !preview.affordable;
 
-        const tooltipText = isTier0
-          ? 'Always-on passive (no cost)'
-          : isUnaffordable
-          ? 'Insufficient resources for this tier'
-          : previewLoading && isSelected
-          ? 'Loading affordability…'
-          : undefined;
+        // For paid tiers: use the pre-fetched preview to determine affordability.
+        // null means preview hasn't resolved yet — leave tentatively enabled.
+        const paidPreview = tier > 0 ? tierPreviews[tier as PaidTier] : null;
+        const isUnaffordable = paidPreview !== null && !paidPreview.affordable;
+
+        let tooltipText: string | undefined;
+        if (isTier0) {
+          tooltipText = 'Always-on passive (no cost)';
+        } else if (isUnaffordable && paidPreview !== null) {
+          tooltipText = `Need ${paidPreview.resonance_cost} ${resonanceName}; have ${currentBalance}`;
+        }
 
         return (
           <button
             key={tier}
             type="button"
-            onClick={() => onSelectTier(tier)}
+            onClick={() => {
+              if (!isUnaffordable) onSelectTier(tier);
+            }}
+            disabled={isUnaffordable}
             title={tooltipText}
             data-testid={`tier-btn-${threadId}-${tier}`}
             className={cn(
               'rounded border px-2 py-0.5 text-xs font-medium transition-colors min-w-[28px]',
+              'disabled:cursor-not-allowed',
               isTier0 && isSelected
                 ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
-                : isSelected && !isUnaffordable
-                ? 'border-primary bg-primary/10 text-primary'
-                : isSelected && isUnaffordable
+                : isUnaffordable
                 ? 'border-muted bg-muted/30 text-muted-foreground opacity-60'
+                : isSelected
+                ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
             )}
           >
@@ -183,6 +200,7 @@ interface ApplicableRowProps {
   selectedTier: TierValue;
   onSelectTier: (tier: TierValue) => void;
   characterSheetId: number;
+  balanceByResonanceId: Record<number, number>;
   onOpenDetails: (thread: Thread) => void;
 }
 
@@ -191,13 +209,13 @@ function ApplicableRow({
   selectedTier,
   onSelectTier,
   characterSheetId,
+  balanceByResonanceId,
   onOpenDetails,
 }: ApplicableRowProps) {
-  const { preview, loading: previewLoading } = useRowPreview(
-    thread,
-    selectedTier,
-    characterSheetId
-  );
+  const tierPreviews = useRowTierPreviews(thread, characterSheetId);
+
+  // Use the pre-fetched preview for the selected paid tier.
+  const selectedPreview = selectedTier > 0 ? tierPreviews[selectedTier as PaidTier] : null;
   const hasPaidTier = selectedTier > 0;
 
   return (
@@ -218,32 +236,34 @@ function ApplicableRow({
       {/* Tier strip */}
       <TierStrip
         threadId={thread.id}
+        resonanceId={thread.resonance}
+        resonanceName={thread.resonance_name}
         selectedTier={selectedTier}
         onSelectTier={onSelectTier}
-        preview={preview}
-        previewLoading={previewLoading}
+        tierPreviews={tierPreviews}
+        balanceByResonanceId={balanceByResonanceId}
       />
 
       {/* Active line */}
       {selectedTier === 0 && (
         <p className="text-xs text-emerald-300/80">Passive: always-on (tier 0)</p>
       )}
-      {selectedTier > 0 && previewLoading && (
+      {selectedTier > 0 && selectedPreview === null && (
         <p className="text-xs text-muted-foreground">Loading preview…</p>
       )}
-      {selectedTier > 0 && !previewLoading && preview && (
+      {selectedTier > 0 && selectedPreview !== null && (
         <p className="text-xs text-muted-foreground">
-          {preview.resolved_effects.length > 0
-            ? `Pulled: ${preview.resolved_effects[0].kind.replace(/_/g, ' ')} (×${preview.resolved_effects[0].scaled_value})`
+          {selectedPreview.resolved_effects.length > 0
+            ? `Pulled: ${selectedPreview.resolved_effects[0].kind.replace(/_/g, ' ')} (×${selectedPreview.resolved_effects[0].scaled_value})`
             : 'No active effects at this tier'}
         </p>
       )}
 
-      {/* Cost line — only when paid tier selected */}
-      {hasPaidTier && !previewLoading && preview && (
+      {/* Cost line — only when paid tier selected and preview loaded */}
+      {hasPaidTier && selectedPreview !== null && (
         <div className="flex items-center gap-2">
           <p className="text-xs text-amber-400">
-            {`−${preview.resonance_cost} resonance · −${preview.anima_cost} anima`}
+            {`−${selectedPreview.resonance_cost} resonance · −${selectedPreview.anima_cost} anima`}
           </p>
           <button
             type="button"
@@ -309,6 +329,7 @@ export function ThreadPullPicker({
   showInapplicable,
   onToggleInapplicable,
   onAutoRevertNotice,
+  balanceByResonanceId = {},
 }: ThreadPullPickerProps) {
   const [nameFilter, setNameFilter] = useState('');
   const [detailThread, setDetailThread] = useState<Thread | null>(null);
@@ -382,10 +403,14 @@ export function ThreadPullPicker({
         );
       }
     }
-    // Intentionally omitting selectedPulls and onPullsChange from deps to avoid
-    // re-running on every selection change. This effect should only fire when
-    // the applicability data itself changes (new context).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally omitting selectedPulls, onPullsChange, onAutoRevertNotice,
+    // applicableSet, and threadById from deps. This effect must only fire when
+    // applicableData itself changes (new context query result). Including
+    // selectedPulls would re-run the revert check on every tier click, causing
+    // infinite revert loops; including threadById would re-run on every thread
+    // list fetch. The stale closures are harmless — selectedPulls is read once
+    // at revert time and the names in revertedNames are only for the notice message.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedPulls/onPullsChange/threadById intentionally omitted; see comment above
   }, [applicableData]);
 
   const handleSelectTier = useCallback(
@@ -468,6 +493,7 @@ export function ThreadPullPicker({
               selectedTier={selectedPulls[thread.id] ?? 0}
               onSelectTier={(tier) => handleSelectTier(thread.id, tier)}
               characterSheetId={characterSheetId}
+              balanceByResonanceId={balanceByResonanceId}
               onOpenDetails={handleOpenDetails}
             />
           ))}
@@ -499,15 +525,13 @@ export function ThreadPullPicker({
 
       {/* Detail modal */}
       {detailThread !== null && (
-        <Suspense fallback={null}>
-          <PullDetailModal
-            thread={detailThread}
-            open={true}
-            onOpenChange={(open) => {
-              if (!open) handleCloseDetails();
-            }}
-          />
-        </Suspense>
+        <PullDetailModal
+          thread={detailThread}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) handleCloseDetails();
+          }}
+        />
       )}
     </div>
   );

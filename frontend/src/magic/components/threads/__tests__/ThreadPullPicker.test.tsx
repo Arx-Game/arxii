@@ -295,8 +295,96 @@ describe('ThreadPullPicker — tier selection', () => {
   });
 });
 
-describe('ThreadPullPicker — unaffordable tier', () => {
-  it('shows unaffordable styling when preview returns affordable=false', async () => {
+describe('ThreadPullPicker — all-tier previews on mount (Fix 1)', () => {
+  it('fires previewPull for all 3 paid tiers on row mount', async () => {
+    const thread = makeThread({ id: 7, name: 'Costly Pull', resonance: 5 });
+    mockApplicable([makeApplicabilityRow(7, true)]);
+    mockThreads([thread]);
+    mockedPreviewPull.mockResolvedValue(makePreviewResponse());
+
+    render(
+      <ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => screen.getByTestId('tier-btn-7-0'));
+
+    // All 3 paid tiers should have fired previewPull on mount.
+    await waitFor(() => {
+      expect(mockedPreviewPull).toHaveBeenCalledTimes(3);
+    });
+    expect(mockedPreviewPull).toHaveBeenCalledWith(
+      expect.objectContaining({ tier: 1, resonance_id: 5 })
+    );
+    expect(mockedPreviewPull).toHaveBeenCalledWith(
+      expect.objectContaining({ tier: 2, resonance_id: 5 })
+    );
+    expect(mockedPreviewPull).toHaveBeenCalledWith(
+      expect.objectContaining({ tier: 3, resonance_id: 5 })
+    );
+  });
+
+  it('disables an unaffordable tier before the user clicks it', async () => {
+    const thread = makeThread({ id: 8, name: 'Costly Pull', resonance: 5, resonance_name: 'Sworn' });
+    mockApplicable([makeApplicabilityRow(8, true)]);
+    mockThreads([thread]);
+
+    // Tier 1 unaffordable, tiers 2 and 3 affordable.
+    mockedPreviewPull.mockImplementation(({ tier }: { tier: number }) => {
+      if (tier === 1) {
+        return Promise.resolve(makePreviewResponse({ affordable: false, resonance_cost: 5 }));
+      }
+      return Promise.resolve(makePreviewResponse({ affordable: true }));
+    });
+
+    render(
+      <ThreadPullPicker
+        {...defaultProps({
+          selectedPulls: {},
+          balanceByResonanceId: { 5: 4 },
+        })}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => screen.getByTestId('tier-btn-8-1'));
+
+    // Wait for tier 1 preview to resolve and disable the button.
+    await waitFor(() => {
+      const tierBtn = screen.getByTestId('tier-btn-8-1');
+      expect(tierBtn).toBeDisabled();
+      expect(tierBtn).toHaveClass('opacity-60');
+    });
+
+    // Tooltip shows "Need X resonanceName; have Y"
+    const tierBtn = screen.getByTestId('tier-btn-8-1');
+    expect(tierBtn).toHaveAttribute('title', 'Need 5 Sworn; have 4');
+  });
+
+  it('leaves unresolved tiers tentatively enabled (null preview = not disabled)', async () => {
+    const thread = makeThread({ id: 9, name: 'Slow Thread' });
+    mockApplicable([makeApplicabilityRow(9, true)]);
+    mockThreads([thread]);
+
+    // previewPull never resolves — simulate pending state.
+    mockedPreviewPull.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => screen.getByTestId('tier-btn-9-1'));
+
+    // Tiers should be enabled while previews are pending.
+    expect(screen.getByTestId('tier-btn-9-1')).not.toBeDisabled();
+    expect(screen.getByTestId('tier-btn-9-2')).not.toBeDisabled();
+    expect(screen.getByTestId('tier-btn-9-3')).not.toBeDisabled();
+  });
+});
+
+describe('ThreadPullPicker — unaffordable tier (legacy — selected tier)', () => {
+  it('shows unaffordable styling when preview returns affordable=false for selected tier', async () => {
     const thread = makeThread({ id: 7, name: 'Costly Pull' });
     mockApplicable([makeApplicabilityRow(7, true)]);
     mockThreads([thread]);
@@ -309,12 +397,13 @@ describe('ThreadPullPicker — unaffordable tier', () => {
 
     await waitFor(() => screen.getByTestId('tier-btn-7-1'));
 
-    // Wait for the debounced preview to fire and resolve
+    // Wait for the preview to fire and resolve (no debounce now — resolves immediately).
     await waitFor(
       () => {
         const tierBtn = screen.getByTestId('tier-btn-7-1');
-        // Unaffordable tier has muted styling
+        // Unaffordable tier has muted styling and is disabled.
         expect(tierBtn).toHaveClass('opacity-60');
+        expect(tierBtn).toBeDisabled();
       },
       { timeout: 1000 }
     );
