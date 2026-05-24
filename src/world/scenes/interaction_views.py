@@ -21,6 +21,7 @@ from world.scenes.interaction_filters import (
     InteractionFilter,
     InteractionReactionFilter,
 )
+from world.scenes.interaction_link_services import auto_link_pose_to_actions
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
@@ -32,13 +33,20 @@ from world.scenes.interaction_serializers import (
     InteractionFavoriteSerializer,
     InteractionListSerializer,
     InteractionReactionSerializer,
+    PoseSubmitSerializer,
 )
-from world.scenes.interaction_services import delete_interaction, mark_very_private
+from world.scenes.interaction_services import (
+    create_interaction,
+    delete_interaction,
+    mark_very_private,
+)
 from world.scenes.models import (
     Interaction,
+    InteractionAction,
     InteractionFavorite,
     InteractionReaction,
     Persona,
+    Scene,
 )
 from world.scenes.place_models import InteractionReceiver
 
@@ -223,6 +231,52 @@ class InteractionViewSet(
             mark_very_private(interaction, persona)
         serializer = self.get_serializer(interaction)
         return Response(serializer.data)
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="submit-pose")
+    def submit_pose(self, request: Request) -> Response:
+        """Create a POSE Interaction and auto-link prior ACTION Interactions.
+
+        Accepts ``action_link_ids`` for an explicit override:
+        - Absent (key missing): auto-link is run.
+        - Present as a list (even empty): exact links are created; auto-link skipped.
+        """
+        serializer = PoseSubmitSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        persona = Persona.objects.get(pk=data["persona_id"])
+        scene: Scene | None = (
+            Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
+        )
+
+        interaction = create_interaction(
+            persona=persona,
+            content=data["content"],
+            mode="pose",
+            scene=scene,
+        )
+
+        action_link_ids: list[int] | None = data.get("action_link_ids")
+        if action_link_ids is not None:
+            # Explicit override: create exactly the supplied links in order,
+            # skipping auto-link entirely (empty list = caller opted out).
+            InteractionAction.objects.bulk_create(
+                [
+                    InteractionAction(
+                        pose=interaction,
+                        action_interaction_id=aid,
+                        ordering=i,
+                    )
+                    for i, aid in enumerate(action_link_ids)
+                ]
+            )
+        else:
+            auto_link_pose_to_actions(interaction)
+
+        out_serializer = InteractionListSerializer(
+            interaction, context=self.get_serializer_context()
+        )
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class InteractionFavoritePagination(PageNumberPagination):

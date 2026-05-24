@@ -1,9 +1,12 @@
 from rest_framework import serializers
 
+from world.scenes.constants import InteractionMode
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
     InteractionReaction,
+    Persona,
+    Scene,
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import PersonaPayload, ReactionAggregation
@@ -114,3 +117,109 @@ class InteractionReactionSerializer(serializers.ModelSerializer):
         model = InteractionReaction
         fields = ["id", "interaction", "emoji", "created_at"]
         read_only_fields = ["created_at"]
+
+
+class PoseSubmitSerializer(serializers.Serializer):
+    """Write serializer for submitting a POSE-mode Interaction from the web frontend.
+
+    Validates persona ownership and action_link_ids integrity before the view
+    creates the Interaction and wires the auto-link service.
+    """
+
+    persona_id = serializers.IntegerField(
+        help_text="PK of the Persona the requesting user is posing as.",
+    )
+    scene_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="PK of the Scene this pose belongs to. Null for scene-less poses.",
+    )
+    content = serializers.CharField(
+        help_text="The written text of the pose.",
+    )
+    action_link_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        help_text=(
+            "Optional explicit action-link override. When provided, auto-link "
+            "is skipped and InteractionAction bridges are created for exactly "
+            "these ACTION Interaction ids in order. An empty list explicitly "
+            "requests no links (caller opted out of auto-link this pose)."
+        ),
+    )
+
+    def validate_persona_id(self, value: int) -> int:
+        """Confirm the persona exists and belongs to the requesting user."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context unavailable."
+            raise serializers.ValidationError(msg)
+        try:
+            persona = Persona.objects.get(pk=value)
+        except Persona.DoesNotExist:
+            msg = "Persona not found."
+            raise serializers.ValidationError(msg) from None
+
+        # Import here to avoid circular dependency at module level.
+        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+
+        owned_persona_ids = get_account_personas(request)
+        if persona.pk not in owned_persona_ids:
+            msg = "You do not own this persona."
+            raise serializers.ValidationError(msg)
+
+        return value
+
+    def validate_scene_id(self, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if not Scene.objects.filter(pk=value).exists():
+            msg = "Scene not found."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate_action_link_ids(self, value: list[int]) -> list[int]:
+        """Confirm all supplied IDs reference ACTION-mode Interactions."""
+        if not value:
+            return value
+        valid_pks = set(
+            Interaction.objects.filter(
+                pk__in=value,
+                mode=InteractionMode.ACTION,
+            ).values_list("pk", flat=True)
+        )
+        invalid = set(value) - valid_pks
+        if invalid:
+            msg = f"These IDs are not valid ACTION-mode Interactions: {sorted(invalid)}"
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """Cross-field: persona must own the action_link_ids (same character)."""
+        action_link_ids = attrs.get("action_link_ids")
+        if not action_link_ids:
+            return attrs
+
+        persona_id = attrs.get("persona_id")
+        if persona_id is None:
+            return attrs  # persona_id error will be surfaced by its own validator
+
+        try:
+            persona = Persona.objects.get(pk=persona_id)
+        except Persona.DoesNotExist:
+            return attrs  # surfaced by validate_persona_id
+
+        # All action interactions must belong to the same persona as this pose.
+        wrong_persona = Interaction.objects.filter(
+            pk__in=action_link_ids,
+        ).exclude(persona=persona)
+        if wrong_persona.exists():
+            raise serializers.ValidationError(
+                {
+                    "action_link_ids": (
+                        "All action_link_ids must belong to the same persona as the pose."
+                    )
+                }
+            )
+        return attrs
