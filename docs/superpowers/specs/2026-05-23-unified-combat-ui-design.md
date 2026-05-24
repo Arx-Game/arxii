@@ -265,7 +265,10 @@ Behavior:
   later poses attach actions taken after it.
 - **Advanced override** — the API accepts an optional explicit action-link list
   on submission so power users can correct the auto-linking. Not exposed in the
-  default UI.
+  default UI. **Explicit override wins** — when a pose is submitted with an
+  explicit `action_link_ids` list, the auto-link step is skipped entirely. The
+  affected actions are marked as already-linked so subsequent poses won't
+  re-attach them.
 
 ### Rendering
 
@@ -506,7 +509,10 @@ Components and APIs consumed without modification:
 - `CombatRoundAction`, `ClashContribution`, `CombatPull`, `ComboDefinition` —
   existing models, no schema changes (the bridge is the only new model)
 - `PlayerAction` descriptor API — existing
-- `detect_available_combos`, `upgrade_combo`, `revert_combo` — existing services
+- `detect_available_combos`, `upgrade_action_to_combo`, `revert_combo_upgrade` —
+  existing services (the ViewSet actions in `world/combat/views.py` are named
+  `upgrade_combo` / `revert_combo`; the underlying service functions carry the
+  longer names)
 - `previewPull`, `commitPull` — existing APIs
 
 ## §8 — New backend pieces
@@ -528,8 +534,12 @@ Small surface — most of the backend exists.
 4. **`PlayerAction` descriptors for clash contributions** — the clash spec
    §4 already calls for these. The cleanup-notes backlog tracks wiring the
    `_find_combat_player_action_for_ref` dispatch path to
-   `declare_clash_contribution`. This UI work depends on that wiring landing
-   first (or as part of the same PR).
+   `declare_clash_contribution`. **This dispatch wiring is a hard prerequisite
+   for this UI work** — without it, the UI's clash contribution path raises
+   `UNKNOWN_ACTION_REF` and cannot be integration-tested. The plan should
+   sequence dispatch wiring as Phase 0 (or land it as a separate PR first).
+   It is small focused backend work and is the cleanest split between backend
+   plumbing and UI implementation.
 
 No `ScenePull` or `ActionPull` envelope is added here — scene-side adoption is
 deferred.
@@ -606,14 +616,10 @@ neither owns the abstraction and either can adopt.
    anchored-on-other-technique, prerequisite-condition-unmet, location-mismatch.
    Possibly more; plan should enumerate.
 
-4. **Auto-link conflict resolution** (§3) — what happens when the same action
-   is referenced by an explicit override and would also be auto-linked to a
-   later pose? Probably "explicit wins" but worth nailing.
-
-5. **Long-pose threshold** (§1) — what triggers "click to expand"? Probably
+4. **Long-pose threshold** (§1) — what triggers "click to expand"? Probably
    character count or rendered-height. Defer to implementation.
 
-6. **Scene-action passive declaration in non-combat scenes** — does the scene
+5. **Scene-action passive declaration in non-combat scenes** — does the scene
    wrapper allow multiple action cards (one per category) like combat, or is it
    always a single card? Defer to the scene-side spec.
 
