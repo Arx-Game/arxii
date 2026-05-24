@@ -58,6 +58,9 @@ export const magicKeys = {
 
   applicablePulls: (context: ApplicablePullsRequest | null) =>
     [...magicKeys.all, 'applicable-pulls', context] as const,
+
+  characterAnima: (characterId: number) =>
+    [...magicKeys.all, 'character-anima', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -440,6 +443,30 @@ export function useAcceptTeachingOffer() {
       void qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() });
       void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls read hook
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Character Anima read hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the CharacterAnima record for the given character (ObjectDB PK).
+ *
+ * Disabled when characterId <= 0.
+ * The CharacterAnima ViewSet filters by ?character=<pk> (ObjectDB PK, not
+ * CharacterSheet PK). Each character has at most one CharacterAnima row.
+ */
+export function useCharacterAnima(characterId: number) {
+  return useQuery({
+    queryKey: magicKeys.characterAnima(characterId),
+    queryFn: () => api.getCharacterAnima(characterId),
+    enabled: characterId > 0,
+    staleTime: 10_000,
   });
 }
 

@@ -712,3 +712,40 @@ export async function fetchApplicablePulls(
   }
   return res.json() as Promise<ThreadApplicability[]>;
 }
+
+// ---------------------------------------------------------------------------
+// Character Anima
+// ---------------------------------------------------------------------------
+
+const CHARACTER_ANIMA_URL = '/api/magic/character-anima/';
+
+/** Shape of CharacterAnima records returned by GET /api/magic/character-anima/. */
+export interface CharacterAnimaRecord {
+  id: number;
+  character: number;
+  current: number;
+  maximum: number;
+  last_recovery: string | null;
+}
+
+/**
+ * GET /api/magic/character-anima/?character=<characterId>
+ *
+ * Returns CharacterAnima records visible to the authenticated user,
+ * narrowed to the given character (ObjectDB PK).
+ *
+ * The response is a paginated list; we return the first result's record
+ * since each character has at most one CharacterAnima row.
+ */
+export async function getCharacterAnima(
+  characterId: number
+): Promise<CharacterAnimaRecord | null> {
+  const res = await apiFetch(`${CHARACTER_ANIMA_URL}?character=${characterId}`);
+  if (!res.ok) throw new Error(`Failed to load anima for character ${characterId}`);
+  const data = (await res.json()) as { results?: CharacterAnimaRecord[] } | CharacterAnimaRecord[];
+  // Handle both paginated (results array) and bare array responses.
+  const list: CharacterAnimaRecord[] = Array.isArray(data)
+    ? data
+    : ((data as { results?: CharacterAnimaRecord[] }).results ?? []);
+  return list[0] ?? null;
+}
