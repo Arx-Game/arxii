@@ -510,7 +510,7 @@ class Interaction(SharedMemoryModel):
     def cached_action_links(self) -> "list[InteractionAction]":
         """InteractionAction bridge rows for this POSE. Uses Prefetch(to_attr=) when available."""
         try:
-            return self._cached_action_links  # type: ignore[attr-defined]
+            return self._cached_action_links
         except AttributeError:
             return list(
                 InteractionAction.objects.filter(pose=self).select_related("action_interaction")
@@ -519,7 +519,7 @@ class Interaction(SharedMemoryModel):
     @cached_action_links.setter
     def cached_action_links(self, value: "list[InteractionAction]") -> None:
         """Allow Prefetch(to_attr='cached_action_links') to set this."""
-        self._cached_action_links = value  # type: ignore[attr-defined]
+        self._cached_action_links = value
 
 
 class InteractionFavorite(SharedMemoryModel):

@@ -1,0 +1,12 @@
+# pnpm 11+ reads workspace-wide config from this file. Two things here:
+#   1. allowBuilds explicitly approves dependencies' install scripts (replaces
+#      the package.json `pnpm.onlyBuiltDependencies` field that v11 ignores).
+#   2. store-dir keeps the content-addressable store off the bind-mounted
+#      workspace (Windows D: drive). Without this, pnpm puts the store at
+#      ../.pnpm-store relative to the workspace root — i.e. the project root,
+#      which is the bind mount. Slow, eats host disk. Put it on the container
+#      writable layer instead. Lost on container recreation, regenerated on
+#      next install.
+store-dir: /home/vscode/.local/share/pnpm/store
+allowBuilds:
+  esbuild: true

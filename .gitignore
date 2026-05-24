@@ -65,6 +65,13 @@ nosetests.xml
 # ENV files
 .env
 .env.*_backup
+.devcontainer/dev.env
+
+# pnpm content-addressable store. pnpm-workspace.yaml in frontend/ makes pnpm
+# default its store path one level above the workspace root — i.e. here — when
+# no store-dir is configured. The store-dir setting now points inside the
+# container, but this guard prevents accidental commits if that config breaks.
+.pnpm-store/
 
 .venv
 
