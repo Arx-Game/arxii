@@ -118,7 +118,8 @@ resolve_and_add() {
 
 resolve_and_add "api.anthropic.com"
 resolve_and_add "sentry.io"
-resolve_and_add "statsig.anthropic.com"
+# statsig.anthropic.com is NXDOMAIN; statsig.com covers the actual Statsig
+# endpoint that Claude Code reaches.
 resolve_and_add "statsig.com"
 resolve_and_add "pypi.org"
 
@@ -229,12 +230,18 @@ echo "Firewall configuration complete."
 # ---------------------------------------------------------------------------
 echo "Verifying firewall rules..."
 
-# (a) Blocked host must be unreachable.
-if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
-    echo "ERROR: Firewall verification FAILED — reached https://example.com (should be blocked)"
+# (a) Blocked host must be unreachable. Use www.google.com — Google's own
+# IPs (142.250.0.0/15, 142.251.0.0/16) are not in any of our allowlist
+# sources (Anthropic, Sentry, Statsig, PyPI, GitHub meta, Fastly,
+# Cloudflare), so reachability here means a firewall miss. Avoid
+# example.com / example.org as test targets: both now resolve to
+# Cloudflare IPs (104.20.x.x, 172.66.x.x) that are legitimately in our
+# allowlist because Cloudflare fronts the npm registry.
+if curl --connect-timeout 5 https://www.google.com >/dev/null 2>&1; then
+    echo "ERROR: Firewall verification FAILED — reached https://www.google.com (should be blocked)"
     exit 1
 else
-    echo "OK: https://example.com is blocked as expected."
+    echo "OK: https://www.google.com is blocked as expected."
 fi
 
 # (b) Allowed host should be reachable.  Treat external-network failure as a

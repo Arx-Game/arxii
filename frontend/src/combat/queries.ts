@@ -8,6 +8,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type { DispatchActionRequest } from './types';
+import { fetchAvailableActions } from '@/scenes/actionQueries';
+import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -19,6 +21,9 @@ export const combatKeys = {
   encounter: (encounterId: number) => [...combatKeys.all, 'encounter', encounterId] as const,
 
   combos: (encounterId: number) => [...combatKeys.all, 'combos', encounterId] as const,
+
+  availableActions: (characterId: number) =>
+    [...combatKeys.all, 'available-actions', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -74,6 +79,45 @@ export function useUpgradeCombo(encounterId: number) {
       void qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) });
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Available actions hook (combat-scoped)
+//
+// Fetches all PlayerActions for the character and filters to COMBAT backend.
+// Clash-contribution actions appear here too with ref.clash_id !== null.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch COMBAT-backend PlayerActions for the character.
+ *
+ * Wraps GET /api/actions/characters/{characterId}/available/ and filters
+ * results where ref.backend === 'COMBAT'. Clash contribution actions appear
+ * here too with ref.clash_id !== null.
+ *
+ * Disabled when characterId <= 0.
+ */
+export function useAvailableActions(characterId: number): {
+  data: PlayerAction[];
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useQuery({
+    queryKey: combatKeys.availableActions(characterId),
+    queryFn: () => fetchAvailableActions(characterId),
+    enabled: characterId > 0,
+    staleTime: 10_000,
+  });
+
+  const combatActions = (result.data?.results ?? []).filter(
+    (a: PlayerAction) => a.ref.backend === 'COMBAT'
+  );
+
+  return {
+    data: combatActions,
+    isLoading: result.isLoading,
+    isError: result.isError,
+  };
 }
 
 // ---------------------------------------------------------------------------
