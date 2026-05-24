@@ -10,6 +10,33 @@ mirroring ``world.mechanics.challenge_resolution`` (notably its
 Phase 3 is SINGLE-participant: ``viewer``/``actor`` is the one acting
 participant. Multi-participant union/arbitration is Phase 4.
 
+STORED-BUT-UNCONSUMED INVENTORY (Phase B end-of-batch-2 — Phase D must
+wire each of these or this list must explain why it stayed unconsumed):
+
+  * ``MissionGiverOffering.requirements_override`` (B2) —
+    ``services.availability.offer_missions`` reads only the template's
+    ``availability_rule`` today; Phase D AND-composes the override.
+  * ``MissionOptionRouteCandidate.consequence`` (B4) —
+    ``_select_route_consequence`` reads only ``route.consequence`` today;
+    Phase D checks the chosen candidate's override first when a random
+    candidate fires.
+  * ``MissionOptionRouteCandidate.outcome_text`` (B4) — Phase D emits it
+    to the player when a random candidate fires.
+  * ``MissionOptionRouteReward.candidate`` (B4 polymorphic parent) —
+    :func:`world.missions.services.rewards.emit_terminal_rewards` walks
+    only ``route.reward_templates`` today; Phase D also walks the chosen
+    candidate's reward_templates when a random candidate fires terminal.
+  * ``MissionNode.flavor_text`` (B6) — :func:`enter_node` writes the
+    snapshot but doesn't surface the text; Phase D emits it on node
+    entry.
+  * ``MissionOptionRoute.outcome_text`` (B6) — Phase D emits it on tier
+    roll (the non-random path).
+
+Each of these is silently invisible to players until Phase D wires it.
+Studio authors may write content into these fields and see no effect
+in-game; the authoring tool should surface a "wires up in Phase D"
+caveat on the relevant input rows until then.
+
 Design invariants honored here:
   * difficulty for an AUTHORED CHECK is ``instance.template.risk_tier`` (the
     authored DC); for a CHALLENGE CHECK it is the challenge's ``severity``

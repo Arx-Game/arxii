@@ -1,6 +1,6 @@
 # Missions & Living Grid
 
-**Status:** not-started
+**Status:** engine + Phase A authoring landed; Phase B in progress
 **Depends on:** Checks, Mechanics (Challenges/Situations), Conditions, Areas, Instances, Traits, Skills, Distinctions, Societies
 
 ## Overview
@@ -27,6 +27,12 @@ Missions are branching narrative quest chains — the primary way characters int
 - **Capability sources:** TechniqueCapabilityGrant (magic), TraitCapabilityDerivation (mechanics), ConditionTemplate capabilities (conditions) — multiple sources feed into the action generation pipeline
 - **Conditions:** Persistent state tracking with stage progression, now with Properties M2M for integration with the Challenge system
 - **No mission-specific models exist** — but the Challenge/Situation infrastructure provides the foundation for mission stages
+- **MISSIONS ENGINE (now built — `world/missions/`):** `MissionTemplate`/`MissionNode`/`MissionOption`/`MissionOptionRoute`(+`Candidate`/`Reward`)/`MissionInstance`/`MissionParticipant`/`MissionNodeSnapshot`/`MissionDeedRecord`/`MissionGiver`(+`Cooldown`)/`MissionDeedRewardLine`/`MissionRewardQueue`. Full Phase-0–5b runtime: predicate evaluator + leaf resolver registry, multi-participant orchestrator (COINFLIP/VOTE/JOINT with combined routing), front-door availability + offer pipeline, journal, terminal reward emission, deferred-payout cron, Mission→Beat seam (`Beat.required_mission` is live; the Beat-completion engine itself is stubbed). Design + plan in `docs/plans/2026-05-18-missions-design.md` + `2026-05-18-missions-implementation.md`.
+- **MISSION AUTHORING TOOLING — Phase A landed (PR #492):** `MissionOption(source_kind=CHALLENGE)` with `challenge` FK fans out per qualifying `ChallengeApproach` exactly like the now-retired AFFORDANCE option fanned out per binding; `challenge_options_for_character` is the expansion service; `ChallengeApproach.auto_succeeds`/`is_default` flags. Affordance system fully retired. Design + plan in `docs/plans/2026-05-22-mission-authoring-tooling-{design,implementation,findings}.md`. Phases B/C/D/E pending — B (model extensions) in progress; C (predicate leaf-resolver expansion); D (DRF API); E (React Mission Studio).
+- **Phase B in progress — recorded deviations:**
+  - **B2** ships a *single* `MissionGiver.target = FK(ObjectDB)` field with `clean()`-time typeclass validation, instead of the plan's `DiscriminatorMixin` (which assumed three separate typed FKs to different tables). Senior-dev review (TehomCD on the Phase B PR) pointed out the rejected discriminator pattern: all three originally-proposed FKs (`location`, `npc`, `environmental_detail`) targeted the same `ObjectDB` table, so the "discriminator" was just three nullable columns where one would do. Collapsed to one `target` whose typeclass (Character / Room / non-Character-Room-Exit Object) clean() validates against `giver_kind`. `MissionGiver.is_publishable` simplifies to `target is not None` and remains the authoring-UI / admin signal for the "ready for live audience" gate (the operator flipping a template's `access_tier` from `STAFF_ONLY` to `OPEN`). **Runtime enforcement in `offer_missions` is intentionally deferred to Phase D**, where it can be designed alongside the broader visibility/permission tiers; today `is_publishable` is consumed only by authoring/admin layers.
+  - **B7** ships a single `MissionTemplate.access_tier` audience gate (`AccessTier` TextChoices: `OPEN`/`STAFF_ONLY`, default `STAFF_ONLY`) instead of the plan's full draft/publish working-copy fork. Rationale: per-author in-flight protection is already provided by `MissionNodeSnapshot` (every accepted mission pins its node state), so the only remaining need is "let staff test an authored mission before players see it" — handled cleanly by audience gating without forking the graph. `offer_missions` excludes `STAFF_ONLY` templates from non-`is_staff_observer` characters. The enum is intentionally minimal; richer tiers (society membership, GM-level, distinction-gated, etc.) defer to a dedicated permission brainstorm.
+    - **DEPLOY NOTE:** migration `0021` adds the field with default `STAFF_ONLY` — every pre-existing `MissionTemplate` row becomes staff-only after migration. No pre-existing authored content exists today (the missions app is in dev), but if it ever does, the deploy needs an operator pass to flip live missions to `OPEN`. There is intentionally no data migration auto-converting `is_active=True` rows to `OPEN`: the audit step (a human confirming each formerly-live mission is still ready for the live audience) is the point of the gate.
 
 ## What's Needed for MVP
 - Mission model — definition, metadata, rewards; stages map to SituationTemplates
@@ -41,3 +47,10 @@ Missions are branching narrative quest chains — the primary way characters int
 - Mission UI — web interface for tracking active missions, making decisions, viewing outcomes
 
 ## Notes
+
+**Roadmap doc lag (2026-05-22):** the Overview / Key Design Points / What's
+Needed for MVP sections below were written before the missions engine was
+built and don't reflect the current architecture (predicate-tree gating
+instead of Application+Property eligibility, CHALLENGE-source options
+instead of mission-stages-as-SituationInstances, etc.). The two bullets
+added to "What Exists" are accurate; the rest is overdue for a fuller pass.

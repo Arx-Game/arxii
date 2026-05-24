@@ -24,8 +24,9 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 from django.utils import timezone
 
+from core_management.permissions import is_staff_observer
 from world.checks.outcome_utils import select_weighted
-from world.missions.constants import ArcScope
+from world.missions.constants import AccessTier, ArcScope
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.stories.models import Era
 
@@ -119,13 +120,23 @@ def _eligible_templates(
       * level band (widened by ``risk_dial``); skipped when level is None
       * (arc_filter only) ``created_in_era == active_era`` AND
         ``_arc_scope_matches(template, giver)``
+      * audience gate (``access_tier``): non-staff characters never see
+        STAFF_ONLY templates; staff see both tiers
     """
     now = timezone.now()
     qs = giver.templates.filter(is_active=True).exclude(
-        Q(givers__cooldowns__character=character)
-        & Q(givers__cooldowns__giver=giver)
-        & Q(givers__cooldowns__available_at__gt=now),
+        Q(givers__standings__character=character)
+        & Q(givers__standings__giver=giver)
+        & Q(givers__standings__available_at__gt=now),
     )
+    if not is_staff_observer(character):
+        qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
+    # DESIGN: a staff character testing a STAFF_ONLY template will pass
+    # this audience filter but can still be silently dropped by the per-
+    # template predicate / level-band / cooldown filters below — with no
+    # in-band signal to the author about which gate ate the template.
+    # Phase D's Mission Studio is the right place for a debug overlay
+    # surfacing "why doesn't this template show for me?" — see design §8.1.
     if arc_filter and active_era is not None:
         qs = qs.filter(created_in_era=active_era)
     elif arc_filter:

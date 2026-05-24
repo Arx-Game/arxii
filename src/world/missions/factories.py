@@ -9,20 +9,24 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.missions.constants import (
+    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
+    GiverKind,
     MissionStatus,
     OptionKind,
     OptionSource,
     RewardGroupRule,
 )
 from world.missions.models import (
+    MissionCategory,
     MissionDeedRecord,
     MissionDeedRewardLine,
     MissionGiver,
-    MissionGiverCooldown,
+    MissionGiverOffering,
+    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
@@ -34,6 +38,18 @@ from world.missions.models import (
     MissionRewardQueue,
     MissionTemplate,
 )
+
+
+class MissionCategoryFactory(DjangoModelFactory):
+    """Factory for the MissionCategory lookup model."""
+
+    class Meta:
+        model = MissionCategory
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"mission-category-{n}")
+    description = factory.Faker("sentence")
+
 
 # ---------------------------------------------------------------------------
 # Mission graph factories
@@ -61,6 +77,24 @@ class MissionTemplateFactory(DjangoModelFactory):
     cooldown = timedelta(days=1)
     reward_group_rule = RewardGroupRule.ALL_EQUAL
     is_active = True
+    # Factory default differs from MODEL default: the model defaults to
+    # STAFF_ONLY (production-safe — new authored templates are in testing
+    # until staff publishes them). The factory defaults to OPEN so the
+    # entire test suite keeps surfacing templates to non-staff characters
+    # without every caller passing access_tier. Tests covering the
+    # STAFF_ONLY tier set access_tier explicitly.
+    #
+    # CAVEAT: per ``feedback_factory_get_or_create_kwargs``, factory_boy's
+    # ``django_get_or_create`` silently drops non-lookup kwargs when the
+    # row pre-exists. If a test calls ``MissionTemplateFactory(slug="x",
+    # access_tier=AccessTier.STAFF_ONLY)`` after another call has already
+    # created slug="x" (with the default OPEN), the second call returns
+    # the existing OPEN row and the access_tier kwarg is silently dropped.
+    # Tests that care about the tier MUST use a unique slug (the convention
+    # in OfferMissionsAccessTierTests). If a future test pattern needs to
+    # share a slug across factories with different tiers, override _create
+    # here per the project memory's pattern.
+    access_tier = AccessTier.OPEN
 
 
 class MissionNodeFactory(DjangoModelFactory):
@@ -174,31 +208,53 @@ class MissionDeedRecordFactory(DjangoModelFactory):
 
 
 class MissionGiverFactory(DjangoModelFactory):
-    """Factory for MissionGiver. Defaults to an active, location-less giver."""
+    """Factory for MissionGiver.
+
+    Defaults to an active, target-less ROOM_TRIGGER-kind giver — a
+    drafty row (passes ``clean()``, fails ``is_publishable``). Tests
+    exercising a specific kind pass ``giver_kind=`` + a matching
+    ``target=`` (whose typeclass clean() validates).
+    """
 
     class Meta:
         model = MissionGiver
 
     name = factory.Sequence(lambda n: f"Giver {n}")
-    location = None
+    giver_kind = GiverKind.ROOM_TRIGGER
+    target = None
     org = None
     is_active = True
 
 
-class MissionGiverCooldownFactory(DjangoModelFactory):
-    """Factory for MissionGiverCooldown. Defaults to an already-elapsed cooldown.
+class MissionGiverOfferingFactory(DjangoModelFactory):
+    """Factory for the MissionGiver↔MissionTemplate through-model."""
+
+    class Meta:
+        model = MissionGiverOffering
+
+    giver = factory.SubFactory(MissionGiverFactory)
+    template = factory.SubFactory(MissionTemplateFactory)
+    weight_override = None
+    requirements_override = factory.LazyFunction(dict)
+
+
+class MissionGiverStandingFactory(DjangoModelFactory):
+    """Factory for MissionGiverStanding. Defaults to an already-elapsed cooldown
+    and zero affection.
 
     Tests that need a *live* cooldown should override ``available_at`` with a
     future datetime; the default ``timezone.now() - 1s`` lets the row exist
-    without acting as a gate.
+    without acting as a gate. Tests exercising the standing/affection side
+    pass ``affection=`` explicitly.
     """
 
     class Meta:
-        model = MissionGiverCooldown
+        model = MissionGiverStanding
 
     giver = factory.SubFactory(MissionGiverFactory)
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
+    affection = 0
 
 
 class MissionDeedRewardLineFactory(DjangoModelFactory):

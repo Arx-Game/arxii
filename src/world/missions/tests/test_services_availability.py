@@ -14,17 +14,17 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionFactory,
 )
-from world.missions.constants import ArcScope
+from world.missions.constants import AccessTier, ArcScope
 from world.missions.factories import (
-    MissionGiverCooldownFactory,
     MissionGiverFactory,
+    MissionGiverStandingFactory,
     MissionTemplateFactory,
 )
 from world.missions.services.availability import offer_missions
@@ -69,7 +69,7 @@ class OfferMissionsFilterTests(TestCase):
         giver.templates.add(cooled, fresh)
         character = _make_character_with_level(level=1)
 
-        MissionGiverCooldownFactory(
+        MissionGiverStandingFactory(
             giver=giver,
             character=character,
             available_at=timezone.now() + timedelta(days=1),
@@ -316,3 +316,78 @@ class OfferMissionsArcReplaceTests(TestCase):
         result_org = offer_missions(org_giver, character, count=1)
         self.assertEqual(len(result_org), 1)
         self.assertIn(result_org[0], {arc, ambient_org})
+
+
+def _make_character_with_account(*, level: int, is_staff: bool) -> "object":
+    """Helper: character + sheet + bound AccountDB so is_staff_observer can resolve.
+
+    ``is_staff_observer`` walks ``character.account.is_staff``; pure
+    CharacterFactory has no db_account, so we stamp one explicitly. Used
+    by the AccessTier filter tests below.
+    """
+    character = _make_character_with_level(level=level)
+    account = AccountFactory(
+        username=f"acc_for_{character.pk}",
+        is_staff=is_staff,
+    )
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    return character
+
+
+class OfferMissionsAccessTierTests(TestCase):
+    """STAFF_ONLY templates are gated to is_staff_observer; OPEN are public.
+
+    The default access_tier on the model is STAFF_ONLY (production-safe:
+    new missions are in-testing). The MissionTemplateFactory overrides
+    this default to OPEN so the rest of the suite keeps working without
+    touching every test. These tests exercise both tiers explicitly.
+    """
+
+    def test_open_template_visible_to_non_staff(self) -> None:
+        giver = MissionGiverFactory()
+        template = MissionTemplateFactory(slug="open-tier-t", access_tier=AccessTier.OPEN)
+        giver.templates.add(template)
+        character = _make_character_with_account(level=1, is_staff=False)
+
+        result = offer_missions(giver, character, count=10)
+
+        self.assertIn(template, result)
+
+    def test_staff_only_template_excluded_for_non_staff(self) -> None:
+        giver = MissionGiverFactory()
+        staff_only = MissionTemplateFactory(
+            slug="staff-only-tier-t", access_tier=AccessTier.STAFF_ONLY
+        )
+        giver.templates.add(staff_only)
+        character = _make_character_with_account(level=1, is_staff=False)
+
+        result = offer_missions(giver, character, count=10)
+
+        self.assertNotIn(staff_only, result)
+        self.assertEqual(result, [])
+
+    def test_staff_only_template_visible_to_staff(self) -> None:
+        giver = MissionGiverFactory()
+        staff_only = MissionTemplateFactory(
+            slug="staff-only-staff-sees-t", access_tier=AccessTier.STAFF_ONLY
+        )
+        giver.templates.add(staff_only)
+        staff_character = _make_character_with_account(level=1, is_staff=True)
+
+        result = offer_missions(giver, staff_character, count=10)
+
+        self.assertIn(staff_only, result)
+
+    def test_staff_sees_both_open_and_staff_only(self) -> None:
+        """Staff aren't gated AWAY from OPEN — they're a superset audience."""
+        giver = MissionGiverFactory()
+        open_t = MissionTemplateFactory(slug="mixed-open-t", access_tier=AccessTier.OPEN)
+        staff_t = MissionTemplateFactory(slug="mixed-staff-t", access_tier=AccessTier.STAFF_ONLY)
+        giver.templates.add(open_t, staff_t)
+        staff_character = _make_character_with_account(level=1, is_staff=True)
+
+        result = offer_missions(giver, staff_character, count=10)
+
+        self.assertIn(open_t, result)
+        self.assertIn(staff_t, result)

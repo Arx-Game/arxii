@@ -17,14 +17,18 @@ models.
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
     MAX_PERCENT_REPLACE,
+    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
+    GiverKind,
     JointCombine,
     MissionStatus,
     OptionKind,
@@ -32,9 +36,48 @@ from world.missions.constants import (
     RewardGroupRule,
 )
 
+# MissionOptionRouteReward XOR (route, candidate) — module-level so the
+# clean() messages stay readable and the magic 2 has a name.
+_ERR_REWARD_NO_PARENT = "Exactly one of route or candidate must be set; both are null."
+_ERR_REWARD_BOTH_PARENTS = "Cannot set both route and candidate — pick one."
+_REWARD_BOTH_PARENTS_SET = 2
+
+
 # ---------------------------------------------------------------------------
 # Mission graph data model
 # ---------------------------------------------------------------------------
+
+
+class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
+    """A content-type tag a :class:`MissionTemplate` can carry (multi-valued).
+
+    Examples: assassination, investigation, courtly, heist, social, combat.
+    Categories drive browse/filter in the authoring tool (Phase B–D) and
+    are designed so a future category→path-aspect-bonus mechanic can hang
+    off them without a schema change (design §11.1).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Browse ordering in the authoring tool (lower = earlier). "
+            "No Meta.ordering on the model — callers order explicitly via "
+            "``order_by('display_order', 'name')``."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Mission categories"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class MissionTemplate(SharedMemoryModel):
@@ -96,6 +139,31 @@ class MissionTemplate(SharedMemoryModel):
         help_text="Phase 0 predicate tree gating front-door availability for this template.",
     )
     is_active = models.BooleanField(default=True)
+    access_tier = models.CharField(
+        max_length=16,
+        choices=AccessTier.choices,
+        default=AccessTier.STAFF_ONLY,
+        db_index=True,
+        help_text=(
+            "Audience gate: STAFF_ONLY hides the template from all but "
+            "is_staff_observer characters (the 'in testing' state — the "
+            "production-safe default for new templates). OPEN lets the "
+            "usual predicate / cooldown / level-band filters take over. "
+            "Phase B-7 intentionally ships only two tiers; richer tiers "
+            "(society, GM-level, etc.) follow after a permission-design "
+            "brainstorm."
+        ),
+    )
+    categories = models.ManyToManyField(
+        MissionCategory,
+        blank=True,
+        related_name="templates",
+        help_text=(
+            "Content-type tags for this mission (multi-valued, e.g. "
+            "assassination, courtly, heist). Drives browse/filter in the "
+            "authoring tool."
+        ),
+    )
 
     def clean(self) -> None:
         super().clean()
@@ -169,6 +237,43 @@ class MissionNode(SharedMemoryModel):
         help_text=(
             "When true, no consequence riders may attach at this node. NOT "
             "consumed by the engine in Phase A; reserved for future use."
+        ),
+    )
+    editor_x = models.IntegerField(
+        default=0,
+        help_text=(
+            "Mission Studio (Phase E) canvas X coordinate. Pure authoring "
+            "metadata — no engine meaning. IntegerField (negatives allowed) "
+            "so authors can pan to negative coords."
+        ),
+    )
+    editor_y = models.IntegerField(
+        default=0,
+        help_text=(
+            "Mission Studio (Phase E) canvas Y coordinate. Pure authoring "
+            "metadata — no engine meaning. IntegerField (negatives allowed) "
+            "so authors can pan to negative coords."
+        ),
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Thin abstract description of the moment shown to the player "
+            "when they enter this node (design §8.2). Paragraph-style "
+            "(TextField, unbounded) — the short per-option label is the "
+            "option's authored_ic_framing (CharField/200). The rich "
+            "narration is the player-authored Legend Entry; this is just "
+            "the engine's framing line."
+        ),
+    )
+    flavor_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy service sets True (inherited copy reads as "
+            "'rewrite me'); the Phase-D edit service clears it on save. "
+            "Surfaces in the Studio's 'N flavor fields are still flagged "
+            "as un-rewritten copy' counter (design §10). NOT cleared "
+            "automatically at the model layer — service responsibility."
         ),
     )
 
@@ -274,7 +379,25 @@ class MissionOption(SharedMemoryModel):
         help_text="AUTHORED+CHECK: the check resolved by this option.",
     )
     authored_base_risk = models.PositiveSmallIntegerField(default=0)
-    authored_ic_framing = models.CharField(max_length=200, blank=True)
+    authored_ic_framing = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Short option-row label shown in the choice list (CharField/200). "
+            "Keep terse; the longer 'what happens at this node' narration "
+            "belongs in MissionNode.flavor_text."
+        ),
+    )
+    authored_ic_framing_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy service sets True (inherited copy reads as "
+            "'rewrite me'); the Phase-D edit service clears it on save. "
+            "Surfaces in the Studio's 'N flavor fields are still flagged "
+            "as un-rewritten copy' counter (design §10). NOT cleared "
+            "automatically at the model layer — service responsibility."
+        ),
+    )
     branch_target = models.ForeignKey(
         MissionNode,
         null=True,
@@ -429,6 +552,23 @@ class MissionOptionRoute(SharedMemoryModel):
             "tier is rolled; null = pure routing/no effect."
         ),
     )
+    outcome_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Player-facing outcome text shown when this route's tier is "
+            "rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the "
+            "resolution engine doesn't surface outcome_text today; Phase D "
+            "wires it into the player message."
+        ),
+    )
+    outcome_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy service sets True; the Phase-D edit service "
+            "clears it on save. NOT cleared automatically at the model "
+            "layer — service responsibility."
+        ),
+    )
 
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"
@@ -439,7 +579,13 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
     """One weighted destination in a randomized :class:`MissionOptionRoute`.
 
     When the parent route's ``is_random_set`` is true the engine picks one
-    candidate by ``weight``.
+    candidate by ``weight``. Each candidate can optionally carry its OWN
+    ``consequence`` + ``outcome_text`` override so a random pool entry is
+    a full self-contained outcome bundle (design §8.3 — destination +
+    consequence + outcome text + (via :class:`MissionOptionRouteReward`
+    with ``candidate=`` set) reward lines). The overrides are STORED BUT
+    UNCONSUMED in Phase B; Phase D wires per-candidate emission. Until
+    then, null/blank values mean "fall back to the parent route's".
     """
 
     route = models.ForeignKey(
@@ -453,18 +599,50 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         related_name="+",
     )
     weight = models.PositiveSmallIntegerField(default=1)
+    consequence = models.ForeignKey(
+        "checks.Consequence",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Optional per-candidate consequence override; falls back to "
+            "the parent route's consequence when null. STORED BUT "
+            "UNCONSUMED in Phase B — Phase D wires per-candidate emission."
+        ),
+    )
+    outcome_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Optional per-candidate outcome text shown to the player. "
+            "STORED BUT UNCONSUMED in Phase B — Phase D wires it."
+        ),
+    )
+    outcome_text_needs_rewrite = models.BooleanField(
+        default=False,
+        help_text=(
+            "Phase-D copy service sets True; the Phase-D edit service "
+            "clears it on save. NOT cleared automatically at the model "
+            "layer — service responsibility."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.route} → {self.target_node} ({self.weight})"
 
 
 class MissionOptionRouteReward(SharedMemoryModel):
-    """Authored reward template attached to a :class:`MissionOptionRoute`.
+    """Authored reward template attached to a route OR a route candidate.
 
-    Phase 5b.0 closes the Phase-3 gap that left no authored source for
-    structured rewards. When the engine resolves a TERMINAL route (a route
-    whose ``target_node`` is null), it walks this route's ``reward_templates``
-    and emits one :class:`MissionDeedRewardLine` per (template × participant)
+    Phase 5b.0 closed the Phase-3 gap that left no authored source for
+    structured rewards on routes. B4 extends the parent surface to also
+    allow per-candidate reward bundles (design §8.3 self-contained
+    outcome bundle) — exactly one of ``route``/``candidate`` is set.
+    Per-candidate rewards are STORED BUT UNCONSUMED in Phase B; Phase D
+    wires emission. The route-parented path is unchanged: when the engine
+    resolves a TERMINAL route (a route whose ``target_node`` is null), it
+    walks the route's ``reward_templates`` and emits one
+    :class:`MissionDeedRewardLine` per (template × participant)
     combination per the template's ``reward_group_rule``:
 
       * ``contract_holder_only=True`` rows emit exactly ONE line, recipient =
@@ -482,8 +660,27 @@ class MissionOptionRouteReward(SharedMemoryModel):
 
     route = models.ForeignKey(
         MissionOptionRoute,
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="reward_templates",
+        help_text=(
+            "Parent route (route-level reward). Exactly one of route / "
+            "candidate must be set; enforced in clean()."
+        ),
+    )
+    candidate = models.ForeignKey(
+        MissionOptionRouteCandidate,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="reward_templates",
+        help_text=(
+            "Parent candidate (per-candidate reward bundle — design §8.3). "
+            "STORED BUT UNCONSUMED in Phase B; Phase D wires emission "
+            "when a random candidate fires. Exactly one of route / "
+            "candidate must be set."
+        ),
     )
     kind = models.CharField(
         max_length=12,
@@ -513,6 +710,32 @@ class MissionOptionRouteReward(SharedMemoryModel):
             "distribute per the template's reward_group_rule."
         ),
     )
+
+    class Meta:
+        constraints = [
+            # Database-level XOR enforcement: bulk_create / QuerySet.update
+            # bypass clean(), and a row with both FKs null would be a
+            # permanently orphaned reward (invisible to either reverse
+            # manager). CHECK constraint catches that at the row level.
+            models.CheckConstraint(
+                check=(
+                    (Q(route__isnull=False) & Q(candidate__isnull=True))
+                    | (Q(route__isnull=True) & Q(candidate__isnull=False))
+                ),
+                name="missionoptionroutereward_exactly_one_parent",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
+        if set_count == 0:
+            # Non-field error — neither side is the "wrong" one.
+            raise ValidationError(_ERR_REWARD_NO_PARENT)
+        if set_count == _REWARD_BOTH_PARENTS_SET:
+            raise ValidationError(
+                {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
+            )
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -709,21 +932,45 @@ class MissionGiver(SharedMemoryModel):
 
     A giver is the player-facing "front door" (a guild-hall guildmaster, a
     notice-board, a society fixer) and is intentionally NOT a piloted NPC.
-    It can be physically anchored (``location``) and/or org-anchored
-    (``org``); both are optional and ``SET_NULL`` so giver rows survive their
-    anchors being deleted. ``templates`` is the M2M draw pool consumed by
-    ``services.availability.offer_missions``; ``is_active`` is the master
-    on/off switch for the giver itself (staff toggle).
+    The giver is bound to one Evennia object — its ``target`` — and the
+    ``giver_kind`` enum says how to interpret that object: NPC means
+    ``target`` is the giver-NPC Character; ROOM_TRIGGER means ``target`` is
+    the trigger room itself; ENVIRONMENTAL_DETAIL means ``target`` is the
+    examinable item / detail. (All three end up as ``ObjectDB`` rows in
+    Evennia — the discrimination happens at the typeclass level, not the
+    schema, which is why there is one FK rather than three.) ``org`` is
+    optional and used by ORG arc-scope filtering. ``is_active`` is the
+    master on/off switch for the giver itself (staff toggle).
+
+    Validation is **loose**: ``clean()`` enforces that ``target`` has the
+    typeclass matching ``giver_kind`` when set, but a giver without its
+    target is a 'draft' that ``is_publishable`` reports unready. The
+    runtime offering surface intentionally doesn't gate on
+    ``is_publishable`` today (Phase D's offering surface will).
     """
 
     name = models.CharField(max_length=200)
-    location = models.ForeignKey(
+    giver_kind = models.CharField(
+        max_length=20,
+        choices=GiverKind.choices,
+        default=GiverKind.ROOM_TRIGGER,
+        help_text="How this giver reaches the player; selects the target's expected typeclass.",
+    )
+    target = models.ForeignKey(
         "objects.ObjectDB",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        help_text="Optional Evennia room/location anchoring this giver.",
+        help_text=(
+            "The Evennia object this giver is bound to. Its typeclass must "
+            "match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → "
+            "Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/"
+            "Exit Object (an examinable item or room detail). Null = draft "
+            "(see is_publishable). All FK targets land in ObjectDB; the "
+            "kind enum + clean() typeclass check enforce semantic shape "
+            "without the wasted nullable columns of a discriminator."
+        ),
     )
     org = models.ForeignKey(
         "societies.Organization",
@@ -735,30 +982,186 @@ class MissionGiver(SharedMemoryModel):
     )
     templates = models.ManyToManyField(
         MissionTemplate,
+        through="MissionGiverOffering",
         blank=True,
         related_name="givers",
-        help_text="Authored template draw pool — see services.availability.offer_missions.",
+        help_text=(
+            "Authored template draw pool — see services.availability.offer_missions. "
+            "Backed by MissionGiverOffering for per-link odds/requirements overrides."
+        ),
     )
     is_active = models.BooleanField(default=True)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.target_id is None:
+            super().clean()
+            return
+        # Lazy typeclass imports — typeclasses pull in Evennia object
+        # machinery and would create circular imports at module load.
+        from typeclasses.characters import Character  # noqa: PLC0415
+        from typeclasses.exits import Exit  # noqa: PLC0415
+        from typeclasses.rooms import Room  # noqa: PLC0415
+
+        target = self.target
+        if self.giver_kind == GiverKind.NPC:
+            if not target.is_typeclass(Character, exact=False):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"NPC-kind giver's target must be a Character-typeclass "
+                            f"ObjectDB; got {target.typeclass_path}."
+                        )
+                    }
+                )
+        elif self.giver_kind == GiverKind.ROOM_TRIGGER:
+            if not target.is_typeclass(Room, exact=False):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"ROOM_TRIGGER-kind giver's target must be a Room-typeclass "
+                            f"ObjectDB; got {target.typeclass_path}."
+                        )
+                    }
+                )
+        elif self.giver_kind == GiverKind.ENVIRONMENTAL_DETAIL:
+            # An examinable detail / item — must NOT be a Character, Room,
+            # or Exit. (Any other Object subclass is fair game: weapons,
+            # books, props, room details.)
+            if (
+                target.is_typeclass(Character, exact=False)
+                or target.is_typeclass(Room, exact=False)
+                or target.is_typeclass(Exit, exact=False)
+            ):
+                raise ValidationError(
+                    {
+                        "target": (
+                            f"ENVIRONMENTAL_DETAIL-kind giver's target must be a "
+                            f"non-Character/Room/Exit Object (an examinable item or "
+                            f"detail); got {target.typeclass_path}."
+                        )
+                    }
+                )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_publishable(self) -> bool:
+        """True when this giver has its ``target`` populated.
+
+        A 'drafty' giver (kind set, target unset) passes ``clean()`` —
+        the model layer intentionally allows partial in-progress rows so
+        authoring tools can save mid-edit state. ``is_publishable`` is the
+        boolean signal that an authoring UI / admin surface uses to gate
+        the "ready for live audience" transition (e.g. the operator flipping
+        ``MissionTemplate.access_tier`` from ``STAFF_ONLY`` to ``OPEN``).
+        Runtime enforcement in ``offer_missions`` is deferred until the
+        Phase-D offering surface and the broader visibility/permission
+        brainstorm — today this property is consumed only by the
+        authoring layer. NOT a ``cached_property`` — ``target`` is
+        mutable and ``SharedMemoryModel`` keeps the instance long-lived;
+        recomputing on access is the safe choice.
+        """
+        return self.target_id is not None
 
     def __str__(self) -> str:
         return self.name
 
 
-class MissionGiverCooldown(SharedMemoryModel):
-    """Per-(giver, character) re-offer cooldown.
+class MissionGiverOffering(SharedMemoryModel):
+    """Per-(giver, template) link with optional offering-time overrides.
 
-    Set by ``services.run.accept_mission`` to ``now + template.cooldown``.
-    ``services.availability.offer_missions`` excludes templates whose giver
-    has a cooldown row with ``available_at > now`` for this character.
-    Design §10: contractual consequence (incl. cooldown) is the
-    contract-holder's alone — sharees never get cooldown rows.
+    The default draw weight and availability requirements come from the
+    :class:`MissionTemplate` itself. A per-link override lets the same
+    template be offered with different odds or extra gating by a specific
+    giver — e.g. the guildmaster offers the standard 'rescue' template
+    with extra-favourable odds to VIP members.
     """
 
     giver = models.ForeignKey(
         MissionGiver,
         on_delete=models.CASCADE,
-        related_name="cooldowns",
+        related_name="offerings",
+    )
+    template = models.ForeignKey(
+        MissionTemplate,
+        on_delete=models.CASCADE,
+        related_name="offerings",
+    )
+    weight_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Optional per-offering draw weight; null = use "
+            "template.base_weight. Must be >= 1 when set — 0 would silently "
+            "disable this offering, which is not the right tool (use the "
+            "template's is_active flag or delete the offering instead)."
+        ),
+    )
+    # SANCTIONED DYNAMIC JSON: same shape as MissionTemplate.availability_rule
+    # — a Phase-0 predicate tree consumed by world.missions.predicates.evaluate.
+    # Empty {} = use the template's own availability_rule only.
+    requirements_override = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional per-offering predicate gate (Phase-0 tree shape). "
+            "STORED BUT UNCONSUMED in Phase B — services.availability "
+            "reads only the template's availability_rule today; Phase D "
+            "wires this override in (semantic: AND-compose with the "
+            "template rule). Empty {} = no per-offering override."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["giver", "template"],
+                name="unique_missiongiveroffering_giver_template",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.weight_override is not None and self.weight_override < 1:
+            raise ValidationError(
+                {
+                    "weight_override": (
+                        "Must be >= 1; use null to fall back to "
+                        "template.base_weight. 0 would silently disable "
+                        "this offering."
+                    ),
+                }
+            )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.giver} → {self.template}"
+
+
+class MissionGiverStanding(SharedMemoryModel):
+    """Per-(giver, character) standing — cooldown plus an affection integer.
+
+    Generalises the original cooldown-only row to also carry the giver's
+    affection / standing with this character. Set by
+    ``services.run.accept_mission`` to ``now + template.cooldown`` (cooldown
+    side); the affection side is moved by future flirt/seduce-style checks
+    against the giver NPC (gameplay TBD — the model just carries the value).
+    ``services.availability.offer_missions`` excludes templates whose giver
+    has a standing row with ``available_at > now`` for this character.
+    Design §6 (giver standing) + §10 (contractual consequence is the
+    contract-holder's alone — sharees never get standing rows from accept).
+    """
+
+    giver = models.ForeignKey(
+        MissionGiver,
+        on_delete=models.CASCADE,
+        related_name="standings",
     )
     character = models.ForeignKey(
         "objects.ObjectDB",
@@ -766,17 +1169,33 @@ class MissionGiverCooldown(SharedMemoryModel):
         related_name="+",
     )
     available_at = models.DateTimeField()
+    affection = models.IntegerField(
+        default=0,
+        help_text=(
+            "Per-character standing / affection with this giver. Authoring "
+            "tool exposes 'giver_standing_at_least' predicate gates against "
+            "this value (Phase C). Negative values are permitted and mean "
+            "disliked — the Phase-C 'giver_standing_at_least: N' gate uses "
+            "plain >= comparison so it works uniformly across the integer "
+            "range (e.g. 'at least -5' is True for affection=-3, False for "
+            "affection=-10). Movement mechanic (flirt/seduce checks against "
+            "the NPC) is adjacent gameplay work, not built here."
+        ),
+    )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["giver", "character"],
-                name="unique_missiongivercooldown_giver_character",
+                name="unique_missiongiverstanding_giver_character",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d}"
+        return (
+            f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d} "
+            f"(affection={self.affection})"
+        )
 
 
 class MissionDeedRewardLine(SharedMemoryModel):

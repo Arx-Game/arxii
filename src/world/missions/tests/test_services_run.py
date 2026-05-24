@@ -23,7 +23,7 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.models import (
-    MissionGiverCooldown,
+    MissionGiverStanding,
     MissionInstance,
     MissionNodeSnapshot,
     MissionParticipant,
@@ -79,7 +79,7 @@ class AcceptMissionTests(TestCase):
         accept_mission(self.giver, self.template, self.character)
 
         # Cooldown row exists with future available_at.
-        cd = MissionGiverCooldown.objects.get(giver=self.giver, character=self.character)
+        cd = MissionGiverStanding.objects.get(giver=self.giver, character=self.character)
         self.assertGreater(cd.available_at, timezone.now())
 
         # offer_missions now returns no offers from this giver for this char.
@@ -87,13 +87,13 @@ class AcceptMissionTests(TestCase):
 
     def test_accept_uses_upsert_for_existing_cooldown_row(self) -> None:
         # Pre-existing cooldown (e.g. from a prior, expired run on this giver).
-        MissionGiverCooldown.objects.create(
+        MissionGiverStanding.objects.create(
             giver=self.giver,
             character=self.character,
             available_at=timezone.now() - timedelta(days=1),
         )
         accept_mission(self.giver, self.template, self.character)
-        rows = MissionGiverCooldown.objects.filter(giver=self.giver, character=self.character)
+        rows = MissionGiverStanding.objects.filter(giver=self.giver, character=self.character)
         self.assertEqual(rows.count(), 1)
         self.assertGreater(rows.first().available_at, timezone.now())
 
@@ -129,10 +129,10 @@ class ShareMissionTests(TestCase):
 
         # Holder has a cooldown from the accept; sharee MUST NOT.
         self.assertTrue(
-            MissionGiverCooldown.objects.filter(giver=self.giver, character=self.holder).exists()
+            MissionGiverStanding.objects.filter(giver=self.giver, character=self.holder).exists()
         )
         self.assertFalse(
-            MissionGiverCooldown.objects.filter(giver=self.giver, character=sharee).exists()
+            MissionGiverStanding.objects.filter(giver=self.giver, character=sharee).exists()
         )
 
 
