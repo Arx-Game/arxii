@@ -1,3 +1,4 @@
+from django.db.models import QuerySet
 import django_filters
 
 from world.scenes.models import Interaction, InteractionFavorite, InteractionReaction
@@ -14,10 +15,25 @@ class InteractionFilter(django_filters.FilterSet):
         field_name="target_personas",
         lookup_expr="exact",
     )
+    without_pose_link = django_filters.BooleanFilter(
+        method="filter_without_pose_link",
+        label="Exclude interactions that are already linked to a POSE via InteractionAction.",
+    )
+
+    def filter_without_pose_link(
+        self,
+        queryset: QuerySet[Interaction],
+        name: str,  # noqa: ARG002 — django-filter signature requires this argument
+        value: bool,
+    ) -> QuerySet[Interaction]:
+        """When true, exclude ACTION interactions already linked to a POSE."""
+        if value:
+            return queryset.filter(pose_links__isnull=True)
+        return queryset
 
     class Meta:
         model = Interaction
-        fields = ["persona", "scene", "mode", "visibility"]
+        fields = ["persona", "scene", "mode", "visibility", "without_pose_link"]
 
 
 class InteractionFavoriteFilter(django_filters.FilterSet):

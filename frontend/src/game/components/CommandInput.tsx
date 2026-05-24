@@ -6,6 +6,7 @@ import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import { submitPose } from '@/scenes/queries';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
@@ -26,6 +27,14 @@ interface CommandInputProps {
   onActionAttach?: (action: ActionAttachmentInfo) => void;
   onActionDetach?: () => void;
   onSubmitAction?: (action: ActionAttachmentInfo) => void;
+  /** Persona id for the active character — used to call submit_pose REST endpoint. */
+  personaId?: number | null;
+  /** IDs of the persona's unlinked ACTION interactions in this scene (from usePendingUnlinkedActions). */
+  pendingActionIds?: number[];
+  /** IDs the user has explicitly detached — these will be omitted from action_link_ids. */
+  detachedActionIds?: number[];
+  /** Called after a successful pose submit so the parent can clear detachedActionIds. */
+  onPoseSubmitted?: () => void;
 }
 
 export function CommandInput({
@@ -39,6 +48,10 @@ export function CommandInput({
   onActionAttach,
   onActionDetach,
   onSubmitAction,
+  personaId,
+  pendingActionIds,
+  detachedActionIds,
+  onPoseSubmitted,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -91,13 +104,52 @@ export function CommandInput({
       onSubmitAction(actionAttachment);
     }
 
+    // When posing in a scene with a known persona, call the submit_pose REST
+    // endpoint to associate pending ACTION interactions via auto-link (or
+    // explicit detach override).  This is fire-and-forget alongside the
+    // WebSocket send — the backend deduplicates via the auto-link service.
+    const isPose = !composerMode || composerMode.command === 'pose';
+    if (isPose && sceneId && personaId != null) {
+      const detachedSet = new Set(detachedActionIds ?? []);
+      const hasPending = (pendingActionIds ?? []).length > 0;
+      const hasDetachments = detachedSet.size > 0;
+
+      // Only send action_link_ids when the user detached something — otherwise
+      // omit the field so server-side auto-link runs (no redundant override).
+      const body =
+        hasPending && hasDetachments
+          ? {
+              persona_id: personaId,
+              scene_id: Number(sceneId),
+              content: trimmed,
+              action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
+            }
+          : { persona_id: personaId, scene_id: Number(sceneId), content: trimmed };
+
+      void submitPose(body).then(() => {
+        onPoseSubmitted?.();
+      });
+    }
+
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
     setCommand('');
     // I3: Clear synchronously — React batches the state updates above,
     // so this runs on the same tick and prevents double-submission.
     submittingRef.current = false;
-  }, [character, command, composerMode, send, actionAttachment, onSubmitAction]);
+  }, [
+    character,
+    command,
+    composerMode,
+    send,
+    actionAttachment,
+    onSubmitAction,
+    sceneId,
+    personaId,
+    pendingActionIds,
+    detachedActionIds,
+    onPoseSubmitted,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' && command === '') {

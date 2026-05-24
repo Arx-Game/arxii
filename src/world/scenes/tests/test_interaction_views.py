@@ -421,3 +421,102 @@ class ActionLinksSerializerTests(APITestCase):
         pose_row = next((r for r in results if r["id"] == pose.pk), None)
         assert pose_row is not None
         assert pose_row["action_links"] == []
+
+
+class WithoutPoseLinkFilterTests(APITestCase):
+    """Tests for the without_pose_link filter on InteractionFilter."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+
+    def test_without_pose_link_true_excludes_linked_actions(self) -> None:
+        """?without_pose_link=true excludes ACTION interactions that have a pose link."""
+        scene = SceneFactory()
+        unlinked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        linked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=linked_action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(
+            url,
+            {
+                "scene": scene.pk,
+                "mode": InteractionMode.ACTION,
+                "without_pose_link": "true",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        result_ids = {r["id"] for r in response.data["results"]}
+        assert unlinked_action.pk in result_ids
+        assert linked_action.pk not in result_ids
+
+    def test_without_pose_link_false_returns_all_actions(self) -> None:
+        """?without_pose_link=false returns both linked and unlinked ACTION interactions."""
+        scene = SceneFactory()
+        unlinked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        linked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=linked_action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(
+            url,
+            {
+                "scene": scene.pk,
+                "mode": InteractionMode.ACTION,
+                "without_pose_link": "false",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        result_ids = {r["id"] for r in response.data["results"]}
+        assert unlinked_action.pk in result_ids
+        assert linked_action.pk in result_ids

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
@@ -14,6 +14,9 @@ import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { PendingActionAttachments } from '../components/PendingActionAttachments';
+import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -26,6 +29,32 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+
+  // Resolve the active character's primary persona id for submit_pose REST calls.
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const personaId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacter)?.primary_persona_id ?? null,
+    [myRosterEntries, activeCharacter]
+  );
+
+  // Track IDs the user has detached from the auto-attach chip strip.
+  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
+
+  const handleDetach = useCallback((actionId: number) => {
+    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
+  }, []);
+
+  const handleUndoDetach = useCallback((actionId: number) => {
+    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
+  }, []);
+
+  const handlePoseSubmitted = useCallback(() => {
+    setDetachedActionIds([]);
+  }, []);
+
+  // Pending unlinked actions for the chip strip.
+  const { data: pendingActions } = usePendingUnlinkedActions(id, personaId);
+  const pendingActionIds = useMemo(() => pendingActions.map((a) => a.id), [pendingActions]);
 
   const [composerMode, setComposerMode] = useState<ComposerMode>({
     command: 'pose',
@@ -101,18 +130,31 @@ export function SceneDetailPage() {
       {isActive && (
         <div className="shrink-0">
           {activeCharacter && (
-            <CommandInput
-              character={activeCharacter}
-              composerMode={composerMode}
-              onModeChange={handleComposerModeChange}
-              targetToAppend={targetToAppend}
-              onTargetConsumed={handleTargetConsumed}
-              sceneId={id}
-              actionAttachment={actionAttachment}
-              onActionAttach={handleActionAttach}
-              onActionDetach={handleActionDetach}
-              onSubmitAction={handleSubmitAction}
-            />
+            <>
+              <PendingActionAttachments
+                sceneId={id}
+                personaId={personaId}
+                detachedIds={detachedActionIds}
+                onDetach={handleDetach}
+                onUndoDetach={handleUndoDetach}
+              />
+              <CommandInput
+                character={activeCharacter}
+                composerMode={composerMode}
+                onModeChange={handleComposerModeChange}
+                targetToAppend={targetToAppend}
+                onTargetConsumed={handleTargetConsumed}
+                sceneId={id}
+                actionAttachment={actionAttachment}
+                onActionAttach={handleActionAttach}
+                onActionDetach={handleActionDetach}
+                onSubmitAction={handleSubmitAction}
+                personaId={personaId}
+                pendingActionIds={pendingActionIds}
+                detachedActionIds={detachedActionIds}
+                onPoseSubmitted={handlePoseSubmitted}
+              />
+            </>
           )}
           <ActionPanel sceneId={id} />
         </div>

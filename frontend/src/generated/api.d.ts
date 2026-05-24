@@ -2348,6 +2348,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/combat/action-outcome-details/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Return outcome details for a list of ACTION Interaction IDs.
+         *
+         *     Query parameter: ``action_interaction_ids`` — comma-separated list of IDs.
+         *
+         *     Example: GET /api/combat/action-outcome-details/?action_interaction_ids=1,2,3
+         */
+        get: operations["combat_action_outcome_details_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conditions/capabilities/": {
         parameters: {
             query?: never;
@@ -20704,6 +20727,24 @@ export interface operations {
             };
         };
     };
+    combat_action_outcome_details_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     conditions_capabilities_list: {
         parameters: {
             query?: never;
@@ -24001,6 +24042,8 @@ export interface operations {
                 target_persona?: number;
                 until?: string;
                 visibility?: string;
+                /** @description Exclude interactions that are already linked to a POSE via InteractionAction. */
+                without_pose_link?: boolean;
             };
             header?: never;
             path?: never;
