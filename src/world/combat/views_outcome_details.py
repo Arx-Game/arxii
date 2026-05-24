@@ -17,7 +17,6 @@ unified-combat-ui plan.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -30,13 +29,21 @@ from rest_framework.views import APIView
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class DeepLinkRef:
+    """A typed reference to a modal detail view."""
+
+    modal: str
+    id: int
+
+
 @dataclass
 class EffectRow:
     """A single effect entry in an action's outcome detail."""
 
     kind: str
     label: str
-    deep_link: dict[str, Any] | None
+    deep_link: DeepLinkRef | None
 
 
 @dataclass
@@ -52,10 +59,35 @@ class ActionOutcomeDetail:
 # ---------------------------------------------------------------------------
 
 
+class OutcomeDetailsQuerySerializer(serializers.Serializer):
+    """Validates the ``action_interaction_ids`` query parameter."""
+
+    action_interaction_ids = serializers.CharField(default="")
+
+    def validate_action_interaction_ids(self, value: str) -> list[int]:
+        if not value:
+            return []
+        parts = [p.strip() for p in value.split(",") if p.strip()]
+        try:
+            return [int(p) for p in parts]
+        except ValueError as exc:
+            raise serializers.ValidationError("Must be comma-separated integers.") from exc
+
+
+class DeepLinkRefSerializer(serializers.Serializer):
+    modal = serializers.CharField()
+    id = serializers.IntegerField()
+
+
 class EffectRowSerializer(serializers.Serializer):
     kind = serializers.CharField()
     label = serializers.CharField()
-    deep_link = serializers.DictField(allow_null=True)
+    deep_link = serializers.SerializerMethodField()
+
+    def get_deep_link(self, obj: EffectRow) -> dict[str, int | str] | None:
+        if obj.deep_link is None:
+            return None
+        return {"modal": obj.deep_link.modal, "id": obj.deep_link.id}
 
 
 class OutcomeDetailSerializer(serializers.Serializer):
@@ -92,22 +124,14 @@ class ActionOutcomeDetailsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        raw_ids = request.query_params.get("action_interaction_ids", "")
-        if not raw_ids.strip():
+        query = OutcomeDetailsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        ids: list[int] = query.validated_data["action_interaction_ids"]
+
+        if not ids:
             return Response([], status=status.HTTP_200_OK)
 
-        try:
-            ids = [int(x.strip()) for x in raw_ids.split(",") if x.strip()]
-        except ValueError:
-            return Response(
-                {"detail": "action_interaction_ids must be comma-separated integers."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        # TODO(permissions): verify caller can view these action IDs (currently
+        # all authenticated users see all effects; gated by empty-effects v1 stub).
         details = [_build_outcome_detail(action_id) for action_id in ids]
-        payload = [
-            {"action_interaction_id": d.action_interaction_id, "effects": d.effects}
-            for d in details
-        ]
-        serializer = OutcomeDetailSerializer(payload, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(OutcomeDetailSerializer(details, many=True).data, status=status.HTTP_200_OK)

@@ -103,6 +103,22 @@ describe('PoseUnitDetailPanel', () => {
     });
   });
 
+  it('shows error message when hook returns isError', () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    } as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[1]} />
+      </Wrapper>
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load outcome details.');
+  });
+
   it('calls useOutcomeDetails with the provided IDs', () => {
     mockUseOutcomeDetails.mockReturnValue({
       data: [],
