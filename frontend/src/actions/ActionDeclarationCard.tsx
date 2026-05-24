@@ -14,11 +14,13 @@
  * - `onSubmit` — wired by the combat panel in Phase 7.
  * - Real target picker with combatants list — deferred to Phase 7.
  * - ThreadPullPicker embedding — deferred to Phase 6.4.
- * - Technique + target pickers — Task 5.2.
  * - Effort selector, I/C chip, cost preview — Task 5.3.
  */
 
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { fetchAvailableActions } from '@/scenes/actionQueries';
+import type { PlayerAction } from '@/scenes/actionTypes';
 import type { ActionContext } from './types';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +33,95 @@ export interface ActionDeclarationCardProps {
   actionContext: ActionContext;
   onContextChange: (next: ActionContext) => void;
   readOnly?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Technique picker sub-component
+// ---------------------------------------------------------------------------
+
+interface TechniquePickerProps {
+  techniques: PlayerAction[];
+  selectedId: number | undefined;
+  onSelect: (techniqueId: number) => void;
+  disabled?: boolean;
+}
+
+function TechniquePicker({ techniques, selectedId, onSelect, disabled }: TechniquePickerProps) {
+  if (techniques.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">No techniques available.</p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {techniques.map((action) => {
+        const techId = action.ref.technique_id;
+        if (techId === null) return null;
+        const isSelected = selectedId === techId;
+        return (
+          <button
+            key={techId}
+            type="button"
+            disabled={disabled || !action.prerequisite_met}
+            onClick={() => onSelect(techId)}
+            title={
+              action.prerequisite_reasons.length > 0
+                ? action.prerequisite_reasons.join('; ')
+                : action.description
+            }
+            className={cn(
+              'rounded border px-2.5 py-1 text-xs font-medium transition-colors text-left',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isSelected
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-background text-foreground hover:border-primary/50'
+            )}
+          >
+            {action.display_name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Target picker sub-component (placeholder — real picker wired in Phase 7)
+// ---------------------------------------------------------------------------
+
+interface TargetPickerProps {
+  targetId: number | undefined;
+  targetKind: ActionContext['targetKind'];
+  onTargetChange: (targetKind: ActionContext['targetKind'], targetId: number | undefined) => void;
+  disabled?: boolean;
+}
+
+function TargetPicker({ targetId, targetKind, onTargetChange, disabled }: TargetPickerProps) {
+  // Phase 5 placeholder — kind select only.
+  // Real combatant-list target picker is wired in Phase 7.
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        disabled={disabled}
+        value={targetKind ?? ''}
+        onChange={(e) => {
+          const kind = e.target.value as ActionContext['targetKind'];
+          onTargetChange(kind || undefined, targetId);
+        }}
+        className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+      >
+        <option value="">— no target —</option>
+        <option value="opponent">Opponent</option>
+        <option value="ally">Ally</option>
+        <option value="social">Social</option>
+        <option value="self">Self</option>
+      </select>
+      {targetKind && targetKind !== 'self' && (
+        <span className="text-xs text-muted-foreground">(target picker: Phase 7)</span>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,15 +144,37 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 // ---------------------------------------------------------------------------
 
 export function ActionDeclarationCard({
-  characterId: _characterId,
+  characterId,
   actionContext,
-  onContextChange: _onContextChange,
-  readOnly: _readOnly = false,
+  onContextChange,
+  readOnly = false,
 }: ActionDeclarationCardProps) {
+  // Fetch available techniques for this character.
+  // The API returns all PlayerActions; we filter to those with a technique_id
+  // so pure-combat actions without a technique are excluded.
+  const { data, isLoading } = useQuery({
+    queryKey: ['available-actions', characterId],
+    queryFn: () => fetchAvailableActions(characterId),
+    enabled: characterId > 0,
+  });
+
+  const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
+
+  function handleTechniqueSelect(techniqueId: number) {
+    onContextChange({ ...actionContext, techniqueId });
+  }
+
+  function handleTargetChange(
+    targetKind: ActionContext['targetKind'],
+    targetId: number | undefined
+  ) {
+    onContextChange({ ...actionContext, targetKind, targetId });
+  }
+
   const hasTechnique = actionContext.techniqueId !== undefined;
 
   return (
-    <div className={cn('rounded-lg border border-border bg-card p-4 shadow-sm space-y-4')}>
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold capitalize">
@@ -71,19 +184,39 @@ export function ActionDeclarationCard({
 
       {/* Technique section */}
       <Section label="Technique">
-        {hasTechnique ? (
-          <p className="text-xs text-muted-foreground">Technique #{actionContext.techniqueId}</p>
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Loading techniques...</p>
+        ) : !hasTechnique ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground italic">Pick a technique</p>
+            <TechniquePicker
+              techniques={techniques}
+              selectedId={actionContext.techniqueId}
+              onSelect={handleTechniqueSelect}
+              disabled={readOnly}
+            />
+          </div>
         ) : (
-          <p className="text-xs text-muted-foreground italic">Pick a technique</p>
+          <TechniquePicker
+            techniques={techniques}
+            selectedId={actionContext.techniqueId}
+            onSelect={handleTechniqueSelect}
+            disabled={readOnly}
+          />
         )}
       </Section>
 
       {/* Target section */}
       <Section label="Target">
-        <p className="text-xs text-muted-foreground">— no target selected —</p>
+        <TargetPicker
+          targetId={actionContext.targetId}
+          targetKind={actionContext.targetKind}
+          onTargetChange={handleTargetChange}
+          disabled={readOnly}
+        />
       </Section>
 
-      {/* Effort section */}
+      {/* Effort section — placeholder; selectable pills added in Task 5.3 */}
       <Section label="Effort">
         <p className="text-xs text-muted-foreground">{actionContext.effort}</p>
       </Section>
