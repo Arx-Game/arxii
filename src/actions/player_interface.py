@@ -109,6 +109,40 @@ def dispatch_player_action(
         player_action = _find_combat_player_action_for_ref(character, ref)
         avail = None  # COMBAT doesn't use AvailableAction
 
+        # Clash-contribution path: bypass record_declaration and write directly.
+        # ClashContributionDeclaration does not produce a CombatRoundAction row —
+        # it is consumed by _resolve_clashes in the post-pass after all round actions
+        # are resolved.  technique_id is required: ClashContributionDeclaration.technique
+        # is non-nullable (world/combat/models.py, on_delete=PROTECT, no null=True).
+        if ref.clash_id is not None:
+            from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+            from world.combat.models import Clash  # noqa: PLC0415
+            from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+            from world.combat.services import declare_clash_contribution  # noqa: PLC0415
+            from world.magic.models.techniques import Technique  # noqa: PLC0415
+
+            technique_id = kwargs.get("technique_id")
+            if technique_id is None:
+                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+            # ctx is CombatRoundContext at this point (guard above ensures ctx is not None
+            # and is_declaration_open is True); _participant is already identity-mapped.
+            if not isinstance(ctx, CombatRoundContext):
+                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+            clash = get_object_or_404(Clash, pk=ref.clash_id)
+            technique = get_object_or_404(Technique, pk=technique_id)
+
+            declare_clash_contribution(
+                participant=ctx.participant,
+                clash=clash,
+                action_slot=ref.clash_action_slot,
+                technique=technique,
+                strain_commitment=kwargs.get("strain_commitment", 0),
+            )
+            return DispatchResult(backend=ActionBackend.COMBAT, deferred=True)
+
     # Step 3: route — declaration-gated or immediate.
     declaration_open = ctx is not None and ctx.is_declaration_open
     if declaration_open:
@@ -448,13 +482,16 @@ def _find_combat_player_action_for_ref(character: ObjectDB, ref: ActionRef) -> P
     Raises:
         ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if no matching COMBAT action found.
     """
-    # Clash-contribution dispatch is deferred: the read path emits clash PlayerActions
-    # (via _clash_contribution_actions), but the write/dispatch path hasn't been wired
-    # yet — that is Task 7.x / Phase 8 work.  Guard here rather than falling through to
-    # the technique_id comparison, which would silently misfire when technique_id is None
-    # (all clash-contribution refs omit technique_id).
     if ref.clash_id is not None:
-        # Clash contribution dispatch is intentionally unimplemented — see comment above.
+        # Clash-contribution dispatch: match against the read-path emitter so that
+        # only surfaced clashes are dispatchable (same security gate as technique dispatch).
+        clash_actions = _clash_contribution_actions(character)
+        for action in clash_actions:
+            if (
+                action.ref.clash_id == ref.clash_id
+                and action.ref.clash_action_slot == ref.clash_action_slot
+            ):
+                return action
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 
     # Calls get_player_actions (which also computes challenge actions via _challenge_actions).
