@@ -4,6 +4,7 @@ from datetime import timedelta
 from http import HTTPMethod
 from typing import Any
 
+from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -249,30 +250,40 @@ class InteractionViewSet(
             Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
         )
 
-        interaction = create_interaction(
-            persona=persona,
-            content=data["content"],
-            mode="pose",
-            scene=scene,
-        )
-
-        action_link_ids: list[int] | None = data.get("action_link_ids")
-        if action_link_ids is not None:
-            # Explicit override: create exactly the supplied links in order,
-            # skipping auto-link entirely (empty list = caller opted out).
-            InteractionAction.objects.bulk_create(
-                [
-                    InteractionAction(
-                        pose=interaction,
-                        action_interaction_id=aid,
-                        ordering=i,
-                    )
-                    for i, aid in enumerate(action_link_ids)
-                ]
+        with transaction.atomic():
+            interaction = create_interaction(
+                persona=persona,
+                content=data["content"],
+                mode=InteractionMode.POSE,
+                scene=scene,
             )
-        else:
-            auto_link_pose_to_actions(interaction)
 
+            action_link_ids: list[int] | None = data.get("action_link_ids")
+            if action_link_ids is not None:
+                # Explicit override: create exactly the supplied links in order,
+                # skipping auto-link entirely (empty list = caller opted out).
+                InteractionAction.objects.bulk_create(
+                    [
+                        InteractionAction(
+                            pose=interaction,
+                            action_interaction_id=aid,
+                            ordering=i,
+                        )
+                        for i, aid in enumerate(action_link_ids)
+                    ]
+                )
+            else:
+                auto_link_pose_to_actions(interaction)
+
+        # The freshly-created interaction has not been through get_queryset()'s
+        # Prefetch pipeline, so the cached_* to_attr attributes used by
+        # InteractionListSerializer do not exist yet. Set them to empty lists
+        # to avoid AttributeError on serialization; a new pose has no receivers,
+        # target personas, favorites, or reactions.
+        interaction.cached_receivers = []
+        interaction.cached_target_personas = []
+        interaction.cached_favorites = []
+        interaction.cached_reactions = []
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )

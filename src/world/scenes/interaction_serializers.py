@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from world.scenes.constants import InteractionMode
+from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
@@ -160,9 +161,6 @@ class PoseSubmitSerializer(serializers.Serializer):
         except Persona.DoesNotExist:
             msg = "Persona not found."
             raise serializers.ValidationError(msg) from None
-
-        # Import here to avoid circular dependency at module level.
-        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
 
         owned_persona_ids = get_account_personas(request)
         if persona.pk not in owned_persona_ids:

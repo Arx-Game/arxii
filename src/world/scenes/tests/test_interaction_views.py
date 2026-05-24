@@ -319,3 +319,30 @@ class PoseSubmitViewTests(APITestCase):
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         }
+
+    def test_submit_pose_response_includes_serialized_list_fields(self) -> None:
+        """Response payload includes all InteractionListSerializer fields.
+
+        This exercises the cached_* to_attr attributes (cached_receivers,
+        cached_target_personas, cached_favorites, cached_reactions) that the
+        freshly-created Interaction won't have from get_queryset()'s Prefetch
+        pipeline. Without the empty-list assignment in submit_pose, all four
+        get_* methods AttributeError here.
+        """
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A fully serialized pose."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.data
+        # Fields populated from cached_receivers / cached_target_personas
+        assert "receiver_persona_ids" in data
+        assert data["receiver_persona_ids"] == []
+        assert "target_persona_ids" in data
+        assert data["target_persona_ids"] == []
+        # Fields from cached_favorites / cached_reactions
+        assert "is_favorited" in data
+        assert data["is_favorited"] is False
+        assert "reactions" in data
+        assert data["reactions"] == []
