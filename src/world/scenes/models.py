@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -619,6 +619,65 @@ class InteractionTargetPersona(SharedMemoryModel):
                 name="unique_target_per_interaction",
             ),
         ]
+
+
+class InteractionAction(SharedMemoryModel):
+    """Links a POSE Interaction to the ACTION Interaction(s) it elaborates.
+
+    Pattern A from the unified-combat-ui spec: the bridge points at the
+    ACTION-mode Interaction (not the underlying CombatRoundAction /
+    ClashContribution directly). The ACTION Interaction is the polymorphic
+    join point — different mechanical action types still reach a uniform
+    bridge target without contenttypes.
+    """
+
+    pose = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="action_links",
+        db_constraint=False,
+        help_text="The POSE Interaction that elaborates the action(s).",
+    )
+    action_interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="pose_links",
+        db_constraint=False,
+        help_text="The ACTION Interaction being elaborated.",
+    )
+    ordering = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Display order within the pose (low values render first).",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pose", "action_interaction"],
+                name="unique_action_link_per_pose",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["pose", "ordering"]),
+            models.Index(fields=["action_interaction"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.pose_id} ↔ {self.action_interaction_id}"
+
+    def clean(self) -> None:
+        super().clean()
+        from world.scenes.constants import InteractionMode  # noqa: PLC0415
+
+        if self.pose_id is not None and self.pose.mode != InteractionMode.POSE:
+            raise ValidationError({"pose": "Bridge pose must be a POSE-mode Interaction."})
+        if (
+            self.action_interaction_id is not None
+            and self.action_interaction.mode != InteractionMode.ACTION
+        ):
+            raise ValidationError(
+                {"action_interaction": "Linked target must be an ACTION-mode Interaction."}
+            )
 
 
 class SceneSummaryRevision(SharedMemoryModel):
