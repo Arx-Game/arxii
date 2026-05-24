@@ -115,33 +115,7 @@ def dispatch_player_action(
         # are resolved.  technique_id is required: ClashContributionDeclaration.technique
         # is non-nullable (world/combat/models.py, on_delete=PROTECT, no null=True).
         if ref.clash_id is not None:
-            from django.shortcuts import get_object_or_404  # noqa: PLC0415
-
-            from world.combat.models import Clash  # noqa: PLC0415
-            from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
-            from world.combat.services import declare_clash_contribution  # noqa: PLC0415
-            from world.magic.models.techniques import Technique  # noqa: PLC0415
-
-            technique_id = kwargs.get("technique_id")
-            if technique_id is None:
-                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-
-            # ctx is CombatRoundContext at this point (guard above ensures ctx is not None
-            # and is_declaration_open is True); _participant is already identity-mapped.
-            if not isinstance(ctx, CombatRoundContext):
-                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-
-            clash = get_object_or_404(Clash, pk=ref.clash_id)
-            technique = get_object_or_404(Technique, pk=technique_id)
-
-            declare_clash_contribution(
-                participant=ctx.participant,
-                clash=clash,
-                action_slot=ref.clash_action_slot,
-                technique=technique,
-                strain_commitment=kwargs.get("strain_commitment", 0),
-            )
-            return DispatchResult(backend=ActionBackend.COMBAT, deferred=True)
+            return _dispatch_clash_contribution(ctx, ref, kwargs)
 
     # Step 3: route — declaration-gated or immediate.
     declaration_open = ctx is not None and ctx.is_declaration_open
@@ -390,6 +364,56 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
             )
 
     return result
+
+
+def _dispatch_clash_contribution(
+    ctx: Any,
+    ref: ActionRef,
+    kwargs: dict[str, Any],
+) -> DispatchResult:
+    """Write a ``ClashContributionDeclaration`` for the given clash ref.
+
+    Extracted from ``dispatch_player_action`` to keep its cyclomatic complexity
+    within ruff's C901 limit.  Called only when ``ref.clash_id is not None`` and
+    ``ctx.is_declaration_open`` is ``True`` (both guaranteed by the caller).
+
+    Raises:
+        ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if ``technique_id`` is
+            missing from ``kwargs``, ``ctx`` is not a ``CombatRoundContext``, or
+            either the ``Clash`` or ``Technique`` pk does not exist.
+    """
+    from world.combat.models import Clash  # noqa: PLC0415
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.combat.services import declare_clash_contribution  # noqa: PLC0415
+    from world.magic.models.techniques import Technique  # noqa: PLC0415
+
+    technique_id = kwargs.get("technique_id")
+    if technique_id is None:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    # isinstance guard narrows the type for ty so ctx.participant is accessible.
+    # ctx is non-None with is_declaration_open=True — guaranteed by the caller.
+    if not isinstance(ctx, CombatRoundContext):
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    try:
+        clash = Clash.objects.get(pk=ref.clash_id)
+    except Clash.DoesNotExist as exc:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+    try:
+        technique = Technique.objects.get(pk=technique_id)
+    except Technique.DoesNotExist as exc:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+    declare_clash_contribution(
+        participant=ctx.participant,
+        clash=clash,
+        action_slot=ref.clash_action_slot,
+        technique=technique,
+        strain_commitment=kwargs.get("strain_commitment", 0),
+    )
+    return DispatchResult(backend=ActionBackend.COMBAT, deferred=True)
 
 
 def _find_available_action_for_ref(character: ObjectDB, ref: ActionRef) -> AvailableAction:
