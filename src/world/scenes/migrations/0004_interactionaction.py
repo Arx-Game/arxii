@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0005_sceneactionrequest_snapshot_check_type_and_more"),
+        ("scenes", "0003_partition_interaction"),
     ]
 
     operations = [
