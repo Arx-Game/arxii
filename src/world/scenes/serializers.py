@@ -113,6 +113,7 @@ class SceneListSerializer(serializers.ModelSerializer):
                 obj.interactions.select_related(
                     "persona__character_sheet__character",
                     "persona__character_sheet__roster_entry",
+                    "persona__thumbnail",
                 )
             )
         seen: dict[int, Persona] = {}
