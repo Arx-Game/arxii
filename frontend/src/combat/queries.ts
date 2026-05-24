@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { DispatchActionRequest } from './types';
+import type { DispatchActionRequest, EncounterListItem } from './types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
@@ -19,6 +19,9 @@ export const combatKeys = {
   all: ['combat'] as const,
 
   encounter: (encounterId: number) => [...combatKeys.all, 'encounter', encounterId] as const,
+
+  encountersForScene: (sceneId: number) =>
+    [...combatKeys.all, 'encounters-for-scene', sceneId] as const,
 
   combos: (encounterId: number) => [...combatKeys.all, 'combos', encounterId] as const,
 
@@ -45,6 +48,42 @@ export function useCombatEncounter(encounterId: number) {
     refetchInterval: 10_000,
     staleTime: 5_000,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Encounter-for-scene hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the first active (non-completed) encounter for a scene.
+ *
+ * Queries GET /api/combat/?scene=<sceneId> and returns the first encounter
+ * whose status is not "completed". Returns null when none exists.
+ *
+ * Polls every 15 seconds so the page stays current during encounter creation.
+ * Disabled when sceneId <= 0.
+ */
+export function useEncounterForScene(sceneId: number): {
+  data: EncounterListItem | null | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useQuery({
+    queryKey: combatKeys.encountersForScene(sceneId),
+    queryFn: () => api.fetchEncountersForScene(sceneId),
+    enabled: sceneId > 0,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+
+  const activeEncounter =
+    result.data?.find((e: EncounterListItem) => e.status !== 'completed') ?? null;
+
+  return {
+    data: result.isLoading ? undefined : activeEncounter,
+    isLoading: result.isLoading,
+    isError: result.isError,
+  };
 }
 
 // ---------------------------------------------------------------------------

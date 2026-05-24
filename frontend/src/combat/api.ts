@@ -11,6 +11,7 @@ import type {
   DispatchActionRequest,
   DispatchResult,
   EncounterDetail,
+  EncounterListItem,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,22 @@ export async function fetchEncounter(encounterId: number): Promise<EncounterDeta
   const res = await apiFetch(`/api/combat/${encounterId}/`);
   if (!res.ok) throw new Error('Failed to load encounter');
   return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * List encounters filtered by scene.
+ * GET /api/combat/?scene=<sceneId>
+ *
+ * Returns the list of encounter summaries for the given scene.
+ * The caller filters to the first non-completed encounter.
+ */
+export async function fetchEncountersForScene(
+  sceneId: number
+): Promise<EncounterListItem[]> {
+  const res = await apiFetch(`/api/combat/?scene=${sceneId}`);
+  if (!res.ok) throw new Error('Failed to load encounters for scene');
+  const data = (await res.json()) as { results?: EncounterListItem[]; count?: number };
+  return data.results ?? [];
 }
 
 // ---------------------------------------------------------------------------

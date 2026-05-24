@@ -12,6 +12,7 @@ import type { components } from '@/generated/api';
 // ---------------------------------------------------------------------------
 
 export type EncounterDetail = components['schemas']['EncounterDetail'];
+export type EncounterListItem = components['schemas']['EncounterList'];
 export type Participant = components['schemas']['Participant'];
 export type Opponent = components['schemas']['Opponent'];
 
