@@ -223,6 +223,7 @@ export function YourTurn({
   // ---------------------------------------------------------------------------
 
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Reset submitted when round advances.
   useEffect(() => {
@@ -264,6 +265,8 @@ export function YourTurn({
 
   async function handleSubmit() {
     if (submitted || dispatchPending) return;
+
+    setSubmitError(null);
 
     // Submission order per plan: focused first, then passives, then clashes.
     const dispatchJobs: Array<() => Promise<unknown>> = [];
@@ -320,11 +323,15 @@ export function YourTurn({
     }
 
     // Execute in order (focused first guarantees the server sees focused before passives).
-    for (const job of dispatchJobs) {
-      await job();
+    try {
+      for (const job of dispatchJobs) {
+        await job();
+      }
+      setSubmitted(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Submit failed. Try again.';
+      setSubmitError(message);
     }
-
-    setSubmitted(true);
   }
 
   // ---------------------------------------------------------------------------
@@ -354,7 +361,10 @@ export function YourTurn({
           characterId={characterId}
           characterSheetId={characterSheetId}
           actionContext={focusedContext}
-          onContextChange={setFocusedContext}
+          onContextChange={(next) => {
+            setSubmitError(null);
+            setFocusedContext(next);
+          }}
           readOnly={isLocked}
         />
       </div>
@@ -410,9 +420,10 @@ export function YourTurn({
               characterId={characterId}
               characterSheetId={characterSheetId}
               actionContext={passiveContexts[slot]}
-              onContextChange={(next) =>
-                setPassiveContexts((prev) => ({ ...prev, [slot]: next }))
-              }
+              onContextChange={(next) => {
+                setSubmitError(null);
+                setPassiveContexts((prev) => ({ ...prev, [slot]: next }));
+              }}
               readOnly={isLocked}
             />
           ))}
@@ -468,6 +479,13 @@ export function YourTurn({
       >
         {dispatchPending ? 'Submitting…' : 'Submit declarations · mark ready'}
       </button>
+
+      {/* Inline submit error — shown when a dispatch rejects */}
+      {submitError !== null && (
+        <p role="alert" className="text-sm text-destructive mt-2">
+          {submitError}
+        </p>
+      )}
     </div>
   );
 }

@@ -33,29 +33,39 @@ vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
 }));
 
-// Stub ActionDeclarationCard to avoid deep render complexity in slot tests.
-// Each instance is identified by its slot prop.
-vi.mock('@/actions/ActionDeclarationCard', () => ({
-  ActionDeclarationCard: ({
-    actionContext,
-    onContextChange,
-    readOnly,
-  }: {
-    actionContext: { slot: string; strainCommitment: number };
-    onContextChange: (ctx: { slot: string; strainCommitment: number; effort: string }) => void;
-    readOnly?: boolean;
-  }) => (
+// Stub ActionDeclarationCard — wrapped in vi.fn() so per-test overrides via
+// mockImplementation() work. The default implementation exposes:
+//   - data-testid="card-change-btn-<slot>": fires onContextChange without techniqueId
+//   - data-testid="card-select-technique-<slot>": fires onContextChange WITH
+//     techniqueId (read from actionContext.techniqueId, so caller must supply it
+//     via the actionContext prop — only meaningful in per-test overrides where the
+//     parent state already holds a techniqueId, or where the mockImplementation
+//     hard-codes one).
+type CardProps = {
+  actionContext: { slot: string; strainCommitment: number; techniqueId?: number };
+  onContextChange: (ctx: {
+    slot: string;
+    strainCommitment: number;
+    effort: string;
+    techniqueId?: number;
+  }) => void;
+  readOnly?: boolean;
+};
+
+function defaultCardImpl({ actionContext, onContextChange, readOnly }: CardProps) {
+  const slot = actionContext.slot;
+  return (
     <div
-      data-testid={`action-card-${actionContext.slot}`}
+      data-testid={`action-card-${slot}`}
       data-readonly={String(readOnly ?? false)}
     >
-      ActionCard [{actionContext.slot}]
+      ActionCard [{slot}]
       <button
         type="button"
-        data-testid={`card-change-btn-${actionContext.slot}`}
+        data-testid={`card-change-btn-${slot}`}
         onClick={() =>
           onContextChange({
-            slot: actionContext.slot,
+            slot,
             effort: 'HIGH',
             strainCommitment: actionContext.strainCommitment,
           })
@@ -63,8 +73,30 @@ vi.mock('@/actions/ActionDeclarationCard', () => ({
       >
         change
       </button>
+      <button
+        type="button"
+        data-testid={`card-select-technique-${slot}`}
+        onClick={() =>
+          onContextChange({
+            slot,
+            effort: 'MEDIUM',
+            strainCommitment: actionContext.strainCommitment,
+            techniqueId: actionContext.techniqueId,
+          })
+        }
+      >
+        select technique
+      </button>
     </div>
-  ),
+  );
+}
+
+const mockActionDeclarationCard = vi.fn(defaultCardImpl);
+
+vi.mock('@/actions/ActionDeclarationCard', () => ({
+  get ActionDeclarationCard() {
+    return mockActionDeclarationCard;
+  },
 }));
 
 // Magic queries — stubbed so the ActionDeclarationCard stub never calls them.
@@ -408,12 +440,53 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
   it('dispatches focused → passives in order (focused first)', async () => {
     setupMocks();
 
-    // We'll verify submission order by checking that mutateAsync is called
-    // once per selected action. With no techniques selected, dispatch won't
-    // be called, so we set up a focused context by trusting the stub.
-    // The dispatch order logic is in handleSubmit; the unit test for order
-    // is covered by the implementation comment above handleSubmit.
+    // Override the stub for this test so each card's "select technique" button
+    // emits a hard-coded techniqueId (not derived from actionContext.techniqueId,
+    // which starts undefined). mockActionDeclarationCard is a vi.fn() so
+    // mockImplementation() works per-test. Restored via mockRestore() after.
+    //
+    // Iteration order in handleSubmit: focused, then visiblePassiveSlots which is
+    // ['passive-social', 'passive-mental'] (passive-physical hidden because
+    // resolveFocusedCategory stubs to 'passive-physical').
+    const techniqueIds: Record<string, number> = {
+      focused: 1,
+      'passive-social': 2,
+      'passive-mental': 3,
+    };
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      const tid = techniqueIds[slot];
+      return (
+        <div
+          data-testid={`action-card-${slot}`}
+          data-readonly={String(readOnly ?? false)}
+        >
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: tid,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    // Click "select technique" for focused, passive-social, passive-mental.
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('card-select-technique-passive-social'));
+    await userEvent.click(screen.getByTestId('card-select-technique-passive-mental'));
 
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
 
@@ -421,8 +494,72 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
       expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
     });
 
-    // No technique selected → no dispatch calls; just verifies no crash.
-    expect(mockMutateAsync).not.toHaveBeenCalled();
+    // Three dispatches: focused → passive-social → passive-mental (in that order).
+    expect(mockMutateAsync).toHaveBeenCalledTimes(3);
+
+    const calls = mockMutateAsync.mock.calls as Array<
+      [{ ref: { backend: string; technique_id: number | null } }]
+    >;
+
+    // 1st call: focused slot (techniqueId=1)
+    expect(calls[0][0].ref.technique_id).toBe(1);
+    // 2nd call: passive-social (techniqueId=2) — social before mental in PASSIVE_SLOTS
+    expect(calls[1][0].ref.technique_id).toBe(2);
+    // 3rd call: passive-mental (techniqueId=3)
+    expect(calls[2][0].ref.technique_id).toBe(3);
+
+    // Restore default stub implementation for subsequent tests.
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('shows inline error alert when dispatch rejects', async () => {
+    setupMocks();
+
+    // Override stub to emit techniqueId=99 on click so handleSubmit dispatches.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div
+          data-testid={`action-card-${slot}`}
+          data-readonly={String(readOnly ?? false)}
+        >
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 99,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    mockMutateAsync.mockRejectedValueOnce(new Error('boom'));
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    // Select a technique so handleSubmit actually dispatches.
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    // The inline error alert should appear with the rejection message.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('boom');
+
+    // ready-badge should NOT appear — submission did not complete.
+    expect(screen.queryByTestId('ready-badge')).not.toBeInTheDocument();
+
+    // Restore default stub implementation for subsequent tests.
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 });
 
