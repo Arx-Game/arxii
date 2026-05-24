@@ -55,10 +55,16 @@ export function useCombatEncounter(encounterId: number) {
 // ---------------------------------------------------------------------------
 
 /**
- * Return the first active (non-completed) encounter for a scene.
+ * Return the most-recent active (non-completed) encounter for a scene.
  *
  * Queries GET /api/combat/?scene=<sceneId> and returns the first encounter
  * whose status is not "completed". Returns null when none exists.
+ *
+ * The most recent non-completed encounter is the canonical active one for the
+ * scene. Multiple in-flight encounters per scene is unsupported but not
+ * constraint-enforced in the backend. The API returns results ordered
+ * -created_at (see CombatEncounterViewSet.get_queryset), so the first
+ * non-completed entry is always deterministic regardless of how many exist.
  *
  * Polls every 15 seconds so the page stays current during encounter creation.
  * Disabled when sceneId <= 0.
@@ -76,8 +82,12 @@ export function useEncounterForScene(sceneId: number): {
     staleTime: 10_000,
   });
 
-  const activeEncounter =
-    result.data?.find((e: EncounterListItem) => e.status !== 'completed') ?? null;
+  // Filter to non-completed encounters. The API guarantees -created_at ordering,
+  // so taking index 0 is deterministic: it is always the most-recent non-completed
+  // encounter. Using .find() was equally correct here but index 0 makes the
+  // intent explicit.
+  const nonCompleted = result.data?.filter((e: EncounterListItem) => e.status !== 'completed');
+  const activeEncounter = nonCompleted && nonCompleted.length > 0 ? nonCompleted[0] : null;
 
   return {
     data: result.isLoading ? undefined : activeEncounter,

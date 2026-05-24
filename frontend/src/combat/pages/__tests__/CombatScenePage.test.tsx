@@ -59,6 +59,10 @@ vi.mock('@/scenes/queries', () => ({
     is_active: true,
     is_owner: false,
   }),
+  sceneKeys: {
+    all: ['scene'] as const,
+    detail: (id: string | number) => ['scene', String(id)] as const,
+  },
 }));
 
 vi.mock('@/roster/queries', () => ({
@@ -264,5 +268,30 @@ describe('CombatScenePage — empty state', () => {
 
     expect(screen.getByTestId('combat-encounter-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('combat-turn-panel-stub')).not.toBeInTheDocument();
+  });
+});
+
+describe('CombatScenePage — deterministic encounter selection', () => {
+  it('uses the first (most-recent) non-completed encounter when multiple exist', () => {
+    // useEncounterForScene already applies the deterministic pick in queries.ts;
+    // this test verifies that the page uses whatever encounter the hook returns
+    // without re-applying its own selection logic. When the hook is called with
+    // multiple non-completed encounters in the real implementation, the first
+    // one (ordered by -created_at from the API) is always chosen.
+    mockedUseEncounterForScene.mockReturnValue({
+      // Simulates the hook having already picked encounter id=99 (most-recent)
+      // over a stale encounter id=7.
+      data: { id: 99, scene: 42, status: 'declaring', round_number: 2, participant_count: 3, opponent_count: 0 },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<CombatScenePage />, { wrapper: createWrapper() });
+
+    const panel = screen.getByTestId('combat-turn-panel-stub');
+    expect(panel).toBeInTheDocument();
+    // The page must forward exactly the encounter id the hook returned, not
+    // the first encounter it happens to find itself.
+    expect(panel).toHaveAttribute('data-encounter-id', '99');
   });
 });

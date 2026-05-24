@@ -29,11 +29,13 @@ export async function fetchEncounter(encounterId: number): Promise<EncounterDeta
 }
 
 /**
- * List encounters filtered by scene.
+ * List encounters filtered by scene, ordered most-recent first.
  * GET /api/combat/?scene=<sceneId>
  *
  * Returns the list of encounter summaries for the given scene.
- * The caller filters to the first non-completed encounter.
+ * CombatEncounterViewSet.get_queryset() already applies order_by("-created_at"),
+ * so the first non-completed result is deterministically the most-recent one.
+ * The caller picks the first non-completed encounter from this ordered list.
  */
 export async function fetchEncountersForScene(
   sceneId: number

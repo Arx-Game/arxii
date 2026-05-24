@@ -1,5 +1,23 @@
 import { apiFetch } from '@/evennia_replacements/api';
 
+// ---------------------------------------------------------------------------
+// Query key factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Query key factory for scene queries.
+ *
+ * detail(id) produces ['scene', String(id)], which matches the legacy raw-array
+ * shape used in SceneDetailPage (`queryKey: ['scene', id]`). This means both
+ * CombatScenePage (using this factory) and SceneDetailPage share the same cache
+ * entry and avoid a double fetch. SceneDetailPage uses the legacy shape for now;
+ * refactor it to use this factory in a separate PR.
+ */
+export const sceneKeys = {
+  all: ['scene'] as const,
+  detail: (id: string | number) => ['scene', String(id)] as const,
+};
+
 export type {
   RosterEntryRef,
   SceneParticipant,

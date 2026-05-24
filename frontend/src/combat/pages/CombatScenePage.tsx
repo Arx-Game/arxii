@@ -23,7 +23,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { fetchScene } from '@/scenes/queries';
+import { fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
 import { createActionRequest } from '@/scenes/actionQueries';
 import { SceneHeader } from '@/scenes/components/SceneHeader';
@@ -46,9 +46,10 @@ export function CombatScenePage() {
   const { id = '' } = useParams();
   const sceneIdNum = Number(id);
 
-  // Scene data
+  // Scene data — sceneKeys.detail(id) produces ['scene', id] to match the
+  // legacy shape in SceneDetailPage, so both pages share the same cache entry.
   const { data: scene, refetch } = useQuery<SceneDetail>({
-    queryKey: ['scene', id],
+    queryKey: sceneKeys.detail(id),
     queryFn: () => fetchScene(id),
     refetchInterval: (query) => (query.state.data?.is_active ? 60000 : false),
   });
