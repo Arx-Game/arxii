@@ -177,3 +177,53 @@ DEFENSE_CRITICAL_MULTIPLIER: float = 1.5
 
 OFFENSE_FULL_THRESHOLD: int = 2
 OFFENSE_HALF_THRESHOLD: int = 1
+
+# ---------------------------------------------------------------------------
+# Clash enums
+# ---------------------------------------------------------------------------
+
+
+class ClashFlavor(models.TextChoices):
+    """Which variant of the Clash mechanic this instance represents."""
+
+    CLASH = "CLASH", "Clash"
+    LOCK = "LOCK", "Lock"
+    WARD = "WARD", "Ward"
+    BREAK = "BREAK", "Break"
+
+
+class LockPcRole(models.TextChoices):
+    """A PC's role within a LOCK-flavored Clash."""
+
+    SUSTAINING = "SUSTAINING", "Sustaining"
+    ESCAPING = "ESCAPING", "Escaping"
+
+
+class ClashStatus(models.TextChoices):
+    """Lifecycle status of a Clash."""
+
+    ACTIVE = "ACTIVE", "Active"
+    RESOLVED = "RESOLVED", "Resolved"
+
+
+class ClashActionSlot(models.TextChoices):
+    """Which action slot a PC commits to a Clash each round."""
+
+    FOCUSED = "FOCUSED", "Focused"
+    PASSIVE = "PASSIVE", "Passive"
+
+
+class ClashResolution(models.TextChoices):
+    """Outcome tier when a Clash resolves.
+
+    CLASH uses all five tiers (PC_DECISIVE … NPC_DECISIVE) plus ABANDONED.
+    BREAK uses PC_DECISIVE, PC_MARGINAL, and ABANDONED.
+    LOCK and WARD map onto subsets of these values.
+    """
+
+    PC_DECISIVE = "PC_DECISIVE", "PC Decisive"
+    PC_MARGINAL = "PC_MARGINAL", "PC Marginal"
+    MUTUAL = "MUTUAL", "Mutual"
+    NPC_MARGINAL = "NPC_MARGINAL", "NPC Marginal"
+    NPC_DECISIVE = "NPC_DECISIVE", "NPC Decisive"
+    ABANDONED = "ABANDONED", "Abandoned"

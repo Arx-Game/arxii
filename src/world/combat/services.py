@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
+    from world.combat.models import ClashConfig, StrainConfig
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
@@ -60,6 +61,8 @@ from world.combat.constants import (
 from world.combat.damage_source import classify_source
 from world.combat.models import (
     BossPhase,
+    Clash,
+    ClashContributionDeclaration,
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
@@ -76,12 +79,14 @@ from world.combat.types import (
     ActionOutcome,
     AppliedConditionResult,
     AvailableCombo,
+    ClashRoundResult,
     CombatTechniqueResolution,
     CombatTechniqueResult,
     ComboSlotMatch,
     DefenseResult,
     OpponentDamageResult,
     ParticipantDamageResult,
+    PreparedClashContribution,
     RoundResolutionResult,
 )
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
@@ -1402,7 +1407,87 @@ def _try_match_all_slots(
     ]
 
 
-def detect_available_combos(
+def _prefetch_clash_state(
+    encounter: CombatEncounter,
+    active_opponents: list[CombatOpponent],
+) -> tuple[set[str], set[int]]:
+    """Prefetch clash-state data needed for combo prerequisite checks.
+
+    Executes exactly two queries regardless of the number of combos or
+    opponents: one for clash flavors (ACTIVE or RESOLVED), one for
+    window-condition template IDs on opponent ObjectDBs.
+
+    Args:
+        encounter: The combat encounter.
+        active_opponents: Already-fetched list of ACTIVE ``CombatOpponent`` rows.
+
+    Returns:
+        A 2-tuple of:
+        - ``encounter_clash_flavors``: set of flavor strings for ACTIVE **or
+          RESOLVED** clashes in this encounter.  A resolved clash still
+          enables combos that require its flavor — e.g. a LOCK clash that
+          resolved with a decisive PC win leaves boss_held on the NPC, and
+          the clash_window_combo (required_clash_flavor=LOCK) should still
+          be available.  The window-condition field on the combo is the
+          precise gate; this field is a coarse "has this encounter seen
+          this clash type" check.
+        - ``active_window_condition_template_ids``: set of ``ConditionTemplate``
+          PKs that are active on at least one opponent ObjectDB.
+    """
+    from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    # Include both ACTIVE and RESOLVED clashes: the window combo is available
+    # even after the LOCK resolves, as long as the boss_held window condition
+    # is still active on the NPC.
+    encounter_clash_flavors: set[str] = set(
+        Clash.objects.filter(
+            encounter=encounter,
+            status__in=(ClashStatus.ACTIVE, ClashStatus.RESOLVED),
+        ).values_list("flavor", flat=True)
+    )
+
+    opponent_objectdb_ids = {opp.objectdb_id for opp in active_opponents if opp.objectdb_id}
+    active_window_condition_template_ids: set[int] = set()
+    if opponent_objectdb_ids:
+        active_window_condition_template_ids = set(
+            ConditionInstance.objects.filter(
+                target_id__in=opponent_objectdb_ids,
+            ).values_list("condition_id", flat=True)
+        )
+
+    return encounter_clash_flavors, active_window_condition_template_ids
+
+
+def _combo_passes_clash_prereqs(
+    combo: ComboDefinition,
+    encounter_clash_flavors: set[str],
+    active_window_condition_template_ids: set[int],
+) -> bool:
+    """Return True iff the combo's clash-state prerequisites are satisfied.
+
+    Both fields are optional; a null field imposes no constraint.
+
+    Args:
+        combo: The combo definition to check.
+        encounter_clash_flavors: Set of clash-flavor strings for any clash (ACTIVE or
+            RESOLVED) in the encounter. RESOLVED clashes are included because combo
+            eligibility runs after ``_resolve_clashes`` and a combo gated on
+            ``required_clash_flavor`` should still see the just-resolved clash's flavor.
+        active_window_condition_template_ids: Set of ``ConditionTemplate`` PKs active
+            on any opponent ObjectDB in the encounter.
+    """
+    if combo.required_clash_flavor and combo.required_clash_flavor not in encounter_clash_flavors:
+        return False
+    if (
+        combo.required_clash_window_condition_id
+        and combo.required_clash_window_condition_id not in active_window_condition_template_ids
+    ):
+        return False
+    return True
+
+
+def detect_available_combos(  # noqa: C901 — sequential pipeline of independent eligibility checks; splitting further would harm readability
     encounter: CombatEncounter,
     round_number: int,
 ) -> list[AvailableCombo]:
@@ -1414,6 +1499,12 @@ def detect_available_combos(
       opponent in the encounter.
     - At least one participating PC knows the combo (``ComboLearning``) **or**
       the combo is ``discoverable_via_combat``.
+    - Clash-state prerequisites are satisfied (two prefetches per call, not per combo):
+      - If ``required_clash_flavor`` is set, an active ``Clash`` of that flavor
+        must exist in the encounter.
+      - If ``required_clash_window_condition`` is set, a ``ConditionInstance`` of
+        that ``ConditionTemplate`` must be active on at least one opponent in the
+        encounter.
 
     Args:
         encounter: The combat encounter.
@@ -1477,12 +1568,20 @@ def detect_available_combos(
 
     # Max probing across active opponents for minimum_probing check
     max_probing = 0
-    active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
+    active_opponents = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        )
     )
     for opp in active_opponents:
         max_probing = max(max_probing, opp.probing_current)
+
+    # Prefetch clash-state for combo prerequisite checks (two queries total).
+    encounter_clash_flavors, active_window_condition_template_ids = _prefetch_clash_state(
+        encounter, active_opponents
+    )
+
     available: list[AvailableCombo] = []
 
     for combo in combos:
@@ -1498,6 +1597,12 @@ def detect_available_combos(
         knowers = known_map.get(combo.pk, set())
         known_by_any = bool(knowers & participant_sheet_ids)
         if not known_by_any and not combo.discoverable_via_combat:
+            continue
+
+        # Check clash-state prerequisites (flavor + window condition)
+        if not _combo_passes_clash_prereqs(
+            combo, encounter_clash_flavors, active_window_condition_template_ids
+        ):
             continue
 
         # Backtracking slot matching: each slot must be filled by a distinct action
@@ -2081,6 +2186,138 @@ def _resolve_declared_challenges(
     return outcomes
 
 
+def _resolve_clashes(
+    encounter: CombatEncounter,
+    round_number: int,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],  # noqa: ARG001 — reserved for future initiative-ordering; v1 uses Clash.pk order (see TODO below)
+) -> list[ClashRoundResult]:
+    """Post-pass: detect clash opportunities, then drive one round per active Clash.
+
+    Called after all combat-action resolution for the round.  Two phases:
+
+    1. **Opportunity detection** — ``detect_clash_opportunities`` inspects the
+       round's declared PC + NPC actions and creates ``Clash`` rows for newly-
+       emerged opportunities.  Newly-created clashes participate in the same
+       round's post-pass so that the first round of a clash is resolved
+       immediately.
+
+    2. **Per-clash round driver** — for each ACTIVE Clash (including any just
+       created in step 1), gather the PC's ``ClashContributionDeclaration`` rows,
+       build ``PreparedClashContribution`` objects, and call ``run_clash_round``.
+       Clashes are iterated in ``Clash.pk`` order for deterministic resolution.
+
+       TODO(Phase 5 / initiative ordering): order PC-initiated clashes by the
+       initiating participant's initiative slot, mirroring how
+       ``_resolve_declared_challenges`` follows ``resolution_order``.  NPC-initiated
+       clashes (WARD, LOCK/ESCAPING) don't have a PC initiator in the same sense;
+       they can resolve at a fixed NPC slot or after all PC-initiated clashes.
+       For v1, pk order is sufficient and deterministic.
+
+    3. **Declaration cleanup** — all ``ClashContributionDeclaration`` rows for
+       this round are deleted atomically after all clashes are processed, inside
+       the caller's ``@transaction.atomic`` block.
+
+    ``npc_attack_affinity`` is resolved at post-pass time from
+    ``clash.triggering_threat_entry``.  ``ThreatPoolEntry`` has no affinity field
+    (confirmed in Task 5.3 investigation) — ``npc_attack_affinity`` is always
+    ``None`` in v1, so ``affinity_tilt`` always returns 0.  When a future task
+    adds an affinity field to ``ThreatPoolEntry``, update this function to read it.
+
+    Runs inside the outer ``@transaction.atomic`` on ``resolve_round`` — no
+    separate ``@transaction.atomic`` decorator is needed here.
+
+    Args:
+        encounter: The active ``CombatEncounter`` being resolved.
+        round_number: The current encounter round number (1-indexed).
+        resolution_order: PC/NPC action resolution order (reserved for future
+            initiative-based clash ordering; unused in v1).
+
+    Returns:
+        A list of ``ClashRoundResult`` objects, one per Clash that was driven
+        this round.  May be empty when no Clashes are active.
+    """
+    from world.combat.clash import (  # noqa: PLC0415 — local import avoids circular dependency
+        detect_clash_opportunities,
+        run_clash_round,
+    )
+    from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
+
+    # 1. Detect new opportunities this round (creates Clash rows).
+    detect_clash_opportunities(encounter=encounter, round_number=round_number)
+
+    # 2. Find all ACTIVE clashes (includes any just created in step 1).
+    # TODO(Phase 5 / initiative ordering): order by initiating participant's
+    # initiative slot instead of pk for PC-initiated clashes.
+    active_clashes = list(
+        Clash.objects.filter(
+            encounter=encounter,
+            status=ClashStatus.ACTIVE,
+        ).select_related("npc_opponent", "triggering_threat_entry")
+    )
+
+    if not active_clashes:
+        return []
+
+    # 3. Gather all declarations for this round and group by clash_id.
+    declarations = list(
+        ClashContributionDeclaration.objects.filter(
+            encounter=encounter,
+            round_number=round_number,
+        ).select_related(
+            "clash",
+            "participant__character_sheet",
+            "technique",
+            "technique__action_template",
+        )
+    )
+    decls_by_clash: dict[int, list[ClashContributionDeclaration]] = defaultdict(list)
+    for decl in declarations:
+        decls_by_clash[decl.clash_id].append(decl)
+
+    # 4. Load configs once (singleton reads; SharedMemoryModel caches them).
+    # get_clash_config / get_strain_config are defined later in this module;
+    # Python resolves names at call time so the forward reference is fine.
+    config_clash = get_clash_config()
+    config_strain = get_strain_config()
+
+    # 5. Drive one round per active clash.
+    outcomes: list[ClashRoundResult] = []
+    for clash in active_clashes:
+        clash_decls = decls_by_clash.get(clash.pk, [])
+
+        # Build PreparedClashContribution objects for this clash's declarations.
+        # npc_attack_affinity: ThreatPoolEntry has no affinity field in v1 — pass None.
+        # When a future task adds an affinity field, read it here from
+        # clash.triggering_threat_entry.
+        pc_contributions: list[PreparedClashContribution] = [
+            PreparedClashContribution(
+                character_sheet=decl.participant.character_sheet,
+                action_slot=decl.action_slot,
+                technique=decl.technique,
+                strain_commitment=decl.strain_commitment,
+                npc_attack_affinity=None,  # ThreatPoolEntry has no affinity field in v1
+            )
+            for decl in clash_decls
+        ]
+
+        result = run_clash_round(
+            clash=clash,
+            round_number=round_number,
+            pc_contributions=pc_contributions,
+            config_clash=config_clash,
+            config_strain=config_strain,
+        )
+        outcomes.append(result)
+
+    # 6. Delete all declarations for this round (inside caller's atomic block).
+    ClashContributionDeclaration.objects.filter(
+        encounter=encounter,
+        round_number=round_number,
+    ).delete()
+
+    return outcomes
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -2111,6 +2348,12 @@ def resolve_round(
        declarations are skipped. Bridge rows for the round are deleted inside
        the same atomic block. Resolved outcomes populate ``challenge_outcomes``
        on the return value.
+    4b. Post-pass: resolve clashes — detect new clash opportunities from the
+       round's declared PC + NPC actions (creates Clash rows), then drive one
+       round per active Clash. Gather ClashContributionDeclaration rows,
+       build PreparedClashContribution objects, and call run_clash_round for
+       each. Clean up all declarations for the round. Clash round outcomes
+       populate ``clash_outcomes`` on the return value.
     5. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
     6. After all actions: check boss phase transitions for boss-tier opponents.
     7. Check encounter completion (all opponents defeated or all PCs down).
@@ -2202,6 +2445,13 @@ def resolve_round(
         resolution_order,
     )
 
+    # --- Post-pass: clash opportunity detection + per-round drivers ---
+    result.clash_outcomes = _resolve_clashes(
+        encounter,
+        round_number,
+        resolution_order,
+    )
+
     # --- Dying final round consumption ---
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
@@ -2256,3 +2506,92 @@ def resolve_round(
     encounter.refresh_from_db()
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Clash tuning singleton accessors
+# ---------------------------------------------------------------------------
+
+
+def get_strain_config() -> StrainConfig:
+    """Get-or-create the StrainConfig singleton (pk=1)."""
+    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+        StrainConfig,
+    )
+
+    cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def get_clash_config() -> ClashConfig:
+    """Get-or-create the ClashConfig singleton (pk=1)."""
+    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+        ClashConfig,
+    )
+
+    cfg, _ = ClashConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+# ---------------------------------------------------------------------------
+# Player-facing clash contribution declaration (Task 7.1a)
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def declare_clash_contribution(
+    *,
+    participant: CombatParticipant,
+    clash: Clash,
+    action_slot: str,
+    technique: Technique,
+    strain_commitment: int,
+) -> ClashContributionDeclaration:
+    """Write (or overwrite) a PC's clash contribution declaration for the current round.
+
+    Performs the atomic write.  All user-input validation lives in
+    ``DeclareClashContributionSerializer`` — this function trusts its inputs and
+    performs only defensive programmer-error assertions.
+
+    The declaration is keyed on ``(encounter, round_number, participant, clash)``.
+    Calling a second time in the same round replaces the prior declaration
+    (idempotent re-declaration).
+
+    Args:
+        participant: The PC participant making the contribution.
+        clash: The active ``Clash`` the contribution targets.
+        action_slot: ``ClashActionSlot`` value (FOCUSED or PASSIVE).
+        technique: The ``Technique`` the PC commits to the clash.
+        strain_commitment: Extra anima committed on top of the technique cost floor.
+
+    Returns:
+        The created-or-updated ``ClashContributionDeclaration`` instance.
+
+    Raises:
+        ValueError: If ``clash.encounter`` does not match ``participant.encounter``
+            (programmer error — the serializer enforces this for user input).
+    """
+    round_number = participant.encounter.round_number
+
+    # Defensive assertion: catches programmer errors where the wrong clash or
+    # participant is passed (the serializer already validates this for user input).
+    if clash.encounter_id != participant.encounter_id:
+        msg = (
+            f"declare_clash_contribution: clash.encounter_id ({clash.encounter_id}) "
+            f"does not match participant.encounter_id ({participant.encounter_id}). "
+            "This is a programmer error — pass clashes and participants from the same encounter."
+        )
+        raise ValueError(msg)
+
+    declaration, _ = ClashContributionDeclaration.objects.update_or_create(
+        encounter=participant.encounter,
+        round_number=round_number,
+        participant=participant,
+        clash=clash,
+        defaults={
+            "action_slot": action_slot,
+            "technique": technique,
+            "strain_commitment": strain_commitment,
+        },
+    )
+    return declaration

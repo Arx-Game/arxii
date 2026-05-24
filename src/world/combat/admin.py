@@ -4,6 +4,10 @@ from django.contrib import admin
 
 from world.combat.models import (
     BossPhase,
+    Clash,
+    ClashConfig,
+    ClashContribution,
+    ClashRound,
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
@@ -14,6 +18,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -227,3 +232,99 @@ class CombatPullResolvedEffectAdmin(admin.ModelAdmin):
     list_filter = ["kind", "vital_target", "source_tier"]
     search_fields = ["narrative_snippet"]
     raw_id_fields = ["pull", "source_thread", "granted_capability"]
+
+
+# =============================================================================
+# Clash admin (Task 1.7)
+# =============================================================================
+
+
+class ClashContributionInline(admin.TabularInline):
+    model = ClashContribution
+    extra = 0
+    fields = [
+        "character",
+        "action_slot",
+        "anima_committed",
+        "check_outcome",
+        "progress_delta",
+        "was_overburn",
+        "was_audere",
+        "soulfray_severity_accrued",
+    ]
+    raw_id_fields = ["character", "check_outcome"]
+
+
+class ClashRoundInline(admin.TabularInline):
+    model = ClashRound
+    extra = 0
+    fields = [
+        "round_number",
+        "pc_progress_delta",
+        "npc_progress_delta",
+        "progress_after",
+    ]
+
+
+@admin.register(Clash)
+class ClashAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "flavor",
+        "encounter",
+        "npc_opponent",
+        "status",
+        "progress",
+        "pc_win_threshold",
+        "npc_win_threshold",
+        "started_round",
+        "resolved_round",
+        "resolution",
+    ]
+    list_filter = ["flavor", "status", "resolution"]
+    raw_id_fields = [
+        "encounter",
+        "npc_opponent",
+        "initiator",
+        "resolution_consequence_pool",
+        "per_round_consequence_pool",
+    ]
+    inlines = [ClashRoundInline]
+
+
+@admin.register(ClashRound)
+class ClashRoundAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "clash",
+        "round_number",
+        "pc_progress_delta",
+        "npc_progress_delta",
+        "progress_after",
+    ]
+    list_filter = ["clash__flavor"]
+    raw_id_fields = ["clash"]
+    inlines = [ClashContributionInline]
+
+
+@admin.register(StrainConfig)
+class StrainConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "pk",
+        "conversion_base",
+        "diminishing_step",
+        "diminishing_floor",
+        "updated_at",
+    ]
+
+
+@admin.register(ClashConfig)
+class ClashConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "pk",
+        "affinity_tilt_coefficient",
+        "passive_anima_cap",
+        "break_abandon_idle_rounds",
+        "max_round_cap",
+        "updated_at",
+    ]

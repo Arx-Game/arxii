@@ -103,8 +103,27 @@ class ActionRef:
     optional; the relevant one(s) are populated per backend.
 
     - CHALLENGE: challenge_instance_id + approach_id
-    - COMBAT: technique_id
+    - COMBAT (technique): technique_id
+    - COMBAT (clash contribution): clash_id + clash_action_slot
     - REGISTRY: registry_key
+
+    COMBAT ActionRef encoding
+    -------------------------
+    Two mutually exclusive COMBAT variants:
+
+    1. Technique declaration: ``technique_id`` is set, ``clash_id`` / ``clash_action_slot``
+       are ``None``.  Used by the normal round-declaration path.
+
+    2. Clash contribution: ``clash_id`` + ``clash_action_slot`` are both set,
+       ``technique_id`` is ``None``.  A future dispatcher reads these two fields to
+       route to ``declare_clash_contribution``.  ``clash_action_slot`` is a
+       ``ClashActionSlot`` string value (``"FOCUSED"`` or ``"PASSIVE"``).
+
+    Reversibility contract
+    ----------------------
+    A future dispatch handler can recover ``(clash_id, action_slot)`` from this ref
+    via ``ref.clash_id`` and ``ref.clash_action_slot``.  No encoding/decoding step
+    needed — the ids are stored as plain ints/strings.
     """
 
     backend: ActionBackend
@@ -112,14 +131,25 @@ class ActionRef:
     approach_id: int | None = None
     technique_id: int | None = None
     registry_key: str | None = None
+    clash_id: int | None = None
+    clash_action_slot: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:
             msg = "CHALLENGE ActionRef requires challenge_instance_id"
             raise ValueError(msg)
-        if self.backend == ActionBackend.COMBAT and self.technique_id is None:
-            msg = "COMBAT ActionRef requires technique_id"
-            raise ValueError(msg)
+        if self.backend == ActionBackend.COMBAT:
+            has_technique = self.technique_id is not None
+            has_clash = self.clash_id is not None and self.clash_action_slot is not None
+            if not has_technique and not has_clash:
+                msg = (
+                    "COMBAT ActionRef requires either technique_id "
+                    "or (clash_id + clash_action_slot)"
+                )
+                raise ValueError(msg)
+            if has_technique and has_clash:
+                msg = "COMBAT ActionRef must not set both technique_id and clash_id"
+                raise ValueError(msg)
         if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
             msg = "REGISTRY ActionRef requires registry_key"
             raise ValueError(msg)
@@ -152,12 +182,15 @@ class PlayerAction:
     backends. Carries model instances (not bare PKs) per project convention;
     only ActionRef holds primitive ids for wire serialization.
 
-    ``check_type`` is ALWAYS present — it is the unifying resolution anchor
-    resolved per-backend before this descriptor is constructed.
+    ``check_type`` is present for most actions — it is the unifying resolution
+    anchor resolved per-backend before this descriptor is constructed.  For
+    clash-contribution actions, ``check_type`` is ``None`` because the check
+    type is determined by the technique the PC selects at declaration time, not
+    at opportunity-surfacing time.
 
     ``action_template`` is optional: present for combat techniques, registry
     templates, and override challenge approaches; None for plain
-    check_type-direct challenge approaches.
+    check_type-direct challenge approaches and clash contributions.
 
     When ``action_template`` is present, ``PlayerAction.check_type`` remains
     authoritative; ``action_template.check_type`` may differ for override approaches.
@@ -165,11 +198,12 @@ class PlayerAction:
 
     # --- required fields (no defaults) ---
     backend: ActionBackend
-    check_type: CheckType  # always-present resolution anchor
     display_name: str
     ref: ActionRef
 
     # --- optional fields (with defaults) ---
+    # None for clash contributions: technique chosen at declaration time determines the check.
+    check_type: CheckType | None = None
     action_template: ActionTemplate | None = None
     description: str = ""
     difficulty: DifficultyIndicator | None = None

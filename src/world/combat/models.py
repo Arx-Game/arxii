@@ -1,5 +1,7 @@
 """Models for the combat system."""
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -8,9 +10,14 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
+    ClashActionSlot,
+    ClashFlavor,
+    ClashResolution,
+    ClashStatus,
     ComboLearningMethod,
     EncounterStatus,
     EncounterType,
+    LockPcRole,
     OpponentStatus,
     OpponentTier,
     PaceMode,
@@ -144,6 +151,79 @@ class ThreatPoolEntry(SharedMemoryModel):
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
 
+    # === Clash fields (Task 1.5) ===
+    clash_capable = models.BooleanField(
+        default=False,
+        help_text="When True, this entry can initiate or sustain a Clash.",
+    )
+    is_lock_applying = models.BooleanField(
+        default=False,
+        help_text=(
+            "When this attack lands on a PC, it opens a LOCK-flavor Clash — the PC must win "
+            "a Break Free clash to escape. Requires `clash_break_free_force`."
+        ),
+    )
+    is_sustained_attack = models.BooleanField(
+        default=False,
+        help_text=(
+            "This attack is a sustained multi-round barrage that opens a WARD-flavor Clash — "
+            "PCs endure it for `sustained_duration_rounds`. Distinct from `is_lock_applying`."
+        ),
+    )
+    sustained_duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many rounds a sustained attack persists before the NPC must re-use it.",
+    )
+    clash_break_free_force = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The BREAK-clash PC win threshold for breaking free of a lock applied "
+            "by this entry. Required when is_lock_applying=True."
+        ),
+    )
+    clash_npc_pressure = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "NPC's per-round pressure contribution in a Clash initiated or sustained by this entry."
+        ),
+    )
+    clash_resolution_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Consequence pool fired when a Clash initiated by this entry resolves.",
+    )
+    clash_per_round_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Optional per-round consequence pool fired each round of a Clash "
+            "initiated by this entry."
+        ),
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.is_lock_applying and self.clash_break_free_force is None:
+            errors["clash_break_free_force"] = (
+                "clash_break_free_force is required when is_lock_applying=True."
+            )
+        if self.is_sustained_attack and self.sustained_duration_rounds is None:
+            errors["sustained_duration_rounds"] = (
+                "sustained_duration_rounds is required when is_sustained_attack=True."
+            )
+        if errors:
+            raise ValidationError(errors)
+
     def __str__(self) -> str:
         return f"{self.pool.name}: {self.name}"
 
@@ -199,6 +279,25 @@ class CombatOpponent(SharedMemoryModel):
         help_text="If True, the ObjectDB was created for this encounter only "
         "and will be cleaned up at encounter completion. Persona-bearing "
         "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
+    )
+
+    # === Clash fields (Task 1.5) ===
+    barrier_strength = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The BREAK-clash MAX threshold source; governs how hard it is for PCs "
+            "to break through this opponent's barrier. PCs must accumulate this much "
+            "progress in a BREAK Clash to breach the barrier (e.g. 10 = ten progress)."
+        ),
+    )
+    barrier_break_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=("Consequence pool fired when PCs successfully break this opponent's barrier."),
     )
 
     class Meta:
@@ -309,6 +408,29 @@ class ComboDefinition(SharedMemoryModel):
     bonus_damage = models.PositiveIntegerField(
         default=0,
         help_text="Flat bonus damage added when the combo fires.",
+    )
+
+    # === Clash fields (Task 1.5) ===
+    required_clash_flavor = models.CharField(
+        max_length=10,
+        choices=ClashFlavor.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, this combo is only available during a Clash of the specified flavor. "
+            "Null means the combo is not clash-gated."
+        ),
+    )
+    required_clash_window_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Clash-window gate: the target must have an active instance of this condition "
+            "for the combo to be available. Null means no window condition is required."
+        ),
     )
 
     def __str__(self) -> str:
@@ -842,4 +964,483 @@ class RoundChallengeDeclaration(SharedMemoryModel):
             f"encounter={self.encounter_id} "
             f"round={self.round_number} "
             f"participant={self.participant_id})"
+        )
+
+
+# =============================================================================
+# Clash tuning singletons (Task 1.2)
+# =============================================================================
+
+
+class StrainConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for the anima→modifier diminishing-returns curve.
+
+    ``conversion_base`` is the base unit for converting raw anima commitment
+    into a modifier value.  ``diminishing_step`` controls how quickly successive
+    units are worth less.  ``diminishing_floor`` is the minimum value any unit
+    can contribute.
+    """
+
+    conversion_base = models.PositiveIntegerField(
+        default=10,
+        help_text="Base anima units required per +1 modifier step.",
+    )
+    diminishing_step = models.PositiveIntegerField(
+        default=5,
+        help_text="Additional anima required per step above the first (diminishing returns).",
+    )
+    diminishing_floor = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum modifier contribution any anima unit can produce.",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="strain_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"StrainConfig(pk={self.pk})"
+
+
+class ClashConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for clash contest math.
+
+    ``affinity_tilt_coefficient`` scales how much affinity alignment shifts the
+    final progress delta.  ``passive_anima_cap`` limits how much anima a passive
+    contribution can commit.  ``break_abandon_idle_rounds`` controls how many
+    consecutive zero-contribution rounds a BREAK clash tolerates before it
+    auto-resolves as ABANDONED.  ``max_round_cap`` is the hard upper limit after
+    which any CLASH resolves as MUTUAL.
+
+    The six ``delta_*`` fields map check-result tiers to progress-delta integers.
+    Default table: critical +3, great +2, success +1, partial 0, failure -1,
+    botch -2.
+    """
+
+    affinity_tilt_coefficient = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.25"),
+        help_text="Fraction by which affinity alignment tilts the progress delta.",
+    )
+    passive_anima_cap = models.PositiveIntegerField(
+        default=20,
+        help_text="Maximum anima a passive contribution may commit per round.",
+    )
+    break_abandon_idle_rounds = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Consecutive zero-contribution rounds before a BREAK clash resolves as ABANDONED."
+        ),
+    )
+    max_round_cap = models.PositiveIntegerField(
+        default=12,
+        help_text="Round cap after which a CLASH auto-resolves as MUTUAL.",
+    )
+    decisive_overshoot = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Minimum overshoot past a threshold for a resolution to be DECISIVE (vs MARGINAL). "
+            "E.g. with default 3, crossing pc_win_threshold by 0-2 progress is MARGINAL; "
+            "by 3+ is DECISIVE."
+        ),
+    )
+
+    # Progress-delta table — can be negative.
+    delta_critical_success = models.IntegerField(default=3)
+    delta_great_success = models.IntegerField(default=2)
+    delta_success = models.IntegerField(default=1)
+    delta_partial = models.IntegerField(default=0)
+    delta_failure = models.IntegerField(default=-1)
+    delta_botch = models.IntegerField(default=-2)
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="clash_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"ClashConfig(pk={self.pk})"
+
+
+# =============================================================================
+# Clash model (Task 1.3) — discriminator model for multi-round contested struggles
+# =============================================================================
+
+
+class Clash(SharedMemoryModel):
+    """Central primitive for a Clash multi-round contest between PCs and an NPC opponent.
+
+    ``flavor`` is the discriminator (CLASH / LOCK / WARD / BREAK). Three flavored
+    fields have an iff coupling enforced at the application layer (``clean()``) and
+    at the DB layer (``CheckConstraint``):
+
+    - ``lock_pc_role`` is non-null iff ``flavor == LOCK``
+    - ``npc_win_threshold`` is non-null iff ``flavor == CLASH``
+    - ``ward_ends_on_round`` is non-null iff ``flavor == WARD``
+
+    Mirrors the Thread discriminator pattern from world/magic/models/threads.py.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="clashes",
+    )
+    npc_opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.PROTECT,
+        related_name="clashes",
+    )
+    initiator = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    resolution_consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    per_round_consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Optional per-round consequence pool fired each round for incremental feedback; "
+        "omit for flavors with no per-round effects.",
+    )
+
+    flavor = models.CharField(
+        max_length=10,
+        choices=ClashFlavor.choices,
+    )
+    lock_pc_role = models.CharField(
+        max_length=12,
+        choices=LockPcRole.choices,
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=LOCK; null otherwise.",
+    )
+    progress = models.IntegerField(default=0)
+    pc_win_threshold = models.IntegerField()
+    npc_win_threshold = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=CLASH; null otherwise.",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=ClashStatus.choices,
+        default=ClashStatus.ACTIVE,
+    )
+    started_round = models.PositiveIntegerField()
+    resolved_round = models.PositiveIntegerField(null=True, blank=True)
+    resolution = models.CharField(
+        max_length=15,
+        choices=ClashResolution.choices,
+        null=True,
+        blank=True,
+    )
+    ward_ends_on_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Set iff flavor=WARD; null otherwise.",
+    )
+    triggering_threat_entry = models.ForeignKey(
+        "combat.ThreatPoolEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The ThreatPoolEntry that opened this clash and is the NPC side of its contest "
+            "(the sustained-attack entry for WARD, the lock-applying entry for LOCK, the "
+            "big-attack entry for CLASH). Null for BREAK (NPC contributes nothing to the "
+            "meter). Set at clash creation in Phase 5; Phase 3 reads it for the NPC "
+            "per-round contribution."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            # lock_pc_role is non-null iff flavor == LOCK
+            models.CheckConstraint(
+                name="clash_lock_role_iff_lock_flavor",
+                check=(~Q(flavor=ClashFlavor.LOCK) | Q(lock_pc_role__isnull=False))
+                & (Q(flavor=ClashFlavor.LOCK) | Q(lock_pc_role__isnull=True)),
+            ),
+            # npc_win_threshold is non-null iff flavor == CLASH
+            models.CheckConstraint(
+                name="clash_npc_threshold_iff_clash_flavor",
+                check=(~Q(flavor=ClashFlavor.CLASH) | Q(npc_win_threshold__isnull=False))
+                & (Q(flavor=ClashFlavor.CLASH) | Q(npc_win_threshold__isnull=True)),
+            ),
+            # ward_ends_on_round is non-null iff flavor == WARD
+            models.CheckConstraint(
+                name="clash_ward_round_iff_ward_flavor",
+                check=(~Q(flavor=ClashFlavor.WARD) | Q(ward_ends_on_round__isnull=False))
+                & (Q(flavor=ClashFlavor.WARD) | Q(ward_ends_on_round__isnull=True)),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Clash<{self.flavor}>(encounter={self.encounter_id} "
+            f"opponent={self.npc_opponent_id} status={self.status})"
+        )
+
+    def clean(self) -> None:
+        """Validate the three iff couplings between flavor and flavored fields."""
+        errors: dict[str, str] = {}
+
+        # lock_pc_role iff LOCK
+        if self.flavor == ClashFlavor.LOCK and self.lock_pc_role is None:
+            errors["lock_pc_role"] = "flavor=LOCK requires lock_pc_role."
+        elif self.flavor != ClashFlavor.LOCK and self.lock_pc_role is not None:
+            errors["lock_pc_role"] = "lock_pc_role must be null for non-LOCK flavors."
+
+        # npc_win_threshold iff CLASH
+        if self.flavor == ClashFlavor.CLASH and self.npc_win_threshold is None:
+            errors["npc_win_threshold"] = "flavor=CLASH requires npc_win_threshold."
+        elif self.flavor != ClashFlavor.CLASH and self.npc_win_threshold is not None:
+            errors["npc_win_threshold"] = "npc_win_threshold must be null for non-CLASH flavors."
+
+        # ward_ends_on_round iff WARD
+        if self.flavor == ClashFlavor.WARD and self.ward_ends_on_round is None:
+            errors["ward_ends_on_round"] = "flavor=WARD requires ward_ends_on_round."
+        elif self.flavor != ClashFlavor.WARD and self.ward_ends_on_round is not None:
+            errors["ward_ends_on_round"] = "ward_ends_on_round must be null for non-WARD flavors."
+
+        if errors:
+            raise ValidationError(errors)
+
+
+# =============================================================================
+# ClashRound model (Task 1.4) — per-round record for a Clash contest
+# =============================================================================
+
+
+class ClashRound(SharedMemoryModel):
+    """Per-round record of a Clash multi-round contest.
+
+    One row is written at the end of each round of a ``Clash``.  The deltas
+    record how much each side moved the progress meter this round, and
+    ``progress_after`` snapshots the meter value after the round resolves so
+    that the history is self-contained and does not depend on replaying all
+    prior rounds.
+
+    ``ClashContribution`` (Task 1.5) will hang off this model — one row per PC
+    per round.
+    """
+
+    clash = models.ForeignKey(
+        Clash,
+        on_delete=models.CASCADE,
+        related_name="rounds",
+        help_text="The Clash this round belongs to.",
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="Which round of the Clash this row records (1-indexed, matches encounter round).",
+    )
+    pc_progress_delta = models.IntegerField(
+        help_text="Net signed progress contribution from all PCs this round. "
+        "Positive moves the meter toward the PC win threshold.",
+    )
+    npc_progress_delta = models.IntegerField(
+        help_text="Net signed progress contribution from the NPC opponent this round. "
+        "Negative moves the meter toward the NPC win threshold.",
+    )
+    progress_after = models.IntegerField(
+        help_text="Clash progress meter value after this round's deltas are applied. "
+        "Snapshot so history is self-contained without replaying all prior rounds.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["clash", "round_number"],
+                name="unique_round_per_clash",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashRound(clash={self.clash_id} "
+            f"round={self.round_number} progress={self.progress_after})"
+        )
+
+
+# =============================================================================
+# ClashContribution model (Task 1.5) — per-PC-per-round audit record
+# =============================================================================
+
+
+class ClashContribution(SharedMemoryModel):
+    """Per-PC per-round audit record of a single contribution to a Clash.
+
+    One row is written for each PC each round that a ``ClashRound`` resolves.
+    Captures what the PC committed, what technique was used, what the check
+    produced, and how that translated into progress delta and any soulfray cost.
+    The ``UniqueConstraint`` on ``(clash_round, character)`` enforces at most
+    one contribution per character per round.
+    """
+
+    clash_round = models.ForeignKey(
+        ClashRound,
+        on_delete=models.CASCADE,
+        related_name="contributions",
+        help_text="The ClashRound this contribution belongs to.",
+    )
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The PC whose contribution this row records.",
+    )
+    action_slot = models.CharField(
+        max_length=10,
+        choices=ClashActionSlot.choices,
+        help_text="Whether the PC committed their focused or passive action slot to this Clash.",
+    )
+    anima_committed = models.PositiveIntegerField(
+        help_text="Anima the PC committed to the Clash this round.",
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Technique the PC used in the focused action slot. "
+            "Null when the PC contributed from the passive slot."
+        ),
+    )
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The check outcome tier the PC rolled this round.",
+    )
+    progress_delta = models.IntegerField(
+        help_text=(
+            "Signed progress contribution from this PC this round. "
+            "Positive moves the meter toward the PC win threshold."
+        ),
+    )
+    was_overburn = models.BooleanField(
+        default=False,
+        help_text="True if the PC overburned their anima commitment this round.",
+    )
+    was_audere = models.BooleanField(
+        default=False,
+        help_text="True if the PC triggered an Audere escalation this round.",
+    )
+    soulfray_severity_accrued = models.PositiveIntegerField(
+        default=0,
+        help_text="Soulfray severity the PC accrued as a result of this contribution.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["clash_round", "character"],
+                name="unique_contribution_per_character_per_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashContribution(round={self.clash_round_id} "
+            f"character={self.character_id} slot={self.action_slot})"
+        )
+
+
+# =============================================================================
+# ClashContributionDeclaration model (Task 5.3a) — per-round bridge for the
+# clash post-pass
+# =============================================================================
+
+
+class ClashContributionDeclaration(SharedMemoryModel):
+    """A PC's declared clash contribution for one round, awaiting resolve_round's post-pass.
+
+    Written by Task 7.1's player-facing surface (``declare_clash_contribution``)
+    and consumed by ``_resolve_clashes`` in services.py after all combat-action
+    resolution for the round.  Deleted atomically after all clashes are processed.
+
+    One PC can declare to multiple distinct Clashes in a round (e.g., participating
+    in both a BREAK and a CLASH), but may only make ONE contribution per
+    (clash, round) — enforced by the UniqueConstraint.
+
+    ``npc_attack_affinity`` is NOT stored here — it is resolved at post-pass time
+    from ``clash.triggering_threat_entry`` so the declaration is agnostic to the
+    affinity resolution strategy.
+    """
+
+    encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        related_name="clash_declarations",
+        help_text="The encounter this declaration belongs to.",
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="The encounter round this declaration is for (1-indexed).",
+    )
+    participant = models.ForeignKey(
+        "combat.CombatParticipant",
+        on_delete=models.CASCADE,
+        related_name="clash_declarations",
+        help_text="The PC participant making this contribution.",
+    )
+    clash = models.ForeignKey(
+        "combat.Clash",
+        on_delete=models.CASCADE,
+        related_name="declarations",
+        help_text="The active Clash this contribution is directed at.",
+    )
+    action_slot = models.CharField(
+        max_length=16,
+        choices=ClashActionSlot.choices,
+        help_text="Which action slot the PC commits: FOCUSED (primary) or PASSIVE (secondary).",
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The Technique the PC is using for this clash contribution.",
+    )
+    strain_commitment = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra anima committed on top of the technique's effective cost floor.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "round_number", "participant", "clash"],
+                name="unique_clash_declaration_per_round_per_participant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ClashContributionDeclaration("
+            f"encounter={self.encounter_id} "
+            f"round={self.round_number} "
+            f"participant={self.participant_id} "
+            f"clash={self.clash_id})"
         )

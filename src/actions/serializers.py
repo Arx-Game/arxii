@@ -61,6 +61,8 @@ class ActionRefSerializer(serializers.Serializer):
     approach_id = serializers.IntegerField(allow_null=True, required=False)
     technique_id = serializers.IntegerField(allow_null=True, required=False)
     registry_key = serializers.CharField(allow_null=True, required=False)
+    clash_id = serializers.IntegerField(allow_null=True, required=False)
+    clash_action_slot = serializers.CharField(allow_null=True, required=False)
 
 
 class PlayerActionSerializer(serializers.Serializer):
@@ -88,8 +90,10 @@ class PlayerActionSerializer(serializers.Serializer):
         return obj.difficulty.value
 
     @extend_schema_field(CheckTypeMinimalSerializer)
-    def get_check_type(self, obj: PlayerAction) -> dict[str, object]:
-        """Return minimal check_type representation (id + name)."""
+    def get_check_type(self, obj: PlayerAction) -> dict[str, object] | None:
+        """Return minimal check_type representation (id + name), or None for clash contributions."""
+        if obj.check_type is None:
+            return None
         return CheckTypeMinimalSerializer(obj.check_type).data
 
     @extend_schema_field(ActionTemplateMinimalSerializer)
@@ -118,6 +122,8 @@ class _DispatchRefSerializer(serializers.Serializer):
     approach_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     technique_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     registry_key = serializers.CharField(allow_null=True, required=False, default=None)
+    clash_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    clash_action_slot = serializers.CharField(allow_null=True, required=False, default=None)
 
 
 class DispatchActionSerializer(serializers.Serializer):
@@ -159,6 +165,8 @@ class DispatchActionSerializer(serializers.Serializer):
                 approach_id=ref_data.get("approach_id"),
                 technique_id=ref_data.get("technique_id"),
                 registry_key=ref_data.get("registry_key"),
+                clash_id=ref_data.get("clash_id"),
+                clash_action_slot=ref_data.get("clash_action_slot"),
             )
         except ValueError:
             raise serializers.ValidationError(

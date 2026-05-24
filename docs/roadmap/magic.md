@@ -1212,12 +1212,29 @@ The deferred items above, ordered by recommended sequence with rationale and own
 
 ### Cross-reference: combat clash-of-wills
 
-The planned combat **clash** feature (opposed-affinity casters contesting magical energy —
-see `docs/roadmap/combat.md`) is the caster-vs-caster analogue of this caster-vs-place
-interaction. When built, it MUST reuse the same `AffinityInteraction` rows and
-`ResonanceEnvironmentConfig` tuning rather than author a parallel opposition table — the
-affinity-opposition substrate is shared; clash only adds the contested-escalation mechanic
-on top.
+The combat **Clash** mechanic (see `docs/roadmap/combat.md` → "Clash of Wills") is now
+**SHIPPED** on branch `clash-design`. As designed, it reuses the same `AffinityInteraction`
+rows and `ResonanceEnvironmentConfig` tuning from this section — `affinity_tilt` in
+`src/world/combat/clash.py` applies the directed RPS matrix to each round's PC progress
+delta without authoring any parallel opposition table.
+
+### Strain mechanism (breadcrumb — Clash is the v1 consumer)
+
+The **Strain mechanism** — anima committed *beyond* a technique's base cost to escalate
+clash contributions — is built general in `src/world/combat/clash.py` and threaded into
+`use_technique` via an additive `strain_commitment: int = 0` kwarg and a corresponding
+extension to `calculate_effective_anima_cost`. The diminishing-returns conversion curve
+(anima → progress delta) is tuned via the `StrainConfig` singleton in
+`world/combat/models.py`.
+
+The sole v1 consumer is Clash: `commit_to_clash` passes the PC's declared anima
+commitment as the strain amount when it calls `use_technique` in clash-commit mode.
+
+**Regular-cast Strain integration is deferred.** Wiring Strain into ordinary technique
+casts — where a player chooses to push harder on a normal Flame Lance outside a clash —
+requires the regular-cast action UI and a non-clash Strain audit record. That surface is
+broader than Clash and is not built in this branch. The `strain_commitment` kwarg exists
+and is exercised; the authored decision surface for non-clash casts is the follow-up.
 
 ---
 
