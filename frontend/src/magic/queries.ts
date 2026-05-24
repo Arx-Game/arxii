@@ -402,6 +402,25 @@ export function useCommitPull() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Technique detail hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a single Technique by PK, including intensity, control, and anima_cost.
+ *
+ * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ * Disabled when id is undefined or 0.
+ */
+export function useTechnique(id: number | undefined) {
+  return useQuery({
+    queryKey: ['magic', 'technique', id ?? 0],
+    queryFn: () => api.getTechnique(id!),
+    enabled: id !== undefined && id > 0,
+    staleTime: 60_000,
+  });
+}
+
 /**
  * Accept a ThreadWeavingTeachingOffer.
  * Invalidates teachingOffers and threadHubSummary on success.

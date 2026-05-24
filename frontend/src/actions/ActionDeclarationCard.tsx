@@ -14,14 +14,14 @@
  * - `onSubmit` — wired by the combat panel in Phase 7.
  * - Real target picker with combatants list — deferred to Phase 7.
  * - ThreadPullPicker embedding — deferred to Phase 6.4.
- * - Effort selector, I/C chip, cost preview — Task 5.3.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
-import type { ActionContext } from './types';
+import { useTechnique } from '@/magic/queries';
+import type { ActionContext, EffortLevel } from './types';
 
 // ---------------------------------------------------------------------------
 // Public props contract
@@ -33,6 +33,50 @@ export interface ActionDeclarationCardProps {
   actionContext: ActionContext;
   onContextChange: (next: ActionContext) => void;
   readOnly?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Effort pills sub-component
+// ---------------------------------------------------------------------------
+
+const EFFORT_LABELS: Record<EffortLevel, string> = {
+  VERY_LOW: 'Very Low',
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  VERY_HIGH: 'Very High',
+};
+
+const EFFORT_ORDER: EffortLevel[] = ['VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+
+interface EffortSelectorProps {
+  selected: EffortLevel;
+  onChange: (effort: EffortLevel) => void;
+  disabled?: boolean;
+}
+
+function EffortSelector({ selected, onChange, disabled }: EffortSelectorProps) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {EFFORT_ORDER.map((level) => (
+        <button
+          key={level}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(level)}
+          className={cn(
+            'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            selected === level
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+          )}
+        >
+          {EFFORT_LABELS[level]}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +169,72 @@ function TargetPicker({ targetId, targetKind, onTargetChange, disabled }: Target
 }
 
 // ---------------------------------------------------------------------------
+// I/C chip sub-component
+// ---------------------------------------------------------------------------
+
+interface ICChipProps {
+  intensity: number;
+  control: number;
+}
+
+function ICChip({ intensity, control }: ICChipProps) {
+  const isOverburn = intensity > control;
+
+  return (
+    <span
+      data-testid="ic-chip"
+      title={
+        isOverburn
+          ? 'Intensity exceeds Control — overburn risk'
+          : 'Control meets or exceeds Intensity — comfortable cast'
+      }
+      className={cn(
+        'inline-flex items-center rounded border px-2 py-0.5 text-xs font-mono',
+        isOverburn
+          ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+          : 'bg-muted border-border text-muted-foreground'
+      )}
+    >
+      I:{intensity} / C:{control}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cost preview sub-component
+//
+// This is intentionally informational and computed client-side.
+// Real cost is computed server-side at cast time. The formula here is
+// a heuristic:
+//   - control >= intensity  → 0 anima (comfortable)
+//   - intensity > control   → ~anima_cost anima (overburn risk — server confirms)
+// ---------------------------------------------------------------------------
+
+interface CostPreviewProps {
+  intensity: number;
+  control: number;
+  animaCost: number;
+}
+
+function CostPreview({ intensity, control, animaCost }: CostPreviewProps) {
+  const isOverburn = intensity > control;
+
+  if (isOverburn) {
+    return (
+      <p className="text-xs text-amber-400">
+        Cost: ~{animaCost} anima · (overburn risk — server confirms at cast)
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-xs text-muted-foreground">
+      Cost: 0 anima · (Control &ge; Intensity, comfortable)
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Section wrapper
 // ---------------------------------------------------------------------------
 
@@ -158,6 +268,10 @@ export function ActionDeclarationCard({
     enabled: characterId > 0,
   });
 
+  // Fetch technique detail for I/C chip and cost preview (Task 5.3).
+  // Route: GET /api/magic/techniques/<id>/ via useTechnique (magic/queries.ts).
+  const { data: techniqueDetail } = useTechnique(actionContext.techniqueId);
+
   const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
 
   function handleTechniqueSelect(techniqueId: number) {
@@ -171,6 +285,10 @@ export function ActionDeclarationCard({
     onContextChange({ ...actionContext, targetKind, targetId });
   }
 
+  function handleEffortChange(effort: EffortLevel) {
+    onContextChange({ ...actionContext, effort });
+  }
+
   const hasTechnique = actionContext.techniqueId !== undefined;
 
   return (
@@ -180,6 +298,13 @@ export function ActionDeclarationCard({
         <h3 className="text-sm font-semibold capitalize">
           {actionContext.slot.replace(/-/g, ' ')}
         </h3>
+        {/* I/C chip — shown when technique detail is loaded */}
+        {techniqueDetail && (
+          <ICChip
+            intensity={techniqueDetail.intensity ?? 0}
+            control={techniqueDetail.control ?? 0}
+          />
+        )}
       </div>
 
       {/* Technique section */}
@@ -216,16 +341,28 @@ export function ActionDeclarationCard({
         />
       </Section>
 
-      {/* Effort section — placeholder; selectable pills added in Task 5.3 */}
+      {/* Effort section */}
       <Section label="Effort">
-        <p className="text-xs text-muted-foreground">{actionContext.effort}</p>
+        <EffortSelector
+          selected={actionContext.effort}
+          onChange={handleEffortChange}
+          disabled={readOnly}
+        />
       </Section>
 
       {/* Cost section */}
       <Section label="Cost">
-        <p className="text-xs text-muted-foreground">
-          {hasTechnique ? 'Calculating...' : '— select a technique first —'}
-        </p>
+        {techniqueDetail ? (
+          <CostPreview
+            intensity={techniqueDetail.intensity ?? 0}
+            control={techniqueDetail.control ?? 0}
+            animaCost={techniqueDetail.anima_cost}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {hasTechnique ? 'Loading cost...' : '— select a technique first —'}
+          </p>
+        )}
       </Section>
 
       {/* Thread pulls placeholder — wired in Phase 6.4 */}

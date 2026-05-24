@@ -13,6 +13,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { getRituals } from '@/rituals/api';
+import type { components } from '@/generated/api';
 import type {
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
@@ -49,6 +50,8 @@ import type {
   WeaveThreadRequest,
 } from './types';
 
+export type Technique = components['schemas']['Technique'];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -83,6 +86,7 @@ const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
 const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
 const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
+const TECHNIQUES_URL = '/api/magic/techniques';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -662,4 +666,20 @@ export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBri
   const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load rooms by property');
   return res.json() as Promise<RoomBrief[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Technique detail
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/techniques/{id}/
+ *
+ * Returns a single Technique with intensity, control, anima_cost and other stats.
+ * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ */
+export async function getTechnique(id: number): Promise<Technique> {
+  const res = await apiFetch(`${TECHNIQUES_URL}/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load technique ${id}`);
+  return res.json() as Promise<Technique>;
 }

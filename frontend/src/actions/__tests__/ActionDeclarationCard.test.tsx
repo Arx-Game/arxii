@@ -1,6 +1,12 @@
 /**
- * Tests for ActionDeclarationCard — Phase 5.1 and 5.2.
- * Task 5.3 (effort, I/C chip, cost preview) tests added in the next commit.
+ * Tests for ActionDeclarationCard — Phase 5.1, 5.2, and 5.3.
+ *
+ * Mocks:
+ * - @/scenes/actionQueries.fetchAvailableActions  (technique list)
+ * - @/magic/queries.useTechnique                  (I/C chip + cost preview)
+ *
+ * The card uses useTechnique (a React Query hook), so we mock the queries
+ * module directly to control what technique detail the card sees synchronously.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -19,9 +25,20 @@ vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
 }));
 
+// Mock useTechnique so we control what technique detail the card sees.
+vi.mock('@/magic/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/magic/queries')>();
+  return {
+    ...actual,
+    useTechnique: vi.fn(),
+  };
+});
+
 import { fetchAvailableActions } from '@/scenes/actionQueries';
+import * as magicQueries from '@/magic/queries';
 
 const mockedFetchActions = fetchAvailableActions as ReturnType<typeof vi.fn>;
+const mockedUseTechnique = magicQueries.useTechnique as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,6 +99,38 @@ const MOCK_TECHNIQUES = [
   },
 ];
 
+// intensity=8, control=5 → overburn (I > C)
+const TECHNIQUE_OVERBURN = {
+  id: 101,
+  name: 'Tidal Fury',
+  gift: 1,
+  style: 1,
+  effect_type: 1,
+  level: 1,
+  intensity: 8,
+  control: 5,
+  anima_cost: 3,
+  tier: 1,
+};
+
+// intensity=4, control=7 → comfortable (C >= I)
+const TECHNIQUE_COMFORTABLE = {
+  id: 102,
+  name: 'Storm Surge',
+  gift: 1,
+  style: 1,
+  effect_type: 1,
+  level: 1,
+  intensity: 4,
+  control: 7,
+  anima_cost: 1,
+  tier: 1,
+};
+
+function mockUseTechnique(data: typeof TECHNIQUE_OVERBURN | null) {
+  mockedUseTechnique.mockReturnValue({ data, isLoading: false, isError: false });
+}
+
 // ---------------------------------------------------------------------------
 // Task 5.1 — skeleton + empty-state tests
 // ---------------------------------------------------------------------------
@@ -89,6 +138,7 @@ const MOCK_TECHNIQUES = [
 describe('ActionDeclarationCard — Task 5.1 skeleton', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
+    mockUseTechnique(null);
   });
 
   it('renders with empty context (no technique picked yet)', async () => {
@@ -150,6 +200,7 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
       previous: null,
       results: MOCK_TECHNIQUES,
     });
+    mockUseTechnique(null);
   });
 
   it('lists available techniques for selection', async () => {
@@ -201,5 +252,191 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
 
     const tidalFuryBtn = screen.getByText('Tidal Fury').closest('button');
     expect(tidalFuryBtn).toHaveClass('border-primary');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5.3 — effort selector
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
+    mockUseTechnique(null);
+  });
+
+  it('renders all five effort pills', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByText('Very Low')).toBeInTheDocument();
+    expect(screen.getByText('Low')).toBeInTheDocument();
+    expect(screen.getByText('Medium')).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(screen.getByText('Very High')).toBeInTheDocument();
+  });
+
+  it('highlights the currently selected effort', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ effort: 'HIGH' })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const highPill = screen.getByText('High').closest('button');
+    expect(highPill).toHaveClass('bg-primary');
+  });
+
+  it('emits onContextChange when effort pill is clicked', async () => {
+    const onContextChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ effort: 'MEDIUM' })}
+        onContextChange={onContextChange}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await userEvent.click(screen.getByText('Low'));
+    expect(onContextChange).toHaveBeenCalledWith(
+      expect.objectContaining({ effort: 'LOW' })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5.3 — intensity/control chip
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({
+      count: MOCK_TECHNIQUES.length,
+      next: null,
+      previous: null,
+      results: MOCK_TECHNIQUES,
+    });
+  });
+
+  it('shows warning chip when intensity exceeds control', () => {
+    mockUseTechnique(TECHNIQUE_OVERBURN); // I:8 > C:5
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 101 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const chip = screen.getByTestId('ic-chip');
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent('I:8 / C:5');
+    expect(chip).toHaveClass('bg-amber-500/20');
+  });
+
+  it('shows neutral chip when control >= intensity', () => {
+    mockUseTechnique(TECHNIQUE_COMFORTABLE); // I:4, C:7
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 102 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const chip = screen.getByTestId('ic-chip');
+    expect(chip).toHaveTextContent('I:4 / C:7');
+    expect(chip).not.toHaveClass('bg-amber-500/20');
+  });
+
+  it('does not render chip when no technique is selected', () => {
+    mockUseTechnique(null);
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('ic-chip')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5.3 — cost preview line
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({
+      count: MOCK_TECHNIQUES.length,
+      next: null,
+      previous: null,
+      results: MOCK_TECHNIQUES,
+    });
+  });
+
+  it('hides the cost line when no technique is selected', () => {
+    mockUseTechnique(null);
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByText(/0 anima/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/overburn/i)).not.toBeInTheDocument();
+  });
+
+  it('shows comfortable cost line when control >= intensity', () => {
+    mockUseTechnique(TECHNIQUE_COMFORTABLE); // I:4, C:7
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 102 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByText(/0 anima/i)).toBeInTheDocument();
+    expect(screen.getByText(/comfortable/i)).toBeInTheDocument();
+  });
+
+  it('shows overburn cost line when intensity > control', () => {
+    mockUseTechnique(TECHNIQUE_OVERBURN); // I:8 > C:5
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        actionContext={emptyContext({ techniqueId: 101 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByText(/overburn/i)).toBeInTheDocument();
   });
 });
