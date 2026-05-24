@@ -33,7 +33,7 @@ class InteractionFilter(django_filters.FilterSet):
 
     class Meta:
         model = Interaction
-        fields = ["persona", "scene", "mode", "visibility", "without_pose_link"]
+        fields = ["persona", "scene", "mode", "visibility"]
 
 
 class InteractionFavoriteFilter(django_filters.FilterSet):
