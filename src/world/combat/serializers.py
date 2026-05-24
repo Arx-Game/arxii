@@ -180,6 +180,34 @@ class RoundActionSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
+# Clash state serializer (for EncounterDetailSerializer.clashes)
+# ---------------------------------------------------------------------------
+
+
+class ClashStateSerializer(serializers.ModelSerializer):
+    """Compact read serializer for an active Clash, surfaced on EncounterDetail.
+
+    Exposes the fields needed by the frontend ActiveState rail section:
+    - id, flavor, status, progress, pc_win_threshold, npc_win_threshold
+    - npc_opponent_id (for labelling the clash target)
+
+    Phase 8, Task 8.4 — unified-combat-ui plan.
+    """
+
+    class Meta:
+        model = Clash
+        fields = [
+            "id",
+            "flavor",
+            "status",
+            "progress",
+            "pc_win_threshold",
+            "npc_win_threshold",
+            "npc_opponent",
+        ]
+
+
+# ---------------------------------------------------------------------------
 # List and detail serializers
 # ---------------------------------------------------------------------------
 
@@ -236,6 +264,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     current_round_actions = serializers.SerializerMethodField()
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
+    clashes = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatEncounter
@@ -257,6 +286,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "current_round_actions",
             "is_participant",
             "is_gm",
+            "clashes",
         ]
 
     def to_representation(self, instance: CombatEncounter) -> dict[str, Any]:
@@ -349,6 +379,19 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             participant__character_sheet__character_id__in=character_ids,
         )
         return RoundActionSerializer(own_actions, many=True).data  # type: ignore[return-value]
+
+    def get_clashes(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Return active Clash records for this encounter.
+
+        Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
+        rail section. Returns only ACTIVE clashes so resolved ones don't litter
+        the UI after the clash is done.
+        """
+        active_clashes = Clash.objects.filter(
+            encounter=obj,
+            status=ClashStatus.ACTIVE,
+        ).select_related("npc_opponent")
+        return ClashStateSerializer(active_clashes, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

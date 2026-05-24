@@ -11656,6 +11656,16 @@ export interface components {
             readonly is_participant: boolean;
             /** @description Check whether the requesting user is GM of the linked scene. */
             readonly is_gm: boolean;
+            /**
+             * @description Return active Clash records for this encounter.
+             *
+             *     Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
+             *     rail section. Returns only ACTIVE clashes so resolved ones don't litter
+             *     the UI after the clash is done.
+             */
+            readonly clashes: {
+                [key: string]: unknown;
+            }[];
         };
         /** @description Full encounter state with covenant-filtered action visibility. */
         EncounterDetailRequest: {

@@ -21,6 +21,24 @@ export type Opponent = components['schemas']['Opponent'];
 export type RoundAction = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
+// Local type for ClashState (from ClashStateSerializer, Phase 8)
+//
+// EncounterDetail.clashes is typed as {[key: string]: unknown}[] in the
+// generated schema because ClashStateSerializer is a SerializerMethodField
+// result. We declare the concrete shape here.
+// ---------------------------------------------------------------------------
+
+export interface ClashState {
+  id: number;
+  flavor: 'CLASH' | 'LOCK' | 'WARD' | 'BREAK';
+  status: 'ACTIVE' | 'RESOLVED';
+  progress: number;
+  pc_win_threshold: number;
+  npc_win_threshold: number | null;
+  npc_opponent: number;
+}
+
+// ---------------------------------------------------------------------------
 // Local types for available-combos
 //
 // GET /api/combat/{id}/available_combos/ → EncounterDetail (per generated schema),
