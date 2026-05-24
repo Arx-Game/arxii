@@ -15,6 +15,7 @@ from world.scenes.constants import (
 )
 from world.scenes.models import (
     Interaction,
+    InteractionAction,
     InteractionFavorite,
     InteractionReaction,
     InteractionTargetPersona,
@@ -186,3 +187,12 @@ class SceneActionRequestFactory(factory_django.DjangoModelFactory):
     action_key = "intimidate"
     status = ActionRequestStatus.PENDING
     difficulty_choice = DifficultyChoice.NORMAL
+
+
+class InteractionActionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionAction
+
+    pose = factory.SubFactory(InteractionFactory, mode=InteractionMode.POSE)
+    action_interaction = factory.SubFactory(InteractionFactory, mode=InteractionMode.ACTION)
+    ordering = 0
