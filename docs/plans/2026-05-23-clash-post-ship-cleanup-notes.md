@@ -97,10 +97,10 @@ order:
   `_find_combat_player_action_for_ref` that raises `UNKNOWN_ACTION_REF` for
   clash refs (clean failure rather than wrong-action match). Wiring the
   dispatch to call `declare_clash_contribution` is small and focused —
-  service + serializer already exist from Task 7.1.
+  service + serializer already exist from Task 7.1. **(done — unified-combat-ui Phases 0–12)**
 - **Frontend UI** — clash status panel showing meter + opportunity-to-commit /
   lend buttons. Backend reachable via the unified action interface + the new
-  dispatch path.
+  dispatch path. **(done — unified-combat-ui Phases 0–12; carry-forward items listed below)**
 
 ### Architectural follow-ups (cross-cutting)
 
@@ -145,3 +145,79 @@ Tehom mentioned having other items to fold into the same cleanup PR. Add
 them here as they're identified.
 
 - ...
+
+---
+
+## 4. Carry-forward from unified-combat-ui (Phases 0–12, shipped 2026-05-24)
+
+Items identified during the unified-combat-UI build that were intentionally
+deferred per spec §11 or require additional backend work before the UI can
+surface them. Source spec: `docs/superpowers/plans/2026-05-23-unified-combat-ui.md`.
+
+### Backend follow-ups
+
+- **`CombatRoundAction` → `Interaction` join FK for effect enumeration.** The
+  `GET /api/combat/action-outcome-details/` endpoint (Phase 9) returns empty
+  `effects` arrays per action ID because there is no FK linking
+  `CombatRoundAction` to the `Interaction` row that represents its outcome.
+  Adding this FK is a small migration; once it lands the endpoint can populate
+  effect rows from the `InteractionAction` bridge (spec §11 item 5).
+- **`ClashStateSerializer` missing `contributors` and `side_favored`.** The
+  `clashes` field on `EncounterDetailSerializer` returns clash state without
+  per-round contributor breakdowns or a `side_favored` signal. Pairing with
+  the ActiveState Commit/Lend wiring below.
+- **`CombatParticipant.available_strain` not exposed in API.** The `YourTurn`
+  strain slider is hardcoded `max=10`. Exposing `available_strain` on the
+  participant serializer unblocks accurate budget rendering.
+- **Focused-category resolution stubbed.** `YourTurn` currently resolves the
+  focused category as `passive-physical`. Needs `effect_type.category` or
+  `style.category` on the `PlayerAction` API response to pick the correct
+  category label per action.
+- **`lend-to-clash` dispatch not wired.** The Lend button is a UI stub; no
+  `CLASH_SUPPORT` `PlayerAction` descriptor exists on the backend. Requires
+  a new descriptor type and dispatch path.
+- **`submit_pose` REST endpoint does not broadcast via WebSocket.** The
+  detach-case path (breaking a pose-action link) uses REST; other scene
+  viewers see the new pose only on next refetch. The WebSocket push path
+  needs to be added to the `submit_pose` service.
+- **Fatigue model not exposed.** `VitalPools` shows `0/10` placeholders for
+  physical/social/mental fatigue. The fatigue model (effort pools, categories)
+  needs API endpoints before the UI can render real values.
+- **Conditions data not surfaced on `CombatantsList` rows.** The per-combatant
+  row renders no active conditions. Requires conditions to be included in the
+  encounter participant serializer (or a separate prefetch endpoint).
+
+### Frontend follow-ups
+
+- **Deep-link routing for outcome-detail effects.** `PoseUnitDetailPanel` has
+  a `{modal, id}` skeleton for navigating to a linked effect detail view, but
+  no navigation is wired. Blocked on the backend FK above; once effects are
+  returned, add a `useNavigate` call here.
+- **Auto-expand pose units on critical events (KO, death).** `PoseUnit` should
+  auto-open its detail panel when the linked action's outcome is a KO or death
+  event. Requires a player-preference toggle before it can ship (spec §11
+  item 6).
+- **`CombatOpponent` portrait FK — NPC avatars are initial-letter-only.** The
+  `PersonaAvatar` component falls back to an initials badge when no
+  `thumbnail_media_url` is present. `CombatOpponent` has an optional Persona
+  FK but no portrait field; NPC portraits remain initials-only until a portrait
+  FK or URL field is added (spec §11 item 7).
+- **ActiveState Commit/Lend buttons are UI stubs.** The `ActiveState` section
+  renders buttons that are disabled with a `TODO` marker. Wiring requires the
+  `ClashStateSerializer` contributors/side_favored data and the
+  `lend-to-clash` dispatch path above.
+
+### Out of scope (intentionally deferred per spec §11)
+
+- **Scene-side adoption of `<ActionDeclarationCard>` without a `ScenePull`
+  envelope.** The card component assumes it is rendered inside a combat turn
+  panel. Adapting it for the general scene composer is a separate slice.
+- **Positioning / zones integration.** Spatial layout of combatants, zone-aware
+  POV filtering for clash visibility, and zone-partition mechanics are all
+  blocked on the positioning/zones spec
+  (`docs/plans/2026-05-21-positioning-zones-design-notes.md`).
+- **Mobile responsive layout.** The C-frame `CombatScenePage` is desktop-first.
+  Responsive breakpoints are a polish pass, not a functionality blocker.
+- **WebSocket real-time push for all combat state.** The current UI polls on
+  user action. Full real-time push (encounter state changes, round resolution,
+  new poses) requires a WebSocket broadcast layer that is not yet built.
