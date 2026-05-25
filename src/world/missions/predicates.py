@@ -214,6 +214,93 @@ def _resolve_has_skill(character: ObjectDB, *, skill: str) -> bool:
     return ctv is not None and ctv.value > 0
 
 
+def _resolve_min_giver_standing(character: ObjectDB, *, giver: str, min_affection: int) -> bool:
+    """True if the character's standing with the named giver is >= ``min_affection``.
+
+    ``giver`` is the ``MissionGiver.slug`` (added in 0003 specifically for
+    stable string referencing). Standing is the giver's affection toward
+    the character, set by future flirt/seduce/aid checks (gameplay TBD —
+    the model just carries the integer). No standing row means affection
+    is implicitly 0. An unknown giver slug fails closed (returns False)
+    rather than raising — predicates are advisory gates, not assertions.
+    """
+    from world.missions.models import MissionGiverStanding  # noqa: PLC0415
+
+    standing = (
+        MissionGiverStanding.objects.filter(giver__slug=giver, character=character)
+        .values_list("affection", flat=True)
+        .first()
+    )
+    if standing is None:
+        # No row OR no such giver — affection is 0 either way.
+        # (For "no such giver" we could raise, but predicates fail closed
+        # on bad authoring per the broader design.)
+        if not _giver_exists(giver):
+            return False
+        return min_affection <= 0
+    return standing >= min_affection
+
+
+def _giver_exists(slug: str) -> bool:
+    """Internal helper: True if a MissionGiver with this slug exists."""
+    from world.missions.models import MissionGiver  # noqa: PLC0415
+
+    return MissionGiver.objects.filter(slug=slug).exists()
+
+
+def _resolve_has_resonance(character: ObjectDB, *, name: str) -> bool:
+    """True if the character has a CharacterResonance row for the named resonance.
+
+    Per the magic CLAUDE.md Resonance Pivot Spec A §2.2, row existence IS
+    "this character is associated with this resonance" — the row is both
+    identity anchor and currency bucket. Balance / lifetime_earned are not
+    consulted here; presence is enough.
+    """
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+    return CharacterResonance.objects.filter(
+        character_sheet=character.sheet_data,
+        resonance__name=name,
+    ).exists()
+
+
+def _resolve_has_codex_entry(character: ObjectDB, *, subject: str, name: str) -> bool:
+    """True if the character has fully learned (KNOWN) the named codex entry.
+
+    Identified by ``(subject, name)`` — ``CodexEntry`` is unique-together on
+    those two fields; neither alone is a stable identifier. UNCOVERED status
+    (seen-but-not-yet-learned) does NOT satisfy the gate. Knowledge is keyed
+    by ``RosterEntry`` (not CharacterSheet) because per codex/CLAUDE.md the
+    character's knowledge survives roster handoff; we walk
+    ``character.sheet_data.roster_entry`` to find it.
+    """
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+    try:
+        roster_entry = character.sheet_data.roster_entry
+    except AttributeError:
+        return False
+    return CharacterCodexKnowledge.objects.filter(
+        roster_entry=roster_entry,
+        entry__subject__name=subject,
+        entry__name=name,
+        status=CodexKnowledgeStatus.KNOWN,
+    ).exists()
+
+
+def _resolve_min_character_level(character: ObjectDB, *, level: int) -> bool:
+    """True if the character's current level is >= ``level``.
+
+    Reads ``CharacterSheet.current_level`` — the highest level across all
+    class assignments (returns 0 for unclassed characters). Same source the
+    front-door availability service uses for level-band filtering, so a
+    `min_character_level` predicate gate and the template's level_band are
+    consistent.
+    """
+    return int(character.sheet_data.current_level) >= level
+
+
 def _resolve_min_society_standing(character: ObjectDB, **_params: object) -> bool:
     """Stub-sealed resolver for society standing.
 
@@ -239,6 +326,10 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_thread_level": _resolve_min_thread_level,
     "min_trait": _resolve_min_trait,
     "has_skill": _resolve_has_skill,
+    "min_character_level": _resolve_min_character_level,
+    "has_codex_entry": _resolve_has_codex_entry,
+    "has_resonance": _resolve_has_resonance,
+    "min_giver_standing": _resolve_min_giver_standing,
     "min_society_standing": _resolve_min_society_standing,
 }
 

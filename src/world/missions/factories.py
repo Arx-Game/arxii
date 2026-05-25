@@ -220,6 +220,7 @@ class MissionGiverFactory(DjangoModelFactory):
         model = MissionGiver
 
     name = factory.Sequence(lambda n: f"Giver {n}")
+    slug = factory.Sequence(lambda n: f"giver-{n}")
     giver_kind = GiverKind.ROOM_TRIGGER
     target = None
     org = None

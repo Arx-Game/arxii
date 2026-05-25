@@ -950,6 +950,16 @@ class MissionGiver(SharedMemoryModel):
     """
 
     name = models.CharField(max_length=200)
+    slug = models.SlugField(
+        max_length=200,
+        unique=True,
+        help_text=(
+            "Stable string identifier (URL-safe). Used by predicate authoring "
+            "(e.g. min_giver_standing references a giver by slug) and by "
+            "future authoring-tool URLs. Required so that templates and "
+            "predicates have a refactor-safe pointer to a specific giver."
+        ),
+    )
     giver_kind = models.CharField(
         max_length=20,
         choices=GiverKind.choices,
