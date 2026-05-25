@@ -325,43 +325,45 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
     if not active_clashes:
         return []
 
+    # FOCUSED-only emission. Per the combat-resolution-loop design spec, a
+    # clash is something a PC is bound to by their focused action — there is
+    # no separate "passive contribution" concept. The PASSIVE descriptor was
+    # emitted in earlier code (and surfaced "Commit / Lend" as a player
+    # choice) but the dichotomy is wrong by design. The `ClashActionSlot.PASSIVE`
+    # enum value stays in the data model for v1 (no schema churn) but is
+    # unreachable from the public surface.
     result: list[PlayerAction] = []
     for clash in active_clashes:
         opponent_name = clash.npc_opponent.name
         flavor_label = clash.get_flavor_display()
         progress_summary = f"Progress: {clash.progress} / {clash.pc_win_threshold} (PC target)"
 
-        for slot in (ClashActionSlot.FOCUSED, ClashActionSlot.PASSIVE):
-            if slot == ClashActionSlot.FOCUSED:
-                display_name = f"Commit to {flavor_label}: {opponent_name}"
-                description = (
-                    f"Use your focused action slot to contribute to this clash. {progress_summary}."
-                )
-            else:
-                display_name = f"Lend strength to {flavor_label}: {opponent_name}"
-                description = (
-                    f"Use your passive action slot to support this clash. {progress_summary}."
-                )
+        display_name = f"Commit to {flavor_label}: {opponent_name}"
+        description = (
+            f"Use your focused action slot to contribute to this clash. {progress_summary}."
+        )
 
-            ref = ActionRef(
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT,
+            clash_id=clash.pk,
+            clash_action_slot=ClashActionSlot.FOCUSED.value,
+        )
+        result.append(
+            PlayerAction(
                 backend=ActionBackend.COMBAT,
-                clash_id=clash.pk,
-                clash_action_slot=slot.value,
+                display_name=display_name,
+                description=description,
+                ref=ref,
+                # check_type is None: technique chosen at declaration time determines the check.
+                check_type=None,
+                # v1: every PC in the encounter sees every active clash. The
+                # principal-vs-helper-vs-ineligible role distinction is deferred
+                # to a follow-up PR; for now every active clash surfaces a
+                # commit option to every encounter participant.
+                prerequisite_met=True,
+                prerequisite_reasons=[],
             )
-            result.append(
-                PlayerAction(
-                    backend=ActionBackend.COMBAT,
-                    display_name=display_name,
-                    description=description,
-                    ref=ref,
-                    # check_type is None: technique chosen at declaration time determines the check.
-                    check_type=None,
-                    # v1: every PC in the encounter sees every active clash (POV-filter is
-                    # post-positioning; see spec §4).
-                    prerequisite_met=True,
-                    prerequisite_reasons=[],
-                )
-            )
+        )
 
     return result
 
