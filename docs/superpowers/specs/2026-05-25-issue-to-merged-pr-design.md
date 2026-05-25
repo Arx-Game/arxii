@@ -35,7 +35,7 @@ START
        └── poll cheap checks (lint, frontend) within ~90s of push
        └── back off to ~3-5 min intervals for backend tests
        └── on failure: read failure log, attempt fix, push, restart cadence
-       └── stop after 3 consecutive attempts on the same check → diagnostic PR comment, await human
+       └── stop after 3 attempts on the same (check-name, failure-signature) OR 5 total pushes on this PR → diagnostic PR comment, await human (see Bail conditions)
   └── (Session ends here — review on GitHub is async)
   └── PR-comment phase (re-invocation): agent reads PR comments, addresses each, pushes, returns to CI watch
   └── Conflict-during-review phase: if main has moved or user requests rebase, agent re-syncs and re-comments cross-issue impacts
@@ -48,6 +48,34 @@ Pickup→Push, then exits while CI runs and human review is async. The user
 re-invokes the skill in a new session pointing at the PR; the agent reads PR
 state and picks up the right phase. No persistent on-disk workflow state —
 GitHub holds the truth.
+
+### Phase detection on re-invocation
+
+When invoked against an existing PR (`/issue-to-merged-pr 47` where the branch
+already has an open PR, or `/issue-to-merged-pr` with no arg and the current
+branch matches the convention), the agent runs `gh pr view --json
+state,merged,merged_at,statusCheckRollup,reviewDecision,mergeStateStatus`
+first, then — only if checks are all-success and the PR is open — calls
+`read-pr-comments.sh` to populate the unread-comments cell. Phase is picked
+from this table (rows evaluated top-to-bottom; first match wins):
+
+| `state` | `merged` | `mergeStateStatus` | `statusCheckRollup` aggregate | unread-comments | Phase |
+|---|---|---|---|---|---|
+| `MERGED` | `true` | — | — | — | **Post-merge cleanup** |
+| `CLOSED` | `false` | — | — | — | **Closed-without-merge** (notify user, exit) |
+| `OPEN` | `false` | `DIRTY` / `BEHIND` | — | — | **Conflict-during-review** (re-sync with main, re-run cross-issue overlap, push) |
+| `OPEN` | `false` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
+| `OPEN` | `false` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
+| `OPEN` | `false` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
+| `OPEN` | `false` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
+
+"Unread comments" is defined per the `read-pr-comments.sh` marker mechanism
+(see Script contracts). The agent never has to ask the user "where are we" —
+the phase is a pure function of GitHub state.
+
+If the current branch has no open PR but matches the convention
+`<type>-<N>-<slug>`, the agent is mid-implementation and resumes from the
+Implementation step of the lifecycle (continuing the plan).
 
 ## File layout
 
@@ -63,7 +91,7 @@ tools/skills/issue-to-merged-pr/
 │   ├── comment-on-issue.sh        # post a comment to an existing issue
 │   ├── watch-ci.sh                # smart-cadence polling loop, exits when checks settle
 │   ├── get-ci-failure.sh          # given a failing check, fetch concise diagnostic logs
-│   ├── read-pr-comments.sh        # fetch comments newer than last branch commit
+│   ├── read-pr-comments.sh        # fetch comments newer than last-addressed marker
 │   └── post-merge-cleanup.sh      # checkout main, pull, branch delete, related-issue actions
 └── templates/
     ├── pr-body.md                 # PR body template (Closes / Follow-ups / Notes)
@@ -82,10 +110,10 @@ the state-mutating ones.
 - **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → pushes (with `--force-with-lease` if branch was rebased), opens PR via `gh pr create` with body composed from `templates/pr-body.md`; emits PR number. `--dry-run` prints the body without pushing.
 - **file-followup.sh** `<title> <body-path> <labels...>` → `gh issue create`; emits issue number. `--dry-run` prints the title/body/labels.
 - **comment-on-issue.sh** `<issue-number> <body-path>` → `gh issue comment`. `--dry-run` prints the comment.
-- **watch-ci.sh** `<pr-number>` → blocks with internal `sleep` calls per cadence below; exits when checks settle. Stdout: `OK` or `FAIL <check-name>`.
+- **watch-ci.sh** `<pr-number>` → blocks with internal `sleep` calls per cadence below; exits when checks settle. Stdout: `OK` or `FAIL <check-name>`. **Idempotent across sessions:** on start, queries `gh pr checks` first; if no checks are pending, exits immediately with the current rollup status (no sleep). This makes re-invocation while a prior session's CI is mid-run safe — the new session walks straight into the right phase via the phase-detection table rather than racing a stale watch. There is no inter-session lock: GitHub is the single source of truth, multiple agents querying it concurrently is harmless.
 - **get-ci-failure.sh** `<pr-number> <check-name>` → emits last ~200 lines of failing job log + failure summary.
-- **read-pr-comments.sh** `<pr-number>` → emits unread comments (those authored after the most recent commit on the branch by the active git author).
-- **post-merge-cleanup.sh** `<branch> <pr-number>` → switches to main, pulls, deletes branch; emits JSON of linked-issue actions taken. `--dry-run` prints actions without performing them.
+- **read-pr-comments.sh** `<pr-number>` → emits unread comments — those authored after the comment ID recorded in the PR body's marker `<!-- last-addressed-comment: <id> -->`. If the marker is missing, all comments are returned. Fetches both issue-style PR comments (`gh api repos/:owner/:repo/issues/:pr/comments`) and review-thread comments (`gh api repos/:owner/:repo/pulls/:pr/comments`); merges by `created_at`. After the agent addresses comments and pushes, it updates the marker to the highest-seen comment ID via `gh pr edit --body` (preserving the rest of the body). This avoids the fragility of timestamp-relative-to-commit filtering: a tiny follow-up push doesn't make older unaddressed comments disappear, and a force-push doesn't reset the marker.
+- **post-merge-cleanup.sh** `<branch> <pr-number>` → switches to main, pulls, deletes branch; emits JSON of linked-issue actions taken. `--dry-run` prints actions without performing them. **Dirty-tree handling:** if the working tree has uncommitted changes when the script is invoked, it exits non-zero with a structured error naming the dirty files — never stashes, never resets. This is deliberate: the user (or a parallel agent session) may have started unrelated work; silently stashing or discarding it loses that work. The agent then surfaces the message to the user and waits for them to commit, stash, or discard explicitly. **Branch deletion after squash-merge:** the script tries `git branch -d <branch>` first; if it fails (the squash-merge commit on `main` doesn't contain the feature branch's commits as ancestors, so safe-delete reliably fails after squash), the script then verifies the PR is `merged: true` via `gh pr view --json merged` and falls back to `git branch -D`. If `merged` is `false`, the script aborts without forcing — that state means cleanup was invoked prematurely.
 
 ### Templates
 
@@ -106,7 +134,11 @@ Closes #{{issue_number}}
 
 - Brainstorm/plan: {{ran_or_skipped}}{{spec_link}}
 - Sync-with-main: {{sync_summary}}
+
+<!-- last-addressed-comment: 0 -->
 ```
+
+The trailing HTML comment is the marker `read-pr-comments.sh` reads. After the agent addresses comments and pushes, it updates the marker inline using `gh pr edit <pr> --body "<new-body-with-marker-bumped>"` (read the current body, replace the marker line, write it back — no dedicated script for this). Initial value `0` means "no comments addressed yet" — all comments are unread on first read.
 
 `templates/followup-issue.md`:
 
@@ -167,23 +199,40 @@ implementation.
 ```json
 {
   "conflicts": ["src/world/combat/views.py", "src/world/scenes/models.py"],
+  "conflict_symbols": ["resolve_round", "SceneFactory"],
   "potentially_impacted_issues": [
-    {"number": 73, "title": "...", "matched_on": ["src/world/scenes/models.py"]}
+    {"number": 73, "title": "...", "matched_on": ["src/world/scenes/models.py"]},
+    {"number": 81, "title": "...", "matched_on": ["resolve_round"]}
   ]
 }
 ```
 
-Match rule: substring match of conflicted file path against any open issue's
-body + comments. Cheap; over-inclusive. The agent then decides per-match
-whether the impact is real, and calls `comment-on-issue.sh` for real ones.
-Spurious matches are ignored. The skill prefers false positives
-(unnecessary comment) to false negatives (silent silo across issues).
+Match rule: substring match of (a) conflicted file paths and (b) symbol
+names from conflicted diff hunks (function/class/method names extracted
+from `git diff --unified=0` hunk headers, e.g. `@@ ... def resolve_round(
+...`) against any open issue's body + comments. Cheap; over-inclusive on
+purpose. The symbol-name pass catches issues that discuss work
+conceptually (`"the resolve_round logic"`) without naming the file. The
+agent then decides per-match whether the impact is real, and calls
+`comment-on-issue.sh` for real ones. Spurious matches are ignored. The
+skill prefers false positives (unnecessary comment) to false negatives
+(silent silo across issues).
 
 ### When to bail (stop and wait for human)
 
-- Same CI check fails 3 consecutive attempts. Agent posts a diagnostic
-  comment summarizing what it tried, what failed, what it suspects, then
-  exits.
+- **CI check repeat-failure.** The same `(check-name, failure-signature)`
+  pair fails 3 times across pushes on this PR. `failure-signature` is the
+  name of the first failing test (for test jobs), the first error-prefixed
+  line (for lint/build jobs), or the job's first non-zero exit context (for
+  others). Reading is from `get-ci-failure.sh`'s output. This distinguishes
+  "the same bug, three times" (real bail) from "lint failed three different
+  ways" (still iterating).
+- **CI thrash cap.** 5 total pushes on this PR across all fix attempts,
+  regardless of which check failed. Catches the "fix-one-break-another"
+  loop the per-check counter would let slide. Bail comment lists every
+  push's check outcomes so the human can see the thrash.
+- Both CI bails post a diagnostic comment (what was tried, what failed each
+  time, what the agent suspects) and exit.
 - Sync-with-main produces conflicts the agent can't auto-resolve confidently
   (e.g. concurrent changes to the same function body, not "different lines
   in same file"). Posts a comment listing the conflict + the impacted issues
@@ -208,9 +257,15 @@ work) stays. Scope expands from read-only to:
 | Contents | — | ✓ |
 | Pull requests | — | ✓ |
 | Issues | — | ✓ |
+| Workflows | — | ✓ |
 | Actions | ✓ | — |
 | Checks | ✓ | — |
 | Dependabot alerts | ✓ | — |
+
+`Workflows: write` is needed because CI fixes occasionally touch
+`.github/workflows/*.yml` (e.g., adjusting a job's environment, fixing a
+matrix entry). GitHub rejects pushes that modify workflow files without
+this scope, even when `Contents: write` is granted.
 
 One token, scoped to `arxii` repo only. Each maintainer creates their own
 under their own GitHub identity so commits are correctly attributed.
@@ -241,13 +296,21 @@ done
 ```
 
 `-sfn` is idempotent — re-runs cleanly. New skills committed to `tools/skills/`
-appear automatically on the next container creation.
+appear automatically on the next container creation. The paths are
+devcontainer-specific (`/workspaces/arxii`, `/home/vscode/.claude`); the
+bare-metal equivalent uses `$HOME/.claude/skills` and the repo root, captured
+in the README one-liner.
 
 `tools/skills/README.md` is updated:
 
-- Drops the manual `cp -r` instructions in favor of the symlink note.
-- Adds a "in the devcontainer this is automatic; for bare-metal, use the
-  one-liner above" framing.
+- Keeps the manual `cp -r` instructions as the **Windows bare-metal**
+  fallback (symlinks on Windows require developer mode or an elevated
+  shell; `cp -r` works without privileges, at the cost of needing manual
+  refresh when skills change).
+- Adds the symlink one-liner as the recommended path for macOS / Linux
+  bare-metal users.
+- Adds a "in the devcontainer this is automatic; for bare-metal, see the
+  options below" framing.
 
 The `tools/skills/workflow-friction-audit/` directory is **deleted** as part
 of the same commit. Its model (track permission-prompt friction; propose
@@ -267,7 +330,12 @@ That fires on "work on issue 47", "pick up #47", "open a PR for the
 friction-skill rework", etc.
 
 `CLAUDE.md`'s Git Workflow section gets a one-line cross-reference pointing
-at the skill.
+at the skill, and its existing "**No GitHub CLI:** Do not use `gh` commands"
+rule is scoped: the prohibition applies to ad-hoc agent usage; the
+`issue-to-merged-pr` skill's scripts are the sanctioned `gh` consumer (token
+auth + branch protection + audited script contracts make it safe in a way
+ad-hoc `gh` calls are not). The plan should land both edits in the same PR
+that introduces the skill.
 
 ## Validation
 
