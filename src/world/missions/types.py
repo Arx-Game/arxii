@@ -25,11 +25,33 @@ if TYPE_CHECKING:
         MissionParticipant,
         MissionRewardQueue,
     )
+    from world.scenes.models import Persona
 
-# A leaf resolver tests one slice of the acting character's own durable
-# state. It receives the acting character (ObjectDB) plus the leaf's
-# authored params (keyword-only) and returns a bool. The registry maps a
-# leaf name to one resolver.
+
+@dataclass(frozen=True)
+class ResolverContext:
+    """What a predicate-leaf resolver gets called with.
+
+    ``character`` is the acting Character (ObjectDB) — always present and
+    the source-of-truth for character-keyed state. ``presented_persona``
+    is the persona the character is currently presenting as (the mask
+    they're wearing), or None if the caller did not specify one. Resolvers
+    that gate on persona-keyed state (society reputation, org membership,
+    org reputation) consult ``presented_persona``; non-persona resolvers
+    ignore it.
+
+    See ``CharacterPredicateContext`` for the runtime that constructs this
+    and dispatches to the registry.
+    """
+
+    character: ObjectDB
+    presented_persona: Persona | None = None
+
+
+# A leaf resolver tests one slice of the acting character's state. It
+# receives a ResolverContext (character + optional presented_persona) plus
+# the leaf's authored params (keyword-only) and returns a bool. The
+# registry maps a leaf name to one resolver.
 LeafResolver = Callable[..., bool]
 LeafRegistry = dict[str, LeafResolver]
 

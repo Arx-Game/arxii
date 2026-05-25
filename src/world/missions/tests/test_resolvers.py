@@ -412,6 +412,34 @@ class GiverStandingResolverTests(TestCase):
         self.assertTrue(evaluate(rule, self.ctx))
 
 
+class PresentedPersonaContextTests(TestCase):
+    """C5 refactor: CharacterPredicateContext carries presented_persona.
+
+    Verifies the ResolverContext plumbing — resolvers receive the persona
+    the offering surface specified. Non-persona resolvers ignore it
+    (covered by every C1-C4 test, which passes None implicitly).
+    Persona-aware resolvers (C6-C8) consume it.
+    """
+
+    def test_default_persona_is_none(self) -> None:
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        ctx = CharacterPredicateContext(character)
+        self.assertIsNone(ctx.presented_persona)
+
+    def test_persona_passes_through_to_resolver(self) -> None:
+        # Until C6-C8 land a persona-aware resolver to call, the test
+        # asserts the context attribute is settable + readable. The
+        # ResolverContext dataclass freezes it at dispatch time.
+        from world.scenes.factories import PersonaFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        persona = PersonaFactory(character_sheet=sheet)
+        ctx = CharacterPredicateContext(character, presented_persona=persona)
+        self.assertIs(ctx.presented_persona, persona)
+
+
 class SocietyStandingResolverStubTests(unittest.TestCase):
     """Stub-seal: societies standing model is persona-keyed and ambiguous."""
 
