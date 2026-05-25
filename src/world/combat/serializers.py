@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
@@ -190,9 +191,12 @@ class ClashStateSerializer(serializers.ModelSerializer):
     Exposes the fields needed by the frontend ActiveState rail section:
     - id, flavor, status, progress, pc_win_threshold, npc_win_threshold
     - npc_opponent_id (for labelling the clash target)
-
-    Phase 8, Task 8.4 — unified-combat-ui plan.
+    - contributors: per-PC contribution rollup (latest round)
+    - side_favored: "PC" / "NPC" / "EVEN" computed from progress vs thresholds.
     """
+
+    contributors = serializers.SerializerMethodField()
+    side_favored = serializers.SerializerMethodField()
 
     class Meta:
         model = Clash
@@ -204,7 +208,83 @@ class ClashStateSerializer(serializers.ModelSerializer):
             "pc_win_threshold",
             "npc_win_threshold",
             "npc_opponent",
+            "contributors",
+            "side_favored",
         ]
+
+    def get_contributors(self, obj: Clash) -> list[dict[str, object]]:
+        """Per-PC contribution rollup across all rounds of the clash.
+
+        Sums each contributor's progress_delta + anima_committed. Returns
+        a list of dicts shaped for the frontend ActiveState card:
+            {character_id, character_name, action_slot, progress_delta, anima}
+
+        Reads through ``clash.rounds.cached_contributions`` when the
+        EncounterCombatHandler prefetch is in play; falls back to a query
+        otherwise.
+        """
+        from collections import defaultdict  # noqa: PLC0415
+
+        totals: dict[int, dict[str, object]] = defaultdict(
+            lambda: {
+                "character_id": None,
+                "character_name": "",
+                "action_slot": "",
+                "progress_delta": 0,
+                "anima": 0,
+            }
+        )
+
+        # Walk rounds + contributions. Use cached_rounds/cached_contributions
+        # if the handler-prefetch is in scope; fall back to live query otherwise.
+        if hasattr(obj, "cached_rounds"):
+            rounds = obj.cached_rounds
+        else:
+            from world.combat.models import ClashContribution  # noqa: PLC0415
+
+            rounds = list(
+                obj.rounds.all().prefetch_related(
+                    Prefetch(
+                        "contributions",
+                        queryset=ClashContribution.objects.select_related("character"),
+                        to_attr="cached_contributions",
+                    ),
+                )
+            )
+        for clash_round in rounds:
+            if hasattr(clash_round, "cached_contributions"):
+                contribs = clash_round.cached_contributions
+            else:
+                contribs = list(clash_round.contributions.select_related("character"))
+            for c in contribs:
+                bucket = totals[c.character_id]
+                bucket["character_id"] = c.character_id
+                bucket["character_name"] = c.character.character.db_key if c.character_id else ""
+                # Most-recent action_slot wins (each round may use a different slot).
+                bucket["action_slot"] = c.action_slot
+                bucket["progress_delta"] = int(bucket["progress_delta"]) + c.progress_delta
+                bucket["anima"] = int(bucket["anima"]) + c.anima_committed
+        return list(totals.values())
+
+    # Side-favored values surfaced to the frontend.
+    SIDE_FAVORED_PC = "PC"
+    SIDE_FAVORED_NPC = "NPC"
+    SIDE_FAVORED_EVEN = "EVEN"
+
+    def get_side_favored(self, obj: Clash) -> str:
+        """PC / NPC / EVEN — computed from current progress vs thresholds.
+
+        Heuristic: a side is "favored" when progress is past 75% of that side's
+        win threshold. Else "EVEN."
+        """
+        pc_threshold = obj.pc_win_threshold or 0
+        npc_threshold = obj.npc_win_threshold
+
+        if pc_threshold > 0 and obj.progress >= pc_threshold * 0.75:
+            return self.SIDE_FAVORED_PC
+        if npc_threshold is not None and obj.progress <= npc_threshold * 0.75:
+            return self.SIDE_FAVORED_NPC
+        return self.SIDE_FAVORED_EVEN
 
 
 # ---------------------------------------------------------------------------
