@@ -7,6 +7,7 @@ from world.missions.views import (
     MissionGiverOfferingViewSet,
     MissionGiverStandingViewSet,
     MissionGiverViewSet,
+    MissionInstanceViewSet,
     MissionNodeViewSet,
     MissionOptionRouteCandidateViewSet,
     MissionOptionRouteRewardViewSet,
@@ -48,6 +49,8 @@ router.register(
     MissionGiverStandingViewSet,
     basename="mission-giver-standing",
 )
+# D4.3 staff-power instance ops (list/retrieve/destroy only).
+router.register(r"instances", MissionInstanceViewSet, basename="mission-instance")
 
 urlpatterns = [
     path("", include(router.urls)),

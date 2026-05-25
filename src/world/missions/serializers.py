@@ -406,6 +406,29 @@ class MissionGiverOfferingSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class MissionInstanceSerializer(serializers.ModelSerializer):
+    """Staff-side serializer for MissionInstance (assign + remove surfaces).
+
+    Read-only for the common fields; the staff-assign action wraps the
+    `staff_assign_mission` service to populate these (so authors don't
+    POST to this endpoint to create instances — assign is a deliberate
+    operator gesture).
+    """
+
+    class Meta:
+        model = MissionInstance
+        fields = [
+            "id",
+            "template",
+            "current_node",
+            "status",
+            "started_at",
+            "completed_at",
+            "source_beat",
+        ]
+        read_only_fields = ["id", "started_at"]
+
+
 class MissionGiverStandingSerializer(serializers.ModelSerializer):
     """Staff CRUD for per-(giver, character) standing rows.
 

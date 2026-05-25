@@ -38,6 +38,7 @@ from world.missions.models import (
     MissionGiver,
     MissionGiverOffering,
     MissionGiverStanding,
+    MissionInstance,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -50,6 +51,7 @@ from world.missions.serializers import (
     MissionGiverOfferingSerializer,
     MissionGiverSerializer,
     MissionGiverStandingSerializer,
+    MissionInstanceSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
     MissionOptionRouteRewardSerializer,
@@ -121,6 +123,37 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
             )
         new_template = copy_template(source, new_slug=new_slug, new_name=new_name)
         serializer = MissionTemplateSerializer(new_template, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=("POST",))
+    def assign(self, request: Request, slug: str | None = None) -> Response:
+        """D4.3 — staff-power: drop this mission on a character.
+
+        POST body: ``{"character": <ObjectDB pk>}``. Bypasses all
+        availability filters (predicate / cooldown / level band / access
+        tier) — operator gesture, not a normal acceptance flow. Returns
+        the new MissionInstance shape.
+        """
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+
+        template = self.get_object()
+        character_id = request.data.get("character")
+        if not character_id:
+            return Response(
+                {"detail": "character (ObjectDB pk) is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            character = ObjectDB.objects.get(pk=character_id)
+        except ObjectDB.DoesNotExist:
+            return Response(
+                {"detail": f"No character with pk={character_id}."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        instance = staff_assign_mission(template, character)
+        serializer = MissionInstanceSerializer(instance, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -256,6 +289,30 @@ class MissionGiverOfferingViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverOfferingFilterSet
+
+
+class MissionInstanceViewSet(
+    viewsets.mixins.ListModelMixin,
+    viewsets.mixins.RetrieveModelMixin,
+    viewsets.mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Staff-power read + delete for MissionInstance rows.
+
+    No create endpoint — instances are spawned by ``accept_mission``
+    (player flow), ``staff_assign_mission`` (D4.3 assign action above),
+    or future Beat-driven launches. The Studio's "remove a stuck instance"
+    operation uses DELETE here.
+
+    No update endpoint — instance state is the tuple of (current_node +
+    snapshots + deeds) per design §7 invariant; the Studio doesn't mutate
+    it directly.
+    """
+
+    queryset = MissionInstance.objects.all().order_by("pk")
+    serializer_class = MissionInstanceSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
 
 
 class MissionGiverStandingViewSet(viewsets.ModelViewSet):
