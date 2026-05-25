@@ -60,6 +60,28 @@ if TYPE_CHECKING:
     from world.magic.models import Affinity, Technique
 
 
+def can_clash(
+    props_a: frozenset[int] | set[int],
+    props_b: frozenset[int] | set[int],
+) -> bool:
+    """Return True iff two effect-Property sets oppose each other in a clash.
+
+    Inputs are sets of ``mechanics.Property`` pks. Symmetric.
+
+    Rule: any non-empty overlap counts. Empty on either side returns False —
+    unauthored content cannot clash. Authoring discipline is the gate: if a
+    Property is too broad to be meaningful for clash-opposition, the fix is
+    to scope it more narrowly or to not put it on techniques that shouldn't
+    clash on it. The opposition system does not maintain a parallel
+    "clash-bearing" subset; Property is the single taxonomy.
+
+    Phase 3 — combat-resolution-loop PR.
+    """
+    if not props_a or not props_b:
+        return False
+    return bool(props_a & props_b)
+
+
 def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
     """Convert a strain commitment (anima poured in past the floor) to a check modifier.
 
