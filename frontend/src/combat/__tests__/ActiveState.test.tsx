@@ -47,8 +47,15 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     is_gm: false,
     participants: [],
     opponents: [
-      { id: 10, name: 'Mire Knight', tier: 'elite', health: 10, max_health: 10,
-        soak_value: null, probing_threshold: null },
+      {
+        id: 10,
+        name: 'Mire Knight',
+        tier: 'elite',
+        health: 10,
+        max_health: 10,
+        soak_value: null,
+        probing_threshold: null,
+      },
     ],
     current_round_actions: [],
     clashes: clashes as unknown as EncounterDetail['clashes'],
@@ -119,10 +126,9 @@ describe('ActiveState', () => {
     const onCommit = vi.fn();
     const clashes = [makeClash({ id: 5 })];
 
-    render(
-      <ActiveState encounter={makeEncounter(clashes)} onCommitClick={onCommit} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ActiveState encounter={makeEncounter(clashes)} onCommitClick={onCommit} />, {
+      wrapper: createWrapper(),
+    });
 
     await user.click(screen.getByTestId('clash-commit-btn-5'));
     expect(onCommit).toHaveBeenCalledWith(5);

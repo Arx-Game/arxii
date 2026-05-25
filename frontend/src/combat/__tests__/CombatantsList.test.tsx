@@ -123,10 +123,7 @@ describe('CombatantsList', () => {
   });
 
   it('NPC rows have destructive styling to distinguish from PCs', () => {
-    const encounter = makeEncounter(
-      [makeParticipant({ id: 1 })],
-      [makeOpponent({ id: 10 })]
-    );
+    const encounter = makeEncounter([makeParticipant({ id: 1 })], [makeOpponent({ id: 10 })]);
 
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
 
@@ -139,10 +136,7 @@ describe('CombatantsList', () => {
   });
 
   it('HP bar shows correct percentage for PC', () => {
-    const encounter = makeEncounter(
-      [makeParticipant({ id: 1, health: 5, max_health: 10 })],
-      []
-    );
+    const encounter = makeEncounter([makeParticipant({ id: 1, health: 5, max_health: 10 })], []);
 
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
 

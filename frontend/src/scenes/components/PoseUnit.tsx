@@ -37,12 +37,12 @@ function ActionChip({ link, onExpandRequest }: ActionChipProps) {
     <button
       className={cn(
         'flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5',
-        'text-xs text-foreground hover:bg-muted transition-colors',
+        'text-xs text-foreground transition-colors hover:bg-muted'
       )}
       onClick={onExpandRequest}
       title="Click to expand action details"
     >
-      <span className="truncate max-w-[16rem]">{action_interaction.content}</span>
+      <span className="max-w-[16rem] truncate">{action_interaction.content}</span>
       <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
     </button>
   );
@@ -61,25 +61,17 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
   const queryClient = useQueryClient();
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => postInteractionReaction(interaction.id, emoji),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
 
   return (
     <div className="mt-1 flex gap-2">
       {interaction.reactions.map((r) => (
-        <button
-          key={r.emoji}
-          className="text-sm"
-          onClick={() => reactionMutation.mutate(r.emoji)}
-        >
+        <button key={r.emoji} className="text-sm" onClick={() => reactionMutation.mutate(r.emoji)}>
           {r.emoji} {r.count}
         </button>
       ))}
-      <button
-        className="text-sm"
-        onClick={() => reactionMutation.mutate('\u{1F44D}')}
-      >
+      <button className="text-sm" onClick={() => reactionMutation.mutate('\u{1F44D}')}>
         {'\u{1F44D}'}
       </button>
     </div>
@@ -114,7 +106,10 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
       <div className="border-b py-2" data-testid="pose-unit-action-standalone">
         <div className="flex items-center gap-2">
           <PersonaAvatar
-            source={{ name: interaction.persona.name, thumbnailUrl: interaction.persona.thumbnail_url }}
+            source={{
+              name: interaction.persona.name,
+              thumbnailUrl: interaction.persona.thumbnail_url,
+            }}
             size="sm"
           />
           <PersonaContextMenu
@@ -151,7 +146,10 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
       {/* Header: avatar + name + timestamp */}
       <div className="flex items-center gap-2">
         <PersonaAvatar
-          source={{ name: interaction.persona.name, thumbnailUrl: interaction.persona.thumbnail_url }}
+          source={{
+            name: interaction.persona.name,
+            thumbnailUrl: interaction.persona.thumbnail_url,
+          }}
           size="sm"
         />
         <PersonaContextMenu
@@ -177,11 +175,7 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
       {hasLinks && (
         <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid="action-chips">
           {actionLinks.map((link) => (
-            <ActionChip
-              key={link.id}
-              link={link}
-              onExpandRequest={() => setExpanded((v) => !v)}
-            />
+            <ActionChip key={link.id} link={link} onExpandRequest={() => setExpanded((v) => !v)} />
           ))}
         </div>
       )}

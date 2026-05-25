@@ -158,10 +158,9 @@ describe('CombatTurnPanel — render smoke', () => {
       isError: false,
     });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('combat-panel-loading')).toBeInTheDocument();
   });
@@ -173,10 +172,9 @@ describe('CombatTurnPanel — render smoke', () => {
       isError: true,
     });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('combat-panel-error')).toBeInTheDocument();
   });
@@ -184,10 +182,9 @@ describe('CombatTurnPanel — render smoke', () => {
   it('renders the panel with header and YourTurn stub when participant', () => {
     mockEncounter({ round_number: 3, is_participant: true });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('combat-turn-panel')).toBeInTheDocument();
     expect(screen.getByText(/Your Turn — Round 3/)).toBeInTheDocument();
@@ -197,10 +194,9 @@ describe('CombatTurnPanel — render smoke', () => {
   it('shows observer badge and no YourTurn when not a participant', () => {
     mockEncounter({ is_participant: false });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByText(/Observer/i)).toBeInTheDocument();
     expect(screen.queryByTestId('your-turn-stub')).not.toBeInTheDocument();
@@ -210,10 +206,9 @@ describe('CombatTurnPanel — render smoke', () => {
   it('passes encounterId and roundNumber to YourTurn stub', () => {
     mockEncounter({ id: 7, round_number: 5, is_participant: true });
 
-    render(
-      <CombatTurnPanel encounterId={7} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={7} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('your-turn-stub')).toHaveTextContent('enc=7');
     expect(screen.getByTestId('your-turn-stub')).toHaveTextContent('round=5');
@@ -224,10 +219,9 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
   it('renders all six sections in spec order', () => {
     mockEncounter({ is_participant: true });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     const panel = screen.getByTestId('combat-turn-panel');
 
@@ -243,10 +237,9 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
   it('sections appear in the correct top-to-bottom DOM order', () => {
     mockEncounter({ is_participant: true });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     const panel = screen.getByTestId('combat-turn-panel');
     const allChildren = Array.from(panel.querySelectorAll('[data-testid]'));
@@ -276,13 +269,14 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
   it('all sections start expanded by default', () => {
     mockEncounter({ is_participant: true });
 
-    render(
-      <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />,
-      { wrapper: createWrapper() }
-    );
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
 
     // All toggle buttons should report aria-expanded=true
-    const toggles = screen.getAllByRole('button', { name: /round flow|resonance budget|vital pools|combatants|active state/i });
+    const toggles = screen.getAllByRole('button', {
+      name: /round flow|resonance budget|vital pools|combatants|active state/i,
+    });
     toggles.forEach((toggle) => {
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
     });

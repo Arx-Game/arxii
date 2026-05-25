@@ -102,9 +102,7 @@ interface TechniquePickerProps {
 
 function TechniquePicker({ techniques, selectedId, onSelect, disabled }: TechniquePickerProps) {
   if (techniques.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">No techniques available.</p>
-    );
+    return <p className="text-xs text-muted-foreground">No techniques available.</p>;
   }
 
   return (
@@ -125,7 +123,7 @@ function TechniquePicker({ techniques, selectedId, onSelect, disabled }: Techniq
                 : action.description
             }
             className={cn(
-              'rounded border px-2.5 py-1 text-xs font-medium transition-colors text-left',
+              'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed disabled:opacity-50',
               isSelected
                 ? 'border-primary bg-primary/10 text-primary'
@@ -199,10 +197,10 @@ function ICChip({ intensity, control }: ICChipProps) {
           : 'Control meets or exceeds Intensity — comfortable cast'
       }
       className={cn(
-        'inline-flex items-center rounded border px-2 py-0.5 text-xs font-mono',
+        'inline-flex items-center rounded border px-2 py-0.5 font-mono text-xs',
         isOverburn
-          ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-          : 'bg-muted border-border text-muted-foreground'
+          ? 'border-amber-500/40 bg-amber-500/20 text-amber-300'
+          : 'border-border bg-muted text-muted-foreground'
       )}
     >
       I:{intensity} / C:{control}
@@ -251,9 +249,7 @@ function CostPreview({ intensity, control, animaCost }: CostPreviewProps) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       {children}
     </div>
   );
@@ -297,9 +293,7 @@ export function ActionDeclarationCard({
   );
   const balanceByResonanceId = useMemo<Record<number, number>>(() => {
     if (!resonances) return {};
-    return Object.fromEntries(
-      resonances.map((cr) => [cr.resonance, cr.balance ?? 0])
-    );
+    return Object.fromEntries(resonances.map((cr) => [cr.resonance, cr.balance ?? 0]));
   }, [resonances]);
 
   // Build applicable-pulls context from current card state.
@@ -310,16 +304,19 @@ export function ActionDeclarationCard({
       technique_id: actionContext.techniqueId ?? null,
       target_persona_id:
         actionContext.targetKind === 'social' || actionContext.targetKind === 'ally'
-          ? actionContext.targetId ?? null
+          ? (actionContext.targetId ?? null)
           : null,
       target_object_id:
-        actionContext.targetKind === 'opponent'
-          ? actionContext.targetId ?? null
-          : null,
+        actionContext.targetKind === 'opponent' ? (actionContext.targetId ?? null) : null,
       scene_id: null, // wired in Phase 7 when CombatTurnPanel passes scene context
       effect_type_id: null,
     };
-  }, [characterSheetId, actionContext.techniqueId, actionContext.targetKind, actionContext.targetId]);
+  }, [
+    characterSheetId,
+    actionContext.techniqueId,
+    actionContext.targetKind,
+    actionContext.targetId,
+  ]);
 
   // Clear revert notice after 4 seconds
   useEffect(() => {
@@ -346,7 +343,7 @@ export function ActionDeclarationCard({
   const hasTechnique = actionContext.techniqueId !== undefined;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-4">
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold capitalize">
@@ -367,7 +364,7 @@ export function ActionDeclarationCard({
           <p className="text-xs text-muted-foreground">Loading techniques...</p>
         ) : !hasTechnique ? (
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground italic">Pick a technique</p>
+            <p className="text-xs italic text-muted-foreground">Pick a technique</p>
             <TechniquePicker
               techniques={techniques}
               selectedId={actionContext.techniqueId}
@@ -425,7 +422,7 @@ export function ActionDeclarationCard({
       <Section label="Thread Pulls">
         {/* Auto-revert notice */}
         {revertNotice && (
-          <p className="text-xs text-amber-400 mb-1" data-testid="revert-notice">
+          <p className="mb-1 text-xs text-amber-400" data-testid="revert-notice">
             {revertNotice}
           </p>
         )}

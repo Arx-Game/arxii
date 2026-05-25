@@ -84,9 +84,7 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
       <PersonaAvatar source={{ name: participant.character_name }} size="sm" />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">
-          {participant.character_name}
-        </p>
+        <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>
         {/* HP mini-bar */}
         <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
         {/* Condition icon row — placeholder until conditions in encounter payload.

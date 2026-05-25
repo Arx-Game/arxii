@@ -39,13 +39,10 @@ function ResonanceRow({ resonance }: ResonanceRowProps) {
   const name = resonance.resonance_name;
 
   const rowContent = (
-    <div
-      className="space-y-1"
-      data-testid={`resonance-row-${resonance.id}`}
-    >
+    <div className="space-y-1" data-testid={`resonance-row-${resonance.id}`}>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-foreground truncate">{name}</span>
-        <span className="ml-2 shrink-0 text-xs font-mono text-foreground">
+        <span className="truncate text-xs text-foreground">{name}</span>
+        <span className="ml-2 shrink-0 font-mono text-xs text-foreground">
           {balance}
           <span className="text-muted-foreground"> / {lifetime}</span>
         </span>
@@ -136,9 +133,10 @@ export function ResonanceBudget({
               No resonances claimed.
             </p>
           )}
-          {!isLoading && !isError && resonances !== undefined && resonances.map((r) => (
-            <ResonanceRow key={r.id} resonance={r} />
-          ))}
+          {!isLoading &&
+            !isError &&
+            resonances !== undefined &&
+            resonances.map((r) => <ResonanceRow key={r.id} resonance={r} />)}
         </div>
       )}
     </div>

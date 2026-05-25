@@ -56,9 +56,7 @@ describe('PoseUnitDetailPanel', () => {
 
   it('shows empty message when effects list is empty (v1 behavior)', async () => {
     mockUseOutcomeDetails.mockReturnValue({
-      data: [
-        { action_interaction_id: 1, effects: [] },
-      ],
+      data: [{ action_interaction_id: 1, effects: [] }],
       isLoading: false,
     } as unknown as ReturnType<typeof useOutcomeDetails>);
 

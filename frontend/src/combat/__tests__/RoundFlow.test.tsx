@@ -122,7 +122,11 @@ describe('RoundFlow', () => {
   });
 
   it('declarations counter shows correct ratio', () => {
-    const participants = [makeParticipant(1, 'A'), makeParticipant(2, 'B'), makeParticipant(3, 'C')];
+    const participants = [
+      makeParticipant(1, 'A'),
+      makeParticipant(2, 'B'),
+      makeParticipant(3, 'C'),
+    ];
     const encounter = makeEncounter(participants, [1, 3], 2);
 
     render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });

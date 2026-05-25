@@ -69,7 +69,7 @@ function BarRow({ label, current, maximum, fillClass = 'bg-primary', testId }: B
     <div className="space-y-1" data-testid={testId}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-foreground">{label}</span>
-        <span className="text-xs font-mono text-foreground">
+        <span className="font-mono text-xs text-foreground">
           {current}
           <span className="text-muted-foreground"> / {maximum}</span>
         </span>
@@ -101,9 +101,8 @@ export function VitalPools({
   const viewerParticipant = findViewerParticipant(encounter.participants);
   const health = viewerParticipant?.health ?? null;
   const maxHealth = viewerParticipant?.max_health ?? null;
-  const healthPct = health !== null && maxHealth !== null && maxHealth > 0
-    ? health / maxHealth
-    : null;
+  const healthPct =
+    health !== null && maxHealth !== null && maxHealth > 0 ? health / maxHealth : null;
   const isWounded = healthPct !== null && healthPct < 0.5;
 
   // Anima from the CharacterAnima record.
@@ -169,9 +168,7 @@ export function VitalPools({
             <div className="space-y-1" data-testid="vital-anima-bar">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground">Anima</span>
-                <span className="text-xs text-muted-foreground">
-                  {animaLoading ? '…' : '—'}
-                </span>
+                <span className="text-xs text-muted-foreground">{animaLoading ? '…' : '—'}</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-muted" />
             </div>
@@ -191,7 +188,7 @@ export function VitalPools({
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground">{label} Fatigue</span>
-                <span className="text-xs font-mono text-muted-foreground">
+                <span className="font-mono text-xs text-muted-foreground">
                   0 / 10
                   <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">
                     (placeholder)

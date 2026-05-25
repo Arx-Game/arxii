@@ -20,7 +20,7 @@ test.describe('Combat scene smoke tests', () => {
     // Filter expected API failures (404 on the non-existent scene/encounter — these are
     // network errors, not JS exceptions).
     const unexpectedErrors = consoleErrors.filter(
-      (e) => !e.includes('Failed to load resource') && !e.includes('favicon'),
+      (e) => !e.includes('Failed to load resource') && !e.includes('favicon')
     );
     expect(errors).toEqual([]);
     expect(unexpectedErrors).toEqual([]);

@@ -37,10 +37,7 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
 
   if (isError) {
     return (
-      <div
-        className="mt-2 rounded border bg-muted/30 p-3"
-        data-testid="pose-unit-detail-panel"
-      >
+      <div className="mt-2 rounded border bg-muted/30 p-3" data-testid="pose-unit-detail-panel">
         <p role="alert" className="text-sm text-destructive">
           Failed to load outcome details.
         </p>

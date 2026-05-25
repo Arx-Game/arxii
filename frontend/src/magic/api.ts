@@ -737,9 +737,7 @@ export interface CharacterAnimaRecord {
  * The response is a paginated list; we return the first result's record
  * since each character has at most one CharacterAnima row.
  */
-export async function getCharacterAnima(
-  characterId: number
-): Promise<CharacterAnimaRecord | null> {
+export async function getCharacterAnima(characterId: number): Promise<CharacterAnimaRecord | null> {
   const res = await apiFetch(`${CHARACTER_ANIMA_URL}?character=${characterId}`);
   if (!res.ok) throw new Error(`Failed to load anima for character ${characterId}`);
   const data = (await res.json()) as { results?: CharacterAnimaRecord[] } | CharacterAnimaRecord[];

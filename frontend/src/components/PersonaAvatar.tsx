@@ -37,7 +37,7 @@ export function PersonaAvatar({ source, size = 'md', className }: PersonaAvatarP
   const cls = cn(
     'rounded-full overflow-hidden flex items-center justify-center font-semibold text-white shrink-0',
     SIZE_CLASSES[size],
-    className,
+    className
   );
 
   if (url) {

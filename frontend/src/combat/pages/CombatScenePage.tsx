@@ -57,10 +57,7 @@ export function CombatScenePage() {
   const isActive = scene?.is_active ?? false;
 
   // Active encounter for this scene
-  const {
-    data: encounterListItem,
-    isLoading: encounterLoading,
-  } = useEncounterForScene(sceneIdNum);
+  const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
 
   // Active character from Redux global state
   const activeCharacter = useAppSelector((state) => state.game.active);
@@ -212,10 +209,7 @@ export function CombatScenePage() {
         </div>
 
         {/* Right column: CombatTurnPanel */}
-        <div
-          className="min-h-0 overflow-y-auto"
-          data-testid="combat-scene-right"
-        >
+        <div className="min-h-0 overflow-y-auto" data-testid="combat-scene-right">
           {encounterLoading ? (
             <div
               className="p-4 text-sm text-muted-foreground"

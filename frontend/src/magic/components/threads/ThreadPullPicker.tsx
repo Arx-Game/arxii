@@ -77,10 +77,7 @@ function anchorDescription(thread: Thread): string {
 
 type TierPreviews = Record<PaidTier, PullPreviewResponse | null>;
 
-function useRowTierPreviews(
-  thread: Thread,
-  characterSheetId: number
-): TierPreviews {
+function useRowTierPreviews(thread: Thread, characterSheetId: number): TierPreviews {
   const [previews, setPreviews] = useState<TierPreviews>({ 1: null, 2: null, 3: null });
 
   useEffect(() => {
@@ -144,7 +141,7 @@ function TierStrip({
       role="group"
       aria-label={`Tier selection for thread ${threadId}`}
     >
-      <span className="text-xs text-muted-foreground mr-1">Tier</span>
+      <span className="mr-1 text-xs text-muted-foreground">Tier</span>
       {tiers.map((tier) => {
         const isSelected = selectedTier === tier;
         const isTier0 = tier === 0;
@@ -172,15 +169,15 @@ function TierStrip({
             title={tooltipText}
             data-testid={`tier-btn-${threadId}-${tier}`}
             className={cn(
-              'rounded border px-2 py-0.5 text-xs font-medium transition-colors min-w-[28px]',
+              'min-w-[28px] rounded border px-2 py-0.5 text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed',
               isTier0 && isSelected
                 ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
                 : isUnaffordable
-                ? 'border-muted bg-muted/30 text-muted-foreground opacity-60'
-                : isSelected
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                  ? 'border-muted bg-muted/30 text-muted-foreground opacity-60'
+                  : isSelected
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
             )}
           >
             {String(tier)}
@@ -220,7 +217,7 @@ function ApplicableRow({
 
   return (
     <div
-      className="rounded-md border border-border bg-card p-3 space-y-2"
+      className="space-y-2 rounded-md border border-border bg-card p-3"
       data-testid={`applicable-row-${thread.id}`}
     >
       {/* Head */}
@@ -268,7 +265,7 @@ function ApplicableRow({
           <button
             type="button"
             onClick={() => onOpenDetails(thread)}
-            className="text-xs text-primary/80 hover:text-primary transition-colors"
+            className="text-xs text-primary/80 transition-colors hover:text-primary"
             data-testid={`details-btn-${thread.id}`}
           >
             ▸ details
@@ -291,7 +288,7 @@ interface InapplicableRowProps {
 function InapplicableRow({ thread, applicabilityRow }: InapplicableRowProps) {
   return (
     <div
-      className="rounded-md border border-dashed border-border/50 bg-card/40 p-3 space-y-2 opacity-60"
+      className="space-y-2 rounded-md border border-dashed border-border/50 bg-card/40 p-3 opacity-60"
       data-testid={`inapplicable-row-${thread.id}`}
     >
       {/* Head */}
@@ -439,7 +436,7 @@ export function ThreadPullPicker({
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-foreground">
           Thread pulls{' '}
-          <span className="font-normal text-muted-foreground text-xs">
+          <span className="text-xs font-normal text-muted-foreground">
             — {isLoading ? '…' : `${applicableCount} applicable`}
           </span>
         </h4>
@@ -465,7 +462,7 @@ export function ThreadPullPicker({
           )}
           data-testid="thread-name-filter"
         />
-        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+        <label className="flex cursor-pointer select-none items-center gap-1.5">
           <input
             type="checkbox"
             checked={showInapplicable}
@@ -481,7 +478,7 @@ export function ThreadPullPicker({
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading threads…</p>
       ) : filteredApplicable.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic" data-testid="no-applicable-threads">
+        <p className="text-xs italic text-muted-foreground" data-testid="no-applicable-threads">
           No applicable threads.
         </p>
       ) : (

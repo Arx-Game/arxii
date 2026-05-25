@@ -72,9 +72,7 @@ export function CombatTurnPanel({
   const { data: combatActions } = useAvailableActions(characterId);
 
   // Collapse state — all sections start expanded.
-  const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(
-    DEFAULT_COLLAPSE_STATE
-  );
+  const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
 
   function toggleSection(section: SectionName) {
     setCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -109,16 +107,12 @@ export function CombatTurnPanel({
 
   return (
     <div
-      className={cn(
-        'flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm'
-      )}
+      className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
       data-testid="combat-turn-panel"
     >
       {/* Panel header — round number + observer badge */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-foreground">
-          Your Turn — Round {roundNumber}
-        </h2>
+        <h2 className="text-sm font-bold text-foreground">Your Turn — Round {roundNumber}</h2>
         {!isParticipant && (
           <span className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             Observer
@@ -140,9 +134,7 @@ export function CombatTurnPanel({
           readOnly={false}
         />
       ) : (
-        <p className="text-xs text-muted-foreground">
-          You are observing this encounter.
-        </p>
+        <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
       )}
 
       {/* 2. ResonanceBudget */}

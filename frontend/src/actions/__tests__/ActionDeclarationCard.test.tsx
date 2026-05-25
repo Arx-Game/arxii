@@ -53,7 +53,9 @@ const mockedFetchActions = fetchAvailableActions as ReturnType<typeof vi.fn>;
 const mockedUseTechnique = magicQueries.useTechnique as ReturnType<typeof vi.fn>;
 const mockedUseApplicablePulls = magicQueries.useApplicablePulls as ReturnType<typeof vi.fn>;
 const mockedUseThreads = magicQueries.useThreads as ReturnType<typeof vi.fn>;
-const mockedUseCharacterResonances = magicQueries.useCharacterResonances as ReturnType<typeof vi.fn>;
+const mockedUseCharacterResonances = magicQueries.useCharacterResonances as ReturnType<
+  typeof vi.fn
+>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -266,9 +268,7 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
     await waitFor(() => screen.getByText('Tidal Fury'));
     await userEvent.click(screen.getByText('Tidal Fury'));
 
-    expect(onContextChange).toHaveBeenCalledWith(
-      expect.objectContaining({ techniqueId: 101 })
-    );
+    expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({ techniqueId: 101 }));
   });
 
   it('highlights the selected technique', async () => {
@@ -346,9 +346,7 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
     );
 
     await userEvent.click(screen.getByText('Low'));
-    expect(onContextChange).toHaveBeenCalledWith(
-      expect.objectContaining({ effort: 'LOW' })
-    );
+    expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({ effort: 'LOW' }));
   });
 });
 

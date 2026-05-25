@@ -37,9 +37,7 @@ export async function fetchEncounter(encounterId: number): Promise<EncounterDeta
  * so the first non-completed result is deterministically the most-recent one.
  * The caller picks the first non-completed encounter from this ordered list.
  */
-export async function fetchEncountersForScene(
-  sceneId: number
-): Promise<EncounterListItem[]> {
+export async function fetchEncountersForScene(sceneId: number): Promise<EncounterListItem[]> {
   const res = await apiFetch(`/api/combat/?scene=${sceneId}`);
   if (!res.ok) throw new Error('Failed to load encounters for scene');
   const data = (await res.json()) as { results?: EncounterListItem[]; count?: number };

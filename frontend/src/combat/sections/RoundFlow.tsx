@@ -78,7 +78,7 @@ function InitiativeChip({ participant, hasActed }: ChipProps) {
       title={hasActed ? 'Acted this round' : 'Pending'}
     >
       <span className="shrink-0">{hasActed ? '✓' : '…'}</span>
-      <span className="truncate max-w-[80px]">{participant.character_name}</span>
+      <span className="max-w-[80px] truncate">{participant.character_name}</span>
     </div>
   );
 }
@@ -87,13 +87,12 @@ function InitiativeChip({ participant, hasActed }: ChipProps) {
 // RoundFlow
 // ---------------------------------------------------------------------------
 
-export function RoundFlow({
-  encounter,
-  collapsed = false,
-  onToggleCollapse,
-}: RoundFlowProps) {
-  const { round_number: roundNumber, participants, current_round_actions: roundActions } =
-    encounter;
+export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: RoundFlowProps) {
+  const {
+    round_number: roundNumber,
+    participants,
+    current_round_actions: roundActions,
+  } = encounter;
 
   const actedSet = buildActedSet(roundActions);
   const actedCount = participants.filter((p) => actedSet.has(p.id)).length;
@@ -127,10 +126,7 @@ export function RoundFlow({
       {!collapsed && (
         <div className="space-y-3 border-t border-border px-3 py-2">
           {/* Round summary line */}
-          <p
-            className="text-xs text-muted-foreground"
-            data-testid="round-flow-summary"
-          >
+          <p className="text-xs text-muted-foreground" data-testid="round-flow-summary">
             Round {roundNumber ?? 0} &middot; {actedCount}/{totalCount} acted
           </p>
 
@@ -140,7 +136,7 @@ export function RoundFlow({
             data-testid="declarations-counter"
           >
             <span className="text-xs text-muted-foreground">Declarations ready</span>
-            <span className="text-xs font-mono font-semibold text-foreground">
+            <span className="font-mono text-xs font-semibold text-foreground">
               {actedCount} / {totalCount}
             </span>
           </div>
@@ -149,11 +145,7 @@ export function RoundFlow({
           {participants.length > 0 && (
             <div className="flex flex-wrap gap-1.5" data-testid="initiative-chips">
               {participants.map((p) => (
-                <InitiativeChip
-                  key={p.id}
-                  participant={p}
-                  hasActed={actedSet.has(p.id)}
-                />
+                <InitiativeChip key={p.id} participant={p} hasActed={actedSet.has(p.id)} />
               ))}
             </div>
           )}

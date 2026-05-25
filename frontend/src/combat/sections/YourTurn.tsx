@@ -39,11 +39,7 @@ export interface YourTurnProps {
 // Passive slot categories
 // ---------------------------------------------------------------------------
 
-const PASSIVE_SLOTS: ActionSlot[] = [
-  'passive-physical',
-  'passive-social',
-  'passive-mental',
-];
+const PASSIVE_SLOTS: ActionSlot[] = ['passive-physical', 'passive-social', 'passive-mental'];
 
 /**
  * Derive the category of the focused slot from the selected technique.
@@ -107,7 +103,7 @@ function ComboRow({ combo, onUpgrade, isLoading }: ComboRowProps) {
       onClick={() => onUpgrade(combo.combo_id)}
       data-testid={`combo-upgrade-btn-${combo.combo_id}`}
       className={cn(
-        'w-full rounded border px-3 py-1.5 text-xs font-medium text-left transition-colors',
+        'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-50',
         isDisabled
           ? 'border-border bg-muted text-muted-foreground'
@@ -147,7 +143,7 @@ function ClashContributionRow({
         type="button"
         onClick={() => onSelectClash(action.ref)}
         className={cn(
-          'w-full rounded px-2 py-1 text-xs font-medium text-left transition-colors',
+          'w-full rounded px-2 py-1 text-left text-xs font-medium transition-colors',
           isSelected
             ? 'border border-primary bg-primary/10 text-primary'
             : 'border border-border bg-background text-foreground hover:border-primary/50'
@@ -161,10 +157,10 @@ function ClashContributionRow({
       {isSelected && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
               Strain commitment
             </span>
-            <span className="text-xs font-mono text-foreground">{strainCommitment}</span>
+            <span className="font-mono text-xs text-foreground">{strainCommitment}</span>
           </div>
           <input
             type="range"
@@ -198,16 +194,16 @@ export function YourTurn({
   // Slot state
   // ---------------------------------------------------------------------------
 
-  const [focusedContext, setFocusedContext] = useState<ActionContext>(
-    () => initialContext('focused')
+  const [focusedContext, setFocusedContext] = useState<ActionContext>(() =>
+    initialContext('focused')
   );
-  const [passiveContexts, setPassiveContexts] = useState<Partial<Record<ActionSlot, ActionContext>>>(
-    () => ({
-      'passive-physical': initialContext('passive-physical'),
-      'passive-social': initialContext('passive-social'),
-      'passive-mental': initialContext('passive-mental'),
-    })
-  );
+  const [passiveContexts, setPassiveContexts] = useState<
+    Partial<Record<ActionSlot, ActionContext>>
+  >(() => ({
+    'passive-physical': initialContext('passive-physical'),
+    'passive-social': initialContext('passive-social'),
+    'passive-mental': initialContext('passive-mental'),
+  }));
 
   // ---------------------------------------------------------------------------
   // Clash selection state
@@ -345,7 +341,7 @@ export function YourTurn({
       {/* Submitted / ready badge */}
       {submitted && (
         <div
-          className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 text-center"
+          className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
           data-testid="ready-badge"
         >
           Ready — waiting for round to advance
@@ -371,10 +367,7 @@ export function YourTurn({
 
       {/* Clash contribution subsection — shown when clash actions are available */}
       {clashActions.length > 0 && (
-        <div
-          className="space-y-2"
-          data-testid="clash-contributions-section"
-        >
+        <div className="space-y-2" data-testid="clash-contributions-section">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Clash Contributions
           </p>
@@ -387,9 +380,7 @@ export function YourTurn({
                 action={action}
                 strainCommitment={strainByClash[clashId] ?? 0}
                 onSelectClash={(ref) => {
-                  setSelectedClashRef(
-                    selectedClashRef?.clash_id === ref.clash_id ? null : ref
-                  );
+                  setSelectedClashRef(selectedClashRef?.clash_id === ref.clash_id ? null : ref);
                   // Update focused context with the strain commitment.
                   setFocusedContext((prev) => ({
                     ...prev,
@@ -467,7 +458,9 @@ export function YourTurn({
       <button
         type="button"
         disabled={isLocked || dispatchPending}
-        onClick={() => { void handleSubmit(); }}
+        onClick={() => {
+          void handleSubmit();
+        }}
         data-testid="submit-declarations-btn"
         className={cn(
           'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
@@ -482,7 +475,7 @@ export function YourTurn({
 
       {/* Inline submit error — shown when a dispatch rejects */}
       {submitError !== null && (
-        <p role="alert" className="text-sm text-destructive mt-2">
+        <p role="alert" className="mt-2 text-sm text-destructive">
           {submitError}
         </p>
       )}

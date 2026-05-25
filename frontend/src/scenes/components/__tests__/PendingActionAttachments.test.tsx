@@ -67,10 +67,7 @@ describe('PendingActionAttachments', () => {
 
   it('renders one chip per action when query returns multiple items', () => {
     vi.mocked(hooks.usePendingUnlinkedActions).mockReturnValue(
-      makeHookResult([
-        makeAction(1, 'Tidal Fury vs Mire Knight'),
-        makeAction(2, 'Shadow Step'),
-      ])
+      makeHookResult([makeAction(1, 'Tidal Fury vs Mire Knight'), makeAction(2, 'Shadow Step')])
     );
 
     const Wrapper = createWrapper();

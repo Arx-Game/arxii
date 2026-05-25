@@ -93,9 +93,7 @@ vi.mock('@/scenes/components/SceneInteractionPanel', () => ({
 
 // Stub PendingActionAttachments
 vi.mock('@/scenes/components/PendingActionAttachments', () => ({
-  PendingActionAttachments: () => (
-    <div data-testid="pending-action-attachments-stub" />
-  ),
+  PendingActionAttachments: () => <div data-testid="pending-action-attachments-stub" />,
 }));
 
 // Stub CommandInput
@@ -163,8 +161,7 @@ function createWrapper() {
   };
 }
 
-const mockedUseEncounterForScene =
-  combatQueries.useEncounterForScene as ReturnType<typeof vi.fn>;
+const mockedUseEncounterForScene = combatQueries.useEncounterForScene as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -174,7 +171,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: one active encounter in the scene
   mockedUseEncounterForScene.mockReturnValue({
-    data: { id: 7, scene: 42, status: 'declaring', round_number: 1, participant_count: 2, opponent_count: 0 },
+    data: {
+      id: 7,
+      scene: 42,
+      status: 'declaring',
+      round_number: 1,
+      participant_count: 2,
+      opponent_count: 0,
+    },
     isLoading: false,
     isError: false,
   });
@@ -281,7 +285,14 @@ describe('CombatScenePage — deterministic encounter selection', () => {
     mockedUseEncounterForScene.mockReturnValue({
       // Simulates the hook having already picked encounter id=99 (most-recent)
       // over a stale encounter id=7.
-      data: { id: 99, scene: 42, status: 'declaring', round_number: 2, participant_count: 3, opponent_count: 0 },
+      data: {
+        id: 99,
+        scene: 42,
+        status: 'declaring',
+        round_number: 2,
+        participant_count: 3,
+        opponent_count: 0,
+      },
       isLoading: false,
       isError: false,
     });

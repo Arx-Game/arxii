@@ -55,10 +55,7 @@ type CardProps = {
 function defaultCardImpl({ actionContext, onContextChange, readOnly }: CardProps) {
   const slot = actionContext.slot;
   return (
-    <div
-      data-testid={`action-card-${slot}`}
-      data-readonly={String(readOnly ?? false)}
-    >
+    <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
       ActionCard [{slot}]
       <button
         type="button"
@@ -136,16 +133,19 @@ function createWrapper() {
 
 const mockedUseAvailableCombos = combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>;
 const mockedUseUpgradeCombo = combatQueries.useUpgradeCombo as ReturnType<typeof vi.fn>;
-const mockedUseDispatchPlayerAction =
-  combatQueries.useDispatchPlayerAction as ReturnType<typeof vi.fn>;
+const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as ReturnType<
+  typeof vi.fn
+>;
 
 const mockMutate = vi.fn();
 const mockMutateAsync = vi.fn();
 
-function setupMocks(options: {
-  combos?: AvailableCombo[];
-  combosLoading?: boolean;
-} = {}) {
+function setupMocks(
+  options: {
+    combos?: AvailableCombo[];
+    combosLoading?: boolean;
+  } = {}
+) {
   mockedUseAvailableCombos.mockReturnValue({
     data: options.combos ?? [],
     isLoading: options.combosLoading ?? false,
@@ -253,9 +253,7 @@ describe('YourTurn — Task 7.2 combo upgrade', () => {
 
   it('renders combo upgrade row when combos are available', () => {
     setupMocks({
-      combos: [
-        { combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 },
-      ],
+      combos: [{ combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
     });
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
@@ -277,17 +275,12 @@ describe('YourTurn — Task 7.2 combo upgrade', () => {
 
     expect(screen.getByTestId('combo-upgrade-btn-1')).not.toBeDisabled();
     expect(screen.getByTestId('combo-upgrade-btn-2')).toBeDisabled();
-    expect(screen.getByTestId('combo-upgrade-btn-2')).toHaveAttribute(
-      'title',
-      'Combo not known'
-    );
+    expect(screen.getByTestId('combo-upgrade-btn-2')).toHaveAttribute('title', 'Combo not known');
   });
 
   it('calls upgradeCombo mutation when a known combo is clicked', async () => {
     setupMocks({
-      combos: [
-        { combo_id: 5, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 },
-      ],
+      combos: [{ combo_id: 5, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
     });
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
@@ -317,10 +310,9 @@ describe('YourTurn — Task 7.2 clash contributions', () => {
     setupMocks();
     const clashAction = makePlayerAction(42, 'The Great Clash');
 
-    render(
-      <YourTurn {...defaultProps({ availableActions: [clashAction] })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('clash-contributions-section')).toBeInTheDocument();
     expect(screen.getByTestId('clash-contribution-row-42')).toBeInTheDocument();
@@ -331,10 +323,9 @@ describe('YourTurn — Task 7.2 clash contributions', () => {
     setupMocks();
     const clashAction = makePlayerAction(42, 'The Great Clash');
 
-    render(
-      <YourTurn {...defaultProps({ availableActions: [clashAction] })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
+      wrapper: createWrapper(),
+    });
 
     // Slider not visible initially
     expect(screen.queryByTestId('clash-strain-slider-42')).not.toBeInTheDocument();
@@ -349,10 +340,9 @@ describe('YourTurn — Task 7.2 clash contributions', () => {
     setupMocks();
     const clashAction = makePlayerAction(42, 'The Great Clash');
 
-    render(
-      <YourTurn {...defaultProps({ availableActions: [clashAction] })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
+      wrapper: createWrapper(),
+    });
 
     // Select the clash first to show the slider
     await userEvent.click(screen.getByTestId('clash-commit-btn-42'));
@@ -399,19 +389,15 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
     expect(screen.getByTestId('submit-declarations-btn')).toBeDisabled();
 
     // Cards should be read-only (data-readonly="true")
-    expect(screen.getByTestId('action-card-focused')).toHaveAttribute(
-      'data-readonly',
-      'true'
-    );
+    expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
   });
 
   it('resets submitted state when roundNumber changes', async () => {
     setupMocks();
 
-    const { rerender } = render(
-      <YourTurn {...defaultProps({ roundNumber: 1 })} />,
-      { wrapper: createWrapper() }
-    );
+    const { rerender } = render(<YourTurn {...defaultProps({ roundNumber: 1 })} />, {
+      wrapper: createWrapper(),
+    });
 
     // Submit to reach ready state
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
@@ -422,9 +408,7 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
     // Advance round
     rerender(
       <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-        }
+        client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}
       >
         <YourTurn {...defaultProps({ roundNumber: 2 })} />
       </QueryClientProvider>
@@ -458,10 +442,7 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
       const slot = actionContext.slot as string;
       const tid = techniqueIds[slot];
       return (
-        <div
-          data-testid={`action-card-${slot}`}
-          data-readonly={String(readOnly ?? false)}
-        >
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
           ActionCard [{slot}]
           <button
             type="button"
@@ -519,10 +500,7 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
     mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
       const slot = actionContext.slot as string;
       return (
-        <div
-          data-testid={`action-card-${slot}`}
-          data-readonly={String(readOnly ?? false)}
-        >
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
           ActionCard [{slot}]
           <button
             type="button"
@@ -575,10 +553,7 @@ describe('YourTurn — readOnly prop', () => {
       wrapper: createWrapper(),
     });
 
-    expect(screen.getByTestId('action-card-focused')).toHaveAttribute(
-      'data-readonly',
-      'true'
-    );
+    expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
     expect(screen.getByTestId('submit-declarations-btn')).toBeDisabled();
   });
 });

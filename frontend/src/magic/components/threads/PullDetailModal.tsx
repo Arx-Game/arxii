@@ -8,12 +8,7 @@
  * Per spec §5 of docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
  */
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PullEffectPreview } from './PullEffectPreview';
 import type { Thread } from '@/magic/types';
 

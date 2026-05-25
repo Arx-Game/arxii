@@ -86,27 +86,17 @@ beforeEach(() => {
 
 describe('PullDetailModal', () => {
   it('renders the modal when open=true', () => {
-    render(
-      <PullDetailModal
-        thread={makeThread()}
-        open={true}
-        onOpenChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<PullDetailModal thread={makeThread()} open={true} onOpenChange={() => {}} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('pull-detail-modal')).toBeInTheDocument();
   });
 
   it('does not render dialog content when open=false', () => {
-    render(
-      <PullDetailModal
-        thread={makeThread()}
-        open={false}
-        onOpenChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<PullDetailModal thread={makeThread()} open={false} onOpenChange={() => {}} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.queryByTestId('pull-detail-modal')).not.toBeInTheDocument();
   });
@@ -138,14 +128,9 @@ describe('PullDetailModal', () => {
   });
 
   it('renders the PullEffectPreview panel inside the modal', () => {
-    render(
-      <PullDetailModal
-        thread={makeThread()}
-        open={true}
-        onOpenChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<PullDetailModal thread={makeThread()} open={true} onOpenChange={() => {}} />, {
+      wrapper: createWrapper(),
+    });
 
     // PullEffectPreview renders a data-testid="pull-effect-preview"
     expect(screen.getByTestId('pull-effect-preview')).toBeInTheDocument();
@@ -153,14 +138,9 @@ describe('PullDetailModal', () => {
 
   it('calls onOpenChange(false) when the close button is activated', async () => {
     const onOpenChange = vi.fn();
-    render(
-      <PullDetailModal
-        thread={makeThread()}
-        open={true}
-        onOpenChange={onOpenChange}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<PullDetailModal thread={makeThread()} open={true} onOpenChange={onOpenChange} />, {
+      wrapper: createWrapper(),
+    });
 
     // Radix Dialog close button has sr-only text "Close"
     const closeBtn = screen.getByRole('button', { name: /close/i });

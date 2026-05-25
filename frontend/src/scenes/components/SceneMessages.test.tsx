@@ -120,10 +120,7 @@ describe('SceneMessages', () => {
 
     render(
       <Wrapper>
-        <SceneMessages
-          sceneId="1"
-          filteredInteractions={[pose, action, standaloneAction]}
-        />
+        <SceneMessages sceneId="1" filteredInteractions={[pose, action, standaloneAction]} />
       </Wrapper>
     );
 

@@ -82,18 +82,19 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
 
   return (
     <div
-      className={cn('rounded border p-2 space-y-2', colorClass)}
+      className={cn('space-y-2 rounded border p-2', colorClass)}
       data-testid={`clash-card-${clash.id}`}
     >
       {/* Header row */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-foreground" data-testid={`clash-kind-${clash.id}`}>
+        <span
+          className="text-xs font-semibold text-foreground"
+          data-testid={`clash-kind-${clash.id}`}
+        >
           {flavorLabel}
         </span>
         {opponentName !== undefined && (
-          <span className="text-[10px] text-muted-foreground truncate ml-2">
-            vs {opponentName}
-          </span>
+          <span className="ml-2 truncate text-[10px] text-muted-foreground">vs {opponentName}</span>
         )}
       </div>
 
@@ -112,7 +113,7 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
             data-testid={`clash-meter-${clash.id}`}
           />
         </div>
-        <div className="text-center text-[10px] font-mono text-muted-foreground">
+        <div className="text-center font-mono text-[10px] text-muted-foreground">
           {clash.progress} / {clash.pc_win_threshold}
         </div>
       </div>
@@ -124,7 +125,7 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
           onClick={() => onCommitClick?.(clash.id)}
           className={cn(
             'flex-1 rounded border border-primary/40 bg-primary/5 px-2 py-1 text-xs font-medium',
-            'text-primary hover:bg-primary/10 transition-colors'
+            'text-primary transition-colors hover:bg-primary/10'
           )}
           data-testid={`clash-commit-btn-${clash.id}`}
           // TODO(phase-11): dispatch wiring — currently calls the stub callback.
@@ -137,7 +138,7 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
           onClick={() => onLendClick?.(clash.id)}
           className={cn(
             'flex-1 rounded border border-border bg-background px-2 py-1 text-xs font-medium',
-            'text-muted-foreground hover:bg-accent/30 transition-colors'
+            'text-muted-foreground transition-colors hover:bg-accent/30'
           )}
           data-testid={`clash-lend-btn-${clash.id}`}
           // TODO(phase-11): dispatch wiring — currently calls the stub callback.

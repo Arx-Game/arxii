@@ -210,10 +210,9 @@ describe('ThreadPullPicker — show-inapplicable toggle', () => {
     ]);
     mockThreads([applicable, inapplicable]);
 
-    render(
-      <ThreadPullPicker {...defaultProps({ showInapplicable: false })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ showInapplicable: false })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => {
       expect(screen.getByText('Applicable Thread')).toBeInTheDocument();
@@ -230,10 +229,9 @@ describe('ThreadPullPicker — show-inapplicable toggle', () => {
     ]);
     mockThreads([applicable, inapplicable]);
 
-    render(
-      <ThreadPullPicker {...defaultProps({ showInapplicable: true })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ showInapplicable: true })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId('inapplicable-row-2')).toBeInTheDocument();
@@ -250,10 +248,9 @@ describe('ThreadPullPicker — show-inapplicable toggle', () => {
     mockThreads([]);
     const onToggleInapplicable = vi.fn();
 
-    render(
-      <ThreadPullPicker {...defaultProps({ onToggleInapplicable })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ onToggleInapplicable })} />, {
+      wrapper: createWrapper(),
+    });
 
     await userEvent.click(screen.getByTestId('show-inapplicable-toggle'));
     expect(onToggleInapplicable).toHaveBeenCalledWith(true);
@@ -267,10 +264,9 @@ describe('ThreadPullPicker — tier selection', () => {
     mockThreads([thread]);
     const onPullsChange = vi.fn();
 
-    render(
-      <ThreadPullPicker {...defaultProps({ onPullsChange, selectedPulls: {} })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ onPullsChange, selectedPulls: {} })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => screen.getByTestId('tier-btn-3-2'));
     await userEvent.click(screen.getByTestId('tier-btn-3-2'));
@@ -283,10 +279,9 @@ describe('ThreadPullPicker — tier selection', () => {
     mockApplicable([makeApplicabilityRow(4, true)]);
     mockThreads([thread]);
 
-    render(
-      <ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => screen.getByTestId('tier-btn-4-0'));
     // Tier 0 should have the active/green styling
@@ -302,10 +297,9 @@ describe('ThreadPullPicker — all-tier previews on mount (Fix 1)', () => {
     mockThreads([thread]);
     mockedPreviewPull.mockResolvedValue(makePreviewResponse());
 
-    render(
-      <ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => screen.getByTestId('tier-btn-7-0'));
 
@@ -325,7 +319,12 @@ describe('ThreadPullPicker — all-tier previews on mount (Fix 1)', () => {
   });
 
   it('disables an unaffordable tier before the user clicks it', async () => {
-    const thread = makeThread({ id: 8, name: 'Costly Pull', resonance: 5, resonance_name: 'Sworn' });
+    const thread = makeThread({
+      id: 8,
+      name: 'Costly Pull',
+      resonance: 5,
+      resonance_name: 'Sworn',
+    });
     mockApplicable([makeApplicabilityRow(8, true)]);
     mockThreads([thread]);
 
@@ -369,10 +368,9 @@ describe('ThreadPullPicker — all-tier previews on mount (Fix 1)', () => {
     // previewPull never resolves — simulate pending state.
     mockedPreviewPull.mockReturnValue(new Promise(() => {}));
 
-    render(
-      <ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: {} })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => screen.getByTestId('tier-btn-9-1'));
 
@@ -390,10 +388,9 @@ describe('ThreadPullPicker — unaffordable tier (legacy — selected tier)', ()
     mockThreads([thread]);
     mockedPreviewPull.mockResolvedValue(makePreviewResponse({ affordable: false }));
 
-    render(
-      <ThreadPullPicker {...defaultProps({ selectedPulls: { 7: 1 } })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 7: 1 } })} />, {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => screen.getByTestId('tier-btn-7-1'));
 
@@ -434,7 +431,9 @@ describe('ThreadPullPicker — auto-revert', () => {
     mockApplicable([makeApplicabilityRow(9, false, 'wrong_affinity')]);
 
     rerender(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
         <ThreadPullPicker
           characterSheetId={100}
           actionContext={{ character_sheet_id: 100, technique_id: 99 }}
@@ -451,9 +450,7 @@ describe('ThreadPullPicker — auto-revert', () => {
       expect(onPullsChange).toHaveBeenCalledWith({});
     });
 
-    expect(onAutoRevertNotice).toHaveBeenCalledWith(
-      expect.stringContaining('reverted to tier 0')
-    );
+    expect(onAutoRevertNotice).toHaveBeenCalledWith(expect.stringContaining('reverted to tier 0'));
   });
 
   it('does not revert tier-0 pulls even when thread becomes inapplicable', async () => {
@@ -475,7 +472,9 @@ describe('ThreadPullPicker — auto-revert', () => {
     mockApplicable([makeApplicabilityRow(10, false, 'wrong_affinity')]);
 
     rerender(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
         <ThreadPullPicker
           characterSheetId={100}
           actionContext={{ character_sheet_id: 100, technique_id: 99 }}
@@ -501,10 +500,9 @@ describe('ThreadPullPicker — details affordance', () => {
     // selected tier 1 so the cost+details row renders
     mockedPreviewPull.mockResolvedValue(makePreviewResponse({ resonance_cost: 3, anima_cost: 1 }));
 
-    render(
-      <ThreadPullPicker {...defaultProps({ selectedPulls: { 6: 1 } })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 6: 1 } })} />, {
+      wrapper: createWrapper(),
+    });
 
     // Wait for preview to load and details button to appear
     await waitFor(
