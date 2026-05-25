@@ -81,21 +81,22 @@ Implementation step of the lifecycle (continuing the plan).
 
 ```
 tools/skills/issue-to-merged-pr/
-├── SKILL.md                       # recipe, decision logic, when to use, examples
-├── README.md                      # human-facing docs
+├── SKILL.md                              # recipe, decision logic, when to use, examples
+├── README.md                             # human-facing docs (includes bare-metal Setup)
+├── spec-document-reviewer-prompt.md      # project-local override of superpowers' canonical reviewer prompt (see Spec-review override)
 ├── scripts/
-│   ├── pickup-issue.sh            # fetch issue, infer type, create branch
-│   ├── sync-with-main.sh          # fetch + rebase, report conflicts + cross-issue overlap
-│   ├── open-pr.sh                 # push, open PR with body template
-│   ├── file-followup.sh           # create a new issue, return its number
-│   ├── comment-on-issue.sh        # post a comment to an existing issue
-│   ├── watch-ci.sh                # smart-cadence polling loop, exits when checks settle
-│   ├── get-ci-failure.sh          # given a failing check, fetch concise diagnostic logs
-│   ├── read-pr-comments.sh        # fetch comments newer than last-addressed marker
-│   └── post-merge-cleanup.sh      # checkout main, pull, branch delete, related-issue actions
+│   ├── pickup-issue.sh                   # superpowers-installed precheck, then fetch issue, infer type, create branch
+│   ├── sync-with-main.sh                 # fetch + rebase, report conflicts + cross-issue overlap
+│   ├── open-pr.sh                        # push, open PR with body template
+│   ├── file-followup.sh                  # create a new issue, return its number
+│   ├── comment-on-issue.sh               # post a comment to an existing issue
+│   ├── watch-ci.sh                       # smart-cadence polling loop, exits when checks settle
+│   ├── get-ci-failure.sh                 # given a failing check, fetch concise diagnostic logs
+│   ├── read-pr-comments.sh               # fetch comments newer than last-addressed marker
+│   └── post-merge-cleanup.sh             # checkout main, pull, branch delete, related-issue actions
 └── templates/
-    ├── pr-body.md                 # PR body template (Closes / Follow-ups / Notes)
-    └── followup-issue.md          # follow-up issue body template
+    ├── pr-body.md                        # PR body template (Closes / Follow-ups / Notes)
+    └── followup-issue.md                 # follow-up issue body template
 ```
 
 ### Script contracts
@@ -105,7 +106,7 @@ Each script is pure bash (no embedded Python — per repo-wide rule), uses `gh`
 JSON on stdout where structured output is needed, and supports `--dry-run` on
 the state-mutating ones.
 
-- **pickup-issue.sh** `<issue-number>` → emits JSON `{type, slug, branch, parent_issue_url}`; creates branch from `origin/main`; errors if issue is closed or assigned to a different user.
+- **pickup-issue.sh** `<issue-number>` → first runs the superpowers precheck (exits 2 with install command if missing; see Plugin dependency); then fetches the issue, infers type from labels, emits JSON `{type, slug, branch, parent_issue_url}`; creates branch from `origin/main`; errors if issue is closed or assigned to a different user.
 - **sync-with-main.sh** `<branch>` → `git fetch origin && git rebase origin/main`; on conflict emits JSON listing conflicted files and any open issues whose body/comments substring-match those file paths (over-inclusive on purpose).
 - **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → pushes (with `--force-with-lease` if branch was rebased), opens PR via `gh pr create` with body composed from `templates/pr-body.md`; emits PR number. `--dry-run` prints the body without pushing.
 - **file-followup.sh** `<title> <body-path> <labels...>` → `gh issue create`; emits issue number. `--dry-run` prints the title/body/labels.
@@ -175,6 +176,35 @@ The agent makes **one tool call** per watch cycle, not 20-30. While `sleep`
 runs, no tokens are spent.
 
 ## Decision logic
+
+### Spec-review override
+
+When the lifecycle enters the design step and calls
+`superpowers:brainstorming`, the brainstorming skill normally dispatches
+its built-in spec-document-reviewer subagent after the spec is written.
+Our skill overrides that specific substep: SKILL.md instructs the agent
+to dispatch the spec-document-reviewer using the project-local prompt at
+`tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md`
+instead of the plugin's default. The rest of the brainstorming flow
+(exploration, design dialogue, spec writing, user-review gate) runs
+unmodified, as does `superpowers:writing-plans` afterward.
+
+The local prompt extends the canonical one with three additional review
+categories: **contract completeness** (every named mechanism in the spec
+is implementable without the planner inventing decisions), **implied-
+condition robustness** (every flow holds under conditions the rest of
+the spec implies — concurrent invocations, partial failures, state the
+spec assumes but doesn't enforce), and **external-constraint conflicts**
+(no clash with referenced CLAUDE.md sections, existing tooling, or
+platform realities like OS-specific filesystem behavior).
+
+The motivation: the canonical reviewer is calibrated for prose clarity
+and approved this spec on first pass; a broader parallel critique
+surfaced eight implementation-blocking gaps that fell into those three
+categories. The override is project-local, not a fork — the plugin's
+files are read-only at their cache path and never touched. Our SKILL.md
+owns the spec-review substep and dispatches the reviewer with our prompt
+instead of relying on `superpowers:brainstorming`'s default.
 
 ### When to skip brainstorm + plan
 
@@ -343,6 +373,55 @@ allowed-tools rules) doesn't apply in the devcontainer where permission
 prompts don't fire. A redesigned successor (track failed tool calls,
 propose CLAUDE.md edits) is filed as a follow-up issue — the canonical
 first work item for the new skill, providing a low-stakes dogfood case.
+
+### Plugin dependency: superpowers
+
+The skill orchestrates `superpowers:brainstorming` and
+`superpowers:writing-plans` (see Lifecycle), so the `superpowers` plugin
+from the `claude-plugins-official` marketplace must be installed and
+enabled in the Claude Code session. Handled in two layers:
+
+**1. Devcontainer install (primary path).** `post-create.sh` runs, after
+the symlink loop:
+
+```bash
+claude plugin marketplace add anthropics/claude-plugins-official 2>/dev/null || true
+claude plugin install superpowers@claude-plugins-official 2>/dev/null || true
+```
+
+Both commands are idempotent — already-added marketplace and
+already-installed plugin both no-op. `claude plugin install` writes to
+`~/.claude/plugins/` (per-user, off-repo) and enables the plugin in
+`~/.claude/settings.json`. The 2>/dev/null + `|| true` keeps a
+container-creation failure from blocking the whole post-create flow; if
+either command genuinely fails, the script-precheck layer catches it on
+first skill invocation.
+
+**2. Skill script precheck (defense-in-depth).** `pickup-issue.sh` runs as
+its first step:
+
+```bash
+if ! claude plugin list 2>/dev/null | grep -q "superpowers@claude-plugins-official"; then
+  echo "ERROR: superpowers plugin not installed." >&2
+  echo "Install with: claude plugin install superpowers@claude-plugins-official" >&2
+  exit 2
+fi
+```
+
+Catches the bare-metal-without-post-create case, the
+container-create-failed case, and the "user disabled superpowers" case.
+Fast feedback, clear remediation.
+
+**No `.claude/settings.json` layer.** `.claude/` is gitignored at the
+repo root and accumulates per-developer state (hooks, scratch,
+worktrees). Carving exceptions to share an `enabledPlugins` declaration
+would invite merge churn for negligible benefit, since `claude plugin
+install` already handles enabling.
+
+**Bare-metal users.** `tools/skills/issue-to-merged-pr/README.md`
+includes a "Setup" section with the install one-liner above. The
+precheck's error message points users at the install command without
+requiring docs.
 
 ## Invocation
 
