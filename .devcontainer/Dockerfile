@@ -61,3 +61,12 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
 USER vscode
+
+# Install Claude Code via npm at image-build time, replacing the
+# claude-code devcontainer feature which re-ran `npm install -g` on
+# every container creation and wiped ~/.claude/.claude.json (forcing
+# re-login). Installing here means: latest at build time, no churn on
+# container recreate, explicit upgrades via `just dc-build`. Uses mise's
+# node so the binary lands at .../node/24.4.1/bin/claude — already on
+# PATH for any shell that activates mise (via ~/.bashrc).
+RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code
