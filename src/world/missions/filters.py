@@ -13,7 +13,14 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.missions.constants import AccessTier, ArcScope
-from world.missions.models import MissionTemplate
+from world.missions.models import (
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionOptionRouteCandidate,
+    MissionOptionRouteReward,
+    MissionTemplate,
+)
 
 
 class MissionTemplateFilterSet(django_filters.FilterSet):
@@ -59,3 +66,72 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
     ) -> QuerySet[MissionTemplate]:
         """Match templates whose [min, max] band contains the given level."""
         return queryset.filter(level_band_min__lte=value, level_band_max__gte=value)
+
+
+# ---------------------------------------------------------------------------
+# D2 editor CRUD filters — each nested viewset filters on its parent FK
+# (template/node/option/route) plus any other useful editor query
+# surfaces (e.g. is_entry on nodes, source_kind on options).
+# ---------------------------------------------------------------------------
+
+
+class MissionNodeFilterSet(django_filters.FilterSet):
+    """Filter MissionNode rows by template + entry-flag."""
+
+    template = django_filters.NumberFilter(field_name="template_id")
+    template_slug = django_filters.CharFilter(field_name="template__slug")
+    is_entry = django_filters.BooleanFilter(field_name="is_entry")
+
+    class Meta:
+        model = MissionNode
+        fields: list[str] = []
+
+
+class MissionOptionFilterSet(django_filters.FilterSet):
+    """Filter MissionOption rows by node / source_kind / option_kind."""
+
+    node = django_filters.NumberFilter(field_name="node_id")
+    template = django_filters.NumberFilter(field_name="node__template_id")
+    source_kind = django_filters.CharFilter(field_name="source_kind")
+    option_kind = django_filters.CharFilter(field_name="option_kind")
+
+    class Meta:
+        model = MissionOption
+        fields: list[str] = []
+
+
+class MissionOptionRouteFilterSet(django_filters.FilterSet):
+    """Filter MissionOptionRoute rows by option / template / outcome tier."""
+
+    option = django_filters.NumberFilter(field_name="option_id")
+    template = django_filters.NumberFilter(field_name="option__node__template_id")
+    outcome_tier = django_filters.NumberFilter(field_name="outcome_tier_id")
+    is_random_set = django_filters.BooleanFilter(field_name="is_random_set")
+
+    class Meta:
+        model = MissionOptionRoute
+        fields: list[str] = []
+
+
+class MissionOptionRouteCandidateFilterSet(django_filters.FilterSet):
+    """Filter MissionOptionRouteCandidate rows by route / template."""
+
+    route = django_filters.NumberFilter(field_name="route_id")
+    template = django_filters.NumberFilter(field_name="route__option__node__template_id")
+
+    class Meta:
+        model = MissionOptionRouteCandidate
+        fields: list[str] = []
+
+
+class MissionOptionRouteRewardFilterSet(django_filters.FilterSet):
+    """Filter MissionOptionRouteReward rows by route or candidate parent."""
+
+    route = django_filters.NumberFilter(field_name="route_id")
+    candidate = django_filters.NumberFilter(field_name="candidate_id")
+    kind = django_filters.CharFilter(field_name="kind")
+    sink = django_filters.CharFilter(field_name="sink")
+
+    class Meta:
+        model = MissionOptionRouteReward
+        fields: list[str] = []

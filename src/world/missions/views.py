@@ -20,10 +20,29 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import BaseSerializer
 
-from world.missions.filters import MissionTemplateFilterSet
-from world.missions.models import MissionTemplate
+from world.missions.filters import (
+    MissionNodeFilterSet,
+    MissionOptionFilterSet,
+    MissionOptionRouteCandidateFilterSet,
+    MissionOptionRouteFilterSet,
+    MissionOptionRouteRewardFilterSet,
+    MissionTemplateFilterSet,
+)
+from world.missions.models import (
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionOptionRouteCandidate,
+    MissionOptionRouteReward,
+    MissionTemplate,
+)
 from world.missions.permissions import IsStaff
 from world.missions.serializers import (
+    MissionNodeSerializer,
+    MissionOptionRouteCandidateSerializer,
+    MissionOptionRouteRewardSerializer,
+    MissionOptionRouteSerializer,
+    MissionOptionSerializer,
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
 )
@@ -69,3 +88,65 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             return MissionTemplateDetailSerializer
         return MissionTemplateSerializer
+
+
+# ---------------------------------------------------------------------------
+# D2 editor CRUD viewsets — one per nested model, each a full ModelViewSet
+# (list/retrieve/create/update/partial-update/destroy). Filtered by parent
+# FK (template/node/option/route) via the per-model FilterSets. Staff-only.
+# ---------------------------------------------------------------------------
+
+
+class MissionNodeViewSet(viewsets.ModelViewSet):
+    """Editor CRUD for MissionNode rows."""
+
+    queryset = MissionNode.objects.all().order_by("pk")
+    serializer_class = MissionNodeSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionNodeFilterSet
+
+
+class MissionOptionViewSet(viewsets.ModelViewSet):
+    """Editor CRUD for MissionOption rows (authored + challenge-sourced)."""
+
+    queryset = MissionOption.objects.all().order_by("pk")
+    serializer_class = MissionOptionSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionOptionFilterSet
+
+
+class MissionOptionRouteViewSet(viewsets.ModelViewSet):
+    """Editor CRUD for MissionOptionRoute (one row per option per outcome tier)."""
+
+    queryset = MissionOptionRoute.objects.all().order_by("pk")
+    serializer_class = MissionOptionRouteSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionOptionRouteFilterSet
+
+
+class MissionOptionRouteCandidateViewSet(viewsets.ModelViewSet):
+    """Editor CRUD for MissionOptionRouteCandidate (random-set rolls)."""
+
+    queryset = MissionOptionRouteCandidate.objects.all().order_by("pk")
+    serializer_class = MissionOptionRouteCandidateSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionOptionRouteCandidateFilterSet
+
+
+class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
+    """Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent)."""
+
+    queryset = MissionOptionRouteReward.objects.all().order_by("pk")
+    serializer_class = MissionOptionRouteRewardSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionOptionRouteRewardFilterSet

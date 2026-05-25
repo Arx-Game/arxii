@@ -8,7 +8,15 @@ land in D2; giver-library serializers in D3; predicate-tree in D5.
 from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
-from world.missions.models import MissionInstance, MissionTemplate
+from world.missions.models import (
+    MissionInstance,
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionOptionRouteCandidate,
+    MissionOptionRouteReward,
+    MissionTemplate,
+)
 
 
 class MissionTemplateSerializer(serializers.ModelSerializer):
@@ -126,7 +134,7 @@ class MissionTemplateDetailSerializer(MissionTemplateSerializer):
         for instance in instances:
             current_node_key = instance.current_node.key if instance.current_node else None
             contract_holder = None
-            for participant in instance.cached_participants:  # noqa: PREFETCH_STRING — to_attr above
+            for participant in instance.cached_participants:
                 if participant.is_contract_holder:
                     contract_holder = participant.character.db_key
                     break
@@ -138,3 +146,141 @@ class MissionTemplateDetailSerializer(MissionTemplateSerializer):
                 }
             )
         return rows
+
+
+# ---------------------------------------------------------------------------
+# D2 editor CRUD serializers — one per nested model. ModelSerializer with
+# all editable fields (plus the parent FK so create works through nested
+# routes). Validation that depends on the WHOLE GRAPH (entry-node
+# uniqueness, route-set completeness) lives in dedicated validate/
+# actions (D2.validate) — these serializers only enforce single-row
+# invariants the model's clean() already covers.
+# ---------------------------------------------------------------------------
+
+
+class MissionNodeSerializer(serializers.ModelSerializer):
+    """Editor CRUD for MissionNode rows.
+
+    ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
+    authoring UI passes them through unchanged). Editor layout fields
+    (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
+    sibling are both editable.
+    """
+
+    class Meta:
+        model = MissionNode
+        fields = [
+            "id",
+            "template",
+            "key",
+            "is_entry",
+            "conflict_mode",
+            "joint_combine",
+            "joint_count",
+            "allowed_riders",
+            "deny_all_riders",
+            "editor_x",
+            "editor_y",
+            "flavor_text",
+            "flavor_text_needs_rewrite",
+        ]
+        read_only_fields = ["id"]
+
+
+class MissionOptionSerializer(serializers.ModelSerializer):
+    """Editor CRUD for MissionOption rows (authored or challenge-sourced).
+
+    Both source_kind values are editable; consumer code distinguishes via
+    the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
+    rides through; the predicate-tree builder API (D5) is what authors
+    actually use to write it.
+    """
+
+    class Meta:
+        model = MissionOption
+        fields = [
+            "id",
+            "node",
+            "order",
+            "option_kind",
+            "source_kind",
+            "visibility_rule",
+            "authored_check_type",
+            "authored_base_risk",
+            "authored_ic_framing",
+            "authored_ic_framing_needs_rewrite",
+            "branch_target",
+            "challenge",
+        ]
+        read_only_fields = ["id"]
+
+
+class MissionOptionRouteSerializer(serializers.ModelSerializer):
+    """Editor CRUD for MissionOptionRoute rows (one per outcome tier per option)."""
+
+    class Meta:
+        model = MissionOptionRoute
+        fields = [
+            "id",
+            "option",
+            "outcome_tier",
+            "target_node",
+            "is_random_set",
+            "consequence",
+            "outcome_text",
+            "outcome_text_needs_rewrite",
+        ]
+        read_only_fields = ["id"]
+
+
+class MissionOptionRouteCandidateSerializer(serializers.ModelSerializer):
+    """Editor CRUD for MissionOptionRouteCandidate (random-set rolls)."""
+
+    class Meta:
+        model = MissionOptionRouteCandidate
+        fields = [
+            "id",
+            "route",
+            "target_node",
+            "weight",
+            "consequence",
+            "outcome_text",
+            "outcome_text_needs_rewrite",
+        ]
+        read_only_fields = ["id"]
+
+
+class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
+    """Editor CRUD for reward lines attached to a route OR a candidate (XOR).
+
+    Model-level CheckConstraint + clean() both enforce exactly-one-parent.
+    DRF's ModelSerializer skips clean() by default, so we mirror the XOR
+    check here as ``validate()`` to surface a clean 400 instead of letting
+    the DB constraint raise IntegrityError → 500.
+    """
+
+    class Meta:
+        model = MissionOptionRouteReward
+        fields = ["id", "route", "candidate", "kind", "sink", "amount"]
+        read_only_fields = ["id"]
+
+    # Module-level constants for the XOR validation messages — avoid
+    # inline string literals in raise statements (TRY003/EM101).
+    _ERR_BOTH_NULL = "Exactly one of route or candidate must be set; both are null."
+    _ERR_BOTH_SET = "Cannot set both route and candidate — pick one."
+
+    def validate(self, attrs: dict) -> dict:
+        # Honor partial updates: fall back to instance values for fields
+        # not in attrs (PATCH).
+        instance = self.instance
+        route = attrs.get("route")
+        if route is None and instance is not None:
+            route = instance.route
+        candidate = attrs.get("candidate")
+        if candidate is None and instance is not None:
+            candidate = instance.candidate
+        if route is None and candidate is None:
+            raise serializers.ValidationError(self._ERR_BOTH_NULL)
+        if route is not None and candidate is not None:
+            raise serializers.ValidationError(self._ERR_BOTH_SET)
+        return attrs
