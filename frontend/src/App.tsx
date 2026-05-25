@@ -39,6 +39,11 @@ const MissionBrowserPage = lazy(() =>
     default: m.MissionBrowserPage,
   }))
 );
+const MissionCanvasPage = lazy(() =>
+  import('@/missions/pages/MissionCanvasPage').then((m) => ({
+    default: m.MissionCanvasPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -284,6 +289,16 @@ function App() {
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                 <MissionBrowserPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/missions/:slug/canvas"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <MissionCanvasPage />
               </Suspense>
             </StaffRoute>
           }

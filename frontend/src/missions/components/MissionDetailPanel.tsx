@@ -10,7 +10,10 @@
  * land in E6 and reuse the mutation hooks already in queries.ts.
  */
 
+import { Link } from 'react-router-dom';
+
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMissionTemplate } from '../queries';
@@ -60,7 +63,12 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
           <CardTitle>{template.name}</CardTitle>
           <AccessTierBadge tier={template.access_tier ?? 'staff_only'} />
         </div>
-        <div className="text-xs text-muted-foreground">{template.slug}</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-muted-foreground">{template.slug}</div>
+          <Button asChild size="sm" variant="outline">
+            <Link to={`/staff/missions/${template.slug}/canvas`}>Graph view →</Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <DescriptionBlock label="Summary" text={template.summary} />
