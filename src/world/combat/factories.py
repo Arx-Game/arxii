@@ -385,3 +385,129 @@ class ClashContributionFactory(factory_django.DjangoModelFactory):
     anima_committed = 10
     check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     progress_delta = 1
+
+
+# =============================================================================
+# Playable combat scenario — composition helper, not a DjangoModelFactory.
+# =============================================================================
+
+
+from dataclasses import dataclass  # noqa: E402
+
+
+@dataclass
+class PlayableCombatScenario:
+    """All the entities needed for a fully-playable combat encounter.
+
+    Built by ``PlayableCombatScenarioFactory.create()``. Holds references
+    to every entity in the scenario so tests / demo paths can interact
+    with each one directly.
+    """
+
+    scene: object
+    encounter: CombatEncounter
+    participants: list[CombatParticipant]
+    opponent: CombatOpponent
+    clash: Clash
+    threat_pool: ThreatPool
+    threat_entry: ThreatPoolEntry
+
+
+class PlayableCombatScenarioFactory:
+    """Compose a complete combat scenario in one call.
+
+    Wires a Scene + CombatEncounter (in DECLARING status) + 2 PC
+    CombatParticipants (with character sheets, vitals, anima, a clash-capable
+    technique) + 1 NPC CombatOpponent + an active Clash on a threat-entry.
+
+    Used by:
+      - The full UI round-trip integration test as a setUp.
+      - The future ``just demo-combat`` recipe to spawn a playable scenario
+        for a logged-in dev user.
+
+    Sensible defaults; everything is overridable at the kwargs level via
+    a subsequent customization pass.
+    """
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        num_pcs: int = 2,
+        npc_name: str = "Practice Dummy",
+        round_number: int = 1,
+    ) -> PlayableCombatScenario:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.constants import EncounterStatus
+        from world.magic.factories import (
+            CharacterAnimaFactory,
+            CharacterResonanceFactory,
+            CharacterTechniqueFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+            ThreadFactory,
+        )
+        from world.scenes.factories import SceneFactory
+        from world.vitals.models import CharacterVitals
+
+        # Singletons (idempotent via django_get_or_create).
+        ClashConfigFactory()
+        StrainConfigFactory()
+
+        # Scene + encounter.
+        scene = SceneFactory()
+        encounter = CombatEncounterFactory(
+            scene=scene,
+            status=EncounterStatus.DECLARING,
+            round_number=round_number,
+        )
+
+        # PCs.
+        participants: list[CombatParticipant] = []
+        resonance = ResonanceFactory()
+        for _ in range(num_pcs):
+            sheet = CharacterSheetFactory()
+            CharacterVitals.objects.create(
+                character_sheet=sheet,
+                health=50,
+                max_health=50,
+                base_max_health=50,
+            )
+            CharacterAnimaFactory(character=sheet.character, current=10, maximum=10)
+            CharacterResonanceFactory(character_sheet=sheet, resonance=resonance, balance=10)
+            technique = TechniqueFactory(clash_capable=True)
+            CharacterTechniqueFactory(character=sheet, technique=technique)
+            ThreadFactory(owner=sheet, resonance=resonance)
+            participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+            participants.append(participant)
+
+        # NPC opponent.
+        threat_pool = ThreatPoolFactory()
+        threat_entry = ThreatPoolEntryFactory(pool=threat_pool, clash_capable=True)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            name=npc_name,
+            threat_pool=threat_pool,
+            tier=OpponentTier.MOOK,
+            health=30,
+            max_health=30,
+        )
+
+        # Active clash, initiated by PC 1, targeting the opponent.
+        clash = ClashFactory(
+            encounter=encounter,
+            npc_opponent=opponent,
+            initiator=participants[0].character_sheet,
+            triggering_threat_entry=threat_entry,
+            started_round=round_number,
+        )
+
+        return PlayableCombatScenario(
+            scene=scene,
+            encounter=encounter,
+            participants=participants,
+            opponent=opponent,
+            clash=clash,
+            threat_pool=threat_pool,
+            threat_entry=threat_entry,
+        )

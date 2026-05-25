@@ -1,6 +1,7 @@
 """Tests for GET /api/combat/action-outcome-details/
 
-Phase 9, Task 9.4.
+Phase 5 (combat-resolution-loop): outcome details are derived from existing
+models (combo, conditions via correlation, target status) — no audit tables.
 """
 
 from __future__ import annotations
@@ -16,11 +17,9 @@ from evennia_extensions.factories import AccountFactory
 class ActionOutcomeDetailsViewTests(APITestCase):
     """GET /api/combat/action-outcome-details/ returns a list of outcome details."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.account = AccountFactory()
-
     def setUp(self) -> None:
+        # Don't use setUpTestData — Evennia DbHolder isn't deepcopy-safe.
+        self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
 
     def test_returns_empty_list_when_no_ids_given(self) -> None:
@@ -37,8 +36,7 @@ class ActionOutcomeDetailsViewTests(APITestCase):
         ids = {row["action_interaction_id"] for row in response.data}
         assert ids == {10, 20}
 
-    def test_each_row_has_effects_list(self) -> None:
-        """v1: effects list is empty (no CombatRoundAction → Interaction bridge yet)."""
+    def test_unknown_ids_return_empty_effects(self) -> None:
         url = reverse("combat:action-outcome-details")
         response = self.client.get(url, {"action_interaction_ids": "5"})
         assert response.status_code == status.HTTP_200_OK
@@ -65,9 +63,73 @@ class ActionOutcomeDetailsViewTests(APITestCase):
 class OutcomeDetailDataShapeTest(TestCase):
     """Unit tests for the _build_outcome_detail helper."""
 
-    def test_returns_correct_shape_for_given_id(self) -> None:
+    def test_returns_correct_shape_for_unknown_id(self) -> None:
         from world.combat.views_outcome_details import _build_outcome_detail
 
-        detail = _build_outcome_detail(42)
+        # Build a minimal user object — for unknown ids the user isn't
+        # consulted (no encounter to gate on). Pass a real account to
+        # satisfy the function signature.
+        account = AccountFactory()
+        detail = _build_outcome_detail(42, account)
         assert detail.action_interaction_id == 42
+        assert detail.effects == []
+
+
+class DerivedOutcomeRowsTest(TestCase):
+    """The view derives rows from existing models (combo, target status, conditions)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.combat.constants import OpponentStatus
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            CombatRoundActionFactory,
+        )
+        from world.scenes.constants import InteractionMode
+        from world.scenes.factories import InteractionFactory, SceneFactory
+
+        self.scene = SceneFactory()
+        self.encounter = CombatEncounterFactory(scene=self.scene)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        # Make the participant's character a known viewer.
+        self.account = self.participant.character_sheet.character.account or AccountFactory()
+        # Build a defeated opponent target.
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter, name="Pyromancer", status=OpponentStatus.DEFEATED
+        )
+        # Action linked to an ACTION-mode Interaction.
+        self.interaction = InteractionFactory(
+            scene=self.scene,
+            persona=self.participant.character_sheet.primary_persona,
+            mode=InteractionMode.ACTION,
+            content="Frost Bolt at Pyromancer",
+        )
+        self.action = CombatRoundActionFactory(
+            participant=self.participant,
+            focused_opponent_target=self.opponent,
+            interaction=self.interaction,
+            interaction_timestamp=self.interaction.timestamp,
+        )
+
+    def test_defeated_target_emits_status_row(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        # Make the account a participant of the scene so _viewer_can_see passes.
+        # In v1 this test exercises staff-bypass for simplicity.
+        self.account.is_staff = True
+        self.account.save()
+
+        detail = _build_outcome_detail(self.interaction.pk, self.account)
+        kinds = {row.kind for row in detail.effects}
+        labels = " | ".join(row.label for row in detail.effects)
+        assert "status" in kinds, f"expected a 'status' row in: {labels}"
+        assert "Pyromancer" in labels
+
+    def test_non_participant_sees_empty_effects(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        outsider = AccountFactory()
+        detail = _build_outcome_detail(self.interaction.pk, outsider)
         assert detail.effects == []

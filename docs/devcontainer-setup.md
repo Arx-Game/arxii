@@ -237,6 +237,37 @@ ngrok is intentionally not in the allowlist. The container is not designed for
 integration tests that need an inbound tunnel. If you need that, add the relevant
 ngrok API and tunnel hosts to `init-firewall.sh` and rebuild.
 
+## GitHub read-only access (optional)
+
+The container ships with `gh` installed and reads `GH_TOKEN` from `dev.env` at
+startup. This lets the in-container Claude check CI runs, read Dependabot
+alerts, etc. — without any write access to your repo.
+
+To enable:
+
+1. Create a **fine-grained personal access token** at
+   <https://github.com/settings/personal-access-tokens>:
+   - Resource owner: you (or the org `arxii` lives in)
+   - Repository access: select **only** `arxii`
+   - Permissions: `Metadata: Read` (mandatory), `Actions: Read`, `Dependabot
+     alerts: Read`. Add `Pull requests: Read` and `Checks: Read` if you want
+     PR-level CI context. Leave everything else unselected — the token
+     physically cannot do what it isn't granted.
+   - Pick an expiry you're willing to rotate (90 days is GitHub's default).
+2. Append a line to `.devcontainer/dev.env` (which is gitignored):
+   ```
+   GH_TOKEN=github_pat_…your_token_here…
+   ```
+   (Fine-grained PATs start with `github_pat_`; classic PATs start with
+   `ghp_`. Either form works with `gh`.)
+3. Recreate the container (`just dc-down && just dc-up`) so compose
+   re-reads the env file.
+4. Inside the container, `gh run list`, `gh run watch`, `gh api …`, etc.
+   work without further configuration.
+
+To revoke: delete the line from `dev.env` and recreate the container, or
+revoke the token on the GitHub settings page (effective immediately).
+
 ## Superpowers brainstorm server
 
 The `superpowers:brainstorming` skill starts a local Node web server to show

@@ -35,6 +35,8 @@ function makeClash(overrides: Partial<ClashState> = {}): ClashState {
     pc_win_threshold: 5,
     npc_win_threshold: -5,
     npc_opponent: 10,
+    contributors: [],
+    side_favored: 'EVEN',
     ...overrides,
   };
 }

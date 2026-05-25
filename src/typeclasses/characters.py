@@ -148,6 +148,17 @@ class Character(ObjectParent, DefaultCharacter):
         return CharacterCombatPullHandler(self)
 
     @cached_property
+    def techniques(self):
+        """Handler for this character's Techniques + effect Properties.
+
+        Used by the clash-opposition predicate to find which of the
+        character's techniques can engage in or assist a given clash.
+        """
+        from world.magic.handlers import CharacterTechniqueHandler
+
+        return CharacterTechniqueHandler(self)
+
+    @cached_property
     def conditions(self):
         """Handler for this character's active ConditionInstance rows."""
         from world.conditions.handlers import CharacterConditionHandler
