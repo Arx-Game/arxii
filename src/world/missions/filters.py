@@ -1,0 +1,61 @@
+"""django-filter FilterSets for the missions API.
+
+Per the project's "Always use django-filter FilterSet classes for query
+parameter handling in ViewSets and Views" rule (custom linter enforced),
+ViewSets must never read request.query_params directly. Each filter
+exposes a structured query surface for the authoring tool.
+
+D1 ships ``MissionTemplateFilterSet`` (browse). Additional FilterSets
+for editor CRUD and giver library land in D2/D3.
+"""
+
+from django.db.models import QuerySet
+import django_filters
+
+from world.missions.constants import AccessTier, ArcScope
+from world.missions.models import MissionTemplate
+
+
+class MissionTemplateFilterSet(django_filters.FilterSet):
+    """Filters for the MissionTemplateViewSet browse endpoint.
+
+    Plan-defined surface: name (substring), level band, area (giver→
+    room→Area; deferred — see DESIGN below), category (by name), risk,
+    org (giver's org by name), status (is_active / arc_scope / access_tier).
+    """
+
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    # Level-band filters — the template's band is a [min, max] range; we
+    # let the operator filter on either bound or assert "applies to level
+    # X" with `level_band_contains=X`.
+    level_band_min = django_filters.NumberFilter(field_name="level_band_min")
+    level_band_max = django_filters.NumberFilter(field_name="level_band_max")
+    level_band_contains = django_filters.NumberFilter(method="filter_level_band_contains")
+    risk_tier = django_filters.NumberFilter(field_name="risk_tier")
+    is_active = django_filters.BooleanFilter(field_name="is_active")
+    arc_scope = django_filters.ChoiceFilter(field_name="arc_scope", choices=ArcScope.choices)
+    access_tier = django_filters.ChoiceFilter(field_name="access_tier", choices=AccessTier.choices)
+    category = django_filters.CharFilter(field_name="categories__name", lookup_expr="iexact")
+    org = django_filters.CharFilter(
+        field_name="givers__org__name", lookup_expr="iexact", distinct=True
+    )
+
+    # DESIGN: the plan calls out an "area" filter (giver → target room →
+    # locations.RoomProfile → areas.Area). That is a 4-hop chain and the
+    # giver target FK is to ObjectDB (typeclass discriminates room vs
+    # other). Punting until D3 lands the giver library and validates the
+    # most ergonomic shape — likely a `giver_area_slug` filter exposing
+    # the materialized AreaClosure view for ancestor-aware matching.
+
+    class Meta:
+        model = MissionTemplate
+        fields: list[str] = []  # all real filters defined explicitly above
+
+    @staticmethod
+    def filter_level_band_contains(
+        queryset: QuerySet[MissionTemplate],
+        name: str,  # noqa: ARG004 — FilterSet method signature requires it
+        value: int,
+    ) -> QuerySet[MissionTemplate]:
+        """Match templates whose [min, max] band contains the given level."""
+        return queryset.filter(level_band_min__lte=value, level_band_max__gte=value)
