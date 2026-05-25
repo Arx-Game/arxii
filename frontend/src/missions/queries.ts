@@ -13,6 +13,10 @@ import {
   copyNode,
   copySubtree,
   copyTemplate,
+  createGiverOffering,
+  createMissionGiver,
+  deleteGiverOffering,
+  deleteMissionGiver,
   deleteMissionInstance,
   getMissionGiver,
   getMissionTemplate,
@@ -26,6 +30,8 @@ import {
   listPredicateLeaves,
   listRouteCandidates,
   listRouteRewards,
+  patchGiverOffering,
+  patchMissionGiver,
   patchMissionNode,
   patchMissionTemplate,
 } from './api';
@@ -281,5 +287,58 @@ export function useDeleteMissionInstance() {
   return useMutation({
     mutationFn: (id: number) => deleteMissionInstance(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.templates() }),
+  });
+}
+
+export function useCreateMissionGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<MissionGiver>) => createMissionGiver(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
+  });
+}
+
+export function usePatchMissionGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slug, body }: { slug: string; body: Partial<MissionGiver> }) =>
+      patchMissionGiver(slug, body),
+    onSuccess: (_data, { slug }) => {
+      qc.invalidateQueries({ queryKey: missionKeys.giverDetail(slug) });
+      qc.invalidateQueries({ queryKey: missionKeys.givers() });
+    },
+  });
+}
+
+export function useDeleteMissionGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slug: string) => deleteMissionGiver(slug),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
+  });
+}
+
+export function useCreateGiverOffering() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<MissionGiverOffering>) => createGiverOffering(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
+  });
+}
+
+export function usePatchGiverOffering() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<MissionGiverOffering> }) =>
+      patchGiverOffering(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
+  });
+}
+
+export function useDeleteGiverOffering() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteGiverOffering(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
   });
 }

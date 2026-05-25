@@ -223,6 +223,92 @@ export async function listGiverStandings(
   return res.json();
 }
 
+export async function createMissionGiver(body: Partial<MissionGiver>): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to create giver'
+    );
+  }
+  return res.json();
+}
+
+export async function patchMissionGiver(
+  slug: string,
+  body: Partial<MissionGiver>
+): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to update giver'
+    );
+  }
+  return res.json();
+}
+
+export async function deleteMissionGiver(slug: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete giver');
+}
+
+export async function createGiverOffering(
+  body: Partial<MissionGiverOffering>
+): Promise<MissionGiverOffering> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to add offering'
+    );
+  }
+  return res.json();
+}
+
+export async function patchGiverOffering(
+  id: number,
+  body: Partial<MissionGiverOffering>
+): Promise<MissionGiverOffering> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to update offering'
+    );
+  }
+  return res.json();
+}
+
+export async function deleteGiverOffering(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove offering');
+}
+
 // ---------------------------------------------------------------------------
 // Copy actions (D4.2)
 // ---------------------------------------------------------------------------

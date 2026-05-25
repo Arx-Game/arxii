@@ -39,6 +39,12 @@ vi.mock('../api', () => ({
   copySubtree: vi.fn(),
   assignMission: vi.fn(),
   deleteMissionInstance: vi.fn(),
+  createMissionGiver: vi.fn(),
+  patchMissionGiver: vi.fn(),
+  deleteMissionGiver: vi.fn(),
+  createGiverOffering: vi.fn(),
+  patchGiverOffering: vi.fn(),
+  deleteGiverOffering: vi.fn(),
 }));
 
 import * as api from '../api';
