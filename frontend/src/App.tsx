@@ -34,6 +34,11 @@ import { WardrobePage } from './inventory/pages/WardrobePage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
+const MissionBrowserPage = lazy(() =>
+  import('@/missions/pages/MissionBrowserPage').then((m) => ({
+    default: m.MissionBrowserPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -270,6 +275,16 @@ function App() {
           element={
             <StaffRoute>
               <StaffInboxPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/missions"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <MissionBrowserPage />
+              </Suspense>
             </StaffRoute>
           }
         />
