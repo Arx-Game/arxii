@@ -17,9 +17,10 @@ from rest_framework.viewsets import ModelViewSet
 
 from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ParticipantStatus
+from world.combat.constants import ClashStatus, ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
 from world.combat.models import (
+    Clash,
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
@@ -115,6 +116,13 @@ class CombatEncounterViewSet(ModelViewSet):
                 "opponents",
                 queryset=CombatOpponent.objects.all(),
                 to_attr="opponents_cached",
+            ),
+            Prefetch(
+                "clashes",
+                queryset=Clash.objects.filter(status=ClashStatus.ACTIVE).select_related(
+                    "npc_opponent"
+                ),
+                to_attr="clashes_cached",
             ),
         )
 

@@ -12,6 +12,7 @@ from world.scenes.models import (
 
 class PersonaSerializer(serializers.ModelSerializer):
     roster_entry = serializers.SerializerMethodField()
+    thumbnail_media_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Persona
@@ -23,9 +24,15 @@ class PersonaSerializer(serializers.ModelSerializer):
             "persona_type",
             "description",
             "thumbnail_url",
+            "thumbnail_media_url",
             "roster_entry",
         ]
         read_only_fields = ["roster_entry"]
+
+    def get_thumbnail_media_url(self, obj: Persona) -> str | None:
+        if obj.thumbnail_id is None:
+            return None
+        return obj.thumbnail.cloudinary_url
 
     def get_roster_entry(self, obj: Persona) -> dict[str, int | str] | None:
         try:
@@ -106,6 +113,7 @@ class SceneListSerializer(serializers.ModelSerializer):
                 obj.interactions.select_related(
                     "persona__character_sheet__character",
                     "persona__character_sheet__roster_entry",
+                    "persona__thumbnail",
                 )
             )
         seen: dict[int, Persona] = {}

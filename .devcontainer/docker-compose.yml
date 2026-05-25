@@ -18,10 +18,34 @@ services:
       - arxii-fe-node-modules:/workspaces/arxii/frontend/node_modules
       # Persist Claude Code auth/config so login survives container rebuilds.
       - arxii-claude-home:/home/vscode/.claude
+      # Shadow the host's src/.env (which points DATABASE_URL at a bare-metal
+      # localhost Postgres) with a container-specific file. sync-env.sh
+      # generates dev.env from src/.env with DATABASE_URL rewritten before
+      # `just dc-up` brings the stack up.
+      - ./dev.env:/workspaces/arxii/src/.env
     environment:
       # django-environ env.db() reads DATABASE_URL; points at the db service.
       DATABASE_URL: postgres://arxii:arxii@db:5432/arxiidev
+      # Pin the superpowers brainstorm-server port (server.cjs reads
+      # BRAINSTORM_PORT, otherwise picks random in 49152-65535). Fixing it
+      # to one port lets us forward exactly that one to the Windows host
+      # instead of opening a 16k-port range.
+      BRAINSTORM_PORT: "49200"
+    # Forward the brainstorm-server port so http://localhost:49200/ in the
+    # Windows browser reaches the in-container server. The skill's
+    # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
+    # --url-host localhost so it actually listens on the forwarded interface.
+    ports:
+      - "49200:49200"
     command: sleep infinity
+    # Cap container logs at 150 MB (50 MB × 3 rotated files). Docker's
+    # default json-file driver has no rotation — a crash-looping process
+    # can fill the WSL2 vhdx with GB/hour of logs before anyone notices.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     depends_on:
       - db
 
@@ -35,6 +59,11 @@ services:
       # Named volume = optional local-dev persistence. Wiping it is safe
       # (DB is test-only); Django's test runner builds test_arxiidev anyway.
       - arxii-pgdata:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
 volumes:
   arxii-pgdata:

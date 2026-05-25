@@ -13,9 +13,11 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { getRituals } from '@/rituals/api';
+import type { components } from '@/generated/api';
 import type {
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
+  ApplicablePullsRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -45,9 +47,12 @@ import type {
   StageAdvanceRespondRequest,
   TetherBond,
   Thread,
+  ThreadApplicability,
   ThreadHubSummary,
   WeaveThreadRequest,
 } from './types';
+
+export type Technique = components['schemas']['Technique'];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,6 +88,7 @@ const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
 const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
 const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
+const TECHNIQUES_URL = '/api/magic/techniques';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -662,4 +668,82 @@ export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBri
   const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load rooms by property');
   return res.json() as Promise<RoomBrief[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Technique detail
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/techniques/{id}/
+ *
+ * Returns a single Technique with intensity, control, anima_cost and other stats.
+ * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ */
+export async function getTechnique(id: number): Promise<Technique> {
+  const res = await apiFetch(`${TECHNIQUES_URL}/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load technique ${id}`);
+  return res.json() as Promise<Technique>;
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls
+// ---------------------------------------------------------------------------
+
+const APPLICABLE_PULLS_URL = '/api/magic/applicable-pulls/';
+
+/**
+ * POST /api/magic/applicable-pulls/
+ *
+ * Returns per-thread applicability rows for the given action context.
+ * Each row: { thread_id, applicable, inapplicable_reason }.
+ * Designed to be called from useApplicablePulls; do not call directly in components.
+ */
+export async function fetchApplicablePulls(
+  body: ApplicablePullsRequest
+): Promise<ThreadApplicability[]> {
+  const res = await apiFetch(APPLICABLE_PULLS_URL, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to fetch applicable pulls');
+  }
+  return res.json() as Promise<ThreadApplicability[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Character Anima
+// ---------------------------------------------------------------------------
+
+const CHARACTER_ANIMA_URL = '/api/magic/character-anima/';
+
+/** Shape of CharacterAnima records returned by GET /api/magic/character-anima/. */
+export interface CharacterAnimaRecord {
+  id: number;
+  character: number;
+  current: number;
+  maximum: number;
+  last_recovery: string | null;
+}
+
+/**
+ * GET /api/magic/character-anima/?character=<characterId>
+ *
+ * Returns CharacterAnima records visible to the authenticated user,
+ * narrowed to the given character (ObjectDB PK).
+ *
+ * The response is a paginated list; we return the first result's record
+ * since each character has at most one CharacterAnima row.
+ */
+export async function getCharacterAnima(characterId: number): Promise<CharacterAnimaRecord | null> {
+  const res = await apiFetch(`${CHARACTER_ANIMA_URL}?character=${characterId}`);
+  if (!res.ok) throw new Error(`Failed to load anima for character ${characterId}`);
+  const data = (await res.json()) as { results?: CharacterAnimaRecord[] } | CharacterAnimaRecord[];
+  // Handle both paginated (results array) and bare array responses.
+  const list: CharacterAnimaRecord[] = Array.isArray(data)
+    ? data
+    : ((data as { results?: CharacterAnimaRecord[] }).results ?? []);
+  return list[0] ?? null;
 }

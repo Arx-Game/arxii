@@ -72,6 +72,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             queryset=Interaction.objects.select_related(
                 "persona__character_sheet__character",
                 "persona__character_sheet__roster_entry",
+                "persona__thumbnail",
             ),
             to_attr="cached_interactions",
         )
@@ -198,6 +199,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             queryset=Interaction.objects.select_related(
                 "persona__character_sheet__character",
                 "persona__character_sheet__roster_entry",
+                "persona__thumbnail",
             ),
             to_attr="cached_interactions",
         )
@@ -263,6 +265,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
         return Persona.objects.select_related(
             "character_sheet",
             "character_sheet__roster_entry",
+            "thumbnail",
         ).order_by("created_at")
 
 

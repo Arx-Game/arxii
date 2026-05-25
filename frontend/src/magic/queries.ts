@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
   AcceptTeachingOfferRequest,
+  ApplicablePullsRequest,
   CrossXPLockRequest,
   DissolveRequest,
   PatchThreadRequest,
@@ -52,6 +53,14 @@ export const magicKeys = {
   characterResonanceList: () => [...magicKeys.characterResonances(), 'list'] as const,
 
   teachingOffers: () => [...magicKeys.all, 'teaching-offers', 'list'] as const,
+
+  technique: (id: number) => [...magicKeys.all, 'technique', id] as const,
+
+  applicablePulls: (context: ApplicablePullsRequest | null) =>
+    [...magicKeys.all, 'applicable-pulls', context] as const,
+
+  characterAnima: (characterId: number) =>
+    [...magicKeys.all, 'character-anima', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -402,6 +411,25 @@ export function useCommitPull() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Technique detail hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a single Technique by PK, including intensity, control, and anima_cost.
+ *
+ * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ * Disabled when id is undefined or 0.
+ */
+export function useTechnique(id: number | undefined) {
+  return useQuery({
+    queryKey: magicKeys.technique(id ?? 0),
+    queryFn: () => api.getTechnique(id!),
+    enabled: id !== undefined && id > 0,
+    staleTime: 60_000,
+  });
+}
+
 /**
  * Accept a ThreadWeavingTeachingOffer.
  * Invalidates teachingOffers and threadHubSummary on success.
@@ -415,5 +443,49 @@ export function useAcceptTeachingOffer() {
       void qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() });
       void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls read hook
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Character Anima read hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the CharacterAnima record for the given character (ObjectDB PK).
+ *
+ * Disabled when characterId <= 0.
+ * The CharacterAnima ViewSet filters by ?character=<pk> (ObjectDB PK, not
+ * CharacterSheet PK). Each character has at most one CharacterAnima row.
+ */
+export function useCharacterAnima(characterId: number) {
+  return useQuery({
+    queryKey: magicKeys.characterAnima(characterId),
+    queryFn: () => api.getCharacterAnima(characterId),
+    enabled: characterId > 0,
+    staleTime: 10_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Applicable Pulls read hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch per-thread applicability rows for the given action context.
+ *
+ * Disabled when context is null (no action context available yet).
+ * staleTime: 5_000 — context changes are user-driven and quick;
+ * short stale time keeps the picker reactive.
+ */
+export function useApplicablePulls(context: ApplicablePullsRequest | null) {
+  return useQuery({
+    queryKey: magicKeys.applicablePulls(context),
+    queryFn: () => api.fetchApplicablePulls(context!),
+    enabled: context !== null,
+    staleTime: 5_000,
   });
 }

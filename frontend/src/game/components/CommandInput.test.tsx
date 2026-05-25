@@ -4,9 +4,14 @@ import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 
 const sendMock = vi.fn();
+const submitPoseMock = vi.fn(() => Promise.resolve());
 
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({ send: sendMock }),
+}));
+
+vi.mock('@/scenes/queries', () => ({
+  submitPose: (...args: unknown[]) => submitPoseMock(...(args as [])),
 }));
 
 vi.mock('@/store/hooks', () => ({
@@ -52,6 +57,7 @@ vi.mock('@/scenes/components/ActionAttachment', () => ({
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
+    submitPoseMock.mockClear();
   });
 
   it('renders ghost text with mode label when composerMode is provided', () => {
@@ -222,5 +228,53 @@ describe('CommandInput', () => {
   it('renders action attachment slot when sceneId is provided', () => {
     render(<CommandInput character="Alice" sceneId="1" />);
     expect(screen.getByTestId('action-attachment')).toBeInTheDocument();
+  });
+
+  it('pose with detachments uses REST submitPose and skips WebSocket send', async () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+    render(
+      <CommandInput
+        character="Alice"
+        composerMode={mode}
+        sceneId="1"
+        personaId={42}
+        pendingActionIds={[10, 11]}
+        detachedActionIds={[11]}
+        onPoseSubmitted={vi.fn()}
+      />
+    );
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'lunges forward' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 42,
+      scene_id: 1,
+      content: 'lunges forward',
+      action_link_ids: [10],
+    });
+  });
+
+  it('pose without detachments uses WebSocket send and skips REST submitPose', () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+    render(
+      <CommandInput
+        character="Alice"
+        composerMode={mode}
+        sceneId="1"
+        personaId={42}
+        pendingActionIds={[10]}
+        detachedActionIds={[]}
+      />
+    );
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'stands ready' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose stands ready');
+    expect(submitPoseMock).not.toHaveBeenCalled();
   });
 });

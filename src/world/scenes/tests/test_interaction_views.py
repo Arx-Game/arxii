@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -6,12 +9,13 @@ from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import InteractionVisibility
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
+    SceneFactory,
 )
-from world.scenes.models import InteractionFavorite
+from world.scenes.models import Interaction, InteractionAction, InteractionFavorite
 
 
 class InteractionViewSetTestCase(APITestCase):
@@ -146,3 +150,373 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert "receivers" in response.data
         assert len(response.data["receivers"]) == 1
+
+
+class PoseSubmitViewTests(APITestCase):
+    """View-layer integration tests for the submit_pose endpoint.
+
+    Uses setUpTestData for the identity chain and setUp for per-test flush.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+        cls.other_account = AccountFactory()
+        cls.other_character = CharacterFactory()
+        cls.other_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.other_character,
+        )
+        cls.other_player_data = PlayerDataFactory(account=cls.other_account)
+        cls.other_tenure = RosterTenureFactory(
+            player_data=cls.other_player_data,
+            roster_entry=cls.other_roster_entry,
+        )
+        cls.other_identity = CharacterSheetFactory(character=cls.other_character)
+        cls.other_persona = cls.other_identity.primary_persona
+
+    def setUp(self) -> None:
+        # Flush all SharedMemoryModel caches to prevent identity-map contamination
+        # across tests when SQLite recycles PKs after per-test transaction rollback.
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+        self.url = reverse("interaction-submit-pose")
+        self.base_ts = timezone.now() - timedelta(hours=1)
+
+    def _make_action(self, *, offset_seconds: int) -> Interaction:
+        """Create an ACTION interaction at a controlled timestamp."""
+        row = InteractionFactory(
+            persona=self.persona,
+            mode=InteractionMode.ACTION,
+        )
+        target_ts = self.base_ts + timedelta(seconds=offset_seconds)
+        Interaction.objects.filter(pk=row.pk).update(timestamp=target_ts)
+        row.timestamp = target_ts
+        return row
+
+    def test_submit_pose_auto_links_prior_actions(self) -> None:
+        """POST submit-pose without action_link_ids triggers auto-link service."""
+        action_a = self._make_action(offset_seconds=1)
+        action_b = self._make_action(offset_seconds=2)
+
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A pose."},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        pose_id = response.data["id"]
+        linked_action_ids = set(
+            InteractionAction.objects.filter(pose_id=pose_id).values_list(
+                "action_interaction_id", flat=True
+            )
+        )
+        assert linked_action_ids == {action_a.pk, action_b.pk}
+
+    def test_submit_pose_with_explicit_action_link_ids_skips_auto_link(self) -> None:
+        """When action_link_ids is provided, only those links are created (no auto-link)."""
+        action_a = self._make_action(offset_seconds=1)
+        action_b = self._make_action(offset_seconds=2)  # noqa: F841 — present but not supplied
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "A pose with explicit link.",
+                "action_link_ids": [action_a.pk],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        pose_id = response.data["id"]
+        links = list(InteractionAction.objects.filter(pose_id=pose_id))
+        assert len(links) == 1
+        assert links[0].action_interaction_id == action_a.pk
+
+    def test_submit_pose_with_empty_action_link_ids_creates_no_links(self) -> None:
+        """When action_link_ids is explicitly [] no auto-link and no links are created."""
+        self._make_action(offset_seconds=1)
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "A pose that opts out of linking.",
+                "action_link_ids": [],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        pose_id = response.data["id"]
+        assert InteractionAction.objects.filter(pose_id=pose_id).count() == 0
+
+    def test_validate_rejects_non_action_interaction_id(self) -> None:
+        """action_link_ids containing a non-ACTION interaction id is rejected 400."""
+        pose_interaction = InteractionFactory(
+            persona=self.persona,
+            mode=InteractionMode.POSE,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "A pose.",
+                "action_link_ids": [pose_interaction.pk],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_validate_rejects_persona_not_owned_by_user(self) -> None:
+        """action_link_ids referencing another persona's actions is rejected 400."""
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.other_persona.pk, "content": "A pose."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_submit_pose_creates_interaction_in_scene(self) -> None:
+        """Providing scene_id attaches the pose to that scene."""
+        scene = SceneFactory()
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A posed action in a scene.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["scene"] == scene.pk
+
+    def test_unauthenticated_request_is_rejected(self) -> None:
+        """Unauthenticated requests are rejected with 401 or 403."""
+        self.client.force_authenticate(user=None)
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A pose."},
+            format="json",
+        )
+        assert response.status_code in {
+            status.HTTP_401_UNAUTHORIZED,
+            status.HTTP_403_FORBIDDEN,
+        }
+
+    def test_submit_pose_response_includes_serialized_list_fields(self) -> None:
+        """Response payload includes all InteractionListSerializer fields.
+
+        This exercises the cached_* to_attr attributes (cached_receivers,
+        cached_target_personas, cached_favorites, cached_reactions) that the
+        freshly-created Interaction won't have from get_queryset()'s Prefetch
+        pipeline. Without the empty-list assignment in submit_pose, all four
+        get_* methods AttributeError here.
+        """
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A fully serialized pose."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.data
+        # Fields populated from cached_receivers / cached_target_personas
+        assert "receiver_persona_ids" in data
+        assert data["receiver_persona_ids"] == []
+        assert "target_persona_ids" in data
+        assert data["target_persona_ids"] == []
+        # Fields from cached_favorites / cached_reactions
+        assert "is_favorited" in data
+        assert data["is_favorited"] is False
+        assert "reactions" in data
+        assert data["reactions"] == []
+        # action_links — newly-created pose has no links yet (empty list injected)
+        assert "action_links" in data
+        assert data["action_links"] == []
+
+
+class ActionLinksSerializerTests(APITestCase):
+    """action_links field is populated by the list endpoint for POSE interactions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+
+    def test_list_includes_action_links_for_pose_with_linked_actions(self) -> None:
+        """GET /api/interactions/ returns action_links populated for a POSE with linked actions."""
+        scene = SceneFactory()
+        action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(url, {"scene": scene.pk})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data["results"]
+
+        pose_row = next((r for r in results if r["id"] == pose.pk), None)
+        assert pose_row is not None, "POSE interaction not found in results"
+        assert "action_links" in pose_row
+        assert len(pose_row["action_links"]) == 1
+        link = pose_row["action_links"][0]
+        assert link["ordering"] == 0
+        assert link["action_interaction"]["id"] == action.pk
+        assert link["action_interaction"]["mode"] == "action"
+
+    def test_list_includes_empty_action_links_for_pose_without_actions(self) -> None:
+        """GET /api/interactions/ returns action_links=[] for a POSE with no linked actions."""
+        pose = InteractionFactory(
+            persona=self.persona,
+            mode=InteractionMode.POSE,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(url, {"persona": self.persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data["results"]
+
+        pose_row = next((r for r in results if r["id"] == pose.pk), None)
+        assert pose_row is not None
+        assert pose_row["action_links"] == []
+
+
+class WithoutPoseLinkFilterTests(APITestCase):
+    """Tests for the without_pose_link filter on InteractionFilter."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+
+    def test_without_pose_link_true_excludes_linked_actions(self) -> None:
+        """?without_pose_link=true excludes ACTION interactions that have a pose link."""
+        scene = SceneFactory()
+        unlinked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        linked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=linked_action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(
+            url,
+            {
+                "scene": scene.pk,
+                "mode": InteractionMode.ACTION,
+                "without_pose_link": "true",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        result_ids = {r["id"] for r in response.data["results"]}
+        assert unlinked_action.pk in result_ids
+        assert linked_action.pk not in result_ids
+
+    def test_without_pose_link_false_returns_all_actions(self) -> None:
+        """?without_pose_link=false returns both linked and unlinked ACTION interactions."""
+        scene = SceneFactory()
+        unlinked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        linked_action = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.ACTION,
+        )
+        pose = InteractionFactory(
+            persona=self.persona,
+            scene=scene,
+            mode=InteractionMode.POSE,
+        )
+        InteractionAction.objects.create(
+            pose=pose,
+            action_interaction=linked_action,
+            ordering=0,
+        )
+
+        url = reverse("interaction-list")
+        response = self.client.get(
+            url,
+            {
+                "scene": scene.pk,
+                "mode": InteractionMode.ACTION,
+                "without_pose_link": "false",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        result_ids = {r["id"] for r in response.data["results"]}
+        assert unlinked_action.pk in result_ids
+        assert linked_action.pk in result_ids

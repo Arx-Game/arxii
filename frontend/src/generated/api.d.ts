@@ -2348,6 +2348,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/action-outcome-details/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Return outcome details for a list of ACTION Interaction IDs.
+     *
+     *     Query parameter: ``action_interaction_ids`` — comma-separated list of IDs.
+     *
+     *     Example: GET /api/combat/action-outcome-details/?action_interaction_ids=1,2,3
+     */
+    get: operations['combat_action_outcome_details_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/conditions/capabilities/': {
     parameters: {
       query?: never;
@@ -4767,6 +4790,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/interactions/submit-pose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Create a POSE Interaction and auto-link prior ACTION Interactions.
+     *
+     *     Accepts ``action_link_ids`` for an explicit override:
+     *     - Absent (key missing): auto-link is run.
+     *     - Present as a list (even empty): exact links are created; auto-link skipped.
+     */
+    post: operations['interactions_submit_pose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -5175,6 +5221,23 @@ export interface paths {
     get: operations['journals_entries_mine_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/applicable-pulls/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Compute and return per-thread applicability for the given action context. */
+    post: operations['magic_applicable_pulls_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -9947,6 +10010,8 @@ export interface components {
       approach_id?: number | null;
       technique_id?: number | null;
       registry_key?: string | null;
+      clash_id?: number | null;
+      clash_action_slot?: string | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -9968,6 +10033,21 @@ export interface components {
       readonly source_note: string;
       /** Format: date-time */
       readonly recorded_at: string;
+    };
+    /**
+     * @description Request serializer for POST /api/magic/applicable-pulls/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet the
+     *     requesting account owns (staff may pass any sheet). All other fields are
+     *     optional context that narrows which threads are applicable.
+     */
+    ApplicablePullsRequestRequest: {
+      character_sheet_id: number;
+      technique_id?: number | null;
+      effect_type_id?: number | null;
+      target_object_id?: number | null;
+      target_persona_id?: number | null;
+      scene_id?: number | null;
     };
     /**
      * @description * `major` - Major Arcana
@@ -11623,6 +11703,21 @@ export interface components {
       readonly is_participant: boolean;
       /** @description Check whether the requesting user is GM of the linked scene. */
       readonly is_gm: boolean;
+      /**
+       * @description Return active Clash records for this encounter.
+       *
+       *     Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
+       *     rail section. Returns only ACTIVE clashes so resolved ones don't litter
+       *     the UI after the clash is done.
+       *
+       *     Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
+       *     ``_base_queryset`` so no extra query fires during detail serialization.
+       *     Falls back to a direct filter for callers that don't use the viewset
+       *     (e.g. unit tests that call the serializer directly).
+       */
+      readonly clashes: {
+        [key: string]: unknown;
+      }[];
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -12644,6 +12739,53 @@ export interface components {
       /** @description The minimum tier number that must be reached on this track */
       readonly minimum_tier: number;
     };
+    /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
+    InlineActionInteraction: {
+      readonly id: number;
+      /** @description The actual written text of the interaction */
+      content: string;
+      /**
+       * @description The type of IC interaction
+       *
+       *     * `pose` - Pose
+       *     * `emit` - Emit
+       *     * `say` - Say
+       *     * `whisper` - Whisper
+       *     * `shout` - Shout
+       *     * `action` - Action
+       */
+      mode?: components['schemas']['Mode3e5Enum'];
+      /** Format: date-time */
+      readonly timestamp: string;
+    };
+    /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
+    InlineActionInteractionRequest: {
+      /** @description The actual written text of the interaction */
+      content: string;
+      /**
+       * @description The type of IC interaction
+       *
+       *     * `pose` - Pose
+       *     * `emit` - Emit
+       *     * `say` - Say
+       *     * `whisper` - Whisper
+       *     * `shout` - Shout
+       *     * `action` - Action
+       */
+      mode?: components['schemas']['Mode3e5Enum'];
+    };
+    /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
+    InteractionActionLink: {
+      readonly id: number;
+      /** @description Display order within the pose (low values render first). */
+      ordering?: number;
+      readonly action_interaction: components['schemas']['InlineActionInteraction'];
+    };
+    /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
+    InteractionActionLinkRequest: {
+      /** @description Display order within the pose (low values render first). */
+      ordering?: number;
+    };
     InteractionDetail: {
       readonly id: number;
       /** @description Persona data embedded in interaction payloads. */
@@ -12688,6 +12830,7 @@ export interface components {
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
+      readonly action_links: components['schemas']['InteractionActionLink'][];
       readonly receivers: components['schemas']['InteractionReceiver'][];
     };
     InteractionFavorite: {
@@ -12745,6 +12888,7 @@ export interface components {
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
+      readonly action_links: components['schemas']['InteractionActionLink'][];
     };
     InteractionListRequest: {
       /** @description Scene container if one was active */
@@ -15098,6 +15242,7 @@ export interface components {
       description?: string;
       /** Format: uri */
       thumbnail_url?: string;
+      readonly thumbnail_media_url: string | null;
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;
@@ -17094,6 +17239,17 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
+    };
+    /**
+     * @description One row in the applicable-pulls response.
+     *
+     *     Response shape: ``{thread_id, applicable, inapplicable_reason}``.
+     *     ``inapplicable_reason`` is null when ``applicable`` is true.
+     */
+    ThreadApplicability: {
+      thread_id: number;
+      applicable: boolean;
+      inapplicable_reason?: string | null;
     };
     /** @description Response serializer for GET /api/magic/thread-hub-summary/. */
     ThreadHubSummary: {
@@ -20668,6 +20824,24 @@ export interface operations {
       };
     };
   };
+  combat_action_outcome_details_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   conditions_capabilities_list: {
     parameters: {
       query?: never;
@@ -23977,6 +24151,8 @@ export interface operations {
         target_persona?: number;
         until?: string;
         visibility?: string;
+        /** @description Exclude interactions that are already linked to a POSE via InteractionAction. */
+        without_pose_link?: boolean;
       };
       header?: never;
       path?: never;
@@ -24045,6 +24221,29 @@ export interface operations {
         /** @description A unique integer value identifying this interaction. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionListRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionList'];
+        };
+      };
+    };
+  };
+  interactions_submit_pose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody: {
@@ -24741,6 +24940,29 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_applicable_pulls_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ApplicablePullsRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadApplicability'][];
+        };
       };
     };
   };
