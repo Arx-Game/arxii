@@ -32,6 +32,15 @@ RUN printf '%s\n' \
 
 USER vscode
 
+# Put mise's bin dir on PATH for all subsequent RUN steps. Mise installs
+# itself at ~/.local/bin/mise; that path is added to PATH at shell-init
+# time via ~/.bashrc, but Docker's RUN uses `/bin/sh -c` which doesn't
+# source bashrc. Without this, mise's own post-install hooks (e.g. the
+# `mise reshim` that npm runs after `npm install -g`) fail with
+# "mise: command not found" even though our RUN commands invoke it by
+# full path.
+ENV PATH="/home/vscode/.local/bin:${PATH}"
+
 # Pre-create the Claude home dir as the vscode user so the arxii-claude-home
 # named volume (mounted here in compose) inherits vscode ownership on first
 # use. Otherwise Docker creates the mountpoint root-owned and `claude` login
