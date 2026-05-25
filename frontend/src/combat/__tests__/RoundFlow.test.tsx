@@ -31,6 +31,7 @@ function makeParticipant(id: number, name: string): Participant {
     health: 10,
     max_health: 10,
     character_status: 'healthy',
+    available_strain: null,
   };
 }
 

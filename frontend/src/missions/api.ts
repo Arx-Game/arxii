@@ -83,6 +83,7 @@ export async function listMissionNodes(
     template?: number;
     template_slug?: string;
     is_entry?: boolean;
+    needs_rewrite?: boolean;
     page?: number;
     page_size?: number;
   } = {}
@@ -138,6 +139,7 @@ export async function listMissionOptions(
   filters: {
     node?: number;
     template?: number;
+    needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOption>> {
   const res = await apiFetch(`${BASE_URL}/options/${buildQueryString(filters)}`);
@@ -149,6 +151,7 @@ export async function listMissionRoutes(
   filters: {
     option?: number;
     template?: number;
+    needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOptionRoute>> {
   const res = await apiFetch(`${BASE_URL}/routes/${buildQueryString(filters)}`);

@@ -16,7 +16,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMissionTemplate } from '../queries';
+import { FlavorRewriteCard } from './FlavorRewriteCard';
+import { StaffActionsCard } from './StaffActionsCard';
+import { useDeleteMissionInstance, useMissionTemplate } from '../queries';
 
 interface MissionDetailPanelProps {
   /** Template slug — the URL key for the detail endpoint. */
@@ -57,32 +59,38 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle>{template.name}</CardTitle>
-          <AccessTierBadge tier={template.access_tier ?? 'staff_only'} />
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-muted-foreground">{template.slug}</div>
-          <Button asChild size="sm" variant="outline">
-            <Link to={`/staff/missions/${template.slug}/canvas`}>Graph view →</Link>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <DescriptionBlock label="Summary" text={template.summary} />
-        {template.epilogue ? <DescriptionBlock label="Epilogue" text={template.epilogue} /> : null}
-        <MetadataGrid template={template} />
-        <CategoriesRow categories={template.categories ?? []} />
-        <FootprintBlock
-          lifetimeCompletions={template.lifetime_completions}
-          activeInstances={
-            (template.active_instances ?? []) as unknown as readonly ActiveInstance[]
-          }
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle>{template.name}</CardTitle>
+            <AccessTierBadge tier={template.access_tier ?? 'staff_only'} />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">{template.slug}</div>
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/staff/missions/${template.slug}/canvas`}>Graph view →</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <DescriptionBlock label="Summary" text={template.summary} />
+          {template.epilogue ? (
+            <DescriptionBlock label="Epilogue" text={template.epilogue} />
+          ) : null}
+          <MetadataGrid template={template} />
+          <CategoriesRow categories={template.categories ?? []} />
+          <FootprintBlock
+            lifetimeCompletions={template.lifetime_completions}
+            activeInstances={
+              (template.active_instances ?? []) as unknown as readonly ActiveInstance[]
+            }
+          />
+        </CardContent>
+      </Card>
+      <StaffActionsCard template={template} />
+      <FlavorRewriteCard template={template} />
+    </div>
   );
 }
 
@@ -170,6 +178,7 @@ function FootprintBlock({
   lifetimeCompletions: number;
   activeInstances: readonly ActiveInstance[];
 }) {
+  const del = useDeleteMissionInstance();
   return (
     <div className="border-t pt-4">
       <div className="flex items-center justify-between gap-4">
@@ -191,12 +200,26 @@ function FootprintBlock({
           {activeInstances.map((row) => (
             <li
               key={row.instance_id}
-              className="flex justify-between gap-2 rounded border bg-muted/30 px-2 py-1"
+              className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-2 py-1"
             >
-              <span>
+              <span className="flex-1">
                 #{row.instance_id} @ {row.current_node_key ?? '<no node>'}
               </span>
               <span className="text-muted-foreground">{row.contract_holder ?? '<unowned>'}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (confirm(`Delete stuck instance #${row.instance_id}?`)) {
+                    del.mutate(row.instance_id);
+                  }
+                }}
+                disabled={del.isPending}
+                aria-label={`Delete instance ${row.instance_id}`}
+                data-testid={`delete-instance-${row.instance_id}`}
+              >
+                ✕
+              </Button>
             </li>
           ))}
         </ul>

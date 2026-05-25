@@ -108,6 +108,7 @@ export function useMissionNodes(
     template?: number;
     template_slug?: string;
     is_entry?: boolean;
+    needs_rewrite?: boolean;
   } = {}
 ): UseQueryResult<PaginatedResponse<MissionNode>> {
   return useQuery({
@@ -118,7 +119,7 @@ export function useMissionNodes(
 }
 
 export function useMissionOptions(
-  filters: { node?: number; template?: number } = {}
+  filters: { node?: number; template?: number; needs_rewrite?: boolean } = {}
 ): UseQueryResult<PaginatedResponse<MissionOption>> {
   return useQuery({
     queryKey: missionKeys.optionsFor(filters),
@@ -129,7 +130,7 @@ export function useMissionOptions(
 }
 
 export function useMissionRoutes(
-  filters: { option?: number; template?: number } = {}
+  filters: { option?: number; template?: number; needs_rewrite?: boolean } = {}
 ): UseQueryResult<PaginatedResponse<MissionOptionRoute>> {
   return useQuery({
     queryKey: missionKeys.routesFor(filters),
