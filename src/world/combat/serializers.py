@@ -83,6 +83,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     health = serializers.SerializerMethodField()
     max_health = serializers.SerializerMethodField()
     character_status = serializers.SerializerMethodField()
+    available_strain = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -93,6 +94,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "health",
             "max_health",
             "character_status",
+            "available_strain",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -150,6 +152,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return obj.character_sheet.vitals.status
         except AttributeError:
             return None
+
+    def get_available_strain(self, obj: CombatParticipant) -> int | None:
+        """Return strain budget (anima pool) — only if viewer owns the PC.
+
+        Uses the same vitals-visibility rules as health/status fields.
+        The frontend's YourTurn strain slider reads this as its max value.
+        """
+        if not self._can_view_vitals(obj):
+            return None
+        return obj.available_strain
 
 
 class RoundActionSerializer(serializers.ModelSerializer):

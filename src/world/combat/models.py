@@ -565,6 +565,22 @@ class CombatParticipant(SharedMemoryModel):
             ),
         ]
 
+    @property
+    def available_strain(self) -> int:
+        """Strain budget for the round — currently the character's anima pool.
+
+        v1: returns CharacterAnima.current. The frontend's YourTurn strain
+        slider reads this as the slider's max. Future iterations may move
+        per-clash-strain-already-committed subtraction server-side; the
+        current frontend manages that client-side.
+
+        Returns 0 if the character has no CharacterAnima row (defensive).
+        """
+        try:
+            return self.character_sheet.character.anima.current
+        except AttributeError:
+            return 0
+
     def __str__(self) -> str:
         if self.covenant_role_id:
             return f"{self.character_sheet} ({self.covenant_role.name})"
