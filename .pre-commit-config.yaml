@@ -72,7 +72,7 @@ repos:
         pass_filenames: false
       - id: ty
         name: ty
-        entry: ty check --no-progress
+        entry: uv run ty check --no-progress
         language: system
         pass_filenames: false
       - id: check-type-annotations

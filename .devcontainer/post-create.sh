@@ -42,6 +42,19 @@ fi
 uv sync
 pnpm install --dir frontend
 
+# pre-commit hooks: install fresh inside the container.
+#
+# Background: if the host (Windows) ever ran `pre-commit install`, it baked
+# its own absolute path into .git/config's core.hooksPath plus dropped a
+# CRLF-shebang'd hook into .git/hooks/. Both survive the bind mount and
+# silently bypass every commit's checks from inside Linux — git can't exec
+# the CRLF shebang and `core.hooksPath` points at a non-existent Windows
+# path. Unset the stale config, wipe any stale hook files, then reinstall.
+git config --unset-all core.hooksPath 2>/dev/null || true
+rm -f .git/hooks/pre-commit .git/hooks/pre-push
+uv run pre-commit install
+uv run pre-commit install --hook-type pre-push
+
 # Wait for the db service (bounded — never hang first-run forever), then
 # apply schema (test-only DB, safe to recreate).
 timeout 90 bash -c 'until pg_isready -h db -U arxii -d arxiidev >/dev/null 2>&1; do sleep 1; done' \

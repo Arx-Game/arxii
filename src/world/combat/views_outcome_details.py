@@ -24,6 +24,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+_ERR_NON_INTEGER_IDS = "action_interaction_ids must be comma-separated integers."
+
 # ---------------------------------------------------------------------------
 # Domain types
 # ---------------------------------------------------------------------------
@@ -71,7 +73,7 @@ class OutcomeDetailsQuerySerializer(serializers.Serializer):
         try:
             return [int(p) for p in parts]
         except ValueError as exc:
-            raise serializers.ValidationError("Must be comma-separated integers.") from exc
+            raise serializers.ValidationError(_ERR_NON_INTEGER_IDS) from exc
 
 
 class DeepLinkRefSerializer(serializers.Serializer):

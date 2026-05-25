@@ -392,7 +392,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Falls back to a direct filter for callers that don't use the viewset
         (e.g. unit tests that call the serializer directly).
         """
-        clashes = getattr(obj, "clashes_cached", None)
+        clashes = getattr(obj, "clashes_cached", None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=...) sets this
         if clashes is None:
             clashes = (
                 Clash.objects.filter(
