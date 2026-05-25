@@ -92,6 +92,12 @@ export async function listMissionNodes(
   return res.json();
 }
 
+export async function getMissionNode(id: number): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load node ${id}`);
+  return res.json();
+}
+
 export async function patchMissionNode(
   id: number,
   body: Partial<MissionNode>
@@ -102,6 +108,25 @@ export async function patchMissionNode(
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to update node');
+  return res.json();
+}
+
+export async function getMissionOption(id: number): Promise<MissionOption> {
+  const res = await apiFetch(`${BASE_URL}/options/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load option ${id}`);
+  return res.json();
+}
+
+export async function patchMissionOption(
+  id: number,
+  body: Partial<MissionOption>
+): Promise<MissionOption> {
+  const res = await apiFetch(`${BASE_URL}/options/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update option');
   return res.json();
 }
 
