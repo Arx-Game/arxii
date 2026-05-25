@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
@@ -25,11 +26,53 @@ if TYPE_CHECKING:
         MissionParticipant,
         MissionRewardQueue,
     )
+    from world.scenes.models import Persona
 
-# A leaf resolver tests one slice of the acting character's own durable
-# state. It receives the acting character (ObjectDB) plus the leaf's
-# authored params (keyword-only) and returns a bool. The registry maps a
-# leaf name to one resolver.
+
+@dataclass(frozen=True)
+class ResolverContext:
+    """What a predicate-leaf resolver gets called with.
+
+    ``sheet`` is the acting CharacterSheet — the canonical character
+    handle per the project's "Avoid direct FKs to ObjectDB" rule.
+    Resolvers that gate on sheet-keyed state (achievements, threads,
+    resonance, codex knowledge, etc.) use ``ctx.sheet`` directly.
+    The handful of resolvers that gate on models still keyed by
+    ObjectDB (CharacterDistinction.character, ConditionInstance.target
+    via the conditions service, CharacterTraitValue.character,
+    MissionGiverStanding.character) walk ``ctx.character`` — a
+    convenience property that returns ``ctx.sheet.character``.
+
+    ``presented_persona`` is the persona the character is currently
+    presenting as (the mask they're wearing), or None if the caller
+    did not specify one. Persona-aware resolvers consult it; non-
+    persona resolvers ignore it.
+
+    See ``CharacterPredicateContext`` for the runtime that constructs
+    this and dispatches to the registry.
+    """
+
+    sheet: CharacterSheet
+    presented_persona: Persona | None = None
+
+    @property
+    def character(self) -> ObjectDB:
+        """Convenience: walk back to the ObjectDB for models that key on it.
+
+        Most resolvers should prefer ``ctx.sheet`` directly. This
+        property exists for the handful of legacy-keyed models
+        (CharacterDistinction, ConditionInstance, CharacterTraitValue,
+        MissionGiverStanding) that FK ObjectDB. SharedMemoryModel
+        identity map keeps the ObjectDB cached on the sheet — this is
+        a cheap attribute walk, not a query.
+        """
+        return self.sheet.character
+
+
+# A leaf resolver tests one slice of the acting character's state. It
+# receives a ResolverContext (character + optional presented_persona) plus
+# the leaf's authored params (keyword-only) and returns a bool. The
+# registry maps a leaf name to one resolver.
 LeafResolver = Callable[..., bool]
 LeafRegistry = dict[str, LeafResolver]
 

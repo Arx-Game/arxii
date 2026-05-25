@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/codex/", include("world.codex.urls")),
     path("api/character-sheets/", include("world.character_sheets.urls")),
     path("api/achievements/", include("world.achievements.urls")),
+    path("api/missions/", include("world.missions.urls")),
     path("api/journals/", include("world.journals.urls", namespace="journals")),
     path("api/clock/", include("world.game_clock.urls")),
     path("api/events/", include("world.events.urls")),

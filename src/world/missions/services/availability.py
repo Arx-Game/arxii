@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.missions.models import MissionGiver, MissionTemplate
+    from world.scenes.models import Persona
 
 
 def _character_level(character: ObjectDB) -> int | None:
@@ -100,13 +101,14 @@ def _arc_scope_matches(template: MissionTemplate, giver: MissionGiver) -> bool:
     return False
 
 
-def _eligible_templates(
+def _eligible_templates(  # noqa: PLR0913 — kwargs split to keep callsites readable
     giver: MissionGiver,
     character: ObjectDB,
     risk_dial: int,
     *,
     arc_filter: bool,
     active_era: Era | None,
+    presented_persona: Persona | None = None,
 ) -> list[MissionTemplate]:
     """Compute the eligible draw pool.
 
@@ -143,7 +145,7 @@ def _eligible_templates(
         # arc_filter requested but no active era — empty subpool.
         return []
 
-    ctx = CharacterPredicateContext(character)
+    ctx = CharacterPredicateContext(character, presented_persona=presented_persona)
     level = _character_level(character)
 
     eligible: list[MissionTemplate] = []
@@ -199,6 +201,8 @@ def offer_missions(
     character: ObjectDB,
     risk_dial: int = 0,
     count: int = 5,
+    *,
+    presented_persona: Persona | None = None,
 ) -> list[MissionTemplate]:
     """Return up to ``count`` templates the giver offers this character right now.
 
@@ -223,12 +227,24 @@ def offer_missions(
         return []
     active_era = Era.objects.get_active()
     ambient_pool = _eligible_templates(
-        giver, character, risk_dial, arc_filter=False, active_era=active_era
+        giver,
+        character,
+        risk_dial,
+        arc_filter=False,
+        active_era=active_era,
+        presented_persona=presented_persona,
     )
     if not ambient_pool:
         return []
     arc_pool = (
-        _eligible_templates(giver, character, risk_dial, arc_filter=True, active_era=active_era)
+        _eligible_templates(
+            giver,
+            character,
+            risk_dial,
+            arc_filter=True,
+            active_era=active_era,
+            presented_persona=presented_persona,
+        )
         if active_era is not None
         else []
     )

@@ -75,6 +75,25 @@ def accept_mission(
     return instance
 
 
+def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
+    """Staff-power: drop a mission on a character without a giver context.
+
+    Same instance/participant/entry-node setup as ``accept_mission``, but
+    skips the giver standing upsert (no giver involved). Used by the
+    Phase-D staff-assign action so operators can hand-place missions for
+    testing, narrative reasons, or recovery scenarios — bypasses all
+    availability filters (predicate / cooldown / level band / access tier).
+    """
+    instance = MissionInstance.objects.create(template=template)
+    MissionParticipant.objects.create(
+        instance=instance,
+        character=character,
+        is_contract_holder=True,
+    )
+    enter_node(instance, _entry_node(template))
+    return instance
+
+
 def share_mission(
     instance: MissionInstance,
     other_character: ObjectDB,
