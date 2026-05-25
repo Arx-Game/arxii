@@ -6,7 +6,11 @@ D3 adds the giver library. D4 adds access-tier flip + copy + staff-power
 actions. D5 adds the predicate-tree API.
 
 Every viewset in this module uses the project conventions:
-- ``IsAuthenticated + IsStaff`` permission stack (401 vs 403 split).
+- ``IsAuthenticated + IsAdminUser`` permission stack (401 vs 403 split).
+  ``IsAdminUser`` is DRF's built-in check on ``request.user.is_staff``;
+  reusing it instead of a per-app reimplementation (e.g. the older
+  ``IsStaffPermission`` in character_creation) keeps the staff-permission
+  surface uniform across world/ apps.
 - A ``FilterSet`` (never raw request.query_params).
 - Explicit ``.order_by(...)`` for stable pagination.
 - ``ModelViewSet`` when full CRUD applies; ``ReadOnlyModelViewSet`` for
@@ -21,7 +25,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
@@ -49,7 +53,6 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
-from world.missions.permissions import IsStaff
 from world.missions.predicates import LEAF_RESOLVERS
 from world.missions.serializers import (
     MissionGiverOfferingSerializer,
@@ -91,7 +94,7 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
     """
 
     queryset = MissionTemplate.objects.all().order_by("pk")
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionTemplateFilterSet
@@ -174,7 +177,7 @@ class MissionNodeViewSet(viewsets.ModelViewSet):
 
     queryset = MissionNode.objects.all().order_by("pk")
     serializer_class = MissionNodeSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionNodeFilterSet
@@ -227,7 +230,7 @@ class MissionOptionViewSet(viewsets.ModelViewSet):
 
     queryset = MissionOption.objects.all().order_by("pk")
     serializer_class = MissionOptionSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionFilterSet
@@ -238,7 +241,7 @@ class MissionOptionRouteViewSet(viewsets.ModelViewSet):
 
     queryset = MissionOptionRoute.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteFilterSet
@@ -249,7 +252,7 @@ class MissionOptionRouteCandidateViewSet(viewsets.ModelViewSet):
 
     queryset = MissionOptionRouteCandidate.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteCandidateSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteCandidateFilterSet
@@ -260,7 +263,7 @@ class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
 
     queryset = MissionOptionRouteReward.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteRewardSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteRewardFilterSet
@@ -278,7 +281,7 @@ class MissionGiverViewSet(viewsets.ModelViewSet):
 
     queryset = MissionGiver.objects.all().order_by("pk")
     serializer_class = MissionGiverSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverFilterSet
@@ -290,7 +293,7 @@ class MissionGiverOfferingViewSet(viewsets.ModelViewSet):
 
     queryset = MissionGiverOffering.objects.all().order_by("pk")
     serializer_class = MissionGiverOfferingSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverOfferingFilterSet
@@ -316,7 +319,7 @@ class MissionInstanceViewSet(
 
     queryset = MissionInstance.objects.all().order_by("pk")
     serializer_class = MissionInstanceSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
 
 
@@ -330,7 +333,7 @@ class MissionGiverStandingViewSet(viewsets.ModelViewSet):
 
     queryset = MissionGiverStanding.objects.all().order_by("pk")
     serializer_class = MissionGiverStandingSerializer
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverStandingFilterSet
@@ -365,7 +368,7 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     fields without hard-coding the registry on the frontend.
     """
 
-    permission_classes = [IsAuthenticated, IsStaff]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         responses={200: OpenApiResponse(description="List of available predicate leaves.")},
