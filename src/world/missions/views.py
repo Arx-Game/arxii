@@ -15,9 +15,12 @@ Every viewset in this module uses the project conventions:
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.missions.filters import (
@@ -98,6 +101,28 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
             return MissionTemplateDetailSerializer
         return MissionTemplateSerializer
 
+    @action(detail=True, methods=("POST",))
+    def copy(self, request: Request, slug: str | None = None) -> Response:
+        """D4.2 — duplicate this template + its full graph.
+
+        POST body: ``{"new_slug": str, "new_name": str}``. Lands the copy
+        with ``access_tier=STAFF_ONLY`` so the author can fix flavor before
+        publishing. All copied flavor fields are flagged needs_rewrite.
+        """
+        from world.missions.services.copy import copy_template  # noqa: PLC0415
+
+        source = self.get_object()
+        new_slug = request.data.get("new_slug")
+        new_name = request.data.get("new_name")
+        if not new_slug or not new_name:
+            return Response(
+                {"detail": "new_slug and new_name are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        new_template = copy_template(source, new_slug=new_slug, new_name=new_name)
+        serializer = MissionTemplateSerializer(new_template, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 # ---------------------------------------------------------------------------
 # D2 editor CRUD viewsets — one per nested model, each a full ModelViewSet
@@ -115,6 +140,48 @@ class MissionNodeViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionNodeFilterSet
+
+    @action(detail=True, methods=("POST",))
+    def copy(self, request: Request, pk: str | None = None) -> Response:
+        """D4.2 — duplicate this single node within its template.
+
+        POST body: ``{"new_key": str}``. Routes keep their original
+        target_node FKs; the copy is "stuck" until the author re-wires.
+        Useful for "duplicate this entry and tweak."
+        """
+        from world.missions.services.copy import copy_node  # noqa: PLC0415
+
+        source = self.get_object()
+        new_key = request.data.get("new_key")
+        if not new_key:
+            return Response(
+                {"detail": "new_key is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        new_node = copy_node(source, new_key=new_key)
+        serializer = MissionNodeSerializer(new_node, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=("POST",), url_path="copy-subtree")
+    def copy_subtree(self, request: Request, pk: str | None = None) -> Response:
+        """D4.2 — duplicate this node + every downstream reachable node.
+
+        POST body: ``{"new_key_prefix": str}``. Routes within the copied
+        set are re-pointed to copies; routes targeting external nodes
+        keep the original pointer + needs_rewrite flag.
+        """
+        from world.missions.services.copy import copy_subtree  # noqa: PLC0415
+
+        source = self.get_object()
+        new_key_prefix = request.data.get("new_key_prefix")
+        if not new_key_prefix:
+            return Response(
+                {"detail": "new_key_prefix is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        new_node = copy_subtree(source, new_key_prefix=new_key_prefix)
+        serializer = MissionNodeSerializer(new_node, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class MissionOptionViewSet(viewsets.ModelViewSet):
