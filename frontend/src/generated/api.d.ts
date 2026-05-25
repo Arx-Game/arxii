@@ -6989,6 +6989,647 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/giver-offerings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for the giver<->template through-model. */
+    get: operations['missions_giver_offerings_list'];
+    put?: never;
+    /** @description Staff CRUD for the giver<->template through-model. */
+    post: operations['missions_giver_offerings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/giver-offerings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for the giver<->template through-model. */
+    get: operations['missions_giver_offerings_retrieve'];
+    /** @description Staff CRUD for the giver<->template through-model. */
+    put: operations['missions_giver_offerings_update'];
+    post?: never;
+    /** @description Staff CRUD for the giver<->template through-model. */
+    delete: operations['missions_giver_offerings_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for the giver<->template through-model. */
+    patch: operations['missions_giver_offerings_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/giver-standings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    get: operations['missions_giver_standings_list'];
+    put?: never;
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    post: operations['missions_giver_standings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/giver-standings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    get: operations['missions_giver_standings_retrieve'];
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    put: operations['missions_giver_standings_update'];
+    post?: never;
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    delete: operations['missions_giver_standings_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Normally written by ``services.run.accept_mission`` (cooldown side)
+     *     and future flirt/seduce checks (affection side). CRUD here is for
+     *     staff overrides — clear a cooldown, bump or penalize affection.
+     */
+    patch: operations['missions_giver_standings_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/givers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    get: operations['missions_givers_list'];
+    put?: never;
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    post: operations['missions_givers_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/givers/{slug}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    get: operations['missions_givers_retrieve'];
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    put: operations['missions_givers_update'];
+    post?: never;
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    delete: operations['missions_givers_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    patch: operations['missions_givers_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/instances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-power read + delete for MissionInstance rows.
+     *
+     *     No create endpoint — instances are spawned by ``accept_mission``
+     *     (player flow), ``staff_assign_mission`` (D4.3 assign action above),
+     *     or future Beat-driven launches. The Studio's "remove a stuck instance"
+     *     operation uses DELETE here.
+     *
+     *     No update endpoint — instance state is the tuple of (current_node +
+     *     snapshots + deeds) per design §7 invariant; the Studio doesn't mutate
+     *     it directly.
+     */
+    get: operations['missions_instances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/instances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-power read + delete for MissionInstance rows.
+     *
+     *     No create endpoint — instances are spawned by ``accept_mission``
+     *     (player flow), ``staff_assign_mission`` (D4.3 assign action above),
+     *     or future Beat-driven launches. The Studio's "remove a stuck instance"
+     *     operation uses DELETE here.
+     *
+     *     No update endpoint — instance state is the tuple of (current_node +
+     *     snapshots + deeds) per design §7 invariant; the Studio doesn't mutate
+     *     it directly.
+     */
+    get: operations['missions_instances_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Staff-power read + delete for MissionInstance rows.
+     *
+     *     No create endpoint — instances are spawned by ``accept_mission``
+     *     (player flow), ``staff_assign_mission`` (D4.3 assign action above),
+     *     or future Beat-driven launches. The Studio's "remove a stuck instance"
+     *     operation uses DELETE here.
+     *
+     *     No update endpoint — instance state is the tuple of (current_node +
+     *     snapshots + deeds) per design §7 invariant; the Studio doesn't mutate
+     *     it directly.
+     */
+    delete: operations['missions_instances_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/nodes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionNode rows. */
+    get: operations['missions_nodes_list'];
+    put?: never;
+    /** @description Editor CRUD for MissionNode rows. */
+    post: operations['missions_nodes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/nodes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionNode rows. */
+    get: operations['missions_nodes_retrieve'];
+    /** @description Editor CRUD for MissionNode rows. */
+    put: operations['missions_nodes_update'];
+    post?: never;
+    /** @description Editor CRUD for MissionNode rows. */
+    delete: operations['missions_nodes_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Editor CRUD for MissionNode rows. */
+    patch: operations['missions_nodes_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/nodes/{id}/copy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description D4.2 — duplicate this single node within its template.
+     *
+     *     POST body: ``{"new_key": str}``. Routes keep their original
+     *     target_node FKs; the copy is "stuck" until the author re-wires.
+     *     Useful for "duplicate this entry and tweak."
+     */
+    post: operations['missions_nodes_copy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/nodes/{id}/copy-subtree/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description D4.2 — duplicate this node + every downstream reachable node.
+     *
+     *     POST body: ``{"new_key_prefix": str}``. Routes within the copied
+     *     set are re-pointed to copies; routes targeting external nodes
+     *     keep the original pointer + needs_rewrite flag.
+     */
+    post: operations['missions_nodes_copy_subtree_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    get: operations['missions_options_list'];
+    put?: never;
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    post: operations['missions_options_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/options/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    get: operations['missions_options_retrieve'];
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    put: operations['missions_options_update'];
+    post?: never;
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    delete: operations['missions_options_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Editor CRUD for MissionOption rows (authored + challenge-sourced). */
+    patch: operations['missions_options_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/predicate-leaves/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description D5 — the available predicate-leaf catalog for the builder palette.
+     *
+     *     Read-only. Returns ``[{"name": str, "params": [str, ...]}]`` for
+     *     every leaf in ``LEAF_RESOLVERS``. The Mission Studio's predicate-
+     *     tree builder uses this to render leaf-type dropdowns + param input
+     *     fields without hard-coding the registry on the frontend.
+     */
+    get: operations['missions_predicate_leaves_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/route-candidates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    get: operations['missions_route_candidates_list'];
+    put?: never;
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    post: operations['missions_route_candidates_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/route-candidates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    get: operations['missions_route_candidates_retrieve'];
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    put: operations['missions_route_candidates_update'];
+    post?: never;
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    delete: operations['missions_route_candidates_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    patch: operations['missions_route_candidates_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/route-rewards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    get: operations['missions_route_rewards_list'];
+    put?: never;
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    post: operations['missions_route_rewards_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/route-rewards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    get: operations['missions_route_rewards_retrieve'];
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    put: operations['missions_route_rewards_update'];
+    post?: never;
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    delete: operations['missions_route_rewards_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    patch: operations['missions_route_rewards_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/routes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    get: operations['missions_routes_list'];
+    put?: never;
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    post: operations['missions_routes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/routes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    get: operations['missions_routes_retrieve'];
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    put: operations['missions_routes_update'];
+    post?: never;
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    delete: operations['missions_routes_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Editor CRUD for MissionOptionRoute (one row per option per outcome tier). */
+    patch: operations['missions_routes_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    get: operations['missions_templates_list'];
+    put?: never;
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    post: operations['missions_templates_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/templates/{slug}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    get: operations['missions_templates_retrieve'];
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    put: operations['missions_templates_update'];
+    post?: never;
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    delete: operations['missions_templates_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     *
+     *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
+     *     by primary key for stable pagination.
+     *
+     *     Detail (D1.3, pending): returns the §5 footprint — lifetime
+     *     completions + currently-active MissionInstance rows + their current
+     *     node — via a custom action overriding ``retrieve()``.
+     *
+     *     Editor CRUD on nodes / options / routes is in dedicated viewsets
+     *     (per "separate ViewSet for related-model CRUD" rule); this viewset
+     *     only mutates MissionTemplate's own fields.
+     */
+    patch: operations['missions_templates_partial_update'];
+    trace?: never;
+  };
+  '/api/missions/templates/{slug}/assign/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description D4.3 — staff-power: drop this mission on a character.
+     *
+     *     POST body: ``{"character": <ObjectDB pk>}``. Bypasses all
+     *     availability filters (predicate / cooldown / level band / access
+     *     tier) — operator gesture, not a normal acceptance flow. Returns
+     *     the new MissionInstance shape.
+     */
+    post: operations['missions_templates_assign_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/templates/{slug}/copy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description D4.2 — duplicate this template + its full graph.
+     *
+     *     POST body: ``{"new_slug": str, "new_name": str}``. Lands the copy
+     *     with ``access_tier=STAFF_ONLY`` so the author can fix flavor before
+     *     publishing. All copied flavor fields are flagged needs_rewrite.
+     */
+    post: operations['missions_templates_copy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/narrative/deliveries/{id}/acknowledge/': {
     parameters: {
       query?: never;
@@ -9877,6 +10518,12 @@ export interface components {
       unlock_id: number;
       xp_spent: number;
     };
+    /**
+     * @description * `open` - Open
+     *     * `staff_only` - Staff Only
+     * @enum {string}
+     */
+    AccessTierEnum: 'open' | 'staff_only';
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -9947,6 +10594,8 @@ export interface components {
       approach_id?: number | null;
       technique_id?: number | null;
       registry_key?: string | null;
+      clash_id?: number | null;
+      clash_action_slot?: string | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -9969,6 +10618,13 @@ export interface components {
       /** Format: date-time */
       readonly recorded_at: string;
     };
+    /**
+     * @description * `global` - Global
+     *     * `org` - Organization
+     *     * `giver` - Giver
+     * @enum {string}
+     */
+    ArcScopeEnum: 'global' | 'org' | 'giver';
     /**
      * @description * `major` - Major Arcana
      *     * `minor` - Minor Arcana
@@ -10062,7 +10718,7 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
-      kind?: components['schemas']['KindEnum'];
+      kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
       /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
@@ -10122,6 +10778,14 @@ export interface components {
        */
       readonly can_mark: boolean;
     };
+    /**
+     * @description * `situation` - Situation
+     *     * `encounter` - Encounter
+     *     * `task` - Task
+     *     * `requirement` - Requirement
+     * @enum {string}
+     */
+    BeatKindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
       episode: number;
@@ -10144,7 +10808,7 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
-      kind?: components['schemas']['KindEnum'];
+      kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
       /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
@@ -11161,6 +11825,13 @@ export interface components {
       readonly is_visible_to_others: boolean;
       readonly stages: components['schemas']['ConditionStage'][];
     };
+    /**
+     * @description * `coinflip` - Coin Flip
+     *     * `vote` - Vote
+     *     * `joint` - Joint
+     * @enum {string}
+     */
+    ConflictModeEnum: 'coinflip' | 'vote' | 'joint';
     /**
      * @description * `therefore` - Therefore
      *     * `but` - But
@@ -12539,6 +13210,13 @@ export interface components {
       readonly description: string;
       readonly technique_count: number;
     };
+    /**
+     * @description * `npc` - NPC
+     *     * `environmental_detail` - Environmental Detail
+     *     * `room_trigger` - Room Trigger
+     * @enum {string}
+     */
+    GiverKindEnum: 'npc' | 'environmental_detail' | 'room_trigger';
     /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
     GlobalStoryProgress: {
       readonly id: number;
@@ -12895,13 +13573,12 @@ export interface components {
       readonly image_url: string;
     };
     /**
-     * @description * `situation` - Situation
-     *     * `encounter` - Encounter
-     *     * `task` - Task
-     *     * `requirement` - Requirement
+     * @description * `any` - Any
+     *     * `all` - All
+     *     * `count` - Count
      * @enum {string}
      */
-    KindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
+    JointCombineEnum: 'any' | 'all' | 'count';
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -12923,6 +13600,649 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /**
+     * @description Editor CRUD for MissionGiver rows.
+     *
+     *     ``target`` is a generic ObjectDB FK; the model's clean() validates
+     *     the typeclass against ``giver_kind`` (NPC->Character, ROOM_TRIGGER->
+     *     Room, ENVIRONMENTAL_DETAIL->non-Character/Room/Exit Object). The
+     *     serializer passes both through; DRF's ModelSerializer doesn't call
+     *     clean(), so we proxy it from validate() to surface 400 instead of
+     *     IntegrityError.
+     *
+     *     ``is_publishable`` is the authoring-UI gate (Phase B2/B7 deviation
+     *     note) — exposed read-only here so the Studio can grey out "publish"
+     *     when the giver lacks its target.
+     */
+    MissionGiver: {
+      readonly id: number;
+      name: string;
+      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
+      slug: string;
+      /**
+       * @description How this giver reaches the player; selects the target's expected typeclass.
+       *
+       *     * `npc` - NPC
+       *     * `environmental_detail` - Environmental Detail
+       *     * `room_trigger` - Room Trigger
+       */
+      giver_kind?: components['schemas']['GiverKindEnum'];
+      /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
+      target?: number | null;
+      /** @description Optional organization this giver fronts for (used by ORG arc-scope). */
+      org?: number | null;
+      is_active?: boolean;
+      readonly is_publishable: boolean;
+    };
+    /**
+     * @description Editor CRUD for the giver<->template through-model.
+     *
+     *     ``weight_override`` and ``requirements_override`` are the two
+     *     per-link knobs; the model's clean() rejects weight_override=0
+     *     (silent disable trap), which proxies through validate() below.
+     */
+    MissionGiverOffering: {
+      readonly id: number;
+      giver: number;
+      template: number;
+      /** @description Optional per-offering draw weight; null = use template.base_weight. Must be >= 1 when set — 0 would silently disable this offering, which is not the right tool (use the template's is_active flag or delete the offering instead). */
+      weight_override?: number | null;
+      /** @description Optional per-offering predicate gate (Phase-0 tree shape). STORED BUT UNCONSUMED in Phase B — services.availability reads only the template's availability_rule today; Phase D wires this override in (semantic: AND-compose with the template rule). Empty {} = no per-offering override. */
+      requirements_override?: unknown;
+    };
+    /**
+     * @description Editor CRUD for the giver<->template through-model.
+     *
+     *     ``weight_override`` and ``requirements_override`` are the two
+     *     per-link knobs; the model's clean() rejects weight_override=0
+     *     (silent disable trap), which proxies through validate() below.
+     */
+    MissionGiverOfferingRequest: {
+      giver: number;
+      template: number;
+      /** @description Optional per-offering draw weight; null = use template.base_weight. Must be >= 1 when set — 0 would silently disable this offering, which is not the right tool (use the template's is_active flag or delete the offering instead). */
+      weight_override?: number | null;
+      /** @description Optional per-offering predicate gate (Phase-0 tree shape). STORED BUT UNCONSUMED in Phase B — services.availability reads only the template's availability_rule today; Phase D wires this override in (semantic: AND-compose with the template rule). Empty {} = no per-offering override. */
+      requirements_override?: unknown;
+    };
+    /**
+     * @description Editor CRUD for MissionGiver rows.
+     *
+     *     ``target`` is a generic ObjectDB FK; the model's clean() validates
+     *     the typeclass against ``giver_kind`` (NPC->Character, ROOM_TRIGGER->
+     *     Room, ENVIRONMENTAL_DETAIL->non-Character/Room/Exit Object). The
+     *     serializer passes both through; DRF's ModelSerializer doesn't call
+     *     clean(), so we proxy it from validate() to surface 400 instead of
+     *     IntegrityError.
+     *
+     *     ``is_publishable`` is the authoring-UI gate (Phase B2/B7 deviation
+     *     note) — exposed read-only here so the Studio can grey out "publish"
+     *     when the giver lacks its target.
+     */
+    MissionGiverRequest: {
+      name: string;
+      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
+      slug: string;
+      /**
+       * @description How this giver reaches the player; selects the target's expected typeclass.
+       *
+       *     * `npc` - NPC
+       *     * `environmental_detail` - Environmental Detail
+       *     * `room_trigger` - Room Trigger
+       */
+      giver_kind?: components['schemas']['GiverKindEnum'];
+      /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
+      target?: number | null;
+      /** @description Optional organization this giver fronts for (used by ORG arc-scope). */
+      org?: number | null;
+      is_active?: boolean;
+    };
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Per design §6/§10 ``available_at`` is normally set by
+     *     ``services.run.accept_mission`` (= now + template.cooldown) and
+     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
+     *     surface is for staff overrides — clear a cooldown manually,
+     *     bump/penalize affection — not for ordinary runtime writes.
+     */
+    MissionGiverStanding: {
+      readonly id: number;
+      giver: number;
+      character: number;
+      /** Format: date-time */
+      available_at: string;
+      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
+      affection?: number;
+    };
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Per design §6/§10 ``available_at`` is normally set by
+     *     ``services.run.accept_mission`` (= now + template.cooldown) and
+     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
+     *     surface is for staff overrides — clear a cooldown manually,
+     *     bump/penalize affection — not for ordinary runtime writes.
+     */
+    MissionGiverStandingRequest: {
+      giver: number;
+      character: number;
+      /** Format: date-time */
+      available_at: string;
+      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
+      affection?: number;
+    };
+    /**
+     * @description Staff-side serializer for MissionInstance (assign + remove surfaces).
+     *
+     *     Read-only for the common fields; the staff-assign action wraps the
+     *     `staff_assign_mission` service to populate these (so authors don't
+     *     POST to this endpoint to create instances — assign is a deliberate
+     *     operator gesture).
+     */
+    MissionInstance: {
+      readonly id: number;
+      template: number;
+      /** @description Where the run currently sits; null = complete. */
+      current_node?: number | null;
+      status?: components['schemas']['MissionInstanceStatusEnum'];
+      /** Format: date-time */
+      readonly started_at: string;
+      /** Format: date-time */
+      completed_at?: string | null;
+      /** @description Optional: the stories Beat that launched this run. SET_NULL on Beat delete. Engine that flips the Beat at terminal is deferred to a future stories-missions seam design pass (5b.3 stub-records the trigger only). */
+      source_beat?: number | null;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `complete` - Complete
+     *     * `abandoned` - Abandoned
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    MissionInstanceStatusEnum: 'active' | 'complete' | 'abandoned' | 'expired';
+    /**
+     * @description Editor CRUD for MissionNode rows.
+     *
+     *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
+     *     authoring UI passes them through unchanged). Editor layout fields
+     *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
+     *     sibling are both editable.
+     */
+    MissionNode: {
+      readonly id: number;
+      template: number;
+      /** @description Stable per-template node key (unique within the template). */
+      key: string;
+      is_entry?: boolean;
+      /**
+       * @description How contested option choices resolve for multiple participants.
+       *
+       *     * `coinflip` - Coin Flip
+       *     * `vote` - Vote
+       *     * `joint` - Joint
+       */
+      conflict_mode: components['schemas']['ConflictModeEnum'];
+      /**
+       * @description JOINT mode: how participant results combine.
+       *
+       *     * `any` - Any
+       *     * `all` - All
+       *     * `count` - Count
+       */
+      joint_combine?:
+        | (
+            | components['schemas']['JointCombineEnum']
+            | components['schemas']['BlankEnum']
+            | components['schemas']['NullEnum']
+          )
+        | null;
+      /** @description JOINT+COUNT mode: minimum number of successes required. */
+      joint_count?: number | null;
+      /** @description Reusable consequence riders permitted at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      allowed_riders?: number[];
+      /** @description When true, no consequence riders may attach at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      deny_all_riders?: boolean;
+      /** @description Mission Studio (Phase E) canvas X coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_x?: number;
+      /** @description Mission Studio (Phase E) canvas Y coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_y?: number;
+      /** @description Thin abstract description of the moment shown to the player when they enter this node (design §8.2). Paragraph-style (TextField, unbounded) — the short per-option label is the option's authored_ic_framing (CharField/200). The rich narration is the player-authored Legend Entry; this is just the engine's framing line. */
+      flavor_text?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      flavor_text_needs_rewrite?: boolean;
+    };
+    /**
+     * @description Editor CRUD for MissionNode rows.
+     *
+     *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
+     *     authoring UI passes them through unchanged). Editor layout fields
+     *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
+     *     sibling are both editable.
+     */
+    MissionNodeRequest: {
+      template: number;
+      /** @description Stable per-template node key (unique within the template). */
+      key: string;
+      is_entry?: boolean;
+      /**
+       * @description How contested option choices resolve for multiple participants.
+       *
+       *     * `coinflip` - Coin Flip
+       *     * `vote` - Vote
+       *     * `joint` - Joint
+       */
+      conflict_mode: components['schemas']['ConflictModeEnum'];
+      /**
+       * @description JOINT mode: how participant results combine.
+       *
+       *     * `any` - Any
+       *     * `all` - All
+       *     * `count` - Count
+       */
+      joint_combine?:
+        | (
+            | components['schemas']['JointCombineEnum']
+            | components['schemas']['BlankEnum']
+            | components['schemas']['NullEnum']
+          )
+        | null;
+      /** @description JOINT+COUNT mode: minimum number of successes required. */
+      joint_count?: number | null;
+      /** @description Reusable consequence riders permitted at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      allowed_riders?: number[];
+      /** @description When true, no consequence riders may attach at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      deny_all_riders?: boolean;
+      /** @description Mission Studio (Phase E) canvas X coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_x?: number;
+      /** @description Mission Studio (Phase E) canvas Y coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_y?: number;
+      /** @description Thin abstract description of the moment shown to the player when they enter this node (design §8.2). Paragraph-style (TextField, unbounded) — the short per-option label is the option's authored_ic_framing (CharField/200). The rich narration is the player-authored Legend Entry; this is just the engine's framing line. */
+      flavor_text?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      flavor_text_needs_rewrite?: boolean;
+    };
+    /**
+     * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
+     *
+     *     Both source_kind values are editable; consumer code distinguishes via
+     *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
+     *     rides through; the predicate-tree builder API (D5) is what authors
+     *     actually use to write it.
+     */
+    MissionOption: {
+      readonly id: number;
+      node: number;
+      /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
+      order: number;
+      option_kind: components['schemas']['OptionKindEnum'];
+      source_kind: components['schemas']['SourceKindEnum'];
+      /** @description Phase 0 predicate tree gating this option's visibility. */
+      visibility_rule?: unknown;
+      /** @description AUTHORED+CHECK: the check resolved by this option. */
+      authored_check_type?: number | null;
+      authored_base_risk?: number;
+      /** @description Short option-row label shown in the choice list (CharField/200). Keep terse; the longer 'what happens at this node' narration belongs in MissionNode.flavor_text. */
+      authored_ic_framing?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      authored_ic_framing_needs_rewrite?: boolean;
+      /** @description BRANCH/authored route: the node this option leads to. */
+      branch_target?: number | null;
+      /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
+      challenge?: number | null;
+    };
+    /**
+     * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
+     *
+     *     Both source_kind values are editable; consumer code distinguishes via
+     *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
+     *     rides through; the predicate-tree builder API (D5) is what authors
+     *     actually use to write it.
+     */
+    MissionOptionRequest: {
+      node: number;
+      /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
+      order: number;
+      option_kind: components['schemas']['OptionKindEnum'];
+      source_kind: components['schemas']['SourceKindEnum'];
+      /** @description Phase 0 predicate tree gating this option's visibility. */
+      visibility_rule?: unknown;
+      /** @description AUTHORED+CHECK: the check resolved by this option. */
+      authored_check_type?: number | null;
+      authored_base_risk?: number;
+      /** @description Short option-row label shown in the choice list (CharField/200). Keep terse; the longer 'what happens at this node' narration belongs in MissionNode.flavor_text. */
+      authored_ic_framing?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      authored_ic_framing_needs_rewrite?: boolean;
+      /** @description BRANCH/authored route: the node this option leads to. */
+      branch_target?: number | null;
+      /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
+      challenge?: number | null;
+    };
+    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    MissionOptionRoute: {
+      readonly id: number;
+      option: number;
+      /** @description Resolved outcome tier; null = the single BRANCH route. */
+      outcome_tier?: number | null;
+      /** @description Destination node; null = terminal (mission complete). */
+      target_node?: number | null;
+      /** @description When true, destination is drawn from weighted candidates. */
+      is_random_set?: boolean;
+      /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
+      consequence?: number | null;
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    MissionOptionRouteCandidate: {
+      readonly id: number;
+      route: number;
+      target_node: number;
+      weight?: number;
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      consequence?: number | null;
+      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    MissionOptionRouteCandidateRequest: {
+      route: number;
+      target_node: number;
+      weight?: number;
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      consequence?: number | null;
+      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    MissionOptionRouteRequest: {
+      option: number;
+      /** @description Resolved outcome tier; null = the single BRANCH route. */
+      outcome_tier?: number | null;
+      /** @description Destination node; null = terminal (mission complete). */
+      target_node?: number | null;
+      /** @description When true, destination is drawn from weighted candidates. */
+      is_random_set?: boolean;
+      /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
+      consequence?: number | null;
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /**
+     * @description Editor CRUD for reward lines attached to a route OR a candidate (XOR).
+     *
+     *     Model-level CheckConstraint + clean() both enforce exactly-one-parent.
+     *     DRF's ModelSerializer skips clean() by default, so we mirror the XOR
+     *     check here as ``validate()`` to surface a clean 400 instead of letting
+     *     the DB constraint raise IntegrityError → 500.
+     */
+    MissionOptionRouteReward: {
+      readonly id: number;
+      /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
+      route?: number | null;
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      candidate?: number | null;
+      /**
+       * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
+       *
+       *     * `immediate` - Immediate
+       *     * `post_cron` - Post Cron
+       *     * `propagation` - Propagation
+       */
+      kind: components['schemas']['MissionOptionRouteRewardKindEnum'];
+      /**
+       * @description Which ledger the emitted line pays into.
+       *
+       *     * `money` - Money
+       *     * `legend_points` - Legend Points
+       *     * `resonance` - Resonance
+       *     * `rumor` - Rumor
+       *     * `crime_watch` - Crime Watch
+       *     * `beat` - Beat
+       */
+      sink: components['schemas']['SinkEnum'];
+      /** @description Numeric magnitude of the broadcast reward, when applicable. */
+      amount?: number | null;
+    };
+    /**
+     * @description * `immediate` - Immediate
+     *     * `post_cron` - Post Cron
+     *     * `propagation` - Propagation
+     * @enum {string}
+     */
+    MissionOptionRouteRewardKindEnum: 'immediate' | 'post_cron' | 'propagation';
+    /**
+     * @description Editor CRUD for reward lines attached to a route OR a candidate (XOR).
+     *
+     *     Model-level CheckConstraint + clean() both enforce exactly-one-parent.
+     *     DRF's ModelSerializer skips clean() by default, so we mirror the XOR
+     *     check here as ``validate()`` to surface a clean 400 instead of letting
+     *     the DB constraint raise IntegrityError → 500.
+     */
+    MissionOptionRouteRewardRequest: {
+      /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
+      route?: number | null;
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      candidate?: number | null;
+      /**
+       * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
+       *
+       *     * `immediate` - Immediate
+       *     * `post_cron` - Post Cron
+       *     * `propagation` - Propagation
+       */
+      kind: components['schemas']['MissionOptionRouteRewardKindEnum'];
+      /**
+       * @description Which ledger the emitted line pays into.
+       *
+       *     * `money` - Money
+       *     * `legend_points` - Legend Points
+       *     * `resonance` - Resonance
+       *     * `rumor` - Rumor
+       *     * `crime_watch` - Crime Watch
+       *     * `beat` - Beat
+       */
+      sink: components['schemas']['SinkEnum'];
+      /** @description Numeric magnitude of the broadcast reward, when applicable. */
+      amount?: number | null;
+    };
+    /**
+     * @description List + detail serializer for MissionTemplate browse.
+     *
+     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     epilogue, level band, risk tier, weighting, era association, scope,
+     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     availability rule.
+     *
+     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
+     *     ``validate_access_tier`` below — if any attached giver is not
+     *     ``is_publishable`` (no target FK), the flip is refused with the
+     *     list of unready givers' slugs so the Studio can show "needs-work."
+     */
+    MissionTemplate: {
+      readonly id: number;
+      name: string;
+      slug: string;
+      /** @description Rich IC opening lore (mission bookend). */
+      summary: string;
+      /** @description Rich IC wrap-up lore. */
+      epilogue?: string;
+      level_band_min: number;
+      level_band_max: number;
+      risk_tier: number;
+      /** @description Relative weight in the availability draw. */
+      base_weight?: number;
+      /** @description Arc association — the era this mission was authored for. */
+      created_in_era?: number | null;
+      /**
+       * @description Whether this is offered globally, per-org, or per-giver.
+       *
+       *     * `global` - Global
+       *     * `org` - Organization
+       *     * `giver` - Giver
+       */
+      arc_scope: components['schemas']['ArcScopeEnum'];
+      /** @description Percent chance this template replaces an existing offer (0-100). */
+      percent_replace?: number;
+      /** @description Per-giver re-offer cooldown. */
+      cooldown: string;
+      /**
+       * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
+       *
+       *     * `all_equal` - All Equal
+       *     * `by_role` - By Role
+       *     * `by_participation` - By Participation
+       */
+      reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
+      is_active?: boolean;
+      /**
+       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       *
+       *     * `open` - Open
+       *     * `staff_only` - Staff Only
+       */
+      access_tier?: components['schemas']['AccessTierEnum'];
+      readonly categories: string[];
+      /** @description Phase 0 predicate tree gating front-door availability for this template. */
+      availability_rule?: unknown;
+    };
+    /**
+     * @description Detail response: list fields + §5 footprint.
+     *
+     *     Adds:
+     *     - ``lifetime_completions`` — count of MissionInstance rows in
+     *       COMPLETE status for this template.
+     *     - ``active_instances`` — list of currently-ACTIVE runs with their
+     *       current node key + contract holder name.
+     *
+     *     The authoring tool surfaces these so authors can see at a glance
+     *     how their template is being consumed.
+     */
+    MissionTemplateDetail: {
+      readonly id: number;
+      name: string;
+      slug: string;
+      /** @description Rich IC opening lore (mission bookend). */
+      summary: string;
+      /** @description Rich IC wrap-up lore. */
+      epilogue?: string;
+      level_band_min: number;
+      level_band_max: number;
+      risk_tier: number;
+      /** @description Relative weight in the availability draw. */
+      base_weight?: number;
+      /** @description Arc association — the era this mission was authored for. */
+      created_in_era?: number | null;
+      /**
+       * @description Whether this is offered globally, per-org, or per-giver.
+       *
+       *     * `global` - Global
+       *     * `org` - Organization
+       *     * `giver` - Giver
+       */
+      arc_scope: components['schemas']['ArcScopeEnum'];
+      /** @description Percent chance this template replaces an existing offer (0-100). */
+      percent_replace?: number;
+      /** @description Per-giver re-offer cooldown. */
+      cooldown: string;
+      /**
+       * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
+       *
+       *     * `all_equal` - All Equal
+       *     * `by_role` - By Role
+       *     * `by_participation` - By Participation
+       */
+      reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
+      is_active?: boolean;
+      /**
+       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       *
+       *     * `open` - Open
+       *     * `staff_only` - Staff Only
+       */
+      access_tier?: components['schemas']['AccessTierEnum'];
+      readonly categories: string[];
+      /** @description Phase 0 predicate tree gating front-door availability for this template. */
+      availability_rule?: unknown;
+      readonly lifetime_completions: number;
+      /**
+       * @description Flatten ACTIVE runs into the response — one row per instance.
+       *
+       *     SharedMemoryModel identity map keeps current_node + participants
+       *     FK-cached after the prefetch; the in-Python walk fires no extra
+       *     queries beyond the prefetched ones.
+       */
+      readonly active_instances: {
+        [key: string]: unknown;
+      }[];
+    };
+    /**
+     * @description List + detail serializer for MissionTemplate browse.
+     *
+     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     epilogue, level band, risk tier, weighting, era association, scope,
+     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     availability rule.
+     *
+     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
+     *     ``validate_access_tier`` below — if any attached giver is not
+     *     ``is_publishable`` (no target FK), the flip is refused with the
+     *     list of unready givers' slugs so the Studio can show "needs-work."
+     */
+    MissionTemplateRequest: {
+      name: string;
+      slug: string;
+      /** @description Rich IC opening lore (mission bookend). */
+      summary: string;
+      /** @description Rich IC wrap-up lore. */
+      epilogue?: string;
+      level_band_min: number;
+      level_band_max: number;
+      risk_tier: number;
+      /** @description Relative weight in the availability draw. */
+      base_weight?: number;
+      /** @description Arc association — the era this mission was authored for. */
+      created_in_era?: number | null;
+      /**
+       * @description Whether this is offered globally, per-org, or per-giver.
+       *
+       *     * `global` - Global
+       *     * `org` - Organization
+       *     * `giver` - Giver
+       */
+      arc_scope: components['schemas']['ArcScopeEnum'];
+      /** @description Percent chance this template replaces an existing offer (0-100). */
+      percent_replace?: number;
+      /** @description Per-giver re-offer cooldown. */
+      cooldown: string;
+      /**
+       * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
+       *
+       *     * `all_equal` - All Equal
+       *     * `by_role` - By Role
+       *     * `by_participation` - By Participation
+       */
+      reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
+      is_active?: boolean;
+      /**
+       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       *
+       *     * `open` - Open
+       *     * `staff_only` - Staff Only
+       */
+      access_tier?: components['schemas']['AccessTierEnum'];
+      /** @description Phase 0 predicate tree gating front-door availability for this template. */
+      availability_rule?: unknown;
+    };
     /**
      * @description * `pose` - Pose
      *     * `emit` - Emit
@@ -13097,6 +14417,12 @@ export interface components {
      * @enum {string}
      */
     OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
+    /**
+     * @description * `branch` - Branch
+     *     * `check` - Check
+     * @enum {string}
+     */
+    OptionKindEnum: 'branch' | 'check';
     OrganizationSearch: {
       id: number;
       name: string;
@@ -13678,6 +15004,156 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['ItemTemplateList'][];
+    };
+    PaginatedMissionGiverList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionGiver'][];
+    };
+    PaginatedMissionGiverOfferingList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionGiverOffering'][];
+    };
+    PaginatedMissionGiverStandingList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionGiverStanding'][];
+    };
+    PaginatedMissionInstanceList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionInstance'][];
+    };
+    PaginatedMissionNodeList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionNode'][];
+    };
+    PaginatedMissionOptionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionOption'][];
+    };
+    PaginatedMissionOptionRouteCandidateList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionOptionRouteCandidate'][];
+    };
+    PaginatedMissionOptionRouteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionOptionRoute'][];
+    };
+    PaginatedMissionOptionRouteRewardList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionOptionRouteReward'][];
+    };
+    PaginatedMissionTemplateList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['MissionTemplate'][];
     };
     PaginatedNarrativeMessageDeliveryList: {
       /** @example 123 */
@@ -14307,7 +15783,7 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
-      kind?: components['schemas']['KindEnum'];
+      kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
       /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
@@ -14612,6 +16088,269 @@ export interface components {
       /** @description Null while the story is at the frontier (unauthored) or before start. */
       current_episode?: number | null;
       is_active?: boolean;
+    };
+    /**
+     * @description Editor CRUD for the giver<->template through-model.
+     *
+     *     ``weight_override`` and ``requirements_override`` are the two
+     *     per-link knobs; the model's clean() rejects weight_override=0
+     *     (silent disable trap), which proxies through validate() below.
+     */
+    PatchedMissionGiverOfferingRequest: {
+      giver?: number;
+      template?: number;
+      /** @description Optional per-offering draw weight; null = use template.base_weight. Must be >= 1 when set — 0 would silently disable this offering, which is not the right tool (use the template's is_active flag or delete the offering instead). */
+      weight_override?: number | null;
+      /** @description Optional per-offering predicate gate (Phase-0 tree shape). STORED BUT UNCONSUMED in Phase B — services.availability reads only the template's availability_rule today; Phase D wires this override in (semantic: AND-compose with the template rule). Empty {} = no per-offering override. */
+      requirements_override?: unknown;
+    };
+    /**
+     * @description Editor CRUD for MissionGiver rows.
+     *
+     *     ``target`` is a generic ObjectDB FK; the model's clean() validates
+     *     the typeclass against ``giver_kind`` (NPC->Character, ROOM_TRIGGER->
+     *     Room, ENVIRONMENTAL_DETAIL->non-Character/Room/Exit Object). The
+     *     serializer passes both through; DRF's ModelSerializer doesn't call
+     *     clean(), so we proxy it from validate() to surface 400 instead of
+     *     IntegrityError.
+     *
+     *     ``is_publishable`` is the authoring-UI gate (Phase B2/B7 deviation
+     *     note) — exposed read-only here so the Studio can grey out "publish"
+     *     when the giver lacks its target.
+     */
+    PatchedMissionGiverRequest: {
+      name?: string;
+      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
+      slug?: string;
+      /**
+       * @description How this giver reaches the player; selects the target's expected typeclass.
+       *
+       *     * `npc` - NPC
+       *     * `environmental_detail` - Environmental Detail
+       *     * `room_trigger` - Room Trigger
+       */
+      giver_kind?: components['schemas']['GiverKindEnum'];
+      /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
+      target?: number | null;
+      /** @description Optional organization this giver fronts for (used by ORG arc-scope). */
+      org?: number | null;
+      is_active?: boolean;
+    };
+    /**
+     * @description Staff CRUD for per-(giver, character) standing rows.
+     *
+     *     Per design §6/§10 ``available_at`` is normally set by
+     *     ``services.run.accept_mission`` (= now + template.cooldown) and
+     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
+     *     surface is for staff overrides — clear a cooldown manually,
+     *     bump/penalize affection — not for ordinary runtime writes.
+     */
+    PatchedMissionGiverStandingRequest: {
+      giver?: number;
+      character?: number;
+      /** Format: date-time */
+      available_at?: string;
+      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
+      affection?: number;
+    };
+    /**
+     * @description Editor CRUD for MissionNode rows.
+     *
+     *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
+     *     authoring UI passes them through unchanged). Editor layout fields
+     *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
+     *     sibling are both editable.
+     */
+    PatchedMissionNodeRequest: {
+      template?: number;
+      /** @description Stable per-template node key (unique within the template). */
+      key?: string;
+      is_entry?: boolean;
+      /**
+       * @description How contested option choices resolve for multiple participants.
+       *
+       *     * `coinflip` - Coin Flip
+       *     * `vote` - Vote
+       *     * `joint` - Joint
+       */
+      conflict_mode?: components['schemas']['ConflictModeEnum'];
+      /**
+       * @description JOINT mode: how participant results combine.
+       *
+       *     * `any` - Any
+       *     * `all` - All
+       *     * `count` - Count
+       */
+      joint_combine?:
+        | (
+            | components['schemas']['JointCombineEnum']
+            | components['schemas']['BlankEnum']
+            | components['schemas']['NullEnum']
+          )
+        | null;
+      /** @description JOINT+COUNT mode: minimum number of successes required. */
+      joint_count?: number | null;
+      /** @description Reusable consequence riders permitted at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      allowed_riders?: number[];
+      /** @description When true, no consequence riders may attach at this node. NOT consumed by the engine in Phase A; reserved for future use. */
+      deny_all_riders?: boolean;
+      /** @description Mission Studio (Phase E) canvas X coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_x?: number;
+      /** @description Mission Studio (Phase E) canvas Y coordinate. Pure authoring metadata — no engine meaning. IntegerField (negatives allowed) so authors can pan to negative coords. */
+      editor_y?: number;
+      /** @description Thin abstract description of the moment shown to the player when they enter this node (design §8.2). Paragraph-style (TextField, unbounded) — the short per-option label is the option's authored_ic_framing (CharField/200). The rich narration is the player-authored Legend Entry; this is just the engine's framing line. */
+      flavor_text?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      flavor_text_needs_rewrite?: boolean;
+    };
+    /**
+     * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
+     *
+     *     Both source_kind values are editable; consumer code distinguishes via
+     *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
+     *     rides through; the predicate-tree builder API (D5) is what authors
+     *     actually use to write it.
+     */
+    PatchedMissionOptionRequest: {
+      node?: number;
+      /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
+      order?: number;
+      option_kind?: components['schemas']['OptionKindEnum'];
+      source_kind?: components['schemas']['SourceKindEnum'];
+      /** @description Phase 0 predicate tree gating this option's visibility. */
+      visibility_rule?: unknown;
+      /** @description AUTHORED+CHECK: the check resolved by this option. */
+      authored_check_type?: number | null;
+      authored_base_risk?: number;
+      /** @description Short option-row label shown in the choice list (CharField/200). Keep terse; the longer 'what happens at this node' narration belongs in MissionNode.flavor_text. */
+      authored_ic_framing?: string;
+      /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
+      authored_ic_framing_needs_rewrite?: boolean;
+      /** @description BRANCH/authored route: the node this option leads to. */
+      branch_target?: number | null;
+      /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
+      challenge?: number | null;
+    };
+    /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
+    PatchedMissionOptionRouteCandidateRequest: {
+      route?: number;
+      target_node?: number;
+      weight?: number;
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      consequence?: number | null;
+      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    PatchedMissionOptionRouteRequest: {
+      option?: number;
+      /** @description Resolved outcome tier; null = the single BRANCH route. */
+      outcome_tier?: number | null;
+      /** @description Destination node; null = terminal (mission complete). */
+      target_node?: number | null;
+      /** @description When true, destination is drawn from weighted candidates. */
+      is_random_set?: boolean;
+      /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
+      consequence?: number | null;
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      outcome_text?: string;
+      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      outcome_text_needs_rewrite?: boolean;
+    };
+    /**
+     * @description Editor CRUD for reward lines attached to a route OR a candidate (XOR).
+     *
+     *     Model-level CheckConstraint + clean() both enforce exactly-one-parent.
+     *     DRF's ModelSerializer skips clean() by default, so we mirror the XOR
+     *     check here as ``validate()`` to surface a clean 400 instead of letting
+     *     the DB constraint raise IntegrityError → 500.
+     */
+    PatchedMissionOptionRouteRewardRequest: {
+      /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
+      route?: number | null;
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      candidate?: number | null;
+      /**
+       * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
+       *
+       *     * `immediate` - Immediate
+       *     * `post_cron` - Post Cron
+       *     * `propagation` - Propagation
+       */
+      kind?: components['schemas']['MissionOptionRouteRewardKindEnum'];
+      /**
+       * @description Which ledger the emitted line pays into.
+       *
+       *     * `money` - Money
+       *     * `legend_points` - Legend Points
+       *     * `resonance` - Resonance
+       *     * `rumor` - Rumor
+       *     * `crime_watch` - Crime Watch
+       *     * `beat` - Beat
+       */
+      sink?: components['schemas']['SinkEnum'];
+      /** @description Numeric magnitude of the broadcast reward, when applicable. */
+      amount?: number | null;
+    };
+    /**
+     * @description List + detail serializer for MissionTemplate browse.
+     *
+     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     epilogue, level band, risk tier, weighting, era association, scope,
+     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     availability rule.
+     *
+     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
+     *     ``validate_access_tier`` below — if any attached giver is not
+     *     ``is_publishable`` (no target FK), the flip is refused with the
+     *     list of unready givers' slugs so the Studio can show "needs-work."
+     */
+    PatchedMissionTemplateRequest: {
+      name?: string;
+      slug?: string;
+      /** @description Rich IC opening lore (mission bookend). */
+      summary?: string;
+      /** @description Rich IC wrap-up lore. */
+      epilogue?: string;
+      level_band_min?: number;
+      level_band_max?: number;
+      risk_tier?: number;
+      /** @description Relative weight in the availability draw. */
+      base_weight?: number;
+      /** @description Arc association — the era this mission was authored for. */
+      created_in_era?: number | null;
+      /**
+       * @description Whether this is offered globally, per-org, or per-giver.
+       *
+       *     * `global` - Global
+       *     * `org` - Organization
+       *     * `giver` - Giver
+       */
+      arc_scope?: components['schemas']['ArcScopeEnum'];
+      /** @description Percent chance this template replaces an existing offer (0-100). */
+      percent_replace?: number;
+      /** @description Per-giver re-offer cooldown. */
+      cooldown?: string;
+      /**
+       * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
+       *
+       *     * `all_equal` - All Equal
+       *     * `by_role` - By Role
+       *     * `by_participation` - By Participation
+       */
+      reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
+      is_active?: boolean;
+      /**
+       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       *
+       *     * `open` - Open
+       *     * `staff_only` - Staff Only
+       */
+      access_tier?: components['schemas']['AccessTierEnum'];
+      /** @description Phase 0 predicate tree gating front-door availability for this template. */
+      availability_rule?: unknown;
     };
     /**
      * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
@@ -15808,6 +17547,13 @@ export interface components {
       readonly allowed_effect_type_ids: number[];
     };
     /**
+     * @description * `all_equal` - All Equal
+     *     * `by_role` - By Role
+     *     * `by_participation` - By Participation
+     * @enum {string}
+     */
+    RewardGroupRuleEnum: 'all_equal' | 'by_role' | 'by_participation';
+    /**
      * @description * `low` - Low
      *     * `moderate` - Moderate
      *     * `high` - High
@@ -16348,6 +18094,16 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /**
+     * @description * `money` - Money
+     *     * `legend_points` - Legend Points
+     *     * `resonance` - Resonance
+     *     * `rumor` - Rumor
+     *     * `crime_watch` - Crime Watch
+     *     * `beat` - Beat
+     * @enum {string}
+     */
+    SinkEnum: 'money' | 'legend_points' | 'resonance' | 'rumor' | 'crime_watch' | 'beat';
     /** @description Nested serializer for situation challenge links. */
     SituationChallengeLink: {
       challenge_template: number;
@@ -16459,6 +18215,12 @@ export interface components {
       | 'ROOM_RESIDENCE'
       | 'OUTFIT_TRICKLE'
       | 'STAFF_GRANT';
+    /**
+     * @description * `authored` - Authored
+     *     * `challenge` - Challenge
+     * @enum {string}
+     */
+    SourceKindEnum: 'authored' | 'challenge';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -19587,8 +21349,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -27107,6 +28868,1515 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SituationTemplateDetail'];
+        };
+      };
+    };
+  };
+  missions_giver_offerings_list: {
+    parameters: {
+      query?: {
+        giver?: number;
+        giver_slug?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        template?: number;
+        template_slug?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionGiverOfferingList'];
+        };
+      };
+    };
+  };
+  missions_giver_offerings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverOfferingRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverOffering'];
+        };
+      };
+    };
+  };
+  missions_giver_offerings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver offering. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverOffering'];
+        };
+      };
+    };
+  };
+  missions_giver_offerings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver offering. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverOfferingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverOffering'];
+        };
+      };
+    };
+  };
+  missions_giver_offerings_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver offering. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_giver_offerings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver offering. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionGiverOfferingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverOffering'];
+        };
+      };
+    };
+  };
+  missions_giver_standings_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        giver?: number;
+        giver_slug?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionGiverStandingList'];
+        };
+      };
+    };
+  };
+  missions_giver_standings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverStandingRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverStanding'];
+        };
+      };
+    };
+  };
+  missions_giver_standings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverStanding'];
+        };
+      };
+    };
+  };
+  missions_giver_standings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverStandingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverStanding'];
+        };
+      };
+    };
+  };
+  missions_giver_standings_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_giver_standings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission giver standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionGiverStandingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiverStanding'];
+        };
+      };
+    };
+  };
+  missions_givers_list: {
+    parameters: {
+      query?: {
+        giver_kind?: string;
+        is_active?: boolean;
+        name?: string;
+        org?: number;
+        org_name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionGiverList'];
+        };
+      };
+    };
+  };
+  missions_givers_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiver'];
+        };
+      };
+    };
+  };
+  missions_givers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiver'];
+        };
+      };
+    };
+  };
+  missions_givers_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionGiverRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiver'];
+        };
+      };
+    };
+  };
+  missions_givers_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_givers_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionGiverRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionGiver'];
+        };
+      };
+    };
+  };
+  missions_instances_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionInstanceList'];
+        };
+      };
+    };
+  };
+  missions_instances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission instance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionInstance'];
+        };
+      };
+    };
+  };
+  missions_instances_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission instance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_nodes_list: {
+    parameters: {
+      query?: {
+        is_entry?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        template?: number;
+        template_slug?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionNodeList'];
+        };
+      };
+    };
+  };
+  missions_nodes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionNodeRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_nodes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_nodes_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionNodeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_nodes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_nodes_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionNodeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_nodes_copy_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionNodeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_nodes_copy_subtree_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission node. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionNodeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionNode'];
+        };
+      };
+    };
+  };
+  missions_options_list: {
+    parameters: {
+      query?: {
+        node?: number;
+        option_kind?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        source_kind?: string;
+        template?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionOptionList'];
+        };
+      };
+    };
+  };
+  missions_options_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOption'];
+        };
+      };
+    };
+  };
+  missions_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOption'];
+        };
+      };
+    };
+  };
+  missions_options_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOption'];
+        };
+      };
+    };
+  };
+  missions_options_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_options_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionOptionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOption'];
+        };
+      };
+    };
+  };
+  missions_predicate_leaves_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of available predicate leaves. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_route_candidates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        route?: number;
+        template?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionOptionRouteCandidateList'];
+        };
+      };
+    };
+  };
+  missions_route_candidates_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteCandidateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteCandidate'];
+        };
+      };
+    };
+  };
+  missions_route_candidates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route candidate. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteCandidate'];
+        };
+      };
+    };
+  };
+  missions_route_candidates_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route candidate. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteCandidateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteCandidate'];
+        };
+      };
+    };
+  };
+  missions_route_candidates_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route candidate. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_route_candidates_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route candidate. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionOptionRouteCandidateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteCandidate'];
+        };
+      };
+    };
+  };
+  missions_route_rewards_list: {
+    parameters: {
+      query?: {
+        candidate?: number;
+        kind?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        route?: number;
+        sink?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionOptionRouteRewardList'];
+        };
+      };
+    };
+  };
+  missions_route_rewards_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteRewardRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteReward'];
+        };
+      };
+    };
+  };
+  missions_route_rewards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route reward. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteReward'];
+        };
+      };
+    };
+  };
+  missions_route_rewards_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route reward. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteRewardRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteReward'];
+        };
+      };
+    };
+  };
+  missions_route_rewards_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route reward. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_route_rewards_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route reward. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionOptionRouteRewardRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRouteReward'];
+        };
+      };
+    };
+  };
+  missions_routes_list: {
+    parameters: {
+      query?: {
+        is_random_set?: boolean;
+        option?: number;
+        outcome_tier?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        template?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionOptionRouteList'];
+        };
+      };
+    };
+  };
+  missions_routes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRoute'];
+        };
+      };
+    };
+  };
+  missions_routes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRoute'];
+        };
+      };
+    };
+  };
+  missions_routes_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOptionRouteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRoute'];
+        };
+      };
+    };
+  };
+  missions_routes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_routes_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission option route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionOptionRouteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOptionRoute'];
+        };
+      };
+    };
+  };
+  missions_templates_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+         *
+         *     * `open` - Open
+         *     * `staff_only` - Staff Only
+         */
+        access_tier?: 'open' | 'staff_only';
+        /**
+         * @description Whether this is offered globally, per-org, or per-giver.
+         *
+         *     * `global` - Global
+         *     * `org` - Organization
+         *     * `giver` - Giver
+         */
+        arc_scope?: 'giver' | 'global' | 'org';
+        category?: string;
+        is_active?: boolean;
+        level_band_contains?: number;
+        level_band_max?: number;
+        level_band_min?: number;
+        name?: string;
+        org?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        risk_tier?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionTemplateList'];
+        };
+      };
+    };
+  };
+  missions_templates_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionTemplateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplate'];
+        };
+      };
+    };
+  };
+  missions_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplateDetail'];
+        };
+      };
+    };
+  };
+  missions_templates_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplate'];
+        };
+      };
+    };
+  };
+  missions_templates_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_templates_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplate'];
+        };
+      };
+    };
+  };
+  missions_templates_assign_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplate'];
+        };
+      };
+    };
+  };
+  missions_templates_copy_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionTemplate'];
         };
       };
     };

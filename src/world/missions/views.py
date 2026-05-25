@@ -14,7 +14,10 @@ Every viewset in this module uses the project conventions:
   surfaces per project_drf_spectacular_viewset_break.
 """
 
+import inspect
+
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -47,6 +50,7 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.missions.permissions import IsStaff
+from world.missions.predicates import LEAF_RESOLVERS
 from world.missions.serializers import (
     MissionGiverOfferingSerializer,
     MissionGiverSerializer,
@@ -60,6 +64,7 @@ from world.missions.serializers import (
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
 )
+from world.missions.types import LeafResolver
 
 
 class MissionStudioPagination(PageNumberPagination):
@@ -329,3 +334,45 @@ class MissionGiverStandingViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverStandingFilterSet
+
+
+# ---------------------------------------------------------------------------
+# D5 predicate-tree API — list the registry's available leaf types so the
+# Mission Studio's predicate-tree builder can render leaf-type dropdowns.
+# Read/write of the rule trees themselves is already covered by the
+# JSONField on MissionTemplate.availability_rule and MissionOption.
+# visibility_rule (D1/D2 serializers round-trip them as-is).
+# ---------------------------------------------------------------------------
+
+
+def _leaf_params(resolver: LeafResolver) -> list[str]:
+    """Return the leaf's authored param names (everything after ctx)."""
+    sig = inspect.signature(resolver)
+    # First param is always ctx (ResolverContext); skip it.
+    return [
+        name
+        for name, param in list(sig.parameters.items())[1:]
+        if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+    ]
+
+
+class PredicateLeafCatalogViewSet(viewsets.ViewSet):
+    """D5 — the available predicate-leaf catalog for the builder palette.
+
+    Read-only. Returns ``[{"name": str, "params": [str, ...]}]`` for
+    every leaf in ``LEAF_RESOLVERS``. The Mission Studio's predicate-
+    tree builder uses this to render leaf-type dropdowns + param input
+    fields without hard-coding the registry on the frontend.
+    """
+
+    permission_classes = [IsAuthenticated, IsStaff]
+
+    @extend_schema(
+        responses={200: OpenApiResponse(description="List of available predicate leaves.")},
+    )
+    def list(self, request: Request) -> Response:
+        catalog = [
+            {"name": name, "params": _leaf_params(resolver)}
+            for name, resolver in sorted(LEAF_RESOLVERS.items())
+        ]
+        return Response(catalog)
