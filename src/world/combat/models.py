@@ -1102,9 +1102,11 @@ class ClashConfig(SharedMemoryModel):
         ),
     )
     clash_min_intensity = models.PositiveIntegerField(
-        default=4,
+        default=0,
         help_text=(
-            "Minimum effective intensity for a clash to open. Prevents trivial round-1 clashes."
+            "Minimum effective intensity for a clash to open. Prevents trivial "
+            "round-1 clashes. Default 0 = no gate (legacy-permissive); seed "
+            "content sets a real value (e.g. 4) once Properties are authored."
         ),
     )
 

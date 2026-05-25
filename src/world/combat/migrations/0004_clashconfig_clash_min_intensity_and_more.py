@@ -16,8 +16,8 @@ class Migration(migrations.Migration):
             model_name="clashconfig",
             name="clash_min_intensity",
             field=models.PositiveIntegerField(
-                default=4,
-                help_text="Minimum effective intensity for a clash to open. Prevents trivial round-1 clashes.",
+                default=0,
+                help_text="Minimum effective intensity for a clash to open. Prevents trivial round-1 clashes. Default 0 = no gate (legacy-permissive); seed content sets a real value (e.g. 4) once Properties are authored.",
             ),
         ),
         migrations.AddField(

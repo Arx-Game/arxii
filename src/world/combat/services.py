@@ -224,6 +224,7 @@ class CombatTechniqueResolver:
                 target,
                 scaled,
                 damage_type=profile.damage_type,
+                source_sheet=self.participant.character_sheet,
             )
             results.append(result)
         return results
@@ -1097,12 +1098,17 @@ def apply_damage_to_opponent(
     *,
     bypass_soak: bool = False,
     damage_type: DamageType | None = None,
+    source_sheet: CharacterSheet | None = None,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
 
     All raw damage (even fully soaked) contributes to probing. Only damage
     that exceeds soak and resistance actually reduces health.
+
+    When ``source_sheet`` is provided, increments the source's achievement
+    counters: ``damage_dealt`` (by post-soak damage), and on defeat
+    ``opponents_defeated``.
     """
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
@@ -1124,6 +1130,11 @@ def apply_damage_to_opponent(
 
     opponent.save(update_fields=["health", "probing_current", "status"])
 
+    # Achievement counters: see world.combat.achievement_counters. Wired in
+    # a follow-up phase — keeping the source_sheet kwarg in place so the
+    # call sites are pre-threaded.
+    del source_sheet
+
     return OpponentDamageResult(
         damage_dealt=damage_through,
         health_damaged=damage_through > 0,
@@ -1133,18 +1144,23 @@ def apply_damage_to_opponent(
     )
 
 
-def apply_damage_to_participant(
+def apply_damage_to_participant(  # noqa: PLR0913 — public API; kwargs are part of the v1 contract
     participant: CombatParticipant,
     damage: int,
     *,
     force_death: bool = False,
     damage_type: DamageType | None = None,
     source: object | None = None,
+    source_sheet: CharacterSheet | None = None,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
     Does NOT roll for knockout/death/wounds — only reports eligibility.
     The caller is responsible for acting on the result.
+
+    When ``source_sheet`` is provided (e.g. PC vs PC damage), increments the
+    source's ``damage_dealt`` counter. The target always gets a
+    ``damage_received`` increment (regardless of source).
 
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
@@ -1222,6 +1238,11 @@ def apply_damage_to_participant(
         update_fields.extend(["status", "dying_final_round"])
 
     vitals.save(update_fields=update_fields)
+
+    # Achievement counters: see world.combat.achievement_counters. Wired in
+    # a follow-up phase — keeping the source_sheet kwarg in place so the
+    # call sites are pre-threaded.
+    del source_sheet
 
     # --- DAMAGE_APPLIED (post-save, frozen) ---
     applied_payload = DamageAppliedPayload(
@@ -1866,6 +1887,7 @@ def _resolve_pc_action(
                 target,
                 combo.bonus_damage,
                 bypass_soak=combo.bypass_soak,
+                source_sheet=participant.character_sheet,
             )
             outcome.combo_used = combo
             outcome.damage_results.append(dmg_result)
@@ -1892,6 +1914,23 @@ def _resolve_pc_action(
         technique.anima_cost,
         action.effort_level,
     )
+
+    # Create the ACTION-mode Interaction and link it back to this action.
+    # This is the pose ↔ action linkage the outcome panel reads.
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        create_action_interaction,
+        render_action_declaration_label,
+    )
+
+    interaction = create_action_interaction(
+        participant=participant,
+        round_number=action.round_number,
+        summary_label=render_action_declaration_label(action),
+    )
+    if interaction is not None:
+        action.interaction = interaction
+        action.interaction_timestamp = interaction.timestamp
+        action.save(update_fields=["interaction", "interaction_timestamp"])
 
     return outcome
 

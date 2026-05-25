@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from actions.errors import ActionDispatchError
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 
@@ -31,7 +30,7 @@ def create_action_interaction(
     participant: CombatParticipant,
     round_number: int,
     summary_label: str,
-) -> Interaction:
+) -> Interaction | None:
     """Create one ACTION-mode Interaction for a resolved action.
 
     Args:
@@ -44,20 +43,20 @@ def create_action_interaction(
             "Strain commitment to Suppress vs Pyromancer".
 
     Returns:
-        The newly-created Interaction row.
-
-    Raises:
-        ActionDispatchError: with ``NO_PRIMARY_PERSONA`` if the participant's
-            character sheet has no PRIMARY persona. Defensive — invariant is
-            normally maintained by ``create_character_with_sheet``.
+        The newly-created Interaction row, or ``None`` if the participant's
+        character sheet has no PRIMARY persona (legacy fixture content predating
+        the create_character_with_sheet invariant — skipped silently to allow
+        the resolve loop to continue without writing a pose-log link).
     """
     from world.scenes.models import Persona  # noqa: PLC0415
 
     sheet = participant.character_sheet
     try:
         persona = sheet.primary_persona
-    except Persona.DoesNotExist as exc:
-        raise ActionDispatchError(ActionDispatchError.NO_PRIMARY_PERSONA) from exc
+    except Persona.DoesNotExist:
+        # Legacy fixture content; skip Interaction creation. The action still
+        # resolves; it just won't have a pose-log link.
+        return None
 
     encounter = participant.encounter
     scene = encounter.scene  # nullable on Interaction; pass through as-is

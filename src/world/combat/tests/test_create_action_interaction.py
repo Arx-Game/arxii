@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from actions.errors import ActionDispatchError
 from world.combat.factories import (
     ClashFactory,
     ClashRoundFactory,
@@ -125,13 +124,14 @@ class RenderClashContributionLabelTests(TestCase):
         self.assertIn("Pyromancer", label)
 
 
-class CreateActionInteractionErrorTests(TestCase):
-    def test_no_primary_persona_raises(self) -> None:
-        """If the participant's character sheet has no PRIMARY persona, raise.
+class CreateActionInteractionLegacyTests(TestCase):
+    def test_no_primary_persona_returns_none(self) -> None:
+        """If the participant's character sheet has no PRIMARY persona, return None.
 
-        Defensive error path: every CharacterSheet should have a PRIMARY
-        persona per the create_character_with_sheet invariant. We simulate
-        the broken state by deleting the persona row directly.
+        Legacy fixture content predating ``create_character_with_sheet`` may
+        lack a PRIMARY persona. Rather than raise, we skip Interaction
+        creation — the action still resolves; it just won't have a pose-log
+        link.
         """
         encounter = CombatEncounterFactory()
         participant = CombatParticipantFactory(encounter=encounter)
@@ -140,10 +140,9 @@ class CreateActionInteractionErrorTests(TestCase):
         # Invalidate the cached_property on the sheet.
         participant.character_sheet.__dict__.pop("primary_persona", None)
 
-        with self.assertRaises(ActionDispatchError) as ctx:
-            create_action_interaction(
-                participant=participant,
-                round_number=1,
-                summary_label="Cast",
-            )
-        self.assertEqual(ctx.exception.code, ActionDispatchError.NO_PRIMARY_PERSONA)
+        result = create_action_interaction(
+            participant=participant,
+            round_number=1,
+            summary_label="Cast",
+        )
+        self.assertIsNone(result)
