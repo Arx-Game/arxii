@@ -1,4 +1,4 @@
-"""Tests for the missions leaf-resolver registry (Phase 0.3).
+"""Tests for the missions leaf-resolver registry.
 
 Each resolver tests one slice of the acting character's *own durable state*.
 Tests build real factory objects (never mock the ORM) and exercise the
@@ -6,14 +6,14 @@ resolver both through the registry/``CharacterPredicateContext`` and through
 the full ``evaluate`` rule tree, so the structural layer and the leaf layer
 are verified together.
 
-``min_society_standing`` is stub-sealed: ``world.societies`` reputation is
-keyed by ``scenes.Persona`` (not character/sheet), and "standing" is
-ambiguous across SocietyReputation / OrganizationReputation / membership
-rank with no defined character->persona selection rule. Its test is skipped
-until the societies standing model is verified (DESIGN §4).
+Phase C added persona-aware resolvers (``is_member_of_org``,
+``min_org_reputation``, ``min_society_standing``) that consult
+``ctx.presented_persona``. The earlier stub-seal on ``min_society_standing``
+was removed in C8 — it's now a real resolver mirroring ``min_org_reputation``
+against SocietyReputation. Persona-aware tests use ``sheet.primary_persona``
+(auto-created by CharacterSheetFactory; the model has a partial unique
+constraint enforcing one PRIMARY per sheet).
 """
-
-import unittest
 
 from django.test import TestCase
 
@@ -38,6 +38,15 @@ from world.magic.factories import CharacterResonanceFactory, ResonanceFactory, T
 from world.missions.factories import MissionGiverFactory, MissionGiverStandingFactory
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.roster.factories import RosterEntryFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
+from world.societies.factories import (
+    OrganizationFactory,
+    OrganizationMembershipFactory,
+    OrganizationReputationFactory,
+    SocietyFactory,
+    SocietyReputationFactory,
+)
 
 
 class DistinctionAchievementResolverTests(TestCase):
@@ -412,6 +421,114 @@ class GiverStandingResolverTests(TestCase):
         self.assertTrue(evaluate(rule, self.ctx))
 
 
+class OrgMembershipResolverTests(TestCase):
+    """is_member_of_org: gates on the presented persona's membership in the org.
+
+    Persona-aware — checks ``ctx.presented_persona``, not character's primary
+    persona. Per societies CLAUDE.md, only PRIMARY/ESTABLISHED personas can
+    hold memberships, so a TEMPORARY mask correctly fails (no membership row
+    can exist for it). When ``presented_persona`` is None, the gate also
+    fails (no persona to check).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        # CharacterSheetFactory auto-creates the PRIMARY persona (partial
+        # unique constraint enforces one PRIMARY per sheet).
+        cls.primary = cls.sheet.primary_persona
+        cls.established = PersonaFactory(
+            character_sheet=cls.sheet, persona_type=PersonaType.ESTABLISHED
+        )
+        cls.temporary = PersonaFactory(
+            character_sheet=cls.sheet, persona_type=PersonaType.TEMPORARY
+        )
+        cls.guild = OrganizationFactory(name="Guild of Knives")
+        # PRIMARY persona is a member of the guild.
+        OrganizationMembershipFactory(persona=cls.primary, organization=cls.guild)
+
+    def test_true_when_presented_primary_is_member(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertTrue(ctx.has_leaf("is_member_of_org", org="Guild of Knives"))
+
+    def test_false_when_presented_established_is_not_member(self) -> None:
+        # Different persona, same character, no membership row.
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.established)
+        self.assertFalse(ctx.has_leaf("is_member_of_org", org="Guild of Knives"))
+
+    def test_false_when_presented_temporary_mask(self) -> None:
+        # TEMPORARY masks can't hold memberships at all → always fails.
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.temporary)
+        self.assertFalse(ctx.has_leaf("is_member_of_org", org="Guild of Knives"))
+
+    def test_false_when_no_presented_persona(self) -> None:
+        # No persona context → fail closed.
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(ctx.has_leaf("is_member_of_org", org="Guild of Knives"))
+
+    def test_false_when_no_such_org(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertFalse(ctx.has_leaf("is_member_of_org", org="Phantom Guild"))
+
+
+class OrgReputationResolverTests(TestCase):
+    """min_org_reputation: presented persona's reputation tier with the org meets threshold.
+
+    Tier ordering (low → high): REVILED, DESPISED, DISLIKED, DISFAVORED,
+    UNKNOWN, FAVORED, LIKED, HONORED, REVERED. The gate passes when the
+    presented persona's current tier is >= the authored threshold.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.primary = cls.sheet.primary_persona
+        cls.guild = OrganizationFactory(name="Honored Order")
+        # Primary persona has reputation value 600 → HONORED tier.
+        OrganizationReputationFactory(persona=cls.primary, organization=cls.guild, value=600)
+
+    def test_true_when_tier_at_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        # HONORED (600) >= HONORED.
+        self.assertTrue(ctx.has_leaf("min_org_reputation", org="Honored Order", tier="honored"))
+
+    def test_true_when_tier_above_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        # HONORED >= FAVORED.
+        self.assertTrue(ctx.has_leaf("min_org_reputation", org="Honored Order", tier="favored"))
+
+    def test_false_when_tier_below_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        # HONORED < REVERED.
+        self.assertFalse(ctx.has_leaf("min_org_reputation", org="Honored Order", tier="revered"))
+
+    def test_false_when_no_reputation_row(self) -> None:
+        other_org = OrganizationFactory(name="Unknown Order")
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        # No row → fail closed for any tier above UNKNOWN.
+        self.assertFalse(ctx.has_leaf("min_org_reputation", org="Unknown Order", tier="favored"))
+        # Even UNKNOWN tier — no row means we can't claim the standing.
+        self.assertFalse(ctx.has_leaf("min_org_reputation", org="Unknown Order", tier="unknown"))
+        _ = other_org  # silence unused
+
+    def test_false_when_no_presented_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(ctx.has_leaf("min_org_reputation", org="Honored Order", tier="favored"))
+
+    def test_false_when_no_such_org(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertFalse(ctx.has_leaf("min_org_reputation", org="Nonexistent", tier="favored"))
+
+    def test_invalid_tier_raises(self) -> None:
+        # Authoring error: unknown tier string → KeyError. Predicates fail
+        # closed on data, but bad authoring should surface loudly.
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        with self.assertRaises(KeyError):
+            ctx.has_leaf("min_org_reputation", org="Honored Order", tier="bogus")
+
+
 class PresentedPersonaContextTests(TestCase):
     """C5 refactor: CharacterPredicateContext carries presented_persona.
 
@@ -428,21 +545,65 @@ class PresentedPersonaContextTests(TestCase):
         self.assertIsNone(ctx.presented_persona)
 
     def test_persona_passes_through_to_resolver(self) -> None:
-        # Until C6-C8 land a persona-aware resolver to call, the test
-        # asserts the context attribute is settable + readable. The
+        # Asserts the context attribute is settable + readable. The
         # ResolverContext dataclass freezes it at dispatch time.
-        from world.scenes.factories import PersonaFactory
-
         character = CharacterFactory()
         sheet = CharacterSheetFactory(character=character)
-        persona = PersonaFactory(character_sheet=sheet)
+        # Use the auto-created PRIMARY (one-per-sheet constraint).
+        persona = sheet.primary_persona
         ctx = CharacterPredicateContext(character, presented_persona=persona)
         self.assertIs(ctx.presented_persona, persona)
 
 
-class SocietyStandingResolverStubTests(unittest.TestCase):
-    """Stub-seal: societies standing model is persona-keyed and ambiguous."""
+class SocietyStandingResolverTests(TestCase):
+    """min_society_standing: presented persona's tier with the society is >= threshold.
 
-    @unittest.skip("stub-seam: societies standing model unverified")
-    def test_min_society_standing(self) -> None:
-        raise NotImplementedError
+    Mirror of OrgReputationResolverTests against SocietyReputation. Replaces
+    the Phase-0 stub-seal (was raising NotImplementedError pending design).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.primary = cls.sheet.primary_persona
+        cls.society = SocietyFactory(name="Glorious Society")
+        SocietyReputationFactory(persona=cls.primary, society=cls.society, value=300)  # LIKED tier
+
+    def test_true_when_at_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertTrue(
+            ctx.has_leaf("min_society_standing", society="Glorious Society", tier="liked")
+        )
+
+    def test_true_when_above_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertTrue(
+            ctx.has_leaf("min_society_standing", society="Glorious Society", tier="favored")
+        )
+
+    def test_false_when_below_threshold(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        # LIKED < HONORED.
+        self.assertFalse(
+            ctx.has_leaf("min_society_standing", society="Glorious Society", tier="honored")
+        )
+
+    def test_false_when_no_presented_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(
+            ctx.has_leaf("min_society_standing", society="Glorious Society", tier="favored")
+        )
+
+    def test_false_when_no_reputation_row(self) -> None:
+        other = SocietyFactory(name="Unknown Society")
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        self.assertFalse(
+            ctx.has_leaf("min_society_standing", society="Unknown Society", tier="favored")
+        )
+        _ = other
+
+    def test_invalid_tier_raises(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+        with self.assertRaises(KeyError):
+            ctx.has_leaf("min_society_standing", society="Glorious Society", tier="bogus")

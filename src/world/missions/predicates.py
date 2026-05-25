@@ -287,14 +287,109 @@ def _resolve_min_character_level(ctx: ResolverContext, *, level: int) -> bool:
     return int(ctx.character.sheet_data.current_level) >= level
 
 
-def _resolve_min_society_standing(ctx: ResolverContext, **_params: object) -> bool:
-    """Stub-sealed resolver for society standing.
+# Ordered low → high — see world.societies.types.ReputationTier. Index in
+# this tuple IS the rank for ``>=`` comparison in min_org_reputation /
+# min_society_standing. Synced manually with societies.types; if a new tier
+# lands, this tuple must be updated.
+_TIER_ORDER: tuple[str, ...] = (
+    "reviled",
+    "despised",
+    "disliked",
+    "disfavored",
+    "unknown",
+    "favored",
+    "liked",
+    "honored",
+    "revered",
+)
 
-    Persona-aware (consults ``ctx.presented_persona``) once C8 lands.
-    Pending until C8 wires the SocietyReputation tier lookup.
+
+def _tier_rank(tier_value: str) -> int:
+    """Return the rank index for a tier-string ``tier_value``.
+
+    Raises ``KeyError`` for unknown tier values — authoring error (mission
+    template references a nonexistent tier). Predicates fail closed on data,
+    but bad authoring surfaces loudly.
     """
-    msg = "min_society_standing pending C8 persona-aware implementation"
-    raise NotImplementedError(msg)
+    try:
+        return _TIER_ORDER.index(tier_value)
+    except ValueError as exc:
+        msg = f"unknown reputation tier {tier_value!r}; expected one of {_TIER_ORDER}"
+        raise KeyError(msg) from exc
+
+
+def _resolve_min_org_reputation(ctx: ResolverContext, *, org: str, tier: str) -> bool:
+    """True if the presented persona's reputation tier with the org is >= ``tier``.
+
+    Persona-aware: reads ``ctx.presented_persona``. Tiers are ordered
+    REVILED < DESPISED < DISLIKED < DISFAVORED < UNKNOWN < FAVORED <
+    LIKED < HONORED < REVERED. When no OrganizationReputation row exists
+    for (presented_persona, org), the gate fails closed (we can't claim
+    standing without a row). When ``presented_persona`` is None, also fails.
+    """
+    if ctx.presented_persona is None:
+        return False
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
+    threshold_rank = _tier_rank(tier)
+    row = OrganizationReputation.objects.filter(
+        persona=ctx.presented_persona,
+        organization__name=org,
+    ).first()
+    if row is None:
+        return False
+    current_tier = ReputationTier.from_value(row.value).value
+    return _tier_rank(current_tier) >= threshold_rank
+
+
+def _resolve_is_member_of_org(ctx: ResolverContext, *, org: str) -> bool:
+    """True if the character's currently-presented persona belongs to the org.
+
+    Persona-aware: reads ``ctx.presented_persona`` (the persona the
+    character is wearing right now — a mask). Per societies CLAUDE.md, only
+    PRIMARY/ESTABLISHED personas can hold memberships, so TEMPORARY masks
+    naturally fail (no membership row can exist). When ``presented_persona``
+    is None (caller didn't specify), the gate fails closed — predicates
+    are advisory gates, and a missing persona signal is ambiguous.
+    """
+    if ctx.presented_persona is None:
+        return False
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return OrganizationMembership.objects.filter(
+        persona=ctx.presented_persona,
+        organization__name=org,
+    ).exists()
+
+
+def _resolve_min_society_standing(ctx: ResolverContext, *, society: str, tier: str) -> bool:
+    """True if the presented persona's reputation tier with the society is >= ``tier``.
+
+    Persona-aware sibling of ``min_org_reputation`` against Society (not
+    Organization). Tier ordering and fail-closed semantics are identical:
+    no presented persona → False; no SocietyReputation row → False; unknown
+    tier string → KeyError (authoring error).
+
+    Per the user's call: a character traveling under a mask uses THAT
+    persona's reputation (or lack thereof). TEMPORARY masks never have
+    reputation rows by model constraint, so they fail closed naturally —
+    masked characters must un-mask to satisfy this gate.
+    """
+    if ctx.presented_persona is None:
+        return False
+    from world.societies.models import SocietyReputation  # noqa: PLC0415
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
+    threshold_rank = _tier_rank(tier)
+    row = SocietyReputation.objects.filter(
+        persona=ctx.presented_persona,
+        society__name=society,
+    ).first()
+    if row is None:
+        return False
+    current_tier = ReputationTier.from_value(row.value).value
+    return _tier_rank(current_tier) >= threshold_rank
 
 
 # Leaf-name -> resolver. The structural evaluator never reads this; only
@@ -312,6 +407,8 @@ LEAF_RESOLVERS: LeafRegistry = {
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
     "min_giver_standing": _resolve_min_giver_standing,
+    "is_member_of_org": _resolve_is_member_of_org,
+    "min_org_reputation": _resolve_min_org_reputation,
     "min_society_standing": _resolve_min_society_standing,
 }
 
