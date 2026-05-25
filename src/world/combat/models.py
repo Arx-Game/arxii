@@ -1,11 +1,16 @@
 """Models for the combat system."""
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
@@ -87,6 +92,18 @@ class CombatEncounter(SharedMemoryModel):
     )
     is_paused = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @cached_property
+    def combat(self) -> "EncounterCombatHandler":
+        """Handler for encounter-scoped combat state (clashes, actions, etc.).
+
+        Single prefetched cache + list-comp subsets. Service-function bodies
+        read from this rather than running their own raw queries. Mutation
+        services call ``encounter.combat.invalidate()`` afterwards.
+        """
+        from world.combat.handlers import EncounterCombatHandler  # noqa: PLC0415
+
+        return EncounterCombatHandler(self)
 
     def __str__(self) -> str:
         return (
