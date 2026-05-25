@@ -28,14 +28,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     Read-only fields cover the authoring footprint: name, slug, summary,
     epilogue, level band, risk tier, weighting, era association, scope,
     cooldown, reward-group rule, active flag, access tier, categories,
-    availability rule. The ``categories`` M2M is serialized as a list of
-    category names — categories are lookup rows with unique names.
+    availability rule.
 
-    Editor CRUD (D2) reuses this serializer for create/update via
-    ModelViewSet write paths; per the project's "Validation belongs in
-    serializers, not views or services" rule, additional graph
-    well-formedness validation lands here as ``validate()`` methods when
-    D2 introduces those constraints.
+    D4 access-tier flip: PATCHing ``access_tier=open`` runs through
+    ``validate_access_tier`` below — if any attached giver is not
+    ``is_publishable`` (no target FK), the flip is refused with the
+    list of unready givers' slugs so the Studio can show "needs-work."
     """
 
     categories = serializers.SlugRelatedField(
@@ -43,6 +41,11 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         slug_field="name",
         read_only=True,
     )
+
+    # Module-level constants — bare strings as field/error keys would
+    # trip STRING_LITERAL pre-commit.
+    _OPEN_TIER_VALUE = "open"
+    _STAFF_ONLY_TIER_VALUE = "staff_only"
 
     class Meta:
         model = MissionTemplate
@@ -67,6 +70,30 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             "availability_rule",
         ]
         read_only_fields = ["id"]
+
+    def validate_access_tier(self, value: str) -> str:
+        """Guard the flip to OPEN: every attached giver must be publishable.
+
+        Only enforces on UPDATE (instance exists). Create flows through
+        unguarded — a brand-new template with no givers can be authored
+        directly as STAFF_ONLY (the model default) and only later flipped
+        to OPEN once givers are wired up.
+        """
+        if value != self._OPEN_TIER_VALUE:
+            return value
+        instance = self.instance
+        if instance is None:
+            return value  # create — let the model layer accept either tier
+        unready: list[str] = [
+            giver.slug for giver in instance.givers.all() if not giver.is_publishable
+        ]
+        if unready:
+            msg = (
+                "Cannot flip to OPEN: the following attached giver(s) are "
+                "not publishable (no target set): " + ", ".join(unready)
+            )
+            raise serializers.ValidationError(msg)
+        return value
 
 
 class _ActiveInstanceSerializer(serializers.Serializer):
