@@ -251,6 +251,8 @@ where it stopped, what the human should decide.
 Existing `dev.env` PAT mechanism (introduced on the `devcontainer-gh-access`
 work) stays. Scope expands from read-only to:
 
+**Required scopes:**
+
 | Permission | Read | Write |
 |---|---|---|
 | Metadata | ✓ | — |
@@ -259,13 +261,36 @@ work) stays. Scope expands from read-only to:
 | Issues | — | ✓ |
 | Workflows | — | ✓ |
 | Actions | ✓ | — |
-| Checks | ✓ | — |
+| Commit Statuses | ✓ | — |
 | Dependabot alerts | ✓ | — |
 
 `Workflows: write` is needed because CI fixes occasionally touch
 `.github/workflows/*.yml` (e.g., adjusting a job's environment, fixing a
 matrix entry). GitHub rejects pushes that modify workflow files without
 this scope, even when `Contents: write` is granted.
+
+`Actions: read` + `Commit Statuses: read` together cover what `gh pr checks`
+needs: Actions-produced check runs come through the Actions API, and
+external-CI commit statuses (plus the legacy Statuses surface) come through
+Commit Statuses. GitHub's fine-grained PAT taxonomy no longer has a
+single "Checks" category — these two are its modern split.
+
+**Optional scopes (recommended for future-proofing, not required for v1):**
+
+| Permission | Read | Write |
+|---|---|---|
+| Code Scanning Alerts | ✓ | — |
+| Secret Scanning Alerts | ✓ | — |
+| Repository Security Advisories | ✓ | — |
+| Code Quality | ✓ | — |
+
+Granting these lets the agent read CodeQL findings, leaked-secret reports,
+and security advisories when a CI fix or PR comment requires addressing
+them. Dependabot already echoes some of this; the explicit scopes give
+direct access. The skill's v1 doesn't depend on any of them, so a
+maintainer who omits them won't break the workflow — they just get a
+clearer "scope missing" message if the agent later tries to read one of
+these surfaces.
 
 One token, scoped to `arxii` repo only. Each maintainer creates their own
 under their own GitHub identity so commits are correctly attributed.
