@@ -49,3 +49,15 @@ COPY --chown=vscode:vscode mise.toml /tmp/mise/mise.toml
 # check during the build. Other tools in mise.toml still verify normally.
 RUN cd /tmp/mise && ~/.local/bin/mise trust \
  && MISE_PYTHON_GITHUB_ATTESTATIONS=false ~/.local/bin/mise install
+
+# Devcontainer-only tooling. Lives in this Dockerfile (not mise.toml) so it
+# never installs in production / bare-metal environments — only the
+# devcontainer image carries it. Added as a late layer so the mise install
+# above stays cached when this list changes. gh enables `gh run`, `gh api`,
+# etc. for read-only GitHub access (CI runs, Dependabot alerts) when a
+# GH_TOKEN is provided via dev.env.
+USER root
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+ && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
+USER vscode

@@ -23,6 +23,13 @@ services:
       # generates dev.env from src/.env with DATABASE_URL rewritten before
       # `just dc-up` brings the stack up.
       - ./dev.env:/workspaces/arxii/src/.env
+    # ALSO load dev.env as process environment so non-Django tools (gh, curl,
+    # etc.) can read variables like GH_TOKEN without sourcing the .env file
+    # manually. The bind-mount above is what Django/django-environ reads; this
+    # env_file is what the shell sees. Both point at the same dev.env so they
+    # stay in lockstep.
+    env_file:
+      - ./dev.env
     environment:
       # django-environ env.db() reads DATABASE_URL; points at the db service.
       DATABASE_URL: postgres://arxii:arxii@db:5432/arxiidev
