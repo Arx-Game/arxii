@@ -21,6 +21,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import BaseSerializer
 
 from world.missions.filters import (
+    MissionGiverFilterSet,
+    MissionGiverOfferingFilterSet,
+    MissionGiverStandingFilterSet,
     MissionNodeFilterSet,
     MissionOptionFilterSet,
     MissionOptionRouteCandidateFilterSet,
@@ -29,6 +32,9 @@ from world.missions.filters import (
     MissionTemplateFilterSet,
 )
 from world.missions.models import (
+    MissionGiver,
+    MissionGiverOffering,
+    MissionGiverStanding,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -38,6 +44,9 @@ from world.missions.models import (
 )
 from world.missions.permissions import IsStaff
 from world.missions.serializers import (
+    MissionGiverOfferingSerializer,
+    MissionGiverSerializer,
+    MissionGiverStandingSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
     MissionOptionRouteRewardSerializer,
@@ -150,3 +159,49 @@ class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteRewardFilterSet
+
+
+# ---------------------------------------------------------------------------
+# D3 giver-library viewsets — staff CRUD for MissionGiver + its links to
+# templates (MissionGiverOffering) and per-character standing rows
+# (MissionGiverStanding).
+# ---------------------------------------------------------------------------
+
+
+class MissionGiverViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass."""
+
+    queryset = MissionGiver.objects.all().order_by("pk")
+    serializer_class = MissionGiverSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionGiverFilterSet
+    lookup_field = "slug"
+
+
+class MissionGiverOfferingViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for the giver<->template through-model."""
+
+    queryset = MissionGiverOffering.objects.all().order_by("pk")
+    serializer_class = MissionGiverOfferingSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionGiverOfferingFilterSet
+
+
+class MissionGiverStandingViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for per-(giver, character) standing rows.
+
+    Normally written by ``services.run.accept_mission`` (cooldown side)
+    and future flirt/seduce checks (affection side). CRUD here is for
+    staff overrides — clear a cooldown, bump or penalize affection.
+    """
+
+    queryset = MissionGiverStanding.objects.all().order_by("pk")
+    serializer_class = MissionGiverStandingSerializer
+    permission_classes = [IsAuthenticated, IsStaff]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionGiverStandingFilterSet

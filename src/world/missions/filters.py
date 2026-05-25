@@ -14,6 +14,9 @@ import django_filters
 
 from world.missions.constants import AccessTier, ArcScope
 from world.missions.models import (
+    MissionGiver,
+    MissionGiverOffering,
+    MissionGiverStanding,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -134,4 +137,53 @@ class MissionOptionRouteRewardFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = MissionOptionRouteReward
+        fields: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# D3 giver-library filters.
+# ---------------------------------------------------------------------------
+
+
+class MissionGiverFilterSet(django_filters.FilterSet):
+    """Filter MissionGiver rows by org / kind / active / name substring."""
+
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    giver_kind = django_filters.CharFilter(field_name="giver_kind")
+    org = django_filters.NumberFilter(field_name="org_id")
+    org_name = django_filters.CharFilter(field_name="org__name", lookup_expr="iexact")
+    is_active = django_filters.BooleanFilter(field_name="is_active")
+
+    class Meta:
+        model = MissionGiver
+        fields: list[str] = []
+
+
+class MissionGiverOfferingFilterSet(django_filters.FilterSet):
+    """Filter MissionGiverOffering rows by giver / template."""
+
+    giver = django_filters.NumberFilter(field_name="giver_id")
+    giver_slug = django_filters.CharFilter(field_name="giver__slug")
+    template = django_filters.NumberFilter(field_name="template_id")
+    template_slug = django_filters.CharFilter(field_name="template__slug")
+
+    class Meta:
+        model = MissionGiverOffering
+        fields: list[str] = []
+
+
+class MissionGiverStandingFilterSet(django_filters.FilterSet):
+    """Filter MissionGiverStanding rows by giver / character.
+
+    Affection-range queries are rarely useful at the API surface (staff
+    just navigates to a specific (giver, character) pair); supporting
+    them later as ``min_affection`` / ``max_affection`` is trivial.
+    """
+
+    giver = django_filters.NumberFilter(field_name="giver_id")
+    giver_slug = django_filters.CharFilter(field_name="giver__slug")
+    character = django_filters.NumberFilter(field_name="character_id")
+
+    class Meta:
+        model = MissionGiverStanding
         fields: list[str] = []

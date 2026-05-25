@@ -9,6 +9,9 @@ from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
 from world.missions.models import (
+    MissionGiver,
+    MissionGiverOffering,
+    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -284,3 +287,109 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
         if route is not None and candidate is not None:
             raise serializers.ValidationError(self._ERR_BOTH_SET)
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# D3 giver-library serializers — MissionGiver, MissionGiverOffering (the
+# template-link through-model), MissionGiverStanding (the per-character
+# cooldown + affection row).
+# ---------------------------------------------------------------------------
+
+
+class MissionGiverSerializer(serializers.ModelSerializer):
+    """Editor CRUD for MissionGiver rows.
+
+    ``target`` is a generic ObjectDB FK; the model's clean() validates
+    the typeclass against ``giver_kind`` (NPC->Character, ROOM_TRIGGER->
+    Room, ENVIRONMENTAL_DETAIL->non-Character/Room/Exit Object). The
+    serializer passes both through; DRF's ModelSerializer doesn't call
+    clean(), so we proxy it from validate() to surface 400 instead of
+    IntegrityError.
+
+    ``is_publishable`` is the authoring-UI gate (Phase B2/B7 deviation
+    note) — exposed read-only here so the Studio can grey out "publish"
+    when the giver lacks its target.
+    """
+
+    is_publishable = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = MissionGiver
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "giver_kind",
+            "target",
+            "org",
+            "is_active",
+            "is_publishable",
+        ]
+        read_only_fields = ["id", "is_publishable"]
+
+    # Field key used when proxying clean() errors back to the API client.
+    _TARGET_FIELD = "target"
+
+    def validate(self, attrs: dict) -> dict:
+        # Build the candidate instance and run clean() so typeclass
+        # validation surfaces as a 400 with the field-keyed error.
+        instance = self.instance
+        merged_kind = attrs.get("giver_kind") or (instance.giver_kind if instance else None)
+        merged_target = (
+            attrs.get(self._TARGET_FIELD)
+            if self._TARGET_FIELD in attrs
+            else (instance.target if instance else None)
+        )
+        if merged_target is not None and merged_kind is not None:
+            candidate = MissionGiver(giver_kind=merged_kind, target=merged_target)
+            try:
+                candidate.clean()
+            except Exception as exc:
+                raise serializers.ValidationError({self._TARGET_FIELD: str(exc)}) from exc
+        return attrs
+
+
+class MissionGiverOfferingSerializer(serializers.ModelSerializer):
+    """Editor CRUD for the giver<->template through-model.
+
+    ``weight_override`` and ``requirements_override`` are the two
+    per-link knobs; the model's clean() rejects weight_override=0
+    (silent disable trap), which proxies through validate() below.
+    """
+
+    class Meta:
+        model = MissionGiverOffering
+        fields = [
+            "id",
+            "giver",
+            "template",
+            "weight_override",
+            "requirements_override",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        weight_override = attrs.get("weight_override")
+        if weight_override == 0:
+            msg = (
+                "weight_override=0 would silently disable this offering at draw time. "
+                "Use null (= fall back to template.base_weight) or any positive integer."
+            )
+            raise serializers.ValidationError({"weight_override": msg})
+        return attrs
+
+
+class MissionGiverStandingSerializer(serializers.ModelSerializer):
+    """Staff CRUD for per-(giver, character) standing rows.
+
+    Per design §6/§10 ``available_at`` is normally set by
+    ``services.run.accept_mission`` (= now + template.cooldown) and
+    ``affection`` is moved by future flirt/seduce gameplay. The CRUD
+    surface is for staff overrides — clear a cooldown manually,
+    bump/penalize affection — not for ordinary runtime writes.
+    """
+
+    class Meta:
+        model = MissionGiverStanding
+        fields = ["id", "giver", "character", "available_at", "affection"]
+        read_only_fields = ["id"]

@@ -4,6 +4,9 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.missions.views import (
+    MissionGiverOfferingViewSet,
+    MissionGiverStandingViewSet,
+    MissionGiverViewSet,
     MissionNodeViewSet,
     MissionOptionRouteCandidateViewSet,
     MissionOptionRouteRewardViewSet,
@@ -32,6 +35,18 @@ router.register(
     r"route-rewards",
     MissionOptionRouteRewardViewSet,
     basename="mission-option-route-reward",
+)
+# D3 giver library — staff CRUD for the offer-side surface.
+router.register(r"givers", MissionGiverViewSet, basename="mission-giver")
+router.register(
+    r"giver-offerings",
+    MissionGiverOfferingViewSet,
+    basename="mission-giver-offering",
+)
+router.register(
+    r"giver-standings",
+    MissionGiverStandingViewSet,
+    basename="mission-giver-standing",
 )
 
 urlpatterns = [
