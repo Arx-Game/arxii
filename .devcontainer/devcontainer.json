@@ -4,9 +4,16 @@
   "service": "app",
   "workspaceFolder": "/workspaces/arxii",
   "remoteUser": "vscode",
-  "features": {
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
-  },
+  // The ghcr.io/anthropics/devcontainer-features/claude-code feature is
+  // intentionally NOT used. Its install runs on every container creation
+  // (npm install -g, unconditionally pulling latest), which appears to
+  // trigger Claude Code's first-run migration logic — that wipes
+  // /home/vscode/.claude/.claude.json (the onboarding/account state)
+  // even though the named volume persists .credentials.json. Result:
+  // re-login on every dc-down/dc-up. Instead we install Claude Code at
+  // image-build time in the Dockerfile so login persists across container
+  // recreates; explicit upgrades happen on `just dc-build`.
+  "features": {},
   // One-time setup with network OPEN (deps + db schema).
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   // Reapply firewall every start (iptables rules do not persist).

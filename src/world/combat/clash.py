@@ -60,6 +60,28 @@ if TYPE_CHECKING:
     from world.magic.models import Affinity, Technique
 
 
+def can_clash(
+    props_a: frozenset[int] | set[int],
+    props_b: frozenset[int] | set[int],
+) -> bool:
+    """Return True iff two effect-Property sets oppose each other in a clash.
+
+    Inputs are sets of ``mechanics.Property`` pks. Symmetric.
+
+    Rule: any non-empty overlap counts. Empty on either side returns False —
+    unauthored content cannot clash. Authoring discipline is the gate: if a
+    Property is too broad to be meaningful for clash-opposition, the fix is
+    to scope it more narrowly or to not put it on techniques that shouldn't
+    clash on it. The opposition system does not maintain a parallel
+    "clash-bearing" subset; Property is the single taxonomy.
+
+    Phase 3 — combat-resolution-loop PR.
+    """
+    if not props_a or not props_b:
+        return False
+    return bool(props_a & props_b)
+
+
 def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
     """Convert a strain commitment (anima poured in past the floor) to a check modifier.
 
@@ -311,6 +333,39 @@ def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: 
         return entry.clash_break_free_force or 0
     # LockPcRole.ESCAPING: PC is escaping; NPC is maintaining the lock.
     return entry.clash_npc_pressure or 0
+
+
+def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
+    """Derive effect Property pks from a Technique's Gift's Resonances.
+
+    Walks ``technique.gift.resonances.properties`` — the same chain
+    ``mechanics.services._get_technique_effect_property_ids`` uses (we
+    duplicate it here as a free function to avoid a circular import between
+    combat.clash and mechanics.services). Returns an empty frozenset for
+    techniques without a gift.
+
+    Used by ``_detect_clash_flavor`` to compute the opposition surface for
+    clash creation. The per-character ``CharacterTechniqueHandler`` is the
+    cached path for inventory walks; this helper covers the one-off
+    detect-time lookup.
+    """
+    if technique.gift_id is None:
+        return frozenset()
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.mechanics.models import Property  # noqa: PLC0415
+
+    ids: set[int] = set()
+    resonances = technique.gift.resonances.prefetch_related(
+        Prefetch(
+            "properties",
+            queryset=Property.objects.all(),
+            to_attr="cached_properties",
+        ),
+    )
+    for resonance in resonances:
+        ids.update(p.pk for p in resonance.cached_properties)
+    return frozenset(ids)
 
 
 def _get_technique_affinity(technique: Technique) -> Affinity | None:
@@ -1052,6 +1107,12 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
         "focused_opponent_target",
     )
 
+    # Pre-resolve clash config once for the intensity floor.
+    from world.combat.services import compute_effective_intensity, get_clash_config  # noqa: PLC0415
+
+    clash_config = get_clash_config()
+    intensity_floor = clash_config.clash_min_intensity
+
     for pc_action in pc_actions:
         technique = pc_action.focused_action
         opponent = pc_action.focused_opponent_target
@@ -1071,6 +1132,27 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
 
         if not npc_action.threat_entry.clash_capable:
             continue  # NPC action is not clash-capable
+
+        # Property-based opposition gate — clash only opens if technique and
+        # threat entry share at least one Property. Legacy-permissive: when
+        # either side has no authored effect properties, fall through (we're
+        # in pre-Phase-1 content territory). Once seed content authors
+        # Properties for production, the gate engages naturally.
+        pc_props = _technique_effect_property_ids(technique)
+        npc_props = frozenset(
+            npc_action.threat_entry.effect_properties.values_list("pk", flat=True)
+        )
+        if pc_props and npc_props and not can_clash(pc_props, npc_props):
+            continue
+
+        # Intensity floor — prevents trivial round-1 clashes. Reads through
+        # compute_effective_intensity so future combatant-intensity-ramp
+        # contributions automatically tighten the gate. When floor is 0
+        # (default — set to a real value by seed content), this is a no-op.
+        if intensity_floor > 0:
+            eff_intensity = compute_effective_intensity(pc_action.participant, pc_action)
+            if eff_intensity < intensity_floor:
+                continue
 
         # Determine thresholds from authored base_damage fields.
         # Use TechniqueDamageProfile.base_damage if a profile exists; fall back to

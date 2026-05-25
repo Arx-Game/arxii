@@ -1,11 +1,16 @@
 """Models for the combat system."""
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
@@ -88,6 +93,18 @@ class CombatEncounter(SharedMemoryModel):
     is_paused = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @cached_property
+    def combat(self) -> "EncounterCombatHandler":
+        """Handler for encounter-scoped combat state (clashes, actions, etc.).
+
+        Single prefetched cache + list-comp subsets. Service-function bodies
+        read from this rather than running their own raw queries. Mutation
+        services call ``encounter.combat.invalidate()`` afterwards.
+        """
+        from world.combat.handlers import EncounterCombatHandler  # noqa: PLC0415
+
+        return EncounterCombatHandler(self)
+
     def __str__(self) -> str:
         return (
             f"{self.get_encounter_type_display()} "
@@ -147,6 +164,16 @@ class ThreatPoolEntry(SharedMemoryModel):
         "conditions.ConditionTemplate",
         blank=True,
         related_name="threat_pool_entries",
+    )
+    effect_properties = models.ManyToManyField(
+        "mechanics.Property",
+        blank=True,
+        related_name="threat_pool_entries",
+        help_text=(
+            "Effect Properties this NPC attack carries. Drives clash-opposition "
+            "matching against PC techniques' effect properties. Empty = attack "
+            "cannot trigger or assist clashes."
+        ),
     )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
@@ -538,6 +565,22 @@ class CombatParticipant(SharedMemoryModel):
             ),
         ]
 
+    @property
+    def available_strain(self) -> int:
+        """Strain budget for the round — currently the character's anima pool.
+
+        v1: returns CharacterAnima.current. The frontend's YourTurn strain
+        slider reads this as the slider's max. Future iterations may move
+        per-clash-strain-already-committed subtraction server-side; the
+        current frontend manages that client-side.
+
+        Returns 0 if the character has no CharacterAnima row (defensive).
+        """
+        try:
+            return self.character_sheet.character.anima.current
+        except AttributeError:
+            return 0
+
     def __str__(self) -> str:
         if self.covenant_role_id:
             return f"{self.character_sheet} ({self.covenant_role.name})"
@@ -619,6 +662,30 @@ class CombatRoundAction(SharedMemoryModel):
         blank=True,
         related_name="round_actions",
         help_text="If this action was upgraded to a combo, which combo.",
+    )
+    interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="combat_round_actions",
+        db_constraint=False,
+        help_text=(
+            "The ACTION-mode Interaction created when this round-action "
+            "resolved. Null for unresolved declarations and for legacy rows "
+            "predating this PR."
+        ),
+    )
+    interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Denormalized from interaction.timestamp. Required because "
+            "scenes_interaction is range-partitioned by timestamp — the composite "
+            "FK constraint targets (interaction_id, interaction_timestamp). "
+            "Populated atomically with interaction_id by create_action_interaction."
+        ),
     )
 
     class Meta:
@@ -1050,6 +1117,14 @@ class ClashConfig(SharedMemoryModel):
             "by 3+ is DECISIVE."
         ),
     )
+    clash_min_intensity = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Minimum effective intensity for a clash to open. Prevents trivial "
+            "round-1 clashes. Default 0 = no gate (legacy-permissive); seed "
+            "content sets a real value (e.g. 4) once Properties are authored."
+        ),
+    )
 
     # Progress-delta table — can be negative.
     delta_critical_success = models.IntegerField(default=3)
@@ -1352,6 +1427,29 @@ class ClashContribution(SharedMemoryModel):
     soulfray_severity_accrued = models.PositiveIntegerField(
         default=0,
         help_text="Soulfray severity the PC accrued as a result of this contribution.",
+    )
+    interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clash_contributions",
+        db_constraint=False,
+        help_text=(
+            "The ACTION-mode Interaction created when this clash contribution "
+            "resolved. Null for legacy rows predating this PR."
+        ),
+    )
+    interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Denormalized from interaction.timestamp. Required because "
+            "scenes_interaction is range-partitioned by timestamp — the composite "
+            "FK constraint targets (interaction_id, interaction_timestamp). "
+            "Populated atomically with interaction_id by create_action_interaction."
+        ),
     )
 
     class Meta:

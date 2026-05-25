@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Prefetch
 from django.utils.functional import cached_property
 
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
+from world.magic.models.techniques import Technique
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
@@ -203,3 +205,107 @@ class CharacterResonanceHandler:
     def invalidate(self) -> None:
         """Clear the cached resonance dict. Called by mutation services."""
         self.__dict__.pop("_by_resonance", None)
+
+
+class CharacterTechniqueHandler:
+    """Per-character technique inventory with effect properties pre-resolved.
+
+    Single underlying ``cached_property`` prefetches every Technique the
+    character has been granted plus the Gift → Resonance → Property chain
+    that drives clash-opposition matching. Subset methods do list-comps over
+    the cache.
+
+    Mutation contract: services that grant or revoke a CharacterTechnique
+    call ``handler.invalidate()`` afterwards.
+
+    Used by the combat-resolution-loop PR (Phase 2): clash participation
+    services read eligibility from ``helper_eligible_for(clash_props)``;
+    ``_detect_clash_flavor`` reads ``effect_property_ids_for(technique)`` to
+    match PC and NPC opposition props.
+    """
+
+    def __init__(self, character: Character) -> None:
+        self.character = character
+
+    @cached_property
+    def _state(self) -> list[Technique]:
+        """ONE prefetched list of every Technique the character has."""
+        from world.magic.models import Resonance  # noqa: PLC0415
+        from world.mechanics.models import Property  # noqa: PLC0415
+
+        return list(
+            Technique.objects.filter(
+                character_grants__character__character=self.character,
+            )
+            .select_related(
+                "gift",
+                "effect_type",
+                "action_template",
+                "action_template__check_type",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "gift__resonances",
+                    queryset=Resonance.objects.prefetch_related(
+                        Prefetch(
+                            "properties",
+                            queryset=Property.objects.all(),
+                            to_attr="cached_properties",
+                        ),
+                    ),
+                    to_attr="cached_resonances",
+                ),
+            )
+        )
+
+    def all(self) -> list[Technique]:
+        """Return every Technique the character has."""
+        return list(self._state)
+
+    def clash_capable(self) -> list[Technique]:
+        """Return Techniques with clash_capable=True."""
+        return [t for t in self._state if t.clash_capable]
+
+    def effect_property_ids_for(self, technique: Technique) -> frozenset[int]:
+        """Return the effect-Property pks carried by ``technique``.
+
+        Resolved via the prefetched Gift → Resonance → Property chain. Returns
+        an empty frozenset for techniques the character doesn't have or
+        techniques without a Gift.
+        """
+        for t in self._state:
+            if t.pk != technique.pk:
+                continue
+            if t.gift_id is None:
+                return frozenset()
+            ids: set[int] = set()
+            for resonance in t.gift.cached_resonances:
+                ids.update(p.pk for p in resonance.cached_properties)
+            return frozenset(ids)
+        return frozenset()
+
+    def helper_eligible_for(
+        self,
+        clash_property_ids: frozenset[int] | set[int],
+    ) -> list[Technique]:
+        """Return clash-capable Techniques whose effect properties overlap.
+
+        Used to surface helper-eligible techniques for an active clash —
+        a Technique is eligible iff it is clash-capable AND its effect
+        property set shares at least one Property with the clash's
+        opposition props.
+        """
+        if not clash_property_ids:
+            return []
+        eligible: list[Technique] = []
+        for t in self._state:
+            if not t.clash_capable:
+                continue
+            t_props = self.effect_property_ids_for(t)
+            if t_props & clash_property_ids:
+                eligible.append(t)
+        return eligible
+
+    def invalidate(self) -> None:
+        """Clear the cached technique list. Called by mutation services."""
+        self.__dict__.pop("_state", None)

@@ -49,3 +49,24 @@ COPY --chown=vscode:vscode mise.toml /tmp/mise/mise.toml
 # check during the build. Other tools in mise.toml still verify normally.
 RUN cd /tmp/mise && ~/.local/bin/mise trust \
  && MISE_PYTHON_GITHUB_ATTESTATIONS=false ~/.local/bin/mise install
+
+# Devcontainer-only tooling. Lives in this Dockerfile (not mise.toml) so it
+# never installs in production / bare-metal environments — only the
+# devcontainer image carries it. Added as a late layer so the mise install
+# above stays cached when this list changes. gh enables `gh run`, `gh api`,
+# etc. for read-only GitHub access (CI runs, Dependabot alerts) when a
+# GH_TOKEN is provided via dev.env.
+USER root
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+ && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
+USER vscode
+
+# Install Claude Code via npm at image-build time, replacing the
+# claude-code devcontainer feature which re-ran `npm install -g` on
+# every container creation and wiped ~/.claude/.claude.json (forcing
+# re-login). Installing here means: latest at build time, no churn on
+# container recreate, explicit upgrades via `just dc-build`. Uses mise's
+# node so the binary lands at .../node/24.4.1/bin/claude — already on
+# PATH for any shell that activates mise (via ~/.bashrc).
+RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code

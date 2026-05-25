@@ -33,6 +33,9 @@ export interface YourTurnProps {
   /** Available PlayerActions for the character — caller filters COMBAT backend. */
   availableActions: PlayerAction[];
   readOnly?: boolean;
+  /** Strain slider max — typically ParticipantSerializer.available_strain.
+   *  Falls back to 10 if not provided. */
+  availableStrain?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +128,8 @@ interface ClashContributionRowProps {
   onSelectClash: (ref: PlayerAction['ref']) => void;
   onStrainChange: (value: number) => void;
   isSelected: boolean;
+  /** Strain slider max — reads ParticipantSerializer.available_strain. Fallback 10. */
+  strainMax?: number;
 }
 
 function ClashContributionRow({
@@ -133,6 +138,7 @@ function ClashContributionRow({
   onSelectClash,
   onStrainChange,
   isSelected,
+  strainMax = 10,
 }: ClashContributionRowProps) {
   return (
     <div
@@ -165,7 +171,7 @@ function ClashContributionRow({
           <input
             type="range"
             min={0}
-            max={10}
+            max={strainMax}
             value={strainCommitment}
             onChange={(e) => onStrainChange(Number(e.target.value))}
             data-testid={`clash-strain-slider-${action.ref.clash_id ?? 'unknown'}`}
@@ -189,7 +195,9 @@ export function YourTurn({
   roundNumber,
   availableActions,
   readOnly = false,
+  availableStrain,
 }: YourTurnProps) {
+  const strainMax = availableStrain ?? 10;
   // ---------------------------------------------------------------------------
   // Slot state
   // ---------------------------------------------------------------------------
@@ -393,6 +401,7 @@ export function YourTurn({
                   setFocusedContext((prev) => ({ ...prev, strainCommitment: value }));
                 }}
                 isSelected={selectedClashRef?.clash_id === clashId}
+                strainMax={strainMax}
               />
             );
           })}

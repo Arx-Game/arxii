@@ -95,18 +95,17 @@ class ClashPlayerActionsOneClashTests(django.test.TestCase):
             status=ClashStatus.ACTIVE,
         )
 
-    def test_active_clash_emits_focused_and_passive_actions(self) -> None:
-        """One active clash → get_player_actions contains one FOCUSED + one PASSIVE action."""
+    def test_active_clash_emits_focused_only(self) -> None:
+        """One active clash → one FOCUSED PlayerAction (PASSIVE deprecated per spec)."""
         clash_actions = _clash_contribution_actions_for(self.character)
 
         slots = {a.ref.clash_action_slot for a in clash_actions}
         self.assertEqual(
             len(clash_actions),
-            2,
-            f"Expected 2 clash actions (FOCUSED + PASSIVE), got {len(clash_actions)}",
+            1,
+            f"Expected 1 clash action (FOCUSED only), got {len(clash_actions)}",
         )
-        self.assertIn(ClashActionSlot.FOCUSED, slots)
-        self.assertIn(ClashActionSlot.PASSIVE, slots)
+        self.assertEqual(slots, {ClashActionSlot.FOCUSED})
 
     def test_clash_actions_reference_correct_clash(self) -> None:
         """All clash-contribution actions reference the active clash by clash_id."""
@@ -176,13 +175,13 @@ class ClashPlayerActionsTwoClashesTests(django.test.TestCase):
             status=ClashStatus.ACTIVE,
         )
 
-    def test_two_active_clashes_emit_four_actions(self) -> None:
-        """Two active clashes → 4 clash-contribution PlayerActions total."""
+    def test_two_active_clashes_emit_two_focused_actions(self) -> None:
+        """Two active clashes → 2 clash-contribution PlayerActions (FOCUSED-only)."""
         clash_actions = _clash_contribution_actions_for(self.character)
         self.assertEqual(
             len(clash_actions),
-            4,
-            f"Expected 4 clash actions (2 clashes × 2 slots), got {len(clash_actions)}",
+            2,
+            f"Expected 2 clash actions (2 clashes × FOCUSED), got {len(clash_actions)}",
         )
 
     def test_both_clash_ids_represented(self) -> None:
@@ -192,8 +191,8 @@ class ClashPlayerActionsTwoClashesTests(django.test.TestCase):
         self.assertIn(self.clash_a.pk, clash_ids)
         self.assertIn(self.clash_b.pk, clash_ids)
 
-    def test_both_slots_represented_per_clash(self) -> None:
-        """For each clash, both FOCUSED and PASSIVE appear."""
+    def test_focused_slot_only_per_clash(self) -> None:
+        """For each clash, exactly one FOCUSED descriptor is emitted (PASSIVE deprecated)."""
         clash_actions = _clash_contribution_actions_for(self.character)
         for clash in (self.clash_a, self.clash_b):
             clash_slots = {
@@ -201,17 +200,18 @@ class ClashPlayerActionsTwoClashesTests(django.test.TestCase):
             }
             self.assertEqual(
                 clash_slots,
-                {ClashActionSlot.FOCUSED, ClashActionSlot.PASSIVE},
-                f"Clash {clash.pk} must surface both FOCUSED and PASSIVE slots",
+                {ClashActionSlot.FOCUSED},
+                f"Clash {clash.pk} must emit exactly one FOCUSED slot",
             )
 
 
 class ClashPlayerActionsAlreadyDeclaredTests(django.test.TestCase):
-    """PC with an existing ClashContributionDeclaration still sees both slot descriptors (v1).
+    """PC with an existing ClashContributionDeclaration still sees the FOCUSED descriptor.
 
-    v1 behavior: no suppression on already-declared. Both FOCUSED and PASSIVE
-    are still emitted so the UI can show the current declaration and allow
-    re-declaration (changing the slot or technique) until the round resolves.
+    Combat-resolution-loop spec: clashes are committed via the focused
+    action only — there is no PASSIVE slot. A PC with an existing
+    declaration still sees the FOCUSED descriptor so they can re-declare
+    (changing the technique or strain) until the round resolves.
     """
 
     @classmethod
@@ -232,14 +232,12 @@ class ClashPlayerActionsAlreadyDeclaredTests(django.test.TestCase):
             status=ClashStatus.ACTIVE,
         )
 
-    def test_already_declared_pc_still_sees_both_slots(self) -> None:
-        """v1: both FOCUSED and PASSIVE slots are emitted even when a declaration exists.
+    def test_already_declared_pc_still_sees_focused_slot(self) -> None:
+        """v1: FOCUSED descriptor is still emitted even when a declaration exists.
 
-        Design choice: v1 does not suppress already-declared actions because the
-        frontend should handle highlighting the active declaration and allowing
-        re-declaration (upsert via declare_clash_contribution) until the round
-        resolves. Suppressing here would require a re-query and adds no safety value
-        at the read path — the service layer enforces uniqueness at write time.
+        Design choice: no suppression at the read path. The frontend handles
+        highlighting the active declaration and the service layer enforces
+        uniqueness at write time.
         """
         technique = TechniqueFactory()
         ClashContributionDeclaration.objects.create(
@@ -255,12 +253,10 @@ class ClashPlayerActionsAlreadyDeclaredTests(django.test.TestCase):
         clash_actions = _clash_contribution_actions_for(self.character)
         self.assertEqual(
             len(clash_actions),
-            2,
-            "Both FOCUSED and PASSIVE must still appear even after a declaration is on file",
+            1,
+            "FOCUSED descriptor must still appear after a declaration is on file",
         )
-        slots = {a.ref.clash_action_slot for a in clash_actions}
-        self.assertIn(ClashActionSlot.FOCUSED, slots)
-        self.assertIn(ClashActionSlot.PASSIVE, slots)
+        self.assertEqual(clash_actions[0].ref.clash_action_slot, ClashActionSlot.FOCUSED)
 
 
 class ClashPlayerActionsResolvedClashTests(django.test.TestCase):

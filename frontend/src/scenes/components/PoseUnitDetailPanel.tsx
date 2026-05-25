@@ -80,12 +80,23 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
 }
 
 function EffectKindBadge({ kind }: { kind: string }) {
+  // Effect kinds emitted by the outcome-details endpoint:
+  //   combo, condition, status, clash_progress, anima, audere, soulfray
+  //   (plus legacy: damage, trigger_fire, resource_change)
   const colorMap: Record<string, string> = {
     damage: 'text-red-400',
     condition: 'text-amber-400',
+    combo: 'text-emerald-400',
+    status: 'text-rose-400',
+    clash_progress: 'text-cyan-400',
+    anima: 'text-blue-400',
+    audere: 'text-fuchsia-400',
+    soulfray: 'text-violet-400',
     trigger_fire: 'text-purple-400',
     resource_change: 'text-blue-400',
   };
   const color = colorMap[kind] ?? 'text-muted-foreground';
-  return <span className={cn('shrink-0 font-medium capitalize', color)}>{kind}</span>;
+  // Display labels: replace underscores with spaces for readability.
+  const display = kind.replace(/_/g, ' ');
+  return <span className={cn('shrink-0 font-medium capitalize', color)}>{display}</span>;
 }

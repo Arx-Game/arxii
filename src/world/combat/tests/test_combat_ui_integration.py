@@ -126,26 +126,29 @@ class CombatUIRoundTripIntegrationTests(TestCase):
         self.assertEqual(decl.encounter_id, self.encounter.pk)
         self.assertEqual(decl.round_number, self.encounter.round_number)
 
-    def test_step_a_passive_slot_dispatch(self) -> None:
-        """dispatch_player_action also accepts PASSIVE slot without error."""
+    def test_step_a_passive_slot_dispatch_rejected(self) -> None:
+        """PASSIVE descriptors are no longer surfaced, so dispatch rejects them.
+
+        Per the combat-resolution-loop spec, clash contributions are
+        FOCUSED-only. The PASSIVE enum stays in the data model for v1
+        (no schema churn) but is unreachable from the dispatch surface —
+        attempting to dispatch a PASSIVE ref raises UNKNOWN_ACTION_REF.
+        """
+        from actions.errors import ActionDispatchError
+
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             clash_id=self.clash.pk,
             clash_action_slot=ClashActionSlot.PASSIVE,
         )
 
-        result = dispatch_player_action(
-            character=self.character,
-            ref=ref,
-            kwargs={"technique_id": self.technique.pk, "strain_commitment": 0},
-        )
-
-        self.assertTrue(result.deferred)
-        decl = ClashContributionDeclaration.objects.get(
-            participant=self.participant,
-            clash=self.clash,
-        )
-        self.assertEqual(decl.action_slot, ClashActionSlot.PASSIVE)
+        with self.assertRaises(ActionDispatchError) as ctx:
+            dispatch_player_action(
+                character=self.character,
+                ref=ref,
+                kwargs={"technique_id": self.technique.pk, "strain_commitment": 0},
+            )
+        self.assertEqual(ctx.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
 
     # ------------------------------------------------------------------
     # Step B — Commit a thread pull (CombatPull + M2M thread)
