@@ -93,10 +93,47 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
         >
           {flavorLabel}
         </span>
-        {opponentName !== undefined && (
-          <span className="ml-2 truncate text-[10px] text-muted-foreground">vs {opponentName}</span>
-        )}
+        <div className="flex items-center gap-1">
+          {clash.side_favored && (
+            <span
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                clash.side_favored === 'PC' && 'bg-emerald-500/20 text-emerald-300',
+                clash.side_favored === 'NPC' && 'bg-rose-500/20 text-rose-300',
+                clash.side_favored === 'EVEN' && 'bg-muted text-muted-foreground'
+              )}
+              data-testid={`clash-side-favored-${clash.id}`}
+            >
+              {clash.side_favored}
+            </span>
+          )}
+          {opponentName !== undefined && (
+            <span className="ml-2 truncate text-[10px] text-muted-foreground">
+              vs {opponentName}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Contributors list */}
+      {clash.contributors && clash.contributors.length > 0 && (
+        <ul
+          className="space-y-0.5 text-[10px] text-muted-foreground"
+          data-testid={`clash-contributors-${clash.id}`}
+        >
+          {clash.contributors.map((c) => (
+            <li key={c.character_id ?? c.character_name} className="flex justify-between">
+              <span className="truncate">
+                {c.character_name} ({c.action_slot.toLowerCase()})
+              </span>
+              <span className="ml-2 font-mono">
+                {c.progress_delta >= 0 ? '+' : ''}
+                {c.progress_delta}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Meter */}
       <div className="space-y-0.5">

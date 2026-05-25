@@ -29,6 +29,14 @@ export type RoundAction = Record<string, unknown>;
 // result. We declare the concrete shape here.
 // ---------------------------------------------------------------------------
 
+export interface ClashContributor {
+  character_id: number | null;
+  character_name: string;
+  action_slot: string;
+  progress_delta: number;
+  anima: number;
+}
+
 export interface ClashState {
   id: number;
   flavor: 'CLASH' | 'LOCK' | 'WARD' | 'BREAK';
@@ -37,6 +45,10 @@ export interface ClashState {
   pc_win_threshold: number;
   npc_win_threshold: number | null;
   npc_opponent: number;
+  /** Per-PC contribution rollup (Phase 7). */
+  contributors: ClashContributor[];
+  /** "PC" / "NPC" / "EVEN" — Phase 7. */
+  side_favored: 'PC' | 'NPC' | 'EVEN';
 }
 
 // ---------------------------------------------------------------------------
