@@ -28,8 +28,9 @@ import {
   listRouteRewards,
   patchMissionNode,
   patchMissionTemplate,
-  type PredicateLeaf,
 } from './api';
+import type { PredicateLeaf } from './api';
+export type { PredicateLeaf };
 import type {
   MissionGiver,
   MissionGiverOffering,

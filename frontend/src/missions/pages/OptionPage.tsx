@@ -31,6 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
+import { PredicateBuilder, type PredicateNode } from '../components/PredicateBuilder';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
 import { missionKeys, useMissionRoutes, useMissionTemplate } from '../queries';
@@ -126,6 +127,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
     authored_ic_framing: option.authored_ic_framing ?? '',
     authored_ic_framing_needs_rewrite: option.authored_ic_framing_needs_rewrite ?? false,
     authored_base_risk: option.authored_base_risk ?? 0,
+    visibility_rule: (option.visibility_rule ?? {}) as PredicateNode,
   });
 
   const mutation = useMutation({
@@ -146,7 +148,8 @@ function OptionEditor({ option }: { option: MissionOption }) {
       draft.authored_ic_framing !== (option.authored_ic_framing ?? '') ||
       draft.authored_ic_framing_needs_rewrite !==
         (option.authored_ic_framing_needs_rewrite ?? false) ||
-      draft.authored_base_risk !== (option.authored_base_risk ?? 0),
+      draft.authored_base_risk !== (option.authored_base_risk ?? 0) ||
+      JSON.stringify(draft.visibility_rule) !== JSON.stringify(option.visibility_rule ?? {}),
     [draft, option]
   );
 
@@ -233,6 +236,13 @@ function OptionEditor({ option }: { option: MissionOption }) {
             onCheckedChange={(v) => setDraft({ ...draft, authored_ic_framing_needs_rewrite: v })}
           />
           <Label htmlFor="opt-needs-rewrite">Framing needs rewrite</Label>
+        </div>
+        <div className="border-t pt-3 md:col-span-2">
+          <PredicateBuilder
+            label="Visibility rule"
+            value={draft.visibility_rule}
+            onChange={(next) => setDraft({ ...draft, visibility_rule: next })}
+          />
         </div>
         <div className="flex items-center justify-end gap-2 md:col-span-2">
           <Button onClick={() => mutation.mutate()} disabled={!dirty || mutation.isPending}>
