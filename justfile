@@ -154,6 +154,20 @@ dc-build:
 dc-shell:
     devcontainer exec --workspace-folder . bash
 
+# --- Demo content -------------------------------------------------------------
+
+# Spawn a playable combat scenario via the PlayableCombatScenarioFactory.
+# Materializes Scene + DECLARING encounter + 2 PCs (with sheets/vitals/anima/
+# techniques/threads/resonance) + NPC opponent + active Clash. Prints the
+# entity IDs so a logged-in dev user can navigate to /scenes/<scene_id>/combat
+# in the frontend.
+#
+# Note: this is a developer/QA tool — it creates fresh entities each run, not
+# tied to any existing dev-user account. Full dev-user provisioning is a
+# follow-up.
+demo-combat:
+    uv run arx manage shell -c "from world.combat.factories import PlayableCombatScenarioFactory; s = PlayableCombatScenarioFactory.create(); print(f'\\nScene: /scenes/{s.scene.pk}/combat\\nEncounter: {s.encounter.pk}\\nPCs: {[p.pk for p in s.participants]}\\nOpponent: {s.opponent.pk}\\nClash: {s.clash.pk}')"
+
 # Run the test suite inside the container
 dc-test *args:
     devcontainer exec --workspace-folder . bash -lc "uv run arx test {{args}}"
