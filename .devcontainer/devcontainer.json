@@ -10,7 +10,10 @@
   // One-time setup with network OPEN (deps + db schema).
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   // Reapply firewall every start (iptables rules do not persist).
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  // Use our copy (arxii-firewall.sh), NOT the claude-code feature's
+  // /usr/local/bin/init-firewall.sh — the upstream version flushes the nat
+  // table and breaks Docker's embedded DNS resolver. See Dockerfile.
+  "postStartCommand": "sudo /usr/local/bin/arxii-firewall.sh",
   "remoteEnv": {
     "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
   }

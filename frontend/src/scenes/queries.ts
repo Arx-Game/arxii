@@ -1,5 +1,23 @@
 import { apiFetch } from '@/evennia_replacements/api';
 
+// ---------------------------------------------------------------------------
+// Query key factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Query key factory for scene queries.
+ *
+ * detail(id) produces ['scene', String(id)], which matches the legacy raw-array
+ * shape used in SceneDetailPage (`queryKey: ['scene', id]`). This means both
+ * CombatScenePage (using this factory) and SceneDetailPage share the same cache
+ * entry and avoid a double fetch. SceneDetailPage uses the legacy shape for now;
+ * refactor it to use this factory in a separate PR.
+ */
+export const sceneKeys = {
+  all: ['scene'] as const,
+  detail: (id: string | number) => ['scene', String(id)] as const,
+};
+
 export type {
   RosterEntryRef,
   SceneParticipant,
@@ -71,4 +89,42 @@ export async function toggleInteractionFavorite(interactionId: number) {
   });
   if (!res.ok && res.status !== 204) throw new Error('Failed to toggle favorite');
   return res.status;
+}
+
+export interface PendingUnlinkedActionRow {
+  id: number;
+  content: string;
+  mode: string;
+  timestamp: string;
+}
+
+export async function fetchPendingUnlinkedActions(
+  sceneId: string,
+  personaId: number
+): Promise<PendingUnlinkedActionRow[]> {
+  const url = new URL('/api/interactions/', window.location.origin);
+  url.searchParams.set('scene', sceneId);
+  url.searchParams.set('persona', String(personaId));
+  url.searchParams.set('mode', 'action');
+  url.searchParams.set('without_pose_link', 'true');
+  const res = await apiFetch(url.pathname + url.search);
+  if (!res.ok) throw new Error('Failed to load pending unlinked actions');
+  const data = (await res.json()) as { results: PendingUnlinkedActionRow[] };
+  return data.results;
+}
+
+export interface SubmitPoseBody {
+  persona_id: number;
+  scene_id?: number;
+  content: string;
+  /** When provided (including empty array), overrides auto-link. Omit to auto-link. */
+  action_link_ids?: number[];
+}
+
+export async function submitPose(body: SubmitPoseBody): Promise<void> {
+  const res = await apiFetch('/api/interactions/submit-pose/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to submit pose');
 }

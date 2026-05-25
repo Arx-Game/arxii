@@ -4,6 +4,7 @@ from datetime import timedelta
 from http import HTTPMethod
 from typing import Any
 
+from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -21,6 +22,7 @@ from world.scenes.interaction_filters import (
     InteractionFilter,
     InteractionReactionFilter,
 )
+from world.scenes.interaction_link_services import auto_link_pose_to_actions
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
@@ -32,13 +34,20 @@ from world.scenes.interaction_serializers import (
     InteractionFavoriteSerializer,
     InteractionListSerializer,
     InteractionReactionSerializer,
+    PoseSubmitSerializer,
 )
-from world.scenes.interaction_services import delete_interaction, mark_very_private
+from world.scenes.interaction_services import (
+    create_interaction,
+    delete_interaction,
+    mark_very_private,
+)
 from world.scenes.models import (
     Interaction,
+    InteractionAction,
     InteractionFavorite,
     InteractionReaction,
     Persona,
+    Scene,
 )
 from world.scenes.place_models import InteractionReceiver
 
@@ -96,6 +105,11 @@ class InteractionViewSet(
                 "reactions",
                 queryset=InteractionReaction.objects.all(),
                 to_attr="cached_reactions",
+            ),
+            Prefetch(
+                "action_links",
+                queryset=InteractionAction.objects.select_related("action_interaction"),
+                to_attr="cached_action_links",
             ),
         )
 
@@ -223,6 +237,63 @@ class InteractionViewSet(
             mark_very_private(interaction, persona)
         serializer = self.get_serializer(interaction)
         return Response(serializer.data)
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="submit-pose")
+    def submit_pose(self, request: Request) -> Response:
+        """Create a POSE Interaction and auto-link prior ACTION Interactions.
+
+        Accepts ``action_link_ids`` for an explicit override:
+        - Absent (key missing): auto-link is run.
+        - Present as a list (even empty): exact links are created; auto-link skipped.
+        """
+        serializer = PoseSubmitSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        persona = Persona.objects.get(pk=data["persona_id"])
+        scene: Scene | None = (
+            Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
+        )
+
+        with transaction.atomic():
+            interaction = create_interaction(
+                persona=persona,
+                content=data["content"],
+                mode=InteractionMode.POSE,
+                scene=scene,
+            )
+
+            action_link_ids: list[int] | None = data.get("action_link_ids")
+            if action_link_ids is not None:
+                # Explicit override: create exactly the supplied links in order,
+                # skipping auto-link entirely (empty list = caller opted out).
+                InteractionAction.objects.bulk_create(
+                    [
+                        InteractionAction(
+                            pose=interaction,
+                            action_interaction_id=aid,
+                            ordering=i,
+                        )
+                        for i, aid in enumerate(action_link_ids)
+                    ]
+                )
+            else:
+                auto_link_pose_to_actions(interaction)
+
+        # The freshly-created interaction has not been through get_queryset()'s
+        # Prefetch pipeline, so the cached_* to_attr attributes used by
+        # InteractionListSerializer do not exist yet. Set them to empty lists
+        # to avoid AttributeError on serialization; a new pose has no receivers,
+        # target personas, favorites, or reactions.
+        interaction.cached_receivers = []
+        interaction.cached_target_personas = []
+        interaction.cached_favorites = []
+        interaction.cached_reactions = []
+        interaction.cached_action_links = []
+        out_serializer = InteractionListSerializer(
+            interaction, context=self.get_serializer_context()
+        )
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class InteractionFavoritePagination(PageNumberPagination):

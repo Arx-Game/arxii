@@ -343,6 +343,54 @@ Two deliverables in one branch:
 - Normally non-lethal PC vs PC sparring with pose integration
 - Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
 
+### Unified Combat UI (SHIPPED — 2026-05-24)
+
+**Status: SHIPPED**
+**Phases:** 0–12 of `docs/superpowers/plans/2026-05-23-unified-combat-ui.md`
+**Branch:** `clash-cleanup-notes`
+
+The web-first combat interface is live. Players can declare actions, view the
+encounter state, see clash meters, and read pose-linked action outcomes through
+the React frontend.
+
+**Backend shipped:**
+
+- `actions/`: clash-contribution dispatch wired in `dispatch_player_action` (Phase 0)
+- `world/scenes/`: `InteractionAction` bridge model + factory + tests (Phase 1); `auto_link_pose_to_actions` service + POSE submit endpoint integration (Phase 2); `thumbnail_media_url` on PersonaSerializer with FK select_related (Phase 4); `action_links` field on InteractionSerializer with Prefetch (Phase 9); `without_pose_link` filter (Phase 10)
+- `world/magic/`: `InapplicabilityReason` enum, `compute_thread_applicability` service, `POST /api/magic/applicable-pulls/` endpoint (Phase 3)
+- `world/combat/`: `clashes` field on EncounterDetailSerializer + ClashStateSerializer + Prefetch (Phase 8); `GET /api/combat/action-outcome-details/?action_interaction_ids=...` endpoint (Phase 9); full UI round-trip integration test (Phase 12)
+
+**Frontend shipped (all under `frontend/src/`):**
+
+- `components/PersonaAvatar.tsx` (Phase 4)
+- `actions/ActionDeclarationCard.tsx` + types + tests (Phase 5)
+- `magic/components/threads/ThreadPullPicker.tsx` + `PullDetailModal.tsx` + `useApplicablePulls` hook (Phase 6)
+- `combat/CombatTurnPanel.tsx` + `sections/YourTurn.tsx` (Phase 7)
+- `combat/sections/{ResonanceBudget,VitalPools,CombatantsList,ActiveState,RoundFlow}.tsx` (Phase 8)
+- `scenes/components/PoseUnit.tsx` + `PoseUnitDetailPanel.tsx`; updated `SceneMessages.tsx` (Phase 9)
+- `scenes/components/PendingActionAttachments.tsx` + `hooks/usePendingUnlinkedActions.ts` (Phase 10)
+- `combat/pages/CombatScenePage.tsx` at `/scenes/:id/combat` (Phase 11)
+- `e2e/combat.spec.ts` Playwright smoke test (Phase 12)
+
+**Known carry-forward (not in this PR):**
+
+- `CombatRoundAction → Interaction` join FK needed for effect enumeration in `outcome-details` endpoint (v1 returns empty effects)
+- Deep-link routing for outcome-detail effects (`{modal, id}` skeleton exists, no navigation wired)
+- Auto-expand pose units on critical events (KO, death) — pending player-preference toggle
+- Fatigue model not yet exposed; VitalPools shows `0/10` placeholders
+- `CombatOpponent` portrait FK — NPC avatars are initial-letter-only
+- ActiveState Commit/Lend buttons are UI stubs; dispatch wiring deferred
+- `ClashStateSerializer` does not expose `contributors` or `side_favored`
+- Conditions data not surfaced on CombatantsList rows
+- `submit_pose` REST endpoint does not broadcast via WebSocket
+- Strain budget hardcoded `max=10`; needs `CombatParticipant.available_strain` exposed
+- Focused-category resolution stubbed to `passive-physical`
+- `lend-to-clash` not wired; no `CLASH_SUPPORT` `PlayerAction` descriptor exists
+- Scene-side adoption of `<ActionDeclarationCard>` (no `ScenePull` envelope) — out of this spec's scope
+- Positioning/zones integration, mobile responsive layout, WebSocket real-time push — out of scope
+
+---
+
 ### Clash of Wills (SHIPPED — branch `clash-design`)
 
 **Status: SHIPPED**
@@ -501,15 +549,13 @@ integration test suite.
   clash visibility UI is a follow-up.
 
 ### Shared Future Work (combat-adjacent)
-- **Combat REST API** — endpoints for encounter lifecycle, action declaration, combo upgrade, round resolution
-- **Combat UI** — web-first interface for all combat modes (declaration panel, resolution display, combo prompts)
 - **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder
 - **Relationship modifier integration** — romance bonuses, rivalry intensity, party bond effects
 - **Audere Majora trigger conditions** — health thresholds feeding into Audere system
-- **DEAL_DAMAGE effect handler** — connect stubbed handler to combat health system
 - **Combo content authoring** — staff tools for creating/testing combo definitions
 - **Knockout/death roll services** — actual rolls using eligibility flags from damage resolution
 - **Permanent wound application** — connect permanent_wound_eligible to ConditionTemplate instances
+- **Combat UI carry-forward** — see Unified Combat UI section above for the known remaining items
 
 ### Narrative Status in Character Descriptions (future)
 

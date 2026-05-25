@@ -59,6 +59,33 @@ vi.mock('../../actionQueries', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock roster queries — SceneDetailPage uses useMyRosterEntriesQuery to
+// resolve the active persona for Phase 10's pending-action-attachment chip
+// strip. The global useQuery mock above returns Scene data for every query,
+// so we override the roster hook explicitly to return an array.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  })),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock pending-unlinked-actions hook — Phase 10's chip strip queries this.
+// ---------------------------------------------------------------------------
+
+vi.mock('../../hooks/usePendingUnlinkedActions', () => ({
+  usePendingUnlinkedActions: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  })),
+}));
+
+// ---------------------------------------------------------------------------
 // Mock magic queries — both inbox components self-fetch with these hooks
 // ---------------------------------------------------------------------------
 
@@ -98,6 +125,11 @@ vi.mock('@/store/hooks', () => ({
       },
     })
   ),
+  useAccount: vi.fn(() => ({
+    id: 1,
+    username: 'testuser',
+    available_characters: [],
+  })),
 }));
 
 // Mock react-redux useSelector used by SineatingInbox and SoulTetherRescuePrompt

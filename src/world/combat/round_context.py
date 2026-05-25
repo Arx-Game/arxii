@@ -69,6 +69,11 @@ class CombatRoundContext(RoundContext):
         self._encounter = participant.encounter
 
     @property
+    def participant(self) -> CombatParticipant:
+        """Return the resolved ``CombatParticipant`` for this context."""
+        return self._participant
+
+    @property
     def round_id(self) -> tuple[int, int]:
         """Return ``(encounter_id, round_number)`` for this active round."""
         return (self._encounter.pk, self._encounter.round_number)

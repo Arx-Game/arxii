@@ -6,6 +6,7 @@ import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import { submitPose } from '@/scenes/queries';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
@@ -26,6 +27,14 @@ interface CommandInputProps {
   onActionAttach?: (action: ActionAttachmentInfo) => void;
   onActionDetach?: () => void;
   onSubmitAction?: (action: ActionAttachmentInfo) => void;
+  /** Persona id for the active character — used to call submit_pose REST endpoint. */
+  personaId?: number | null;
+  /** IDs of the persona's unlinked ACTION interactions in this scene (from usePendingUnlinkedActions). */
+  pendingActionIds?: number[];
+  /** IDs the user has explicitly detached — these will be omitted from action_link_ids. */
+  detachedActionIds?: number[];
+  /** Called after a successful pose submit so the parent can clear detachedActionIds. */
+  onPoseSubmitted?: () => void;
 }
 
 export function CommandInput({
@@ -39,6 +48,10 @@ export function CommandInput({
   onActionAttach,
   onActionDetach,
   onSubmitAction,
+  personaId,
+  pendingActionIds,
+  detachedActionIds,
+  onPoseSubmitted,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -81,14 +94,36 @@ export function CommandInput({
       }
     }
 
-    // C2: Pose (WebSocket) and action (REST) are submitted independently.
-    // Both are fire-and-forget — there is no transactional link between them.
-    // The SceneActionRequest has a `scene` FK so they are contextually linked,
-    // but if one fails the other may still succeed.
-    send(character, fullCommand);
-
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
+    }
+
+    // Determine submission path for scene poses.
+    // The REST path is used ONLY when the user has detached actions — this is
+    // the only case where we need an explicit action_link_ids override.
+    // For all other cases (no detachments, non-pose commands, outside a scene)
+    // the WebSocket path runs and server-side auto-link handles attachment.
+    const isPose = !composerMode || composerMode.command === 'pose';
+    const detachedSet = new Set(detachedActionIds ?? []);
+    const hasDetachments = detachedSet.size > 0;
+    const usesRestSubmit = isPose && sceneId !== undefined && personaId != null && hasDetachments;
+
+    if (usesRestSubmit) {
+      // REST path: explicit action_link_ids override when the user has detached
+      // one or more pending actions. WebSocket send() is intentionally skipped
+      // to avoid creating two POSE Interactions for the same pose.
+      void submitPose({
+        persona_id: personaId,
+        scene_id: Number(sceneId),
+        content: trimmed,
+        action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
+      }).then(() => {
+        onPoseSubmitted?.();
+      });
+    } else {
+      // WebSocket path: existing behavior. Server-side auto-link will attach
+      // any pending ACTION interactions when the POSE is created.
+      send(character, fullCommand);
     }
 
     setHistory((prev) => [...prev, trimmed]);
@@ -97,7 +132,19 @@ export function CommandInput({
     // I3: Clear synchronously — React batches the state updates above,
     // so this runs on the same tick and prevents double-submission.
     submittingRef.current = false;
-  }, [character, command, composerMode, send, actionAttachment, onSubmitAction]);
+  }, [
+    character,
+    command,
+    composerMode,
+    send,
+    actionAttachment,
+    onSubmitAction,
+    sceneId,
+    personaId,
+    pendingActionIds,
+    detachedActionIds,
+    onPoseSubmitted,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' && command === '') {

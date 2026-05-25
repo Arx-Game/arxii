@@ -183,3 +183,24 @@ class AffinityInteractionAggressor(models.TextChoices):
 # get_or_create — so a missing seed propagates loudly rather than silently creating
 # a chartless CheckType that would break the resolution pipeline.
 ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME: str = "endure_hallowed_ground"
+
+
+class InapplicabilityReason(models.TextChoices):
+    """Stable enum of reasons a thread pull cannot apply to an action context.
+
+    Per design spec §5 — used as a chip label on the inapplicable-row UI.
+    """
+
+    WRONG_AFFINITY = "wrong_affinity", "Wrong affinity for this action"
+    ANCHOR_TARGET_NOT_PRESENT = (
+        "anchor_target_not_present",
+        "Anchor target not present in scene",
+    )
+    ANCHORED_ON_OTHER_TECHNIQUE = (
+        "anchored_on_other_technique",
+        "Anchored on a different technique not used this round",
+    )
+    PREREQUISITE_UNMET = "prerequisite_unmet", "Prerequisite condition unmet"
+    LOCATION_MISMATCH = "location_mismatch", "Location/property mismatch"
+    THREAD_RETIRED = "thread_retired", "Thread is retired"
+    OTHER = "other", "Other (see details)"

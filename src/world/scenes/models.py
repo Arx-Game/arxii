@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -506,6 +506,21 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_reactions') to set this."""
         self._cached_reactions = value
 
+    @property
+    def cached_action_links(self) -> "list[InteractionAction]":
+        """InteractionAction bridge rows for this POSE. Uses Prefetch(to_attr=) when available."""
+        try:
+            return self._cached_action_links
+        except AttributeError:
+            return list(
+                InteractionAction.objects.filter(pose=self).select_related("action_interaction")
+            )
+
+    @cached_action_links.setter
+    def cached_action_links(self, value: "list[InteractionAction]") -> None:
+        """Allow Prefetch(to_attr='cached_action_links') to set this."""
+        self._cached_action_links = value
+
 
 class InteractionFavorite(SharedMemoryModel):
     """Private bookmark for a cherished RP moment.
@@ -619,6 +634,66 @@ class InteractionTargetPersona(SharedMemoryModel):
                 name="unique_target_per_interaction",
             ),
         ]
+
+
+class InteractionAction(SharedMemoryModel):
+    """Links a POSE Interaction to the ACTION Interaction(s) it elaborates.
+
+    Pattern A from the unified-combat-ui spec: the bridge points at the
+    ACTION-mode Interaction (not the underlying CombatRoundAction /
+    ClashContribution directly). The ACTION Interaction is the polymorphic
+    join point — different mechanical action types still reach a uniform
+    bridge target without contenttypes.
+    """
+
+    pose = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="action_links",
+        db_constraint=False,
+        help_text="The POSE Interaction that elaborates the action(s).",
+    )
+    action_interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="pose_links",
+        db_constraint=False,
+        help_text="The ACTION Interaction being elaborated.",
+    )
+    ordering = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Display order within the pose (low values render first).",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pose", "action_interaction"],
+                name="unique_action_link_per_pose",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["pose", "ordering"]),
+            models.Index(fields=["action_interaction"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.pose_id} ↔ {self.action_interaction_id}"
+
+    def clean(self) -> None:
+        super().clean()
+        # NOTE: Django does not call clean() on save(). Callers (e.g. the
+        # Phase 2 auto-link service) must invoke full_clean() before save()
+        # to enforce these mode invariants.
+        if self.pose_id is not None and self.pose.mode != InteractionMode.POSE:
+            raise ValidationError({"pose": "Bridge pose must be a POSE-mode Interaction."})
+        if (
+            self.action_interaction_id is not None
+            and self.action_interaction.mode != InteractionMode.ACTION
+        ):
+            raise ValidationError(
+                {"action_interaction": "Linked target must be an ACTION-mode Interaction."}
+            )
 
 
 class SceneSummaryRevision(SharedMemoryModel):

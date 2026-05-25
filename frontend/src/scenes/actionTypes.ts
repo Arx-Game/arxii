@@ -29,6 +29,8 @@ export interface ActionRef {
   approach_id: number | null;
   technique_id: number | null;
   registry_key: string | null;
+  clash_id?: number | null;
+  clash_action_slot?: string | null;
 }
 
 export interface PlayerAction {

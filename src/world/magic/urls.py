@@ -11,6 +11,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
+    ApplicablePullsView,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
     CharacterGiftViewSet,
@@ -102,6 +103,11 @@ router.register(
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
     # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
+    path(
+        "applicable-pulls/",
+        ApplicablePullsView.as_view(),
+        name="applicable-pulls",
+    ),
     path(
         "rooms-by-property/",
         RoomsByPropertyView.as_view(),
