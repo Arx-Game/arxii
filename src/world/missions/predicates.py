@@ -95,19 +95,24 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
 # ---------------------------------------------------------------------------
 # Leaf resolvers — each tests one slice of the acting character's own state.
 # Signature: ``(ctx: ResolverContext, **params: object) -> bool``. ``ctx``
-# carries the acting character (always present) plus ``presented_persona``
-# (the mask they're wearing, or None). Persona-aware resolvers consult
-# ``ctx.presented_persona``; non-persona resolvers read ``ctx.character``
-# only. Params are the leaf's authored params and are keyword-only.
-# Resolvers must never inspect a target's sheet — only the acting
-# character's durable state.
+# carries ``sheet`` (the CharacterSheet — canonical handle per project
+# convention) and ``presented_persona`` (the mask, or None). Most
+# resolvers read ``ctx.sheet`` directly. The few resolvers gating on
+# models still keyed by ObjectDB (CharacterDistinction.character,
+# ConditionInstance via has_condition service, CharacterTraitValue.
+# character, MissionGiverStanding.character) walk ``ctx.character`` — the
+# @property on ResolverContext that returns ``sheet.character``.
+# Persona-aware resolvers consult ``ctx.presented_persona``.
 #
-# Invariant: the acting character is assumed to have a CharacterSheet (true
-# for every played character per character_sheets/CLAUDE.md). A sheet-less
-# character is a programmer error: sheet-keyed resolvers access
-# ``ctx.character.sheet_data`` and will raise CharacterSheet.DoesNotExist
-# loudly rather than silently gate. No defensive guard is added on purpose
-# — silently returning False would hide the bug.
+# Resolvers must never inspect a target's sheet — only the acting
+# character's durable state. Params are the leaf's authored params and
+# are keyword-only.
+#
+# Invariant: the acting character is assumed to have a CharacterSheet
+# (true for every played character per character_sheets/CLAUDE.md).
+# CharacterPredicateContext walks ``character.sheet_data`` at dispatch
+# time; a sheet-less character is a programmer error and the lookup
+# raises CharacterSheet.DoesNotExist loudly rather than silently gate.
 # ---------------------------------------------------------------------------
 
 
@@ -130,7 +135,7 @@ def _resolve_has_achievement(ctx: ResolverContext, *, slug: str) -> bool:
     from world.achievements.models import CharacterAchievement  # noqa: PLC0415
 
     return CharacterAchievement.objects.filter(
-        character_sheet=ctx.character.sheet_data,
+        character_sheet=ctx.sheet,
         achievement__slug=slug,
     ).exists()
 
@@ -172,7 +177,7 @@ def _resolve_has_thread(ctx: ResolverContext) -> bool:
     from world.magic.models import Thread  # noqa: PLC0415
 
     return Thread.objects.filter(
-        owner=ctx.character.sheet_data,
+        owner=ctx.sheet,
         retired_at__isnull=True,
     ).exists()
 
@@ -182,7 +187,7 @@ def _resolve_min_thread_level(ctx: ResolverContext, *, level: int) -> bool:
     from world.magic.models import Thread  # noqa: PLC0415
 
     return Thread.objects.filter(
-        owner=ctx.character.sheet_data,
+        owner=ctx.sheet,
         retired_at__isnull=True,
         level__gte=level,
     ).exists()
@@ -256,7 +261,7 @@ def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
     return CharacterResonance.objects.filter(
-        character_sheet=ctx.character.sheet_data,
+        character_sheet=ctx.sheet,
         resonance__name=name,
     ).exists()
 
@@ -269,10 +274,11 @@ def _resolve_has_codex_entry(ctx: ResolverContext, *, subject: str, name: str) -
     """
     from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
     from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
 
     try:
-        roster_entry = ctx.character.sheet_data.roster_entry
-    except AttributeError:
+        roster_entry = ctx.sheet.roster_entry
+    except RosterEntry.DoesNotExist:
         return False
     return CharacterCodexKnowledge.objects.filter(
         roster_entry=roster_entry,
@@ -284,7 +290,7 @@ def _resolve_has_codex_entry(ctx: ResolverContext, *, subject: str, name: str) -
 
 def _resolve_min_character_level(ctx: ResolverContext, *, level: int) -> bool:
     """True if the character's current level is >= ``level``."""
-    return int(ctx.character.sheet_data.current_level) >= level
+    return int(ctx.sheet.current_level) >= level
 
 
 # Ordered low → high — see world.societies.types.ReputationTier. Index in
@@ -440,8 +446,12 @@ class CharacterPredicateContext:
 
     def has_leaf(self, leaf: str, **params: object) -> bool:
         resolver: LeafResolver = LEAF_RESOLVERS[leaf]
+        # ResolverContext carries the CharacterSheet (canonical handle per
+        # project convention); the optional ``character`` ObjectDB walk is
+        # available via the dataclass's @property for the few legacy-keyed
+        # models that still FK ObjectDB.
         ctx = ResolverContext(
-            character=self.character,
+            sheet=self.character.sheet_data,
             presented_persona=self.presented_persona,
         )
         return resolver(ctx, **params)
