@@ -67,7 +67,7 @@ RUN cd /tmp/mise && ~/.local/bin/mise trust \
 # GH_TOKEN is provided via dev.env.
 USER root
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
- && apt-get install -y --no-install-recommends gh \
+ && apt-get install -y --no-install-recommends gh shellcheck \
  && rm -rf /var/lib/apt/lists/*
 USER vscode
 
