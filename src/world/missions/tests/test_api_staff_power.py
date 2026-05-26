@@ -78,6 +78,26 @@ class AssignActionTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_assign_is_atomic_on_enter_node_failure(self) -> None:
+        """Adversarial review HIGH: if enter_node raises, the partial
+        MissionInstance + MissionParticipant must roll back. Locked by
+        the @transaction.atomic decorator on staff_assign_mission.
+        """
+        from unittest.mock import patch
+
+        baseline_instances = MissionInstance.objects.count()
+        baseline_participants = MissionParticipant.objects.count()
+        with patch(
+            "world.missions.services.run.enter_node",
+            side_effect=RuntimeError("simulated enter_node blow-up"),
+        ):
+            with self.assertRaises(RuntimeError):
+                from world.missions.services.run import staff_assign_mission
+
+                staff_assign_mission(self.template, self.character)
+        self.assertEqual(MissionInstance.objects.count(), baseline_instances)
+        self.assertEqual(MissionParticipant.objects.count(), baseline_participants)
+
 
 class InstanceRemoveTests(TestCase):
     @classmethod

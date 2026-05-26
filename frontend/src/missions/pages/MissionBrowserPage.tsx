@@ -79,7 +79,7 @@ export function MissionBrowserPage() {
                 No missions match these filters.
               </div>
             ) : (
-              data!.results.map((t) => (
+              (data?.results ?? []).map((t) => (
                 <MissionRow
                   key={t.slug}
                   template={t}

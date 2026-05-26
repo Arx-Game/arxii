@@ -124,10 +124,16 @@ class MissionOptionRouteFilterSet(django_filters.FilterSet):
 
 
 class MissionOptionRouteCandidateFilterSet(django_filters.FilterSet):
-    """Filter MissionOptionRouteCandidate rows by route / template."""
+    """Filter MissionOptionRouteCandidate rows by route / template + flavor-flag.
+
+    ``needs_rewrite`` matches the candidate's own ``outcome_text_needs_rewrite``
+    column. ``copy.py`` flags this on every copied candidate so the Studio's
+    rewrite queue must surface them.
+    """
 
     route = django_filters.NumberFilter(field_name="route_id")
     template = django_filters.NumberFilter(field_name="route__option__node__template_id")
+    needs_rewrite = django_filters.BooleanFilter(field_name="outcome_text_needs_rewrite")
 
     class Meta:
         model = MissionOptionRouteCandidate

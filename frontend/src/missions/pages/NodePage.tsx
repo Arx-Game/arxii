@@ -10,7 +10,6 @@
  * visibility_rule will hook into OptionPage in E4.
  */
 
-import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -29,8 +28,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
+import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionNode } from '../api';
+import { useServerDraft } from '../hooks/useServerDraft';
 import {
   missionKeys,
   useMissionOptions,
@@ -106,25 +107,15 @@ function useNode(id: number) {
 }
 
 function NodeEditor({ node }: { node: MissionNode }) {
-  const [draft, setDraft] = useState({
-    key: node.key,
-    flavor_text: node.flavor_text ?? '',
-    flavor_text_needs_rewrite: node.flavor_text_needs_rewrite ?? false,
-    conflict_mode: node.conflict_mode,
-    is_entry: node.is_entry ?? false,
-  });
+  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(node, (n) => ({
+    key: n.key,
+    flavor_text: n.flavor_text ?? '',
+    flavor_text_needs_rewrite: n.flavor_text_needs_rewrite ?? false,
+    conflict_mode: n.conflict_mode,
+    is_entry: n.is_entry ?? false,
+  }));
   const patchNode = usePatchMissionNode();
   const qc = useQueryClient();
-
-  const dirty = useMemo(
-    () =>
-      draft.key !== node.key ||
-      draft.flavor_text !== (node.flavor_text ?? '') ||
-      draft.flavor_text_needs_rewrite !== (node.flavor_text_needs_rewrite ?? false) ||
-      draft.conflict_mode !== node.conflict_mode ||
-      draft.is_entry !== (node.is_entry ?? false),
-    [draft, node]
-  );
 
   const onSave = () => {
     patchNode.mutate(
@@ -144,6 +135,9 @@ function NodeEditor({ node }: { node: MissionNode }) {
         <CardTitle>Node settings</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
+        {serverChanged ? (
+          <ServerChangedBanner onPull={pullFromServer} className="md:col-span-2" />
+        ) : null}
         <div>
           <Label htmlFor="node-key">Key</Label>
           <Input

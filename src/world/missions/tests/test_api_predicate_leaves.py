@@ -41,17 +41,32 @@ class PredicateLeafCatalogTests(TestCase):
         self.assertIn("is_member_of_org", names)
         self.assertIn("min_society_standing", names)
 
-    def test_each_leaf_carries_param_names(self) -> None:
+    def test_each_leaf_carries_param_names_and_types(self) -> None:
+        """E6 follow-up: params now include type tags so the Studio's tree
+        builder can coerce ``<Input>`` strings before save."""
         client = APIClient()
         client.force_authenticate(self.staff)
         response = client.get(self.URL)
         by_name = {row["name"]: row for row in response.data}
-        # has_distinction takes `slug`.
-        self.assertEqual(by_name["has_distinction"]["params"], ["slug"])
-        # has_codex_entry takes `subject` + `name`.
-        self.assertEqual(set(by_name["has_codex_entry"]["params"]), {"subject", "name"})
+        # has_distinction takes `slug` (str).
+        self.assertEqual(by_name["has_distinction"]["params"], [{"name": "slug", "type": "str"}])
+        # has_codex_entry takes `subject` + `name`, both str.
+        self.assertEqual(
+            {p["name"] for p in by_name["has_codex_entry"]["params"]},
+            {"subject", "name"},
+        )
+        self.assertTrue(
+            all(p["type"] == "str" for p in by_name["has_codex_entry"]["params"]),
+        )
         # min_org_reputation takes `org` + `tier`.
-        self.assertEqual(set(by_name["min_org_reputation"]["params"]), {"org", "tier"})
+        self.assertEqual(
+            {p["name"] for p in by_name["min_org_reputation"]["params"]},
+            {"org", "tier"},
+        )
+        # min_character_level's `level` is int — the bug this whole pass fixes.
+        level_params = by_name["min_character_level"]["params"]
+        self.assertEqual(len(level_params), 1)
+        self.assertEqual(level_params[0], {"name": "level", "type": "int"})
         # has_thread takes no authored params.
         self.assertEqual(by_name["has_thread"]["params"], [])
 

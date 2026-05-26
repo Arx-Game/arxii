@@ -7406,10 +7406,11 @@ export interface paths {
     /**
      * @description D5 — the available predicate-leaf catalog for the builder palette.
      *
-     *     Read-only. Returns ``[{"name": str, "params": [str, ...]}]`` for
-     *     every leaf in ``LEAF_RESOLVERS``. The Mission Studio's predicate-
-     *     tree builder uses this to render leaf-type dropdowns + param input
-     *     fields without hard-coding the registry on the frontend.
+     *     Read-only. Returns ``[{"name": str, "params": [{"name": str, "type":
+     *     str}, ...]}]`` for every leaf in ``LEAF_RESOLVERS``. The Mission
+     *     Studio's predicate-tree builder uses this to render leaf-type
+     *     dropdowns + per-param input widgets typed correctly (int vs str)
+     *     without hard-coding the registry on the frontend.
      */
     get: operations['missions_predicate_leaves_list'];
     put?: never;
@@ -29970,6 +29971,7 @@ export interface operations {
   missions_route_candidates_list: {
     parameters: {
       query?: {
+        needs_rewrite?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */

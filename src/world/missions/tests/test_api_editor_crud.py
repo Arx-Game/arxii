@@ -63,18 +63,26 @@ class NodeViewSetCRUDTests(TestCase):
         self.assertEqual(keys, {"entry"})
 
     def test_list_filters_by_needs_rewrite(self) -> None:
-        """E6: ``?needs_rewrite=true`` returns only flavor-flagged nodes."""
+        """E6: ``?needs_rewrite=true`` returns only flavor-flagged nodes;
+        ``?needs_rewrite=false`` is the strict complement."""
+        # entry is un-flagged (factory default = False); add one flagged sibling.
         MissionNodeFactory(
             template=self.template,
             key="needs-help",
             flavor_text_needs_rewrite=True,
         )
-        response = self.client.get(
+        true_resp = self.client.get(
             self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        keys = {row["key"] for row in response.data["results"]}
-        self.assertEqual(keys, {"needs-help"})
+        self.assertEqual(true_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual({row["key"] for row in true_resp.data["results"]}, {"needs-help"})
+        # Complement assertion — proves the filter actually points at the
+        # right column (was wired to the wrong boolean it would only fail
+        # one of the two directions, not both).
+        false_resp = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "false"}
+        )
+        self.assertEqual({row["key"] for row in false_resp.data["results"]}, {"entry"})
 
     def test_create_round_trips(self) -> None:
         response = self.client.post(
@@ -173,6 +181,28 @@ class OptionViewSetCRUDTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
+    def test_list_filters_by_needs_rewrite(self) -> None:
+        """E6 follow-up: option-level ``?needs_rewrite=true`` round-trip."""
+        flagged = MissionOptionFactory(
+            node=self.node,
+            order=2,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.check_type,
+            authored_ic_framing_needs_rewrite=True,
+        )
+        true_resp = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
+        )
+        true_ids = {row["id"] for row in true_resp.data["results"]}
+        self.assertEqual(true_ids, {flagged.pk})
+        false_resp = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "false"}
+        )
+        false_ids = {row["id"] for row in false_resp.data["results"]}
+        self.assertNotIn(flagged.pk, false_ids)
+        self.assertEqual(len(false_ids), 2)
+
 
 class RouteViewSetCRUDTests(TestCase):
     """MissionOptionRouteViewSet: list+filter, create."""
@@ -207,6 +237,19 @@ class RouteViewSetCRUDTests(TestCase):
         response = self.client.get(self.URL, {"option": self.option.pk})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
+
+    def test_list_filters_by_needs_rewrite(self) -> None:
+        """E6 follow-up: route-level ``?needs_rewrite=true`` round-trip."""
+        flagged = MissionOptionRouteFactory(
+            option=self.option,
+            outcome_tier=CheckOutcomeFactory(),
+            target_node=MissionNodeFactory(template=self.template, key="rt-flagged-tgt"),
+            outcome_text_needs_rewrite=True,
+        )
+        response = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
+        )
+        self.assertEqual({row["id"] for row in response.data["results"]}, {flagged.pk})
 
 
 class CandidateViewSetCRUDTests(TestCase):
@@ -244,6 +287,24 @@ class CandidateViewSetCRUDTests(TestCase):
         response = self.client.get(self.URL, {"route": self.route.pk})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
+
+    def test_list_filters_by_needs_rewrite(self) -> None:
+        """E6 follow-up: candidate-level ``?needs_rewrite=true`` round-trip.
+
+        copy.py flags this field on every copied candidate, so the rewrite
+        queue must surface them — the filter that drives that surface is
+        what this test pins.
+        """
+        flagged = MissionOptionRouteCandidateFactory(
+            route=self.route,
+            target_node=MissionNodeFactory(template=self.template, key="cand-flagged-tgt"),
+            weight=1,
+            outcome_text_needs_rewrite=True,
+        )
+        response = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
+        )
+        self.assertEqual({row["id"] for row in response.data["results"]}, {flagged.pk})
 
 
 class RewardViewSetCRUDTests(TestCase):

@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FlavorRewriteCard } from './FlavorRewriteCard';
 import { StaffActionsCard } from './StaffActionsCard';
+import { TemplateRuleSection } from './TemplateRuleSection';
 import { useDeleteMissionInstance, useMissionTemplate } from '../queries';
 
 interface MissionDetailPanelProps {
@@ -89,6 +90,7 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
         </CardContent>
       </Card>
       <StaffActionsCard template={template} />
+      <TemplateRuleSection template={template} />
       <FlavorRewriteCard template={template} />
     </div>
   );
