@@ -2,32 +2,61 @@
 
 Project-specific skills for Claude Code that support development workflow.
 
-## Installation
+In the devcontainer, these skills are **installed automatically** —
+`.devcontainer/post-create.sh` symlinks every `tools/skills/<name>/`
+directory into `~/.claude/skills/` on container creation. No manual
+copy needed; changes you make to a skill here are picked up
+immediately because the symlink points back at this directory.
 
-Copy the skill directories into your personal Claude skills folder:
+For bare-metal usage, see the options below.
+
+## Bare-metal install
+
+### Linux / macOS (recommended)
 
 ```bash
-# Linux/Mac
-cp -r tools/skills/* ~/.claude/skills/
+for skill in tools/skills/*/; do
+  name=$(basename "$skill")
+  ln -sfn "$(pwd)/${skill%/}" "$HOME/.claude/skills/$name"
+done
+```
 
-# Windows
+`-sfn` is idempotent — re-run any time. Edits to skill files are picked
+up immediately by Claude Code (the symlink points back at this
+directory).
+
+### Windows
+
+Symlinks on Windows require developer mode or an elevated shell, so
+the simpler path is to copy:
+
+```cmd
 xcopy /E /I tools\skills\* %USERPROFILE%\.claude\skills\
 ```
 
-Skills will be available in your next Claude Code session.
+Drawback: this is a one-time copy — you must re-run it after editing a
+skill here. (Enabling developer mode and using `mklink /J` for junctions
+is the symlink-equivalent on Windows if you want the live-update
+behavior.)
 
 ## Available Skills
 
+### issue-to-merged-pr
+
+Carries a GitHub issue through to a merged PR with minimal human gating:
+brainstorm/spec/plan, implementation, PR, CI watch and fix loop,
+post-merge cleanup. Multi-invocation, GitHub-as-truth. See
+[issue-to-merged-pr/README.md](issue-to-merged-pr/README.md) and the
+[design spec](../../docs/superpowers/specs/2026-05-25-issue-to-merged-pr-design.md).
+
 ### codebase-indexing
-Regenerates `docs/systems/MODEL_MAP.md` — an auto-generated map of all Django model
-relationships and service function signatures. Prevents expensive codebase searches
-when working across multiple apps.
 
-### workflow-friction-audit
-Tracks recurring permission denials and workflow friction in a persistent log.
-Periodically reviews the log and proposes permanent fixes to allowed-tools
-configuration or CLAUDE.md.
+Regenerates `docs/systems/MODEL_MAP.md` — an auto-generated map of all
+Django model relationships and service function signatures. Prevents
+expensive codebase searches when working across multiple apps.
 
-## Updating
+## Updating skills
 
-After editing skills here, re-copy to `~/.claude/skills/` to pick up changes.
+In the devcontainer or Linux/macOS bare-metal: just edit the files
+here — the symlink picks up changes. On Windows non-symlink installs,
+re-run `xcopy` after edits.

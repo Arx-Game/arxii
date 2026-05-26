@@ -237,22 +237,57 @@ ngrok is intentionally not in the allowlist. The container is not designed for
 integration tests that need an inbound tunnel. If you need that, add the relevant
 ngrok API and tunnel hosts to `init-firewall.sh` and rebuild.
 
-## GitHub read-only access (optional)
+## GitHub access for the issue→PR workflow
 
-The container ships with `gh` installed and reads `GH_TOKEN` from `dev.env` at
-startup. This lets the in-container Claude check CI runs, read Dependabot
-alerts, etc. — without any write access to your repo.
+The container ships with `gh` installed and reads `GH_TOKEN` from `dev.env`
+at startup. This lets the in-container Claude run the
+`issue-to-merged-pr` skill (see
+`tools/skills/issue-to-merged-pr/README.md` and the
+[design spec](superpowers/specs/2026-05-25-issue-to-merged-pr-design.md))
+— picking up issues, opening PRs, watching CI, addressing comments, and
+cleaning up after merge.
 
 To enable:
 
 1. Create a **fine-grained personal access token** at
    <https://github.com/settings/personal-access-tokens>:
-   - Resource owner: you (or the org `arxii` lives in)
-   - Repository access: select **only** `arxii`
-   - Permissions: `Metadata: Read` (mandatory), `Actions: Read`, `Dependabot
-     alerts: Read`. Add `Pull requests: Read` and `Checks: Read` if you want
-     PR-level CI context. Leave everything else unselected — the token
-     physically cannot do what it isn't granted.
+   - Resource owner: the GitHub org or user that owns the repo
+     (for `arxii`, the org). Fine-grained PATs cannot be scoped to a
+     single org-owned repo; the token is scoped to "all repositories I
+     have access to" — its effective reach is bounded by your actual
+     permissions on each repo and by the per-permission scopes below.
+   - Permissions (required):
+
+     | Permission | Read | Write |
+     |---|---|---|
+     | Metadata | ✓ | — |
+     | Contents | — | ✓ |
+     | Pull requests | — | ✓ |
+     | Issues | — | ✓ |
+     | Workflows | — | ✓ |
+     | Actions | ✓ | — |
+     | Commit Statuses | ✓ | — |
+     | Dependabot alerts | ✓ | — |
+
+     `Workflows: write` is needed because CI fixes occasionally touch
+     `.github/workflows/*.yml`. `Actions: read` + `Commit Statuses: read`
+     together cover what `gh pr checks` needs (GitHub's fine-grained
+     PAT taxonomy no longer has a single "Checks" category).
+
+   - Permissions (optional, for future-proofing):
+
+     | Permission | Read | Write |
+     |---|---|---|
+     | Code Scanning Alerts | ✓ | — |
+     | Secret Scanning Alerts | ✓ | — |
+     | Repository Security Advisories | ✓ | — |
+     | Code Quality | ✓ | — |
+
+     None are required for v1 of the skill, but granting them lets the
+     agent read CodeQL findings and security advisories when a CI fix
+     or PR comment requires addressing them. Dependabot already echoes
+     some of this.
+
    - Pick an expiry you're willing to rotate (90 days is GitHub's default).
 2. Append a line to `.devcontainer/dev.env` (which is gitignored):
    ```
@@ -262,11 +297,14 @@ To enable:
    `ghp_`. Either form works with `gh`.)
 3. Recreate the container (`just dc-down && just dc-up`) so compose
    re-reads the env file.
-4. Inside the container, `gh run list`, `gh run watch`, `gh api …`, etc.
-   work without further configuration.
+4. Inside the container, `gh issue view`, `gh pr create`, `gh pr checks`,
+   etc. work without further configuration. Direct push to `main` is
+   still blocked by branch protection — the token's write scopes cannot
+   bypass it.
 
 To revoke: delete the line from `dev.env` and recreate the container, or
 revoke the token on the GitHub settings page (effective immediately).
+Either takes the autonomous workflow offline cleanly.
 
 ## Superpowers brainstorm server
 
