@@ -86,6 +86,12 @@ repos:
         language: system
         pass_filenames: true
         files: ^frontend/.*\.test\.(ts|tsx)$
+      - id: shellcheck-skills
+        name: shellcheck tools/skills bash scripts
+        entry: shellcheck
+        language: system
+        files: ^tools/skills/.+\.sh$
+        pass_filenames: true
   - repo: local
     hooks:
       - id: eslint

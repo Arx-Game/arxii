@@ -61,23 +61,22 @@ timeout 90 bash -c 'until pg_isready -h db -U arxii -d arxiidev >/dev/null 2>&1;
   || { echo "db service did not become ready within 90s" >&2; exit 1; }
 uv run arx manage migrate
 
-# First-time setup reminder. Plugin install is a Claude Code in-session slash
-# command, not a CLI subcommand, so we can't run it from bash. The named
-# volume at /home/vscode/.claude persists the plugin across container
-# rebuilds — just need to run this once per fresh volume.
-if [ ! -d /home/vscode/.claude/plugins/superpowers ]; then
-  cat <<'EOF'
+# Install required plugins idempotently. claude plugin commands are CLI-
+# safe (no Claude Code session needed). The named volume at
+# /home/vscode/.claude persists the plugin across container rebuilds,
+# so this is fast on second and subsequent runs.
+claude plugin marketplace add anthropics/claude-plugins-official 2>/dev/null || true
+claude plugin install superpowers@claude-plugins-official 2>/dev/null || true
 
-──────────────────────────────────────────────────────────────────────
-  ONE-TIME SETUP STEP REMAINING
-──────────────────────────────────────────────────────────────────────
-  Inside the container (e.g. via `just dc-shell`), launch claude and run:
-
-      /plugin install superpowers@claude-plugins-official
-
-  The plugin persists in the /home/vscode/.claude named volume across
-  container rebuilds; this message stops appearing once it's installed.
-──────────────────────────────────────────────────────────────────────
-
-EOF
-fi
+# Symlink in-repo skills into the user's Claude skills directory so they're
+# discoverable by every session. -sfn is idempotent — re-runs cleanly. New
+# skills committed to tools/skills/ appear on the next container creation.
+# nullglob: if tools/skills/ is empty, the loop body should NOT run with the
+# literal pattern (which would create a dangling "*" symlink).
+mkdir -p /home/vscode/.claude/skills
+shopt -s nullglob
+for skill in /workspaces/arxii/tools/skills/*/; do
+  name=$(basename "$skill")
+  ln -sfn "$skill" "/home/vscode/.claude/skills/$name"
+done
+shopt -u nullglob
