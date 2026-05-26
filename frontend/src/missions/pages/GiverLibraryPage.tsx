@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { GiverKind, GIVER_KINDS } from '../constants';
+import { type GiverKind, GIVER_KINDS } from '../constants';
 import { useCreateMissionGiver, useMissionGiver, useMissionGivers } from '../queries';
 import type { MissionGiver } from '../types';
 
@@ -111,7 +111,7 @@ export function GiverLibraryPage() {
             ) : (data?.results?.length ?? 0) === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No givers match.</div>
             ) : (
-              data!.results.map((g) => (
+              (data?.results ?? []).map((g) => (
                 <GiverRow
                   key={g.slug}
                   giver={g}

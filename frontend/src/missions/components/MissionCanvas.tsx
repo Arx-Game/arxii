@@ -63,12 +63,12 @@ export function MissionCanvas({ templateSlug, templateId }: MissionCanvasProps) 
   }
   return (
     <ReactFlowProvider>
-      <MissionCanvasInner templateSlug={templateSlug} templateId={templateId} />
+      <MissionCanvasInner templateId={templateId} />
     </ReactFlowProvider>
   );
 }
 
-function MissionCanvasInner({ templateId }: { templateSlug: string; templateId: number }) {
+function MissionCanvasInner({ templateId }: { templateId: number }) {
   const nodesQuery = useMissionNodes({ template: templateId });
   const optionsQuery = useMissionOptions({ template: templateId });
   const routesQuery = useMissionRoutes({ template: templateId });

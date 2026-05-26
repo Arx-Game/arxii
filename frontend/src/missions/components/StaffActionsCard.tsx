@@ -45,33 +45,71 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
         <CardTitle className="text-base">Staff actions</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3" data-testid="staff-actions-card">
-        <div className="flex items-center justify-between gap-2 rounded border p-2">
-          <div>
-            <div className="text-sm font-medium">Access tier</div>
-            <div className="text-xs text-muted-foreground">
-              Currently <Badge variant="outline">{template.access_tier}</Badge>
+        <div className="rounded border p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">Access tier</div>
+              <div className="text-xs text-muted-foreground">
+                Currently <Badge variant="outline">{template.access_tier}</Badge>
+              </div>
             </div>
+            <Button
+              size="sm"
+              variant={isOpen ? 'secondary' : 'default'}
+              onClick={() =>
+                patch.mutate({
+                  slug: template.slug,
+                  body: { access_tier: nextTier },
+                })
+              }
+              disabled={patch.isPending}
+              data-testid="access-tier-flip"
+            >
+              {patch.isPending ? 'Flipping…' : isOpen ? 'Withdraw' : 'Publish'}
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant={isOpen ? 'secondary' : 'default'}
-            onClick={() =>
-              patch.mutate({
-                slug: template.slug,
-                body: { access_tier: nextTier },
-              })
-            }
-            disabled={patch.isPending}
-            data-testid="access-tier-flip"
-          >
-            {patch.isPending ? 'Flipping…' : isOpen ? 'Withdraw' : 'Publish'}
-          </Button>
+          {patch.error ? (
+            // Adversarial review HIGH: validate_access_tier returns 400 with
+            // "Cannot flip to OPEN: the following attached giver(s) are not
+            // publishable: ...". Render the body so the staffer knows what
+            // to fix.
+            <div className="mt-2 text-xs text-destructive" data-testid="access-tier-error">
+              {formatErrorMessage(patch.error.message)}
+            </div>
+          ) : null}
         </div>
         <CopyRow template={template} />
         <AssignRow template={template} />
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Try to render a DRF error-body JSON string into readable text.
+ *
+ * api.ts wrappers stringify the response body into ``Error.message``
+ * when the request fails. The body is typically a dict like
+ * ``{"field": ["msg1", "msg2"]}`` or ``{"detail": "msg"}``. Convert
+ * to ``field: msg1; msg2`` so the user reads a sentence, not raw JSON.
+ * Falls back to the raw string if parsing fails.
+ */
+function formatErrorMessage(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (typeof parsed.detail === 'string') return parsed.detail;
+      return Object.entries(parsed)
+        .map(([field, value]) => {
+          const text = Array.isArray(value) ? value.join('; ') : String(value);
+          return `${field}: ${text}`;
+        })
+        .join(' / ');
+    }
+  } catch {
+    // not JSON; fall through
+  }
+  return raw;
 }
 
 function CopyRow({ template }: { template: MissionTemplate }) {
@@ -128,7 +166,9 @@ function CopyRow({ template }: { template: MissionTemplate }) {
         </div>
       </div>
       {copy.error ? (
-        <div className="text-xs text-destructive">{String(copy.error.message)}</div>
+        <div className="text-xs text-destructive">
+          {formatErrorMessage(String(copy.error.message))}
+        </div>
       ) : null}
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
@@ -165,14 +205,19 @@ function AssignRow({ template }: { template: MissionTemplate }) {
   }
   const onSubmit = async () => {
     const pk = Number(characterPk);
-    if (!pk) return;
+    if (!pk || Number.isNaN(pk)) {
+      setFeedback('Error: enter a numeric ObjectDB pk.');
+      return;
+    }
     setFeedback(null);
     try {
       const instance = await assign.mutateAsync({ slug: template.slug, character: pk });
       setFeedback(`Created instance #${instance.id}.`);
       setCharacterPk('');
     } catch (e) {
-      setFeedback(`Error: ${String((e as Error).message)}`);
+      // Format the DRF body if possible — assign returns 404 with
+      // {"detail": "No character with pk=..."} on missing pk.
+      setFeedback(`Error: ${formatErrorMessage(String((e as Error).message))}`);
     }
   };
   return (

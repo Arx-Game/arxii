@@ -284,6 +284,16 @@ class MissionNode(SharedMemoryModel):
                 name="unique_missionnode_template_key",
             ),
         ]
+        # Partial index — the rewrite-queue surfaces a small minority of
+        # rows (only those flagged True). Avoids seq-scan on the full
+        # table when the Studio asks "show me every flagged node".
+        indexes = [
+            models.Index(
+                fields=["template"],
+                condition=models.Q(flavor_text_needs_rewrite=True),
+                name="mn_flag_partial_idx",
+            ),
+        ]
 
     def clean(self) -> None:
         super().clean()
@@ -475,6 +485,16 @@ class MissionOption(SharedMemoryModel):
         if errors:
             raise ValidationError(errors)
 
+    class Meta:
+        # Partial index — see MissionNode.Meta.indexes for the rationale.
+        indexes = [
+            models.Index(
+                fields=["node"],
+                condition=models.Q(authored_ic_framing_needs_rewrite=True),
+                name="mo_flag_partial_idx",
+            ),
+        ]
+
     def save(self, *args: object, **kwargs: object) -> None:
         # Runs the scalar clean() invariants on the real write path so
         # factory creates / explicit create() calls cannot bypass them.
@@ -570,6 +590,16 @@ class MissionOptionRoute(SharedMemoryModel):
         ),
     )
 
+    class Meta:
+        # Partial index — see MissionNode.Meta.indexes for the rationale.
+        indexes = [
+            models.Index(
+                fields=["option"],
+                condition=models.Q(outcome_text_needs_rewrite=True),
+                name="mor_flag_partial_idx",
+            ),
+        ]
+
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"
         return f"{self.option} [{tier}]"
@@ -626,6 +656,16 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
             "layer — service responsibility."
         ),
     )
+
+    class Meta:
+        # Partial index — see MissionNode.Meta.indexes for the rationale.
+        indexes = [
+            models.Index(
+                fields=["route"],
+                condition=models.Q(outcome_text_needs_rewrite=True),
+                name="morc_flag_partial_idx",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.route} → {self.target_node} ({self.weight})"
