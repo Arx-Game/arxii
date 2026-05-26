@@ -68,10 +68,14 @@ else
 fi
 
 # Verify auto-close behavior: list linked issues, see which are still open.
+# A PR with no Closes/Fixes/Resolves lines is valid (e.g., docs-only or
+# bootstrap PRs that predate the issue-driven workflow); grep returns 1
+# on no matches, which `set -e` + pipefail would otherwise turn into a
+# script abort. `|| true` keeps LINKED_ISSUES empty in that case.
 PR_BODY=$(gh pr view "$PR" --json body --jq .body)
-LINKED_ISSUES=$(grep -oiE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' <<<"$PR_BODY" \
+LINKED_ISSUES=$( { grep -oiE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' <<<"$PR_BODY" \
   | grep -oE '[0-9]+' \
-  | sort -u)
+  | sort -u; } || true)
 
 ACTIONS="[]"
 for issue in $LINKED_ISSUES; do
