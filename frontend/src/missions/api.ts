@@ -1,0 +1,390 @@
+/**
+ * Mission Studio API fetch wrappers.
+ *
+ * Pure functions — pair with React Query hooks in queries.ts. Use the
+ * shared `apiFetch` for cookie/CSRF and base-URL handling. All endpoints
+ * are staff-only (IsAdminUser on the backend); player-facing surfaces
+ * land in a future phase.
+ */
+
+import { apiFetch } from '@/evennia_replacements/api';
+import type {
+  MissionGiver,
+  MissionGiverOffering,
+  MissionGiverStanding,
+  MissionInstance,
+  MissionNode,
+  MissionOption,
+  MissionOptionRoute,
+  MissionOptionRouteCandidate,
+  MissionOptionRouteReward,
+  MissionTemplate,
+  MissionTemplateDetail,
+  MissionTemplateFilters,
+  PaginatedResponse,
+} from './types';
+
+const BASE_URL = '/api/missions';
+
+function buildQueryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    search.append(key, String(value));
+  }
+  const s = search.toString();
+  return s ? `?${s}` : '';
+}
+
+// ---------------------------------------------------------------------------
+// MissionTemplate (D1)
+// ---------------------------------------------------------------------------
+
+export async function listMissionTemplates(
+  filters: MissionTemplateFilters & { page?: number } = {}
+): Promise<PaginatedResponse<MissionTemplate>> {
+  const res = await apiFetch(`${BASE_URL}/templates/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load mission templates');
+  return res.json();
+}
+
+export async function getMissionTemplate(slug: string): Promise<MissionTemplateDetail> {
+  const res = await apiFetch(`${BASE_URL}/templates/${slug}/`);
+  if (!res.ok) throw new Error(`Failed to load template ${slug}`);
+  return res.json();
+}
+
+export async function patchMissionTemplate(
+  slug: string,
+  body: Partial<MissionTemplate>
+): Promise<MissionTemplate> {
+  const res = await apiFetch(`${BASE_URL}/templates/${slug}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to update template'
+    );
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// MissionNode (D2)
+// ---------------------------------------------------------------------------
+
+export async function listMissionNodes(
+  filters: {
+    template?: number;
+    template_slug?: string;
+    is_entry?: boolean;
+    needs_rewrite?: boolean;
+    page?: number;
+    page_size?: number;
+  } = {}
+): Promise<PaginatedResponse<MissionNode>> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load nodes');
+  return res.json();
+}
+
+export async function getMissionNode(id: number): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load node ${id}`);
+  return res.json();
+}
+
+export async function patchMissionNode(
+  id: number,
+  body: Partial<MissionNode>
+): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update node');
+  return res.json();
+}
+
+export async function getMissionOption(id: number): Promise<MissionOption> {
+  const res = await apiFetch(`${BASE_URL}/options/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load option ${id}`);
+  return res.json();
+}
+
+export async function patchMissionOption(
+  id: number,
+  body: Partial<MissionOption>
+): Promise<MissionOption> {
+  const res = await apiFetch(`${BASE_URL}/options/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update option');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// MissionOption / Route / Candidate / Reward (D2)
+// ---------------------------------------------------------------------------
+
+export async function listMissionOptions(
+  filters: {
+    node?: number;
+    template?: number;
+    needs_rewrite?: boolean;
+  } = {}
+): Promise<PaginatedResponse<MissionOption>> {
+  const res = await apiFetch(`${BASE_URL}/options/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load options');
+  return res.json();
+}
+
+export async function listMissionRoutes(
+  filters: {
+    option?: number;
+    template?: number;
+    needs_rewrite?: boolean;
+  } = {}
+): Promise<PaginatedResponse<MissionOptionRoute>> {
+  const res = await apiFetch(`${BASE_URL}/routes/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load routes');
+  return res.json();
+}
+
+export async function listRouteCandidates(
+  filters: {
+    route?: number;
+  } = {}
+): Promise<PaginatedResponse<MissionOptionRouteCandidate>> {
+  const res = await apiFetch(`${BASE_URL}/route-candidates/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load candidates');
+  return res.json();
+}
+
+export async function listRouteRewards(
+  filters: {
+    route?: number;
+    candidate?: number;
+  } = {}
+): Promise<PaginatedResponse<MissionOptionRouteReward>> {
+  const res = await apiFetch(`${BASE_URL}/route-rewards/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load rewards');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Givers (D3)
+// ---------------------------------------------------------------------------
+
+export async function listMissionGivers(
+  filters: {
+    org?: number;
+    org_name?: string;
+    giver_kind?: string;
+    is_active?: boolean;
+    name?: string;
+  } = {}
+): Promise<PaginatedResponse<MissionGiver>> {
+  const res = await apiFetch(`${BASE_URL}/givers/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load givers');
+  return res.json();
+}
+
+export async function getMissionGiver(slug: string): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`);
+  if (!res.ok) throw new Error(`Failed to load giver ${slug}`);
+  return res.json();
+}
+
+export async function listGiverOfferings(
+  filters: {
+    giver?: number;
+    template?: number;
+  } = {}
+): Promise<PaginatedResponse<MissionGiverOffering>> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load offerings');
+  return res.json();
+}
+
+export async function listGiverStandings(
+  filters: {
+    giver?: number;
+    character?: number;
+  } = {}
+): Promise<PaginatedResponse<MissionGiverStanding>> {
+  const res = await apiFetch(`${BASE_URL}/giver-standings/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load standings');
+  return res.json();
+}
+
+export async function createMissionGiver(body: Partial<MissionGiver>): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to create giver'
+    );
+  }
+  return res.json();
+}
+
+export async function patchMissionGiver(
+  slug: string,
+  body: Partial<MissionGiver>
+): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to update giver'
+    );
+  }
+  return res.json();
+}
+
+export async function deleteMissionGiver(slug: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete giver');
+}
+
+export async function createGiverOffering(
+  body: Partial<MissionGiverOffering>
+): Promise<MissionGiverOffering> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to add offering'
+    );
+  }
+  return res.json();
+}
+
+export async function patchGiverOffering(
+  id: number,
+  body: Partial<MissionGiverOffering>
+): Promise<MissionGiverOffering> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof detail === 'object' && detail !== null
+        ? JSON.stringify(detail)
+        : 'Failed to update offering'
+    );
+  }
+  return res.json();
+}
+
+export async function deleteGiverOffering(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove offering');
+}
+
+// ---------------------------------------------------------------------------
+// Copy actions (D4.2)
+// ---------------------------------------------------------------------------
+
+export async function copyTemplate(
+  slug: string,
+  body: { new_slug: string; new_name: string }
+): Promise<MissionTemplate> {
+  const res = await apiFetch(`${BASE_URL}/templates/${slug}/copy/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to copy template');
+  return res.json();
+}
+
+export async function copyNode(id: number, body: { new_key: string }): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/copy/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to copy node');
+  return res.json();
+}
+
+export async function copySubtree(
+  id: number,
+  body: { new_key_prefix: string }
+): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/copy-subtree/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to copy subtree');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Staff-power (D4.3)
+// ---------------------------------------------------------------------------
+
+export async function assignMission(
+  slug: string,
+  body: { character: number }
+): Promise<MissionInstance> {
+  const res = await apiFetch(`${BASE_URL}/templates/${slug}/assign/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to assign mission');
+  return res.json();
+}
+
+export async function deleteMissionInstance(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/instances/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove instance');
+}
+
+// ---------------------------------------------------------------------------
+// Predicate-leaf catalog (D5)
+// ---------------------------------------------------------------------------
+
+export interface PredicateLeaf {
+  name: string;
+  params: string[];
+}
+
+export async function listPredicateLeaves(): Promise<PredicateLeaf[]> {
+  const res = await apiFetch(`${BASE_URL}/predicate-leaves/`);
+  if (!res.ok) throw new Error('Failed to load predicate leaves');
+  return res.json();
+}

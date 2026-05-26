@@ -44,6 +44,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     health: 8,
     max_health: 10,
     character_status: 'healthy',
+    available_strain: null,
     ...overrides,
   };
 }

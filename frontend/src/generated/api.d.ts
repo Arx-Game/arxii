@@ -2361,6 +2361,10 @@ export interface paths {
      *     Query parameter: ``action_interaction_ids`` — comma-separated list of IDs.
      *
      *     Example: GET /api/combat/action-outcome-details/?action_interaction_ids=1,2,3
+     *
+     *     Effects derived from existing model state — combo upgrade, ConditionInstance
+     *     correlation by source_technique + applied_at window, target status from
+     *     CombatOpponent.status / CharacterVitals.status. No new audit tables.
      */
     get: operations['combat_action_outcome_details_retrieve'];
     put?: never;
@@ -15870,6 +15874,13 @@ export interface components {
       readonly max_health: number | null;
       /** @description Return life status — only if viewer has permission. */
       readonly character_status: string | null;
+      /**
+       * @description Return strain budget (anima pool) — only if viewer owns the PC.
+       *
+       *     Uses the same vitals-visibility rules as health/status fields.
+       *     The frontend's YourTurn strain slider reads this as its max value.
+       */
+      readonly available_strain: number | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -29597,6 +29608,7 @@ export interface operations {
     parameters: {
       query?: {
         is_entry?: boolean;
+        needs_rewrite?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -29793,6 +29805,7 @@ export interface operations {
   missions_options_list: {
     parameters: {
       query?: {
+        needs_rewrite?: boolean;
         node?: number;
         option_kind?: string;
         /** @description A page number within the paginated result set. */
@@ -30248,6 +30261,7 @@ export interface operations {
     parameters: {
       query?: {
         is_random_set?: boolean;
+        needs_rewrite?: boolean;
         option?: number;
         outcome_tier?: number;
         /** @description A page number within the paginated result set. */

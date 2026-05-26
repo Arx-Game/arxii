@@ -79,11 +79,16 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
 
 
 class MissionNodeFilterSet(django_filters.FilterSet):
-    """Filter MissionNode rows by template + entry-flag."""
+    """Filter MissionNode rows by template + entry-flag + flavor-flag.
+
+    ``needs_rewrite`` is the per-author "flavor inherited from a copy still
+    needs editing" flag; the E6 needs-rewrite queue uses it.
+    """
 
     template = django_filters.NumberFilter(field_name="template_id")
     template_slug = django_filters.CharFilter(field_name="template__slug")
     is_entry = django_filters.BooleanFilter(field_name="is_entry")
+    needs_rewrite = django_filters.BooleanFilter(field_name="flavor_text_needs_rewrite")
 
     class Meta:
         model = MissionNode
@@ -91,12 +96,13 @@ class MissionNodeFilterSet(django_filters.FilterSet):
 
 
 class MissionOptionFilterSet(django_filters.FilterSet):
-    """Filter MissionOption rows by node / source_kind / option_kind."""
+    """Filter MissionOption rows by node / source_kind / option_kind + flavor-flag."""
 
     node = django_filters.NumberFilter(field_name="node_id")
     template = django_filters.NumberFilter(field_name="node__template_id")
     source_kind = django_filters.CharFilter(field_name="source_kind")
     option_kind = django_filters.CharFilter(field_name="option_kind")
+    needs_rewrite = django_filters.BooleanFilter(field_name="authored_ic_framing_needs_rewrite")
 
     class Meta:
         model = MissionOption
@@ -104,12 +110,13 @@ class MissionOptionFilterSet(django_filters.FilterSet):
 
 
 class MissionOptionRouteFilterSet(django_filters.FilterSet):
-    """Filter MissionOptionRoute rows by option / template / outcome tier."""
+    """Filter MissionOptionRoute rows by option / template / outcome tier + flavor-flag."""
 
     option = django_filters.NumberFilter(field_name="option_id")
     template = django_filters.NumberFilter(field_name="option__node__template_id")
     outcome_tier = django_filters.NumberFilter(field_name="outcome_tier_id")
     is_random_set = django_filters.BooleanFilter(field_name="is_random_set")
+    needs_rewrite = django_filters.BooleanFilter(field_name="outcome_text_needs_rewrite")
 
     class Meta:
         model = MissionOptionRoute
