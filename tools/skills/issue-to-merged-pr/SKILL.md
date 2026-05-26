@@ -109,12 +109,24 @@ skipped-design tasks, just edit and commit.
 
 ### 4. Sync with main
 
-Run `scripts/sync-with-main.sh <branch>`. On conflict (exit 4):
+Run `scripts/sync-with-main.sh <branch>`. The script automatically picks the
+right strategy:
+- **Branch not yet on origin (local-only):** rebase onto origin/main. Clean
+  linear history.
+- **Branch already on origin (pushed):** merge origin/main in. Avoids
+  rewriting already-published history, so the next `git push` is a fast-
+  forward — no force-push (and no user approval prompt for it).
+
+The choice is recorded in the JSON's `strategy` field on conflict.
+
+On conflict (exit 4):
 - Read the emitted JSON.
 - For each entry in `potentially_impacted_issues` where the impact is
   judged real, call `scripts/comment-on-issue.sh <issue> <body-file>` to
   notify the other issue's stakeholders.
-- Resolve the conflicts, continue the rebase.
+- Resolve the conflicts, then continue the in-progress sync
+  (`git rebase --continue` or `git merge --continue` depending on
+  `strategy`).
 
 ### 5. Push & open PR
 
@@ -168,6 +180,7 @@ When phase detection lands on **PR-comment**:
 - Run `scripts/read-pr-comments.sh <pr-N>` — get unread comments as JSON.
 - Address each: edit code, commit.
 - Push.
+- **Takeaway evaluation** (see below — runs before the marker bump).
 - Update the PR body marker:
 
 ```bash
@@ -177,6 +190,53 @@ BODY=$(gh pr view <pr> --json body --jq .body)
 NEW_BODY=$(sed -E "s/<!-- last-addressed-comment: [0-9]+ -->/<!-- last-addressed-comment: $NEW_MAX -->/" <<<"$BODY")
 printf '%s' "$NEW_BODY" | gh pr edit <pr> --body-file -
 ```
+
+#### Takeaway evaluation
+
+After all actionable comments are committed (above) and **before** bumping the marker, evaluate each addressed comment for a non-obvious takeaway worth posting on a related issue.
+
+**Criteria for "takeaway worth posting":**
+- The comment surfaced a gotcha, workflow weakness, or design decision that future agents working on a related, currently-open (or recently-closed, <90d) issue would benefit from.
+- The insight is not about THIS PR's work — PR-local insights go in the PR description or commit message, never a sibling-issue comment.
+
+**Ordering rules — follow in this order:**
+1. **Default disposition: actionable.** For every review comment, first ask "can this be addressed in this PR?" Treat as actionable unless clearly out-of-scope (separable concern, different system, or reviewer framed it as future work).
+2. Address all actionable comments in code FIRST. Takeaway evaluation runs only after.
+3. A single comment can yield both a code change AND a takeaway — not mutually exclusive.
+4. When uncertain whether a comment is in-scope or future work, **address it now**. Tie-breaker.
+
+**Posting:** post unilaterally (no user confirmation; the criteria above set the bar). Format:
+
+```
+> **Takeaway from PR #<N>:** <one-sentence headline>
+>
+> <2-4 sentences of specific insight>
+>
+> Refs: PR #<N>, related: #<other-issues-if-any>
+```
+
+Run the **Layer 3 secret-scan** before posting (cross-references `tools/skills/workflow-friction-audit/`):
+
+```bash
+TAKEAWAY_TMP=$(mktemp)
+# Write the comment body to "$TAKEAWAY_TMP" via the Write tool or a heredoc.
+
+USER_PATTERNS=tools/skills/workflow-friction-audit/secret-patterns.txt
+if [ -f "$USER_PATTERNS" ]; then
+  grep -E -n -f tools/skills/workflow-friction-audit/secret-patterns-defaults.txt -f "$USER_PATTERNS" "$TAKEAWAY_TMP"
+else
+  grep -E -n -f tools/skills/workflow-friction-audit/secret-patterns-defaults.txt "$TAKEAWAY_TMP"
+fi
+```
+
+- **Exit 0** (secret match): abort the post, surface the offending line to the user, exit (see "When to bail"). Do NOT call `comment-on-issue.sh`.
+- **Exit 1** (clean): proceed —
+
+```bash
+bash tools/skills/issue-to-merged-pr/scripts/comment-on-issue.sh <target-issue-N> "$TAKEAWAY_TMP"
+```
+
+Then continue to the marker bump.
 
 Return to CI watch.
 
@@ -188,6 +248,14 @@ Run `scripts/post-merge-cleanup.sh <branch> <pr-N>`. Read the JSON:
 - For review-driven follow-ups identified during the PR-comment phase,
   file them now with `scripts/file-followup.sh`.
 
+#### Takeaway evaluation (post-merge)
+
+Review the merged work for any non-obvious takeaway worth posting on:
+- Issues in `linked_issue_actions` (especially `needs-attention` entries).
+- Deferred follow-ups Claude filed during the PR's lifecycle.
+
+Apply the same criteria, ordering rules, format, and Layer 3 secret-scan as Step 8's takeaway evaluation. Post unilaterally if criteria are met. Use `scripts/comment-on-issue.sh` for the post.
+
 ## When to bail (stop and wait for human)
 
 - CI repeat-failure or thrash cap (see above).
@@ -196,6 +264,9 @@ Run `scripts/post-merge-cleanup.sh <branch> <pr-N>`. Read the JSON:
   post on the original issue suggesting a split, exit before opening any PR.
 - Any `gh` command fails with auth errors. Surface the error and the
   `gh auth status` output; the user needs to update their PAT.
+- A takeaway-capture post would contain a secret-pattern match (Layer 3
+  gate from `tools/skills/workflow-friction-audit/`). Abort the post,
+  surface the offending line to the user, exit without commenting.
 
 Each bail writes a structured PR or issue comment with: what was attempted,
 where it stopped, what the human should decide.

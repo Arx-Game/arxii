@@ -134,3 +134,9 @@ src/schema.json
 **/fixtures/*.json
 # Fixture integrity tests (require local fixtures)
 **/test_fixture_integrity.py
+
+# workflow-friction-audit: user-local secret-pattern extensions
+# Default patterns ship in secret-patterns-defaults.txt (committed);
+# this file is for project-specific token prefixes that shouldn't be
+# shared across machines.
+tools/skills/workflow-friction-audit/secret-patterns.txt

@@ -27,6 +27,25 @@ git config --global --add safe.directory /workspaces/arxii
 # to write into them.
 sudo /usr/local/bin/fix-volume-perms.sh
 
+# Claude Code .claude.json relocation (issue #505).
+#
+# CLAUDE_CONFIG_DIR (set in docker-compose.yml) points Claude Code at
+# /home/vscode/.claude/ for its config dir, so .claude.json lands INSIDE
+# the arxii-claude-home named volume and persists across dc-down/dc-up.
+#
+# One-shot migration: if a pre-relocation .claude.json exists at the old
+# default path (~/.claude.json) AND the new persisted location doesn't yet
+# have one, move the file. This carries the user's existing login state
+# forward on the first dc-up after this change lands, so they don't need
+# to re-authenticate.
+#
+# Idempotent: subsequent runs see ~/.claude/.claude.json already present
+# and skip. Never overwrites existing persisted state.
+if [ -f /home/vscode/.claude.json ] && [ ! -f /home/vscode/.claude/.claude.json ]; then
+  mv /home/vscode/.claude.json /home/vscode/.claude/.claude.json
+  echo "[post-create] migrated ~/.claude.json -> ~/.claude/.claude.json (issue #505)"
+fi
+
 # settings.py requires SECRET_KEY and DATABASE_URL (django-environ, raises if
 # missing). No .env ships in a fresh checkout. DATABASE_URL also arrives via
 # compose env, but settings reads src/.env, so write it there too.

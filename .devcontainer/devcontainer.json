@@ -6,13 +6,18 @@
   "remoteUser": "vscode",
   // The ghcr.io/anthropics/devcontainer-features/claude-code feature is
   // intentionally NOT used. Its install runs on every container creation
-  // (npm install -g, unconditionally pulling latest), which appears to
-  // trigger Claude Code's first-run migration logic — that wipes
-  // /home/vscode/.claude/.claude.json (the onboarding/account state)
-  // even though the named volume persists .credentials.json. Result:
-  // re-login on every dc-down/dc-up. Instead we install Claude Code at
-  // image-build time in the Dockerfile so login persists across container
-  // recreates; explicit upgrades happen on `just dc-build`.
+  // (npm install -g, unconditionally pulling latest); we install Claude
+  // Code at image-build time in the Dockerfile instead, so explicit
+  // upgrades happen on `just dc-build`.
+  //
+  // Login persistence (issue #505 fix): the named volume arxii-claude-home
+  // covers /home/vscode/.claude/ (the directory), but Claude Code's
+  // onboarding state file defaults to ~/.claude.json — a SIBLING of the
+  // directory, outside the volume. That mismatch caused re-login on every
+  // dc-down/dc-up. The fix sets CLAUDE_CONFIG_DIR=/home/vscode/.claude in
+  // docker-compose.yml so .claude.json lands inside the volume and
+  // persists. post-create.sh carries an existing ~/.claude.json forward
+  // on first run after this change.
   "features": {},
   // One-time setup with network OPEN (deps + db schema).
   "postCreateCommand": "bash .devcontainer/post-create.sh",

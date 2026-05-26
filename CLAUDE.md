@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent Communication
+
+**Questions in user-facing text must be unambiguous.** If you write a sentence that ends in `?` in text the user sees, it must either:
+- Be issued through `AskUserQuestion` (the answer is required to proceed), OR
+- Be restated as a statement when it's rhetorical self-direction (e.g., "Checking whether the skill expects a reviewer dispatch step." — not "Does the skill expect a reviewer dispatch step?").
+
+Ambiguous "?" sentences force the user to guess whether they're being asked to respond. When in doubt, no `?` in user-facing text outside of `AskUserQuestion`.
+
 ## Git Workflow
 
 > For end-to-end issue → merged-PR work, see the `issue-to-merged-pr` skill at `tools/skills/issue-to-merged-pr/`. It handles branch creation, PR opening, CI watching, and post-merge cleanup. The conventions below still apply; the skill is built on top of them.
