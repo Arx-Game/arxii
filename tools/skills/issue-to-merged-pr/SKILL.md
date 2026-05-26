@@ -109,12 +109,24 @@ skipped-design tasks, just edit and commit.
 
 ### 4. Sync with main
 
-Run `scripts/sync-with-main.sh <branch>`. On conflict (exit 4):
+Run `scripts/sync-with-main.sh <branch>`. The script automatically picks the
+right strategy:
+- **Branch not yet on origin (local-only):** rebase onto origin/main. Clean
+  linear history.
+- **Branch already on origin (pushed):** merge origin/main in. Avoids
+  rewriting already-published history, so the next `git push` is a fast-
+  forward — no force-push (and no user approval prompt for it).
+
+The choice is recorded in the JSON's `strategy` field on conflict.
+
+On conflict (exit 4):
 - Read the emitted JSON.
 - For each entry in `potentially_impacted_issues` where the impact is
   judged real, call `scripts/comment-on-issue.sh <issue> <body-file>` to
   notify the other issue's stakeholders.
-- Resolve the conflicts, continue the rebase.
+- Resolve the conflicts, then continue the in-progress sync
+  (`git rebase --continue` or `git merge --continue` depending on
+  `strategy`).
 
 ### 5. Push & open PR
 

@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # sync-with-main.sh <branch>
 #
-# Fetches origin/main, rebases the named branch onto it.
+# Fetches origin/main and integrates it into the named branch. Strategy
+# depends on whether the branch has already been pushed to origin:
+#
+# - **Branch not on origin (local-only):** rebase. Clean linear history;
+#   no force-push needed because the branch is local.
+# - **Branch already on origin (pushed):** merge. Avoids rewriting
+#   already-published history, so the subsequent `git push` is a
+#   fast-forward and doesn't need `--force-with-lease` (which requires
+#   user approval in restricted environments).
+#
 # On conflict: emits JSON listing conflicted files, conflict symbols
 # (function/class names extracted from `git diff --unified=0` hunk headers
 # against origin/main), and any open issues whose body/comments
@@ -9,9 +18,9 @@
 # over-inclusive — prefers false positives to false negatives.
 #
 # Exits:
-#   0  rebase succeeded with no conflicts (no JSON emitted)
+#   0  sync succeeded with no conflicts (no JSON emitted)
 #   1  usage / generic error
-#   4  rebase produced conflicts (JSON emitted to stdout; rebase left in progress)
+#   4  sync produced conflicts (JSON emitted to stdout; sync left in progress)
 set -euo pipefail
 
 usage() {
@@ -25,8 +34,17 @@ BRANCH="$1"
 git fetch origin --quiet
 git checkout "$BRANCH" --quiet
 
-if git rebase origin/main; then
-  exit 0
+# Decide rebase vs merge based on whether the branch is published.
+if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+  SYNC_STRATEGY="merge"
+  if git merge origin/main --no-edit; then
+    exit 0
+  fi
+else
+  SYNC_STRATEGY="rebase"
+  if git rebase origin/main; then
+    exit 0
+  fi
 fi
 
 # Conflicts present. Collect conflicted files.
@@ -90,6 +108,7 @@ jq -n \
   --argjson c "$CONFLICTS_JSON" \
   --argjson s "$SYMBOLS_JSON" \
   --argjson i "$IMPACTED" \
-  '{conflicts: $c, conflict_symbols: $s, potentially_impacted_issues: $i}'
+  --arg strategy "$SYNC_STRATEGY" \
+  '{strategy: $strategy, conflicts: $c, conflict_symbols: $s, potentially_impacted_issues: $i}'
 
 exit 4
