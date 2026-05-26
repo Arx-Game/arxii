@@ -54,20 +54,33 @@ GitHub holds the truth.
 When invoked against an existing PR (`/issue-to-merged-pr 47` where the branch
 already has an open PR, or `/issue-to-merged-pr` with no arg and the current
 branch matches the convention), the agent runs `gh pr view --json
-state,merged,merged_at,statusCheckRollup,reviewDecision,mergeStateStatus`
+state,mergedAt,statusCheckRollup,reviewDecision,mergeStateStatus`
 first, then — only if checks are all-success and the PR is open — calls
-`read-pr-comments.sh` to populate the unread-comments cell. Phase is picked
-from this table (rows evaluated top-to-bottom; first match wins):
+`read-pr-comments.sh` to populate the unread-comments cell.
 
-| `state` | `merged` | `mergeStateStatus` | `statusCheckRollup` aggregate | unread-comments | Phase |
-|---|---|---|---|---|---|
-| `MERGED` | `true` | — | — | — | **Post-merge cleanup** |
-| `CLOSED` | `false` | — | — | — | **Closed-without-merge** (notify user, exit) |
-| `OPEN` | `false` | `DIRTY` / `BEHIND` | — | — | **Conflict-during-review** (re-sync with main, re-run cross-issue overlap, push) |
-| `OPEN` | `false` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
-| `OPEN` | `false` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
-| `OPEN` | `false` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
-| `OPEN` | `false` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
+(`gh pr view`'s JSON taxonomy is camelCase and has no boolean `merged`
+field; `state == "MERGED"` is the definitive merge indicator, and
+`mergedAt` is the timestamp.)
+
+For each entry in `statusCheckRollup`, the relevant fields are `status`
+(`QUEUED` / `IN_PROGRESS` / `COMPLETED`) and `conclusion` (`SUCCESS` /
+`FAILURE` / `CANCELLED` / `TIMED_OUT` / `SKIPPED` / `NEUTRAL` /
+`ACTION_REQUIRED`). A check is "failing" when `status == COMPLETED &&
+conclusion` is one of `FAILURE` / `CANCELLED` / `TIMED_OUT` /
+`ACTION_REQUIRED`. Pending = any `status != COMPLETED`.
+
+Phase is picked from this table (rows evaluated top-to-bottom; first match wins):
+
+| `state` | `mergeStateStatus` | `statusCheckRollup` aggregate | unread-comments | Phase |
+|---|---|---|---|---|
+| `MERGED` | — | — | — | **Post-merge cleanup** |
+| `CLOSED` | — | — | — | **Closed-without-merge** (notify user, exit) |
+| `OPEN` | `DIRTY` / `BEHIND` | — | — | **Conflict-during-review** (re-sync with main, re-run cross-issue overlap, push) |
+| `OPEN` | `BLOCKED` | all success | none | **Blocked-on-review** (post comment noting required reviewers missing, exit) |
+| `OPEN` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
+| `OPEN` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
+| `OPEN` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
+| `OPEN` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
 
 "Unread comments" is defined per the `read-pr-comments.sh` marker mechanism
 (see Script contracts). The agent never has to ask the user "where are we" —
@@ -114,7 +127,7 @@ the state-mutating ones.
 - **watch-ci.sh** `<pr-number>` → blocks with internal `sleep` calls per cadence below; exits when checks settle. Stdout: `OK` or `FAIL <check-name>`. **Idempotent across sessions:** on start, queries `gh pr checks` first; if no checks are pending, exits immediately with the current rollup status (no sleep). This makes re-invocation while a prior session's CI is mid-run safe — the new session walks straight into the right phase via the phase-detection table rather than racing a stale watch. There is no inter-session lock: GitHub is the single source of truth, multiple agents querying it concurrently is harmless.
 - **get-ci-failure.sh** `<pr-number> <check-name>` → emits last ~200 lines of failing job log + failure summary.
 - **read-pr-comments.sh** `<pr-number>` → emits unread comments — those authored after the comment ID recorded in the PR body's marker `<!-- last-addressed-comment: <id> -->`. If the marker is missing, all comments are returned. Fetches both issue-style PR comments (`gh api repos/:owner/:repo/issues/:pr/comments`) and review-thread comments (`gh api repos/:owner/:repo/pulls/:pr/comments`); merges by `created_at`. After the agent addresses comments and pushes, it updates the marker to the highest-seen comment ID via `gh pr edit --body` (preserving the rest of the body). This avoids the fragility of timestamp-relative-to-commit filtering: a tiny follow-up push doesn't make older unaddressed comments disappear, and a force-push doesn't reset the marker.
-- **post-merge-cleanup.sh** `<branch> <pr-number>` → switches to main, pulls, deletes branch; emits JSON of linked-issue actions taken. `--dry-run` prints actions without performing them. **Dirty-tree handling:** if the working tree has uncommitted changes when the script is invoked, it exits non-zero with a structured error naming the dirty files — never stashes, never resets. This is deliberate: the user (or a parallel agent session) may have started unrelated work; silently stashing or discarding it loses that work. The agent then surfaces the message to the user and waits for them to commit, stash, or discard explicitly. **Branch deletion after squash-merge:** the script tries `git branch -d <branch>` first; if it fails (the squash-merge commit on `main` doesn't contain the feature branch's commits as ancestors, so safe-delete reliably fails after squash), the script then verifies the PR is `merged: true` via `gh pr view --json merged` and falls back to `git branch -D`. If `merged` is `false`, the script aborts without forcing — that state means cleanup was invoked prematurely.
+- **post-merge-cleanup.sh** `<branch> <pr-number>` → switches to main, pulls, deletes branch; emits JSON of linked-issue actions taken. `--dry-run` prints actions without performing them. **Dirty-tree handling:** if the working tree has uncommitted changes when the script is invoked, it exits non-zero with a structured error naming the dirty files — never stashes, never resets. This is deliberate: the user (or a parallel agent session) may have started unrelated work; silently stashing or discarding it loses that work. The agent then surfaces the message to the user and waits for them to commit, stash, or discard explicitly. **Branch deletion after squash-merge:** the script tries `git branch -d <branch>` first; if it fails (the squash-merge commit on `main` doesn't contain the feature branch's commits as ancestors, so safe-delete reliably fails after squash), the script then verifies the PR `state` is `MERGED` via `gh pr view --json state` and falls back to `git branch -D`. If `state` is anything other than `MERGED`, the script aborts without forcing — that state means cleanup was invoked prematurely. (Earlier drafts of this spec referenced a boolean `merged` field that doesn't exist in `gh pr view`'s JSON taxonomy; `state` is the actual indicator.)
 
 ### Templates
 

@@ -27,7 +27,9 @@ ISSUE="$1"
 # 1. Superpowers precheck
 if ! claude plugin list 2>/dev/null | grep -q "superpowers@claude-plugins-official"; then
   echo "ERROR: superpowers plugin not installed." >&2
-  echo "Install with: claude plugin install superpowers@claude-plugins-official" >&2
+  echo "Install with:" >&2
+  echo "  claude plugin marketplace add anthropics/claude-plugins-official" >&2
+  echo "  claude plugin install superpowers@claude-plugins-official" >&2
   exit 2
 fi
 

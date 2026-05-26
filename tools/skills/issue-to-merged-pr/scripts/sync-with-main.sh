@@ -81,7 +81,10 @@ while IFS= read -r issue_row; do
 done < <(jq -c '.[]' <<<"$OPEN_ISSUES")
 
 CONFLICTS_JSON=$(echo "$CONFLICTS" | sed '/^$/d' | jq -R . | jq -s .)
-SYMBOLS_JSON=$(echo "$SYMBOLS" | jq -R . | jq -s .)
+# Drop blank lines BEFORE jq sees them — `echo ""` followed by `jq -R .` yields
+# the string "" which `jq -s` wraps as `[""]`. The sed filter matches the
+# guard CONFLICTS_JSON uses above.
+SYMBOLS_JSON=$(echo "$SYMBOLS" | sed '/^$/d' | jq -R . | jq -s .)
 
 jq -n \
   --argjson c "$CONFLICTS_JSON" \

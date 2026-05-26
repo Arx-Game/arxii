@@ -57,30 +57,18 @@ else
   FOLLOWUP_LIST="${FOLLOWUP_LIST%$'\n'}"
 fi
 
-# Substitute. Use a sentinel-free escape pass with python-like sed safety: use
-# a delimiter unlikely to appear in values (|). Escape | in values just in case.
-substitute() {
-  local key="$1" value="$2"
-  local escaped
-  escaped=$(printf '%s' "$value" | sed 's/|/\\|/g')
-  # Multiline-safe substitution via awk.
-  awk -v k="{{${key}}}" -v v="$escaped" '
-    {
-      while ((idx = index($0, k)) > 0) {
-        $0 = substr($0, 1, idx-1) v substr($0, idx + length(k))
-      }
-      print
-    }
-  '
-}
-
+# Substitute via bash parameter expansion (`${var//pattern/replacement}`):
+# multiline-safe, single-pass, and — critically — does NOT recurse into the
+# replacement text. A value that itself contains "{{summary}}" gets inserted
+# literally rather than triggering the infinite loop the prior awk-based
+# implementation had.
 BODY=$(cat "$TEMPLATE")
-BODY=$(echo "$BODY" | substitute "issue_number" "$ISSUE")
-BODY=$(echo "$BODY" | substitute "summary" "$SUMMARY")
-BODY=$(echo "$BODY" | substitute "followup_list" "$FOLLOWUP_LIST")
-BODY=$(echo "$BODY" | substitute "ran_or_skipped" "$RAN_OR_SKIPPED")
-BODY=$(echo "$BODY" | substitute "spec_link" "$SPEC_LINK")
-BODY=$(echo "$BODY" | substitute "sync_summary" "$SYNC_SUMMARY")
+BODY=${BODY//\{\{issue_number\}\}/$ISSUE}
+BODY=${BODY//\{\{summary\}\}/$SUMMARY}
+BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
+BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
+BODY=${BODY//\{\{spec_link\}\}/$SPEC_LINK}
+BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
 
 # Derive a PR title if not explicitly given.
 if [[ -z "${PR_TITLE:-}" ]]; then
@@ -106,5 +94,10 @@ BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 printf '%s' "$BODY" > "$BODY_FILE"
 
+# gh pr create emits the PR URL; gh has no --json flag for create itself, but
+# we can ask gh pr view for the number after the fact (more robust than
+# regex-parsing the URL, which would silently break under set -e if the URL
+# format gains a suffix).
 URL=$(gh pr create --base main --head "$BRANCH" --title "$PR_TITLE" --body-file "$BODY_FILE")
-echo "$URL" | grep -oE '[0-9]+$'
+PR_NUMBER=$(gh pr view "$URL" --json number --jq .number)
+echo "$PR_NUMBER"

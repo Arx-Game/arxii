@@ -29,10 +29,14 @@ MARKER=$(grep -oE '<!-- last-addressed-comment: [0-9]+ -->' <<<"$BODY" \
   | head -1)
 MARKER="${MARKER:-0}"
 
-ISSUE_COMMENTS=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-  | jq '[.[] | {id, created_at, author: .user.login, body, kind: "issue"}]')
-REVIEW_COMMENTS=$(gh api "repos/$REPO/pulls/$PR/comments" --paginate \
-  | jq '[.[] | {id, created_at, author: .user.login, body, kind: "review", path}]')
+# Each fetch defaults to `[]` on gh failure so jq -s never sees a null input
+# (which would propagate through `add` to break the downstream map).
+ISSUE_COMMENTS=$(gh api "repos/$REPO/issues/$PR/comments" --paginate 2>/dev/null \
+  | jq '[.[] | {id, created_at, author: .user.login, body, kind: "issue"}]' \
+  || echo "[]")
+REVIEW_COMMENTS=$(gh api "repos/$REPO/pulls/$PR/comments" --paginate 2>/dev/null \
+  | jq '[.[] | {id, created_at, author: .user.login, body, kind: "review", path}]' \
+  || echo "[]")
 
 jq -s --argjson marker "$MARKER" '
   add

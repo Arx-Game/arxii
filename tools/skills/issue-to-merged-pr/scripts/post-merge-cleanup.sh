@@ -52,9 +52,15 @@ git pull --ff-only --quiet
 if git branch -d "$BRANCH" 2>/dev/null; then
   DELETE_METHOD="safe"
 else
-  MERGED=$(gh pr view "$PR" --json merged --jq .merged)
-  if [[ "$MERGED" != "true" ]]; then
-    echo "ERROR: PR #$PR is not merged; refusing to force-delete branch $BRANCH" >&2
+  # gh pr view has no boolean `merged` field; state == "MERGED" is the
+  # definitive indicator. Capture gh failures separately so the user sees
+  # "auth/network error" rather than "PR not merged" when the API call dies.
+  if ! PR_STATE=$(gh pr view "$PR" --json state --jq .state 2>&1); then
+    echo "ERROR: could not query PR #$PR state (gh said: $PR_STATE)" >&2
+    exit 1
+  fi
+  if [[ "$PR_STATE" != "MERGED" ]]; then
+    echo "ERROR: PR #$PR state is $PR_STATE, not MERGED; refusing to force-delete branch $BRANCH" >&2
     exit 9
   fi
   git branch -D "$BRANCH"

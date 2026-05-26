@@ -26,21 +26,35 @@ elapsed=0
 
 check_state() {
   # Emit one of: "PASS", "FAIL <name>", "PENDING".
+  # `gh pr checks` has no --json flag; use `gh pr view --json statusCheckRollup`
+  # which returns an array of {name, status, conclusion, workflowName, ...}.
+  # status is one of QUEUED, IN_PROGRESS, COMPLETED. conclusion is SUCCESS,
+  # FAILURE, CANCELLED, SKIPPED, NEUTRAL, TIMED_OUT, ACTION_REQUIRED, STALE.
   local json
-  json=$(gh pr checks "$PR" --json name,state 2>/dev/null || echo "[]")
-  if [[ "$json" == "[]" ]] || [[ -z "$json" ]]; then
-    echo "PASS"
+  json=$(gh pr view "$PR" --json statusCheckRollup --jq .statusCheckRollup 2>/dev/null || echo "")
+  if [[ -z "$json" ]] || [[ "$json" == "null" ]]; then
+    # gh actually failed (auth, network, missing PR). Don't pretend it passed.
+    echo "ERROR" >&2
+    return 1
+  fi
+  if [[ "$json" == "[]" ]]; then
+    # PR exists but no checks attached yet. Treat as pending — checks may register shortly.
+    echo "PENDING"
     return
   fi
 
   local failing pending
-  failing=$(jq -r '.[] | select(.state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED") | .name' <<<"$json" | head -1)
+  failing=$(jq -r '
+    .[] | select(.status == "COMPLETED" and
+      (.conclusion == "FAILURE" or .conclusion == "CANCELLED" or .conclusion == "TIMED_OUT" or .conclusion == "ACTION_REQUIRED")
+    ) | .name
+  ' <<<"$json" | head -1)
   if [[ -n "$failing" ]]; then
     echo "FAIL $failing"
     return
   fi
 
-  pending=$(jq -r '.[] | select(.state == "PENDING" or .state == "IN_PROGRESS" or .state == "QUEUED") | .name' <<<"$json" | head -1)
+  pending=$(jq -r '.[] | select(.status != "COMPLETED") | .name' <<<"$json" | head -1)
   if [[ -n "$pending" ]]; then
     echo "PENDING"
     return

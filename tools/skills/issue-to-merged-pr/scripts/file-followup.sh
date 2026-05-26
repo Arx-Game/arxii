@@ -45,6 +45,8 @@ for label in "${LABELS[@]}"; do
   GH_ARGS+=(--label "$label")
 done
 
-# gh issue create prints the issue URL; extract the number from the tail.
+# gh issue create prints the issue URL. Ask gh for the number directly after
+# creation rather than regex-parsing the URL — robust to URL-format changes
+# and to `set -e` aborting on a regex miss.
 URL=$(gh "${GH_ARGS[@]}")
-echo "$URL" | grep -oE '[0-9]+$'
+gh issue view "$URL" --json number --jq .number

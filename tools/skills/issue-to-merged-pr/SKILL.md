@@ -18,8 +18,23 @@ is the executable recipe.
 
 This skill orchestrates `superpowers:brainstorming` and
 `superpowers:writing-plans`. The `pickup-issue.sh` script checks for the
-plugin's presence and fails fast (`exit 2`) with the install command if
+plugin's presence and fails fast (`exit 2`) with the install commands if
 missing. In the devcontainer, `post-create.sh` installs it automatically.
+
+**On re-invocation** (any phase other than initial Pickup), the agent
+should run the same precheck before invoking any `superpowers:*` skill,
+since re-invocations skip `pickup-issue.sh`. One-liner:
+
+```bash
+claude plugin list 2>/dev/null | grep -q "superpowers@claude-plugins-official" || {
+  echo "Install: claude plugin marketplace add anthropics/claude-plugins-official && claude plugin install superpowers@claude-plugins-official" >&2
+  exit 2
+}
+```
+
+In phases that don't touch `superpowers:*` (CI watch, CI fix, post-merge
+cleanup), the precheck is optional — those phases only need `gh`, `git`,
+and `jq`, all of which are devcontainer baseline.
 
 ## Phase detection on re-invocation
 
@@ -27,22 +42,34 @@ When invoked with no arg, or with a PR number / issue number whose branch
 already has an open PR, run:
 
 ```bash
-gh pr view <pr-or-branch> --json state,merged,merged_at,statusCheckRollup,reviewDecision,mergeStateStatus
+gh pr view <pr-or-branch> --json state,mergedAt,statusCheckRollup,reviewDecision,mergeStateStatus
 ```
+
+(`gh pr view`'s JSON taxonomy is camelCase and has no boolean `merged`
+field; `state == "MERGED"` is the definitive merge indicator, and
+`mergedAt` is the timestamp.)
+
+For each entry in `statusCheckRollup`, the relevant fields are `status`
+(`QUEUED` / `IN_PROGRESS` / `COMPLETED`) and `conclusion` (`SUCCESS` /
+`FAILURE` / `CANCELLED` / `TIMED_OUT` / `SKIPPED` / `NEUTRAL` / etc.).
+A check is "failing" when `status == COMPLETED && conclusion` is one of
+`FAILURE`, `CANCELLED`, `TIMED_OUT`, `ACTION_REQUIRED`. Pending = any
+`status != COMPLETED`.
 
 Then, only if checks are all-success and the PR is open, call
 `scripts/read-pr-comments.sh <pr>` to populate the unread-comments cell.
 Pick the phase from this table (rows top-to-bottom; first match wins):
 
-| `state` | `merged` | `mergeStateStatus` | `statusCheckRollup` aggregate | unread-comments | Phase |
-|---|---|---|---|---|---|
-| `MERGED` | `true` | — | — | — | **Post-merge cleanup** |
-| `CLOSED` | `false` | — | — | — | **Closed-without-merge** (notify user, exit) |
-| `OPEN` | `false` | `DIRTY` / `BEHIND` | — | — | **Conflict-during-review** (re-sync, push) |
-| `OPEN` | `false` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
-| `OPEN` | `false` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
-| `OPEN` | `false` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
-| `OPEN` | `false` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
+| `state` | `mergeStateStatus` | `statusCheckRollup` aggregate | unread-comments | Phase |
+|---|---|---|---|---|
+| `MERGED` | — | — | — | **Post-merge cleanup** |
+| `CLOSED` | — | — | — | **Closed-without-merge** (notify user, exit) |
+| `OPEN` | `DIRTY` / `BEHIND` | — | — | **Conflict-during-review** (re-sync, push) |
+| `OPEN` | `BLOCKED` | all success | none | **Blocked-on-review** (post comment noting required reviewers missing, exit) |
+| `OPEN` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
+| `OPEN` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
+| `OPEN` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
+| `OPEN` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
 
 If the branch matches the convention `<type>-<N>-<slug>` but has no open PR,
 the agent is mid-implementation and resumes from the Implementation step.
@@ -120,8 +147,20 @@ issue, commit, push, return to CI watch.
   job's first non-zero exit context (others).
 - **Thrash cap:** 5 total pushes on this PR across all fix attempts.
 
-On either bail, post a diagnostic PR comment listing every attempt and
-exit.
+**Cross-session attempt counting.** Since the skill has no on-disk state,
+the count is reconstructed from the PR's own commits + the agent's prior
+attempt-trail comments. Each CI-fix attempt the agent makes, post a PR
+comment with this exact prefix:
+
+> `<!-- ci-fix-attempt --> check: <name>, signature: <signature>, push: <commit-sha-short>`
+
+On every re-invocation that enters CI-fix, read prior comments via
+`scripts/read-pr-comments.sh`, count entries matching the marker prefix,
+and apply the bail thresholds against the historical total. Without this
+trail, multi-session thrash is undetectable.
+
+On either bail, post a diagnostic PR comment summarizing every attempt
+(with the same marker for future reconstructability) and exit.
 
 ### 8. PR-comment phase (re-invocation after human review)
 
@@ -134,7 +173,8 @@ When phase detection lands on **PR-comment**:
 ```bash
 NEW_MAX=<max comment id you addressed>
 BODY=$(gh pr view <pr> --json body --jq .body)
-NEW_BODY=$(sed "s/<!-- last-addressed-comment: [0-9]\+ -->/<!-- last-addressed-comment: $NEW_MAX -->/" <<<"$BODY")
+# -E (ERE) so [0-9]+ works on both GNU sed (Linux) and BSD sed (macOS).
+NEW_BODY=$(sed -E "s/<!-- last-addressed-comment: [0-9]+ -->/<!-- last-addressed-comment: $NEW_MAX -->/" <<<"$BODY")
 printf '%s' "$NEW_BODY" | gh pr edit <pr> --body-file -
 ```
 

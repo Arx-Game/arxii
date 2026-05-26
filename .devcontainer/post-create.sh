@@ -71,8 +71,12 @@ claude plugin install superpowers@claude-plugins-official 2>/dev/null || true
 # Symlink in-repo skills into the user's Claude skills directory so they're
 # discoverable by every session. -sfn is idempotent — re-runs cleanly. New
 # skills committed to tools/skills/ appear on the next container creation.
+# nullglob: if tools/skills/ is empty, the loop body should NOT run with the
+# literal pattern (which would create a dangling "*" symlink).
 mkdir -p /home/vscode/.claude/skills
+shopt -s nullglob
 for skill in /workspaces/arxii/tools/skills/*/; do
   name=$(basename "$skill")
   ln -sfn "$skill" "/home/vscode/.claude/skills/$name"
 done
+shopt -u nullglob
