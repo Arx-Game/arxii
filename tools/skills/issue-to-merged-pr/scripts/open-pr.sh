@@ -20,6 +20,12 @@
 #   1  usage / generic error
 set -euo pipefail
 
+# bash 5.2+ defaults `patsub_replacement` ON, which makes `&` in the
+# replacement string of `${var//pat/rep}` substitute with the matched
+# pattern (sed-like). PR_SUMMARY content frequently contains `&` (e.g.,
+# "Steps 8 & 9"), so leave this OFF so the substitution is literal.
+shopt -u patsub_replacement
+
 DRY_RUN=0
 if [[ "${1:-}" == "--dry-run" ]]; then
   DRY_RUN=1
