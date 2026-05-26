@@ -322,8 +322,17 @@ maintainer who omits them won't break the workflow — they just get a
 clearer "scope missing" message if the agent later tries to read one of
 these surfaces.
 
-One token, scoped to `arxii` repo only. Each maintainer creates their own
-under their own GitHub identity so commits are correctly attributed.
+One token per maintainer, created under each maintainer's own GitHub
+identity so commits are correctly attributed. Fine-grained PATs cannot
+be scoped to a single repository when the repo is org-owned (per-repo
+scoping requires the token owner to own the repo, which isn't the case
+for `arxii`). The token is therefore scoped to "all repositories I have
+access to" — but the *effective* reach is still bounded by the
+maintainer's actual permissions on each repo and by the per-permission
+scopes listed in the table above. The skill itself only ever operates
+on the repo of the current working directory (`gh` defaults to the repo
+the CWD is inside), so a token that *could* reach other org repos is
+not directed at them.
 
 `docs/devcontainer-setup.md`'s existing GitHub-access section is updated:
 
@@ -486,8 +495,12 @@ stabilizes.
   invocation. No `.workflow-state.json` to maintain.
 - **Auto-merge.** The skill never merges the PR. Merge is always a human
   action on GitHub.
-- **Cross-repo work.** Token is scoped to `arxii`. Issues/PRs in other repos
-  are out of scope.
+- **Cross-repo work.** The skill operates on the repo of the current
+  working directory only. Issues/PRs in other repos are out of scope by
+  design, even when the maintainer's PAT technically has access to them
+  (fine-grained PATs can't be scoped per-repo for org-owned repos like
+  `arxii`, so the boundary is enforced by the skill's behavior, not by
+  the token).
 - **Replacing superpowers' brainstorming and writing-plans skills.** This
   skill orchestrates them; it does not duplicate their logic.
 - **Automated regression tests.** The skill is validated by dogfood
