@@ -38,6 +38,14 @@ services:
       # to one port lets us forward exactly that one to the Windows host
       # instead of opening a 16k-port range.
       BRAINSTORM_PORT: "49200"
+      # Relocate Claude Code's config directory inside the named-volume mount
+      # so .claude.json (account/onboarding state) persists across
+      # dc-down/dc-up. Default location is ~/.claude.json (a sibling of the
+      # .claude/ directory and OUTSIDE the named volume), which gets reset
+      # to image state on every container recreate — forcing re-login.
+      # post-create.sh migrates an existing ~/.claude.json the first time
+      # this env var takes effect. See #505 for full root-cause analysis.
+      CLAUDE_CONFIG_DIR: /home/vscode/.claude
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
