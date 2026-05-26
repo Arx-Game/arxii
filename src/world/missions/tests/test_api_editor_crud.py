@@ -62,6 +62,20 @@ class NodeViewSetCRUDTests(TestCase):
         keys = {row["key"] for row in response.data["results"]}
         self.assertEqual(keys, {"entry"})
 
+    def test_list_filters_by_needs_rewrite(self) -> None:
+        """E6: ``?needs_rewrite=true`` returns only flavor-flagged nodes."""
+        MissionNodeFactory(
+            template=self.template,
+            key="needs-help",
+            flavor_text_needs_rewrite=True,
+        )
+        response = self.client.get(
+            self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        keys = {row["key"] for row in response.data["results"]}
+        self.assertEqual(keys, {"needs-help"})
+
     def test_create_round_trips(self) -> None:
         response = self.client.post(
             self.URL,
