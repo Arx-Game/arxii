@@ -2,6 +2,13 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 
+[manifest]
+overrides = [
+    { name = "djangorestframework", specifier = ">=3.15.2" },
+    { name = "simpleeval", specifier = ">=1.0.5" },
+    { name = "twisted", specifier = ">=26.4.0" },
+]
+
 [[package]]
 name = "anything"
 version = "0.2.1"
@@ -60,7 +67,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "psycopg", specifier = "==3.2.9" },
     { name = "psycopg", extras = ["binary"] },
-    { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "pyjwt", specifier = ">=2.12.0" },
     { name = "pympler", specifier = ">=1.1" },
     { name = "pyngrok", specifier = ">=7.0.0" },
     { name = "pytest", specifier = ">=9.0.3" },
@@ -501,15 +508,14 @@ wheels = [
 
 [[package]]
 name = "djangorestframework"
-version = "3.14.0"
+version = "3.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
-    { name = "pytz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8e/53/5b2a002c5ebafd60dff1e1945a7d63dee40155830997439a9ba324f0fd50/djangorestframework-3.14.0.tar.gz", hash = "sha256:579a333e6256b09489cbe0a067e66abe55c6595d8926be6b99423786334350c8", size = 1055343, upload-time = "2022-09-22T11:38:44.245Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/d7/c016e69fac19ff8afdc89db9d31d9ae43ae031e4d1993b20aca179b8301a/djangorestframework-3.17.1.tar.gz", hash = "sha256:a6def5f447fe78ff853bff1d47a3c59bf38f5434b031780b351b0c73a62db1a5", size = 905742, upload-time = "2026-03-24T16:58:33.705Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/4b/3b46c0914ba4b7546a758c35fdfa8e7f017fcbe7f23c878239e93623337a/djangorestframework-3.14.0-py3-none-any.whl", hash = "sha256:eb63f58c9f218e1a7d064d17a70751f528ed4e1d35547fdade9aaf4cd103fd08", size = 1062761, upload-time = "2022-09-22T11:38:41.825Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/e1/2c516bdc83652b1a60c6119366ac2c0607b479ed05cd6093f916ca8928f8/djangorestframework-3.17.1-py3-none-any.whl", hash = "sha256:c3c74dd3e83a5a3efc37b3c18d92bd6f86a6791c7b7d4dff62bb068500e76457", size = 898844, upload-time = "2026-03-24T16:58:31.845Z" },
 ]
 
 [[package]]
@@ -967,11 +973,11 @@ wheels = [
 
 [[package]]
 name = "pyjwt"
-version = "2.10.1"
+version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e7/46/bd74733ff231675599650d3e47f361794b22ef3e3770998dda30d3b63726/pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953", size = 87785, upload-time = "2024-11-28T03:43:29.933Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/ad/689f02752eeec26aed679477e80e632ef1b682313be70793d798c1d5fc8f/PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb", size = 22997, upload-time = "2024-11-28T03:43:27.893Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
 ]
 
 [[package]]
@@ -1252,11 +1258,11 @@ wheels = [
 
 [[package]]
 name = "simpleeval"
-version = "1.0.0"
+version = "1.0.7"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f7/ce/846298e33b1611c5cd4f32c025d1198029c1efd105ce1d02e4d303810dd9/simpleeval-1.0.0.tar.gz", hash = "sha256:f3d259deeb751d34c63e56747bab384efad63a2dbdb4f130281c42279788ac3c", size = 25714, upload-time = "2024-10-05T05:37:59.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/9d/e7c9309940794dd3073cba2e5101df5874d84243595ce63b1e1c8f9b9c76/simpleeval-1.0.7.tar.gz", hash = "sha256:1e10e5f9fec597814444e20c0892ed15162fa214c8a88f434b5b077cf2fef85b", size = 30250, upload-time = "2026-03-16T10:53:03.464Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/d6/a6b6cc7dd4c4b50f1db5348992ea5a8340b322b4da68beea376f6a07e168/simpleeval-1.0.0-py3-none-any.whl", hash = "sha256:704817f39879b42d81777f02e2dd28dde45c7f9c3fd84cea0d6dbde85c3efcff", size = 15967, upload-time = "2024-10-05T05:37:58.186Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/2f/f32aa85591882378bb43caa09363f3ed97df399369a5144c7f19f2275bc0/simpleeval-1.0.7-py3-none-any.whl", hash = "sha256:97ac271bfd8f2af9e7b9a36ceea67617f26fa873f9d5ae1922f64d4c1442534b", size = 18792, upload-time = "2026-03-16T10:53:02.103Z" },
 ]
 
 [[package]]
@@ -1288,7 +1294,7 @@ wheels = [
 
 [[package]]
 name = "twisted"
-version = "24.11.0"
+version = "26.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -1299,9 +1305,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "zope-interface" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/1c/e07af0df31229250ab58a943077e4adbd5e227d9f2ac826920416b3e5fa2/twisted-24.11.0.tar.gz", hash = "sha256:695d0556d5ec579dcc464d2856b634880ed1319f45b10d19043f2b57eb0115b5", size = 3526722, upload-time = "2024-12-02T09:53:23.767Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/97/6e9beb1e78247ae6dc34114f27d538cf2cb183c4afcd3609dfdf2b0439c8/twisted-26.4.0.tar.gz", hash = "sha256:dbfd0fe1ee409d0243fdd7a6a6ff14f4948cec1fd78e0376291f805e1501fae9", size = 3575095, upload-time = "2026-05-11T11:24:51.861Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/53/a50654eb9c63da0df2b5dca8ec27656a88b7edd798de5ffad55353203874/twisted-24.11.0-py3-none-any.whl", hash = "sha256:fe403076c71f04d5d2d789a755b687c5637ec3bcd3b2b8252d76f2ba65f54261", size = 3188667, upload-time = "2024-12-02T09:53:21.131Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/57/bcf4e2370dd218c9aa68a9140a65d86729c73f1d529f7e94786c2766fc72/twisted-26.4.0-py3-none-any.whl", hash = "sha256:dc25ea0ebf6511c24f03232ee9f4afa54b291c5d897990e3a39cc4d14a1ef4c0", size = 3230362, upload-time = "2026-05-11T11:24:49.5Z" },
 ]
 
 [[package]]

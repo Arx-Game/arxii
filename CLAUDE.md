@@ -26,7 +26,7 @@ This prevents confusion when PRs are squash-merged and keeps main clean. After a
 git checkout main && git pull && git branch -D feature-name
 ```
 
-**GitHub CLI usage:** Do not use `gh` commands or GitHub CLI MCP tools for ad-hoc work — PRs created manually through the GitHub web interface are still preferred for one-off changes. **Exception:** the `issue-to-merged-pr` skill (see `tools/skills/issue-to-merged-pr/`) is the sanctioned `gh` consumer; its scripts wrap `gh` with auditable, dry-run-able contracts and operate inside the protections of the maintainer's PAT scope + branch protection on `main`. When you're running the issue-to-merged-pr workflow, the scripts under `tools/skills/issue-to-merged-pr/scripts/` are the way to call `gh`. Outside that workflow, the prohibition stands.
+**GitHub CLI usage:** Use `gh` (and the standard PR-creation recipe in your system prompt) to open PRs for completed work. The `issue-to-merged-pr` skill at `tools/skills/issue-to-merged-pr/` is the preferred path for end-to-end issue → merged-PR work because its scripts wrap `gh` with auditable, dry-run-able contracts; outside that workflow, plain `gh pr create` is fine. Branch protection on `main` plus the maintainer's PAT scope provide the safety rails. Read-only `gh api` calls (listing alerts, fetching PR state, etc.) are also fine when needed.
 
 **No `cd &&` compound commands:** Never combine `cd` with other commands using `&&` (e.g., `cd /path && git status`). On Windows, Claude Code flags all `cd && <command>` compounds for manual approval as a bare-repository-attack mitigation, which blocks automated workflows. Instead:
 - For git: use `git -C /path/to/repo <command>` (e.g., `git -C /c/Users/apost/PycharmProjects/arxii status`)

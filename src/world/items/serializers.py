@@ -108,6 +108,11 @@ class ItemFacetWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemFacet
         fields = ["item_instance", "facet", "attachment_quality_tier"]
+        # DRF auto-injects a UniqueTogetherValidator from
+        # UniqueConstraint(item_instance, facet); suppress it so the
+        # FacetAlreadyAttached exception in the service raises a user-message
+        # error instead of DRF's generic "must make a unique set" message.
+        validators: list = []
 
     def create(self, validated_data: dict) -> ItemFacet:  # type: ignore[override]  # DRF base returns Model; we narrow to ItemFacet
         """Delegate creation to the facet service."""
@@ -269,6 +274,11 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = OutfitSlot
         fields = ["id", "outfit", "item_instance", "body_region", "equipment_layer"]
+        # DRF auto-injects a UniqueTogetherValidator from
+        # UniqueConstraint(outfit, body_region, equipment_layer); suppress it
+        # so add_outfit_slot can replace the existing slot at that (region,
+        # layer) instead of erroring out at validation.
+        validators: list = []
 
     def create(self, validated_data: dict) -> OutfitSlot:  # type: ignore[override]
         """Delegate creation to the add_outfit_slot service.
