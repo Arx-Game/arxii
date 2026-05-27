@@ -34,30 +34,48 @@ export function useAccountQuery() {
 }
 
 /**
- * Subscribe to the in-flight state of the account query — used by route
- * guards (StaffRoute, ProtectedRoute, GuestOnlyRoute) to avoid the
- * "direct URL navigation race": on a hard page load Redux starts with
- * `account = null`, and a guard reading Redux immediately would fire a
- * redirect before useAccountQuery's fetch resolves. The guard reads
- * `isPending` here, defers the redirect decision until the fetch
- * settles, and only then trusts the Redux account value.
+ * Auth state read by route guards (StaffRoute, ProtectedRoute,
+ * GuestOnlyRoute) to avoid the direct-URL-navigation race.
  *
- * Shares the `['account']` query key with `useAccountQuery`, so React
- * Query dedupes — no extra network request, no double dispatch.
+ * On hard page load Redux starts at `account: null` and useAccountQuery
+ * fetches /api/user/ asynchronously, dispatching to Redux in a
+ * useEffect AFTER the fetch resolves. That `useEffect`-after-render
+ * gap created a render in which the React Query data was settled but
+ * Redux was still null — so the guards (reading Redux) would fire a
+ * Navigate to /login, and the GuestOnlyRoute on /login would see the
+ * NEXT render with Redux populated and bounce the user to /. End
+ * result: typing /staff/anything in the address bar always landed on
+ * the home page.
+ *
+ * Fix: read both `isPending` and `data` from the same React Query
+ * snapshot. They update atomically within a render, so the guards make
+ * a consistent decision. Login mutations now also write through to the
+ * React Query cache (see useLogin / useLogout below) so post-login
+ * navigation works the same way.
+ *
+ * Shares the `['account']` query key with useAccountQuery, so React
+ * Query dedupes — no extra request.
  */
-export function useIsAccountLoading() {
-  const { isPending } = useQuery({
+export function useAuthStatus(): { isLoading: boolean; account: AccountData | null } {
+  const { isPending, data } = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
   });
-  return isPending;
+  return { isLoading: isPending, account: data ?? null };
 }
 
 export function useLogin(onSuccess?: (data: AccountData) => void) {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: postLogin,
     onSuccess: (data) => {
+      // Keep React Query cache in sync with Redux so guards reading the
+      // cache (via useAuthStatus) see the authenticated state on the
+      // next render — without this, post-login navigation to a guarded
+      // route would bounce back through /login because the cache still
+      // showed `data: null` from the pre-login fetch.
+      queryClient.setQueryData(['account'], data);
       dispatch(setAccount(data));
       onSuccess?.(data);
     },
@@ -86,6 +104,10 @@ export function useLogout(onSuccess?: () => void) {
       disconnectAll();
       dispatch(resetGame());
       dispatch(setAccount(null));
+      // clear() wipes every cache entry including ['account']; that's
+      // what guards observe as `isPending` flipping back true on the
+      // next route — render `null`, then redirect to /login once the
+      // cleared cache settles with `data: null`.
       queryClient.clear();
       onSuccess?.();
     },
