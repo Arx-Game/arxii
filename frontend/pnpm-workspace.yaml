@@ -12,3 +12,30 @@ packages:
 store-dir: /home/vscode/.local/share/pnpm/store
 allowBuilds:
   esbuild: true
+# Security overrides — forces vulnerable transitives onto patched versions.
+# Each entry corresponds to a Dependabot/pnpm-audit alert. Remove an entry once
+# the dependency chain naturally pulls a patched version. Major-version
+# selectors (e.g. `minimatch@9`) are used because compound `>=X <Y` selectors
+# are not supported by pnpm v11 overrides.
+overrides:
+  '@remix-run/router': '1.23.2'
+  'ajv@6': '6.14.0'
+  'brace-expansion@1': '1.1.15'
+  'brace-expansion@2': '2.0.3'
+  'fast-uri@3': '3.1.2'
+  'flatted@3': '3.4.2'
+  'glob@10': '10.5.0'
+  'js-yaml@4': '4.1.1'
+  'lodash@4': '4.18.1'
+  'mdast-util-to-hast@13': '13.2.1'
+  'minimatch@3': '3.1.5'
+  'minimatch@5': '5.1.8'
+  'minimatch@9': '9.0.9'
+  'picomatch@4': '4.0.4'
+  'postcss@8': '8.5.15'
+  'react-router@6': '6.30.2'
+  'ws@8': '8.20.1'
+  'yaml@1': '1.10.3'
+  'yaml@2': '2.8.3'
+minimumReleaseAgeExclude:
+  - brace-expansion@1.1.15
