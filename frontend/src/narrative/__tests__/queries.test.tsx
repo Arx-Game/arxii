@@ -54,6 +54,7 @@ function createWrapper() {
           can_create_characters: false,
           is_staff: false,
           available_characters: [],
+          pending_applications: [],
         },
       },
     },
