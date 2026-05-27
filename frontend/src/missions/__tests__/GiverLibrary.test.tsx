@@ -54,6 +54,7 @@ vi.mock('../queries', async () => {
       isLoading: false,
     }),
     useMissionTemplates: () => ({ data: { count: 0, next: null, previous: null, results: [] } }),
+    usePredicateLeaves: () => ({ data: [], isLoading: false }),
     usePatchMissionGiver: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useDeleteMissionGiver: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCreateMissionGiver: () => ({
@@ -69,7 +70,6 @@ vi.mock('../queries', async () => {
     }),
     usePatchGiverOffering: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useDeleteGiverOffering: () => ({ mutate: vi.fn(), isPending: false }),
-    usePredicateLeaves: () => ({ data: [], isLoading: false }),
   };
 });
 

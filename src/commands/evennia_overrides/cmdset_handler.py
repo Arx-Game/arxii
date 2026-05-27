@@ -25,7 +25,9 @@ class CmdSetHandler(EvenniaCmdSetHandler):
     def _schedule_update(self) -> None:
         """Debounce cmdset updates to only send once."""
         if self._update_handle is None:
-            self._update_handle = reactor.callLater(0, self._send_update)
+            # Twisted 26 stub has a union overload whose first variant lacks
+            # `delay`, causing a false-positive on the int/float first arg.
+            self._update_handle = reactor.callLater(0.0, self._send_update)  # ty: ignore[invalid-argument-type]
 
     def add(self, *args: Any, **kwargs: Any) -> Any:
         """Add a cmdset and schedule a session update."""

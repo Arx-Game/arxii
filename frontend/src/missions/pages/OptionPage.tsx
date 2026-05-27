@@ -11,7 +11,6 @@
  * PredicateBuilder integration lands in E4.
  */
 
-import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -31,10 +30,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
-import { PredicateBuilder, type PredicateNode } from '../components/PredicateBuilder';
+import {
+  coercePredicate,
+  PredicateBuilder,
+  validatePredicate,
+  type PredicateNode,
+} from '../components/PredicateBuilder';
+import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
-import { missionKeys, useMissionRoutes, useMissionTemplate } from '../queries';
+import { useServerDraft } from '../hooks/useServerDraft';
+import { missionKeys, usePredicateLeaves, useMissionRoutes, useMissionTemplate } from '../queries';
 import type { MissionOption } from '../types';
 import { useMutation } from '@tanstack/react-query';
 
@@ -120,18 +126,31 @@ function useOption(id: number) {
 
 function OptionEditor({ option }: { option: MissionOption }) {
   const qc = useQueryClient();
-  const [draft, setDraft] = useState({
-    order: option.order,
-    option_kind: option.option_kind,
-    source_kind: option.source_kind,
-    authored_ic_framing: option.authored_ic_framing ?? '',
-    authored_ic_framing_needs_rewrite: option.authored_ic_framing_needs_rewrite ?? false,
-    authored_base_risk: option.authored_base_risk ?? 0,
-    visibility_rule: (option.visibility_rule ?? {}) as PredicateNode,
-  });
+  const leaves = usePredicateLeaves();
+  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(option, (o) => ({
+    order: o.order,
+    option_kind: o.option_kind,
+    source_kind: o.source_kind,
+    authored_ic_framing: o.authored_ic_framing ?? '',
+    authored_ic_framing_needs_rewrite: o.authored_ic_framing_needs_rewrite ?? false,
+    authored_base_risk: o.authored_base_risk ?? 0,
+    visibility_rule: (o.visibility_rule ?? {}) as PredicateNode,
+  }));
+
+  // Validate the predicate tree before save — blocks empty leaves, missing
+  // required params, and malformed NOT groups so we don't ship a tree that
+  // crashes _eligible_templates at evaluate time.
+  const ruleErrors = validatePredicate(draft.visibility_rule, leaves.data ?? []);
+  const ruleValid = ruleErrors.length === 0;
 
   const mutation = useMutation({
-    mutationFn: () => patchMissionOption(option.id, draft),
+    mutationFn: () =>
+      patchMissionOption(option.id, {
+        ...draft,
+        // Coerce string-typed leaf params to int / bool / float per the
+        // D5 catalog so the backend resolver gets the type it expects.
+        visibility_rule: coercePredicate(draft.visibility_rule, leaves.data ?? []),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: [...missionKeys.options(), 'detail', option.id],
@@ -140,25 +159,15 @@ function OptionEditor({ option }: { option: MissionOption }) {
     },
   });
 
-  const dirty = useMemo(
-    () =>
-      draft.order !== option.order ||
-      draft.option_kind !== option.option_kind ||
-      draft.source_kind !== option.source_kind ||
-      draft.authored_ic_framing !== (option.authored_ic_framing ?? '') ||
-      draft.authored_ic_framing_needs_rewrite !==
-        (option.authored_ic_framing_needs_rewrite ?? false) ||
-      draft.authored_base_risk !== (option.authored_base_risk ?? 0) ||
-      JSON.stringify(draft.visibility_rule) !== JSON.stringify(option.visibility_rule ?? {}),
-    [draft, option]
-  );
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Option settings</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
+        {serverChanged ? (
+          <ServerChangedBanner onPull={pullFromServer} className="md:col-span-2" />
+        ) : null}
         <div>
           <Label htmlFor="opt-order">Order</Label>
           <Input
@@ -244,8 +253,29 @@ function OptionEditor({ option }: { option: MissionOption }) {
             onChange={(next) => setDraft({ ...draft, visibility_rule: next })}
           />
         </div>
+        {!ruleValid && dirty ? (
+          <div
+            className="rounded border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive md:col-span-2"
+            data-testid="visibility-rule-errors"
+          >
+            <div className="font-medium">Visibility rule is not safe to save:</div>
+            <ul className="list-inside list-disc">
+              {ruleErrors.map((err) => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {mutation.error ? (
+          <div className="text-sm text-destructive md:col-span-2" data-testid="option-save-error">
+            {String(mutation.error.message)}
+          </div>
+        ) : null}
         <div className="flex items-center justify-end gap-2 md:col-span-2">
-          <Button onClick={() => mutation.mutate()} disabled={!dirty || mutation.isPending}>
+          <Button
+            onClick={() => mutation.mutate()}
+            disabled={!dirty || !ruleValid || mutation.isPending}
+          >
             {mutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>

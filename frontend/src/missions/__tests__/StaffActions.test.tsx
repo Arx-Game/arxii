@@ -32,12 +32,19 @@ const FAKE_TEMPLATE: MissionTemplate = {
 const patchMutate = vi.fn();
 const copyMutateAsync = vi.fn().mockResolvedValue({ ...FAKE_TEMPLATE, slug: 'bar' });
 const assignMutateAsync = vi.fn().mockResolvedValue({ id: 99 });
+// Spies on the rewrite-queue hooks so the test can assert that the
+// FlavorRewriteCard sent {template, needs_rewrite: true} — without this
+// the test passes even if a regression dropped the filter (adversarial
+// review HIGH).
+const useMissionNodesSpy = vi.fn();
+const useMissionOptionsSpy = vi.fn();
+const useMissionRoutesSpy = vi.fn();
 
 vi.mock('../queries', async () => {
   const actual = await vi.importActual<typeof import('../queries')>('../queries');
   return {
     ...actual,
-    usePatchMissionTemplate: () => ({ mutate: patchMutate, isPending: false }),
+    usePatchMissionTemplate: () => ({ mutate: patchMutate, isPending: false, error: null }),
     useCopyTemplate: () => ({
       mutateAsync: copyMutateAsync,
       isPending: false,
@@ -48,23 +55,32 @@ vi.mock('../queries', async () => {
       isPending: false,
       error: null,
     }),
-    useMissionNodes: () => ({
-      data: {
-        count: 1,
-        next: null,
-        previous: null,
-        results: [{ id: 1, template: 11, key: 'broken-node' }],
-      },
-      isLoading: false,
-    }),
-    useMissionOptions: () => ({
-      data: { count: 0, next: null, previous: null, results: [] },
-      isLoading: false,
-    }),
-    useMissionRoutes: () => ({
-      data: { count: 0, next: null, previous: null, results: [] },
-      isLoading: false,
-    }),
+    useMissionNodes: (filters: object) => {
+      useMissionNodesSpy(filters);
+      return {
+        data: {
+          count: 1,
+          next: null,
+          previous: null,
+          results: [{ id: 1, template: 11, key: 'broken-node' }],
+        },
+        isLoading: false,
+      };
+    },
+    useMissionOptions: (filters: object) => {
+      useMissionOptionsSpy(filters);
+      return {
+        data: { count: 0, next: null, previous: null, results: [] },
+        isLoading: false,
+      };
+    },
+    useMissionRoutes: (filters: object) => {
+      useMissionRoutesSpy(filters);
+      return {
+        data: { count: 0, next: null, previous: null, results: [] },
+        isLoading: false,
+      };
+    },
   };
 });
 
@@ -129,9 +145,25 @@ describe('StaffActionsCard', () => {
 });
 
 describe('FlavorRewriteCard', () => {
+  beforeEach(() => {
+    useMissionNodesSpy.mockClear();
+    useMissionOptionsSpy.mockClear();
+    useMissionRoutesSpy.mockClear();
+  });
+
   it('shows the rewrite count badge with total flagged children', () => {
     render(withProviders(<FlavorRewriteCard template={FAKE_TEMPLATE} />));
     expect(screen.getByTestId('rewrite-count')).toHaveTextContent('1');
     expect(screen.getByText('broken-node')).toBeInTheDocument();
+  });
+
+  it('sends needs_rewrite=true to every nested-resource list endpoint', () => {
+    // Adversarial review HIGH: prior to this test, a regression that
+    // dropped the needs_rewrite filter would surface unrelated rows
+    // as "flagged" and not be caught. Assert on the actual call args.
+    render(withProviders(<FlavorRewriteCard template={FAKE_TEMPLATE} />));
+    expect(useMissionNodesSpy).toHaveBeenCalledWith({ template: 11, needs_rewrite: true });
+    expect(useMissionOptionsSpy).toHaveBeenCalledWith({ template: 11, needs_rewrite: true });
+    expect(useMissionRoutesSpy).toHaveBeenCalledWith({ template: 11, needs_rewrite: true });
   });
 });
