@@ -378,9 +378,17 @@ export async function deleteMissionInstance(id: number): Promise<void> {
 // Predicate-leaf catalog (D5)
 // ---------------------------------------------------------------------------
 
+/** Type tags emitted by the D5 catalog so the FE can coerce <Input> strings. */
+export type PredicateParamType = 'str' | 'int' | 'bool' | 'float';
+
+export interface PredicateLeafParam {
+  name: string;
+  type: PredicateParamType;
+}
+
 export interface PredicateLeaf {
   name: string;
-  params: string[];
+  params: PredicateLeafParam[];
 }
 
 export async function listPredicateLeaves(): Promise<PredicateLeaf[]> {

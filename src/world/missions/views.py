@@ -348,12 +348,45 @@ class MissionGiverStandingViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-def _leaf_params(resolver: LeafResolver) -> list[str]:
-    """Return the leaf's authored param names (everything after ctx)."""
+_TYPE_TAGS: dict[type, str] = {int: "int", bool: "bool", str: "str", float: "float"}
+
+
+def _annotation_tag(annotation: object) -> str:
+    """Map a resolver param annotation to a string tag the FE can switch on.
+
+    Used by the predicate-leaf catalog endpoint so the Studio's builder
+    can coerce ``<Input>`` strings into the right Python type before save
+    — without this, int-typed leaves (e.g. ``min_character_level``) blow
+    up at evaluate time with ``TypeError: '>=' not supported between
+    instances of 'int' and 'str'``.
+
+    Unknown / unannotated params fall back to ``"str"`` (the safe default
+    — most resolvers either accept a slug or ``int(...)``-coerce on read).
+    """
+    return _TYPE_TAGS.get(annotation, "str") if isinstance(annotation, type) else "str"
+
+
+def _leaf_params(resolver: LeafResolver) -> list[dict[str, str]]:
+    """Return the leaf's authored param names + type tags (everything after ctx).
+
+    The resolver module uses ``from __future__ import annotations``, so
+    ``Parameter.annotation`` is a string rather than the type object.
+    Re-resolve via ``typing.get_type_hints`` so the tag mapping works.
+    """
+    import typing  # noqa: PLC0415
+
     sig = inspect.signature(resolver)
-    # First param is always ctx (ResolverContext); skip it.
+    try:
+        hints = typing.get_type_hints(resolver)
+    except (NameError, AttributeError, TypeError):
+        # If a resolver's annotations reference an as-yet-unresolvable
+        # forward reference (NameError) or a non-evaluable annotation
+        # (TypeError / AttributeError on inner typing surfaces), fall
+        # back to the raw (string) annotation — which falls through to
+        # "str" via the isinstance check in _annotation_tag.
+        hints = {}
     return [
-        name
+        {"name": name, "type": _annotation_tag(hints.get(name, param.annotation))}
         for name, param in list(sig.parameters.items())[1:]
         if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
     ]
@@ -362,10 +395,11 @@ def _leaf_params(resolver: LeafResolver) -> list[str]:
 class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     """D5 — the available predicate-leaf catalog for the builder palette.
 
-    Read-only. Returns ``[{"name": str, "params": [str, ...]}]`` for
-    every leaf in ``LEAF_RESOLVERS``. The Mission Studio's predicate-
-    tree builder uses this to render leaf-type dropdowns + param input
-    fields without hard-coding the registry on the frontend.
+    Read-only. Returns ``[{"name": str, "params": [{"name": str, "type":
+    str}, ...]}]`` for every leaf in ``LEAF_RESOLVERS``. The Mission
+    Studio's predicate-tree builder uses this to render leaf-type
+    dropdowns + per-param input widgets typed correctly (int vs str)
+    without hard-coding the registry on the frontend.
     """
 
     permission_classes = [IsAuthenticated, IsAdminUser]

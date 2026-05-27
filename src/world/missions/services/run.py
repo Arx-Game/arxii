@@ -75,6 +75,7 @@ def accept_mission(
     return instance
 
 
+@transaction.atomic
 def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
     """Staff-power: drop a mission on a character without a giver context.
 
@@ -83,6 +84,11 @@ def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> Miss
     Phase-D staff-assign action so operators can hand-place missions for
     testing, narrative reasons, or recovery scenarios — bypasses all
     availability filters (predicate / cooldown / level band / access tier).
+
+    Wrapped in ``@transaction.atomic`` so a failure in ``enter_node``
+    (e.g. invalid entry-node snapshot, ConsequenceRouter blow-up) rolls
+    back the half-created MissionInstance + MissionParticipant instead of
+    leaving an orphaned partial run.
     """
     instance = MissionInstance.objects.create(template=template)
     MissionParticipant.objects.create(

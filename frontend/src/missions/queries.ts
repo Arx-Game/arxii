@@ -35,8 +35,8 @@ import {
   patchMissionNode,
   patchMissionTemplate,
 } from './api';
-import type { PredicateLeaf } from './api';
-export type { PredicateLeaf };
+import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './api';
+export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
   MissionGiver,
   MissionGiverOffering,
@@ -163,7 +163,13 @@ export function useRouteRewards(
 }
 
 export function useMissionGivers(
-  filters: { org?: number; org_name?: string; is_active?: boolean; name?: string } = {}
+  filters: {
+    org?: number;
+    org_name?: string;
+    giver_kind?: string;
+    is_active?: boolean;
+    name?: string;
+  } = {}
 ): UseQueryResult<PaginatedResponse<MissionGiver>> {
   return useQuery({
     queryKey: missionKeys.giverList(filters),

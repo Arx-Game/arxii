@@ -18,7 +18,7 @@
  * plain error row — fancier per-field rendering is a follow-up.
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -36,9 +36,16 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 
-import { PredicateBuilder, type PredicateNode } from '../components/PredicateBuilder';
+import {
+  coercePredicate,
+  PredicateBuilder,
+  validatePredicate,
+  type PredicateNode,
+} from '../components/PredicateBuilder';
+import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
-import { GiverKind, GIVER_KINDS } from '../constants';
+import { type GiverKind, GIVER_KINDS } from '../constants';
+import { useServerDraft } from '../hooks/useServerDraft';
 import {
   useCreateGiverOffering,
   useDeleteGiverOffering,
@@ -48,6 +55,7 @@ import {
   useMissionTemplates,
   usePatchGiverOffering,
   usePatchMissionGiver,
+  usePredicateLeaves,
 } from '../queries';
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
@@ -84,22 +92,13 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
   const navigate = useNavigate();
   const patch = usePatchMissionGiver();
   const del = useDeleteMissionGiver();
-  const [draft, setDraft] = useState({
-    name: giver.name,
-    giver_kind: (giver.giver_kind ?? 'npc') as GiverKind,
-    target: giver.target ?? null,
-    org: giver.org ?? null,
-    is_active: giver.is_active ?? true,
-  });
-  const dirty = useMemo(
-    () =>
-      draft.name !== giver.name ||
-      draft.giver_kind !== (giver.giver_kind ?? 'npc') ||
-      draft.target !== (giver.target ?? null) ||
-      draft.org !== (giver.org ?? null) ||
-      draft.is_active !== (giver.is_active ?? true),
-    [draft, giver]
-  );
+  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(giver, (g) => ({
+    name: g.name,
+    giver_kind: (g.giver_kind ?? 'npc') as GiverKind,
+    target: g.target ?? null,
+    org: g.org ?? null,
+    is_active: g.is_active ?? true,
+  }));
 
   const onSave = () => patch.mutate({ slug: giver.slug, body: draft });
 
@@ -127,6 +126,9 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
+        {serverChanged ? (
+          <ServerChangedBanner onPull={pullFromServer} className="md:col-span-2" />
+        ) : null}
         <div className="md:col-span-2">
           <Label htmlFor="giver-name">Name</Label>
           <Input
@@ -232,7 +234,7 @@ function OfferingsSection({ giverId }: { giverId: number }) {
         ) : (data?.results?.length ?? 0) === 0 ? (
           <div className="text-sm text-muted-foreground">No offerings yet.</div>
         ) : (
-          data!.results.map((o) => <OfferingRow key={o.id} offering={o} />)
+          (data?.results ?? []).map((o) => <OfferingRow key={o.id} offering={o} />)
         )}
       </CardContent>
     </Card>
@@ -242,17 +244,33 @@ function OfferingsSection({ giverId }: { giverId: number }) {
 function OfferingRow({ offering }: { offering: MissionGiverOffering }) {
   const patch = usePatchGiverOffering();
   const del = useDeleteGiverOffering();
-  const [draft, setDraft] = useState({
-    weight_override: offering.weight_override ?? null,
-    requirements_override: (offering.requirements_override ?? {}) as PredicateNode,
-  });
-  const dirty = useMemo(
-    () =>
-      draft.weight_override !== (offering.weight_override ?? null) ||
-      JSON.stringify(draft.requirements_override) !==
-        JSON.stringify(offering.requirements_override ?? {}),
-    [draft, offering]
+  const leaves = usePredicateLeaves();
+  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(
+    offering,
+    (o) => ({
+      weight_override: o.weight_override ?? null,
+      requirements_override: (o.requirements_override ?? {}) as PredicateNode,
+    })
   );
+  const ruleErrors = validatePredicate(draft.requirements_override, leaves.data ?? []);
+  const ruleValid = ruleErrors.length === 0;
+
+  const onDelete = () => {
+    if (!confirm(`Remove offering for template #${offering.template}? This cannot be undone.`)) {
+      return;
+    }
+    del.mutate(offering.id);
+  };
+
+  const onSave = () => {
+    patch.mutate({
+      id: offering.id,
+      body: {
+        ...draft,
+        requirements_override: coercePredicate(draft.requirements_override, leaves.data ?? []),
+      },
+    });
+  };
 
   return (
     <div
@@ -260,14 +278,10 @@ function OfferingRow({ offering }: { offering: MissionGiverOffering }) {
       data-testid="offering-row"
       data-template={offering.template}
     >
+      {serverChanged ? <ServerChangedBanner onPull={pullFromServer} /> : null}
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">Template #{offering.template}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => del.mutate(offering.id)}
-          disabled={del.isPending}
-        >
+        <Button size="sm" variant="ghost" onClick={onDelete} disabled={del.isPending}>
           Remove
         </Button>
       </div>
@@ -297,15 +311,21 @@ function OfferingRow({ offering }: { offering: MissionGiverOffering }) {
           onChange={(next) => setDraft({ ...draft, requirements_override: next })}
         />
       </div>
+      {!ruleValid && dirty ? (
+        <div className="rounded border border-destructive/60 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          <div className="font-medium">Requirements override is not safe to save:</div>
+          <ul className="list-inside list-disc">
+            {ruleErrors.map((err) => (
+              <li key={err}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {patch.error ? (
         <div className="text-sm text-destructive">{String(patch.error.message)}</div>
       ) : null}
       <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => patch.mutate({ id: offering.id, body: draft })}
-          disabled={!dirty || patch.isPending}
-        >
+        <Button size="sm" onClick={onSave} disabled={!dirty || !ruleValid || patch.isPending}>
           {patch.isPending ? 'Saving…' : 'Save'}
         </Button>
       </div>

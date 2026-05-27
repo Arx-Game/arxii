@@ -171,14 +171,18 @@ describe('useMissionOptions (parent-FK guard)', () => {
 });
 
 describe('usePredicateLeaves', () => {
-  it('fetches the leaf catalog', async () => {
+  it('fetches the leaf catalog with typed params', async () => {
+    // D5 now emits {name, type} per param so the FE can coerce strings
+    // to int / bool / float before save.
     vi.mocked(api.listPredicateLeaves).mockResolvedValue([
-      { name: 'has_distinction', params: ['slug'] },
+      { name: 'has_distinction', params: [{ name: 'slug', type: 'str' }] },
     ]);
     const { result } = renderHook(() => usePredicateLeaves(), {
       wrapper: wrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([{ name: 'has_distinction', params: ['slug'] }]);
+    expect(result.current.data).toEqual([
+      { name: 'has_distinction', params: [{ name: 'slug', type: 'str' }] },
+    ]);
   });
 });
