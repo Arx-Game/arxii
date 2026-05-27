@@ -33,6 +33,26 @@ export function useAccountQuery() {
   return result;
 }
 
+/**
+ * Subscribe to the in-flight state of the account query — used by route
+ * guards (StaffRoute, ProtectedRoute, GuestOnlyRoute) to avoid the
+ * "direct URL navigation race": on a hard page load Redux starts with
+ * `account = null`, and a guard reading Redux immediately would fire a
+ * redirect before useAccountQuery's fetch resolves. The guard reads
+ * `isPending` here, defers the redirect decision until the fetch
+ * settles, and only then trusts the Redux account value.
+ *
+ * Shares the `['account']` query key with `useAccountQuery`, so React
+ * Query dedupes — no extra network request, no double dispatch.
+ */
+export function useIsAccountLoading() {
+  const { isPending } = useQuery({
+    queryKey: ['account'],
+    queryFn: fetchAccount,
+  });
+  return isPending;
+}
+
 export function useLogin(onSuccess?: (data: AccountData) => void) {
   const dispatch = useAppDispatch();
   return useMutation({
