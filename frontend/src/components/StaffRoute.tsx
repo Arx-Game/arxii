@@ -1,17 +1,23 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAppSelector } from '@/store/hooks';
+import { useAuthStatus } from '@/evennia_replacements/queries';
 
 interface StaffRouteProps {
   children: ReactNode;
 }
 
 /**
- * Route guard that redirects non-staff users. Checks both authentication
- * and is_staff before rendering children, preventing unnecessary API calls.
+ * Route guard that redirects non-staff users. Reads auth state from
+ * the React Query cache so the loading state and the resolved account
+ * arrive in the same render — see useAuthStatus for the full
+ * race-condition rationale.
  */
 export function StaffRoute({ children }: StaffRouteProps) {
-  const account = useAppSelector((state) => state.auth.account);
+  const { isLoading, account } = useAuthStatus();
+
+  if (isLoading) {
+    return null;
+  }
 
   if (!account) {
     return <Navigate to="/login" replace />;

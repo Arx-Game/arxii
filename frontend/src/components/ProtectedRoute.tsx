@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAppSelector } from '@/store/hooks';
+import { useAuthStatus } from '@/evennia_replacements/queries';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -8,10 +8,14 @@ interface ProtectedRouteProps {
 
 /**
  * Route guard that redirects unauthenticated users to the login page.
- * Used to protect pages that require authentication.
+ * See useAuthStatus for the race-condition rationale.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const account = useAppSelector((state) => state.auth.account);
+  const { isLoading, account } = useAuthStatus();
+
+  if (isLoading) {
+    return null;
+  }
 
   if (!account) {
     return <Navigate to="/login" replace />;
