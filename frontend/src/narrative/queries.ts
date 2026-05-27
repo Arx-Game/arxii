@@ -12,6 +12,7 @@ import {
   muteStory,
   unmuteStory,
 } from './api';
+import { useAppSelector } from '@/store/hooks';
 import type {
   BroadcastGemitBody,
   GemitListParams,
@@ -33,9 +34,16 @@ export const gemitKeys = {
 };
 
 export function useMyMessages(filters?: MyMessagesQueryParams) {
+  // The badge that consumes this hook is rendered unconditionally in the
+  // global Header, so without an auth guard the query fires on the login
+  // page itself, gets 403, and `throwOnError: true` blows the page up via
+  // the error boundary. Guard on the cached account so unauthenticated
+  // page loads stay quiet.
+  const account = useAppSelector((s) => s.auth.account);
   return useQuery({
     queryKey: narrativeKeys.myMessages(filters),
     queryFn: () => getMyMessages(filters),
+    enabled: !!account,
     throwOnError: true,
   });
 }

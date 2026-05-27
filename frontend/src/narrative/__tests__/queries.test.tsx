@@ -6,6 +6,8 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { configureStore } from '@reduxjs/toolkit';
+import { Provider } from 'react-redux';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import {
@@ -14,6 +16,7 @@ import {
   useUnreadNarrativeCount,
   narrativeKeys,
 } from '../queries';
+import { authSlice } from '@/store/authSlice';
 
 // Mock the API module
 vi.mock('../api', () => ({
@@ -32,9 +35,36 @@ function createWrapper() {
       },
     },
   });
+  // `useMyMessages` reads `s.auth.account` to gate on the user being
+  // logged in (the badge that consumes it renders unconditionally in the
+  // header, so without this guard it 403s on the login page and trips
+  // the error boundary). Tests must provide a populated store or the
+  // hook stays disabled and never fetches.
+  const store = configureStore({
+    reducer: { auth: authSlice.reducer },
+    preloadedState: {
+      auth: {
+        account: {
+          id: 1,
+          username: 'test',
+          display_name: 'test',
+          last_login: null,
+          email: 'test@example.com',
+          email_verified: true,
+          can_create_characters: false,
+          is_staff: false,
+          available_characters: [],
+        },
+      },
+    },
+  });
 
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </Provider>
+    );
   };
 }
 

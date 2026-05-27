@@ -14,6 +14,7 @@ import type {
   RitualSessionAcceptRequest,
   RitualSessionDraftRequest,
 } from './api';
+import { useAppSelector } from '@/store/hooks';
 import type { PerformRitualRequest, Ritual } from './types';
 
 // ---------------------------------------------------------------------------
@@ -92,9 +93,15 @@ export function usePatchRitual() {
  * Matches the polling cadence used in magic/queries.ts for active-state checks.
  */
 export function useRitualSessionInbox() {
+  // Inbox is consumed by a header badge rendered on every page, so without
+  // an auth guard it polls /api/magic/rituals/sessions/ unconditionally,
+  // gets 403 on the login page, and `throwOnError` blows the page up via
+  // the error boundary. Skip the poll until the account is loaded.
+  const account = useAppSelector((s) => s.auth.account);
   return useQuery({
     queryKey: ritualSessionKeys.inbox(),
     queryFn: () => api.fetchRitualSessionInbox(),
+    enabled: !!account,
     staleTime: 5_000,
     refetchInterval: 5_000,
     throwOnError: true,
@@ -105,9 +112,12 @@ export function useRitualSessionInbox() {
  * Polls every 5 s — outbox lets the initiator watch participant responses in real time.
  */
 export function useRitualSessionOutbox() {
+  // Same auth guard as the inbox above — see comment there.
+  const account = useAppSelector((s) => s.auth.account);
   return useQuery({
     queryKey: ritualSessionKeys.outbox(),
     queryFn: () => api.fetchRitualSessionOutbox(),
+    enabled: !!account,
     staleTime: 5_000,
     refetchInterval: 5_000,
     throwOnError: true,
