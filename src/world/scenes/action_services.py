@@ -91,6 +91,7 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
     ritual_id: int | None = None,
+    strain_commitment: int = 0,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -114,6 +115,10 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
         ritual_id: Optional Ritual PK (execution_kind=SCENE_ACTION). When provided,
             snapshot fields (stat, skill, specialization, resonance, check_type,
             target_difficulty) are populated from the ritual's sidecar config.
+        strain_commitment: Optional non-negative scalar of self-strain the
+            initiator commits to this action. Persisted via the
+            CommittingDeclaration mixin and consumed downstream when the
+            interaction is recorded.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -140,6 +145,7 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
         difficulty_choice=difficulty_choice,
         status=ActionRequestStatus.PENDING,
         technique=technique,
+        strain_commitment=strain_commitment,
         **snapshot_kwargs,
     )
 
