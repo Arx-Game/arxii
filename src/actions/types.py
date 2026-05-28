@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
     from world.mechanics.types import ChallengeResolutionResult
+    from world.scenes.action_availability import AvailableEnhancement
     from world.traits.models import CheckOutcome
 
 
@@ -209,6 +210,15 @@ class PlayerAction:
     difficulty: DifficultyIndicator | None = None
     prerequisite_met: bool = True
     prerequisite_reasons: list[str] = field(default_factory=list)
+
+    # Targeting / enhancement / strain descriptors for the frontend.
+    # ``target_spec=None`` means a self-action; otherwise it describes the
+    # entity-type axis plus cardinality and filters. ``enhancements`` reuses
+    # the existing ``AvailableEnhancement`` shape from scenes/action_availability.
+    # ``strain`` carries the per-character cap snapshot when applicable.
+    target_spec: TargetSpec | None = None
+    enhancements: tuple[AvailableEnhancement, ...] = ()
+    strain: StrainAvailability | None = None
 
 
 class ActionInterrupted(Exception):
