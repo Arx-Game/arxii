@@ -9,6 +9,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  MissionCategory,
   MissionGiver,
   MissionGiverOffering,
   MissionGiverStanding,
@@ -25,6 +26,16 @@ import type {
 } from './types';
 
 const BASE_URL = '/api/missions';
+
+export class ApiValidationError extends Error {
+  readonly fieldErrors: Record<string, string[]>;
+  constructor(detail: unknown) {
+    super('Validation error');
+    this.name = 'ApiValidationError';
+    this.fieldErrors =
+      typeof detail === 'object' && detail !== null ? (detail as Record<string, string[]>) : {};
+  }
+}
 
 function buildQueryString(params: object): string {
   const search = new URLSearchParams();
@@ -48,17 +59,17 @@ export async function listMissionTemplates(
   return res.json();
 }
 
-export async function getMissionTemplate(slug: string): Promise<MissionTemplateDetail> {
-  const res = await apiFetch(`${BASE_URL}/templates/${slug}/`);
-  if (!res.ok) throw new Error(`Failed to load template ${slug}`);
+export async function getMissionTemplate(id: number): Promise<MissionTemplateDetail> {
+  const res = await apiFetch(`${BASE_URL}/templates/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load template ${id}`);
   return res.json();
 }
 
 export async function patchMissionTemplate(
-  slug: string,
+  id: number,
   body: Partial<MissionTemplate>
 ): Promise<MissionTemplate> {
-  const res = await apiFetch(`${BASE_URL}/templates/${slug}/`, {
+  const res = await apiFetch(`${BASE_URL}/templates/${id}/`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -71,6 +82,35 @@ export async function patchMissionTemplate(
         : 'Failed to update template'
     );
   }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// MissionTemplate create
+// ---------------------------------------------------------------------------
+
+export async function createMissionTemplate(
+  body: Partial<MissionTemplate>
+): Promise<MissionTemplate> {
+  const res = await apiFetch(`${BASE_URL}/templates/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new ApiValidationError(detail);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// MissionCategory read-only browse
+// ---------------------------------------------------------------------------
+
+export async function listMissionCategories(): Promise<PaginatedResponse<MissionCategory>> {
+  const res = await apiFetch(`${BASE_URL}/categories/`);
+  if (!res.ok) throw new Error('Failed to load categories');
   return res.json();
 }
 
@@ -198,9 +238,9 @@ export async function listMissionGivers(
   return res.json();
 }
 
-export async function getMissionGiver(slug: string): Promise<MissionGiver> {
-  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`);
-  if (!res.ok) throw new Error(`Failed to load giver ${slug}`);
+export async function getMissionGiver(id: number): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load giver ${id}`);
   return res.json();
 }
 
@@ -244,10 +284,10 @@ export async function createMissionGiver(body: Partial<MissionGiver>): Promise<M
 }
 
 export async function patchMissionGiver(
-  slug: string,
+  id: number,
   body: Partial<MissionGiver>
 ): Promise<MissionGiver> {
-  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, {
+  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -263,8 +303,8 @@ export async function patchMissionGiver(
   return res.json();
 }
 
-export async function deleteMissionGiver(slug: string): Promise<void> {
-  const res = await apiFetch(`${BASE_URL}/givers/${slug}/`, { method: 'DELETE' });
+export async function deleteMissionGiver(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete giver');
 }
 
@@ -317,10 +357,10 @@ export async function deleteGiverOffering(id: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function copyTemplate(
-  slug: string,
-  body: { new_slug: string; new_name: string }
+  id: number,
+  body: { new_name?: string }
 ): Promise<MissionTemplate> {
-  const res = await apiFetch(`${BASE_URL}/templates/${slug}/copy/`, {
+  const res = await apiFetch(`${BASE_URL}/templates/${id}/copy/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -357,10 +397,10 @@ export async function copySubtree(
 // ---------------------------------------------------------------------------
 
 export async function assignMission(
-  slug: string,
+  id: number,
   body: { character: number }
 ): Promise<MissionInstance> {
-  const res = await apiFetch(`${BASE_URL}/templates/${slug}/assign/`, {
+  const res = await apiFetch(`${BASE_URL}/templates/${id}/assign/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
