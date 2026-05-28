@@ -345,6 +345,7 @@ class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MissionCategory.objects.all().order_by("display_order", "name")
     serializer_class = MissionCategorySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = []
     pagination_class = MissionStudioPagination
 
 

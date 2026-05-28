@@ -988,7 +988,7 @@ class MissionGiver(SharedMemoryModel):
     ``is_publishable`` today (Phase D's offering surface will).
     """
 
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     giver_kind = models.CharField(
         max_length=20,
         choices=GiverKind.choices,
