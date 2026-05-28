@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
 from world.missions.models import (
+    MissionCategory,
     MissionGiver,
     MissionGiverOffering,
     MissionGiverStanding,
@@ -36,12 +37,6 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     list of unready givers' slugs so the Studio can show "needs-work."
     """
 
-    categories = serializers.SlugRelatedField(
-        many=True,
-        slug_field="name",
-        read_only=True,
-    )
-
     # Module-level constants — bare strings as field/error keys would
     # trip STRING_LITERAL pre-commit.
     _OPEN_TIER_VALUE = "open"
@@ -52,7 +47,6 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "summary",
             "epilogue",
             "level_band_min",
@@ -94,6 +88,14 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             )
             raise serializers.ValidationError(msg)
         return value
+
+    def create(self, validated_data: dict) -> MissionTemplate:  # type: ignore[override]
+        from world.missions.services.naming import next_available_name  # noqa: PLC0415
+
+        validated_data["name"] = next_available_name(
+            validated_data["name"], MissionTemplate.objects.all()
+        )
+        return super().create(validated_data)  # type: ignore[return-value]
 
 
 class _ActiveInstanceSerializer(serializers.Serializer):
@@ -345,7 +347,6 @@ class MissionGiverSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "giver_kind",
             "target",
             "org",
@@ -374,6 +375,14 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             except Exception as exc:
                 raise serializers.ValidationError({self._TARGET_FIELD: str(exc)}) from exc
         return attrs
+
+    def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]
+        from world.missions.services.naming import next_available_name  # noqa: PLC0415
+
+        validated_data["name"] = next_available_name(
+            validated_data["name"], MissionGiver.objects.all()
+        )
+        return super().create(validated_data)  # type: ignore[return-value]
 
 
 class MissionGiverOfferingSerializer(serializers.ModelSerializer):
@@ -442,4 +451,17 @@ class MissionGiverStandingSerializer(serializers.ModelSerializer):
     class Meta:
         model = MissionGiverStanding
         fields = ["id", "giver", "character", "available_at", "affection"]
+        read_only_fields = ["id"]
+
+
+class MissionCategorySerializer(serializers.ModelSerializer):
+    """List + detail serializer for MissionCategory browse.
+
+    Read-only resource exposed via MissionCategoryViewSet; categories
+    are seeded via fixture/admin, not authored through the API.
+    """
+
+    class Meta:
+        model = MissionCategory
+        fields = ["id", "name", "description", "display_order"]
         read_only_fields = ["id"]
