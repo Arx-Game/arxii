@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { fetchAvailableActions, fetchSceneActions, createActionRequest } from '../actionQueries';
-import type { PlayerAction, AvailableEnhancement, AvailableSceneAction } from '../actionTypes';
+import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import type { PlayerAction, AvailableEnhancement } from '../actionTypes';
 import { SoulfrayWarning } from './SoulfrayWarning';
 
 interface Props {
@@ -41,11 +41,9 @@ export function ActionPanel({ sceneId }: Props) {
     enabled: open && characterId !== null,
   });
 
-  const { data: sceneActions } = useQuery({
-    queryKey: ['scene-actions', sceneId],
-    queryFn: () => fetchSceneActions(sceneId),
-    enabled: open,
-  });
+  // NOTE: fetchSceneActions/AvailableSceneAction were removed in the unified
+  // action endpoint refactor. Enhancements + target_spec + strain now arrive
+  // inline on each PlayerAction; Task 27 wires those into the UI.
 
   const performAction = useMutation({
     mutationFn: (params: {
@@ -133,16 +131,17 @@ export function ActionPanel({ sceneId }: Props) {
             {data && data.results.length > 0 && (
               <div className="space-y-1.5">
                 {data.results.map((action) => {
-                  // Social-action panel: look up enhancement data from the scene-actions
-                  // endpoint (fetchSceneActions), which carries the richer enhancement
-                  // payload (anima costs, Soulfray warnings).  The action_template name
-                  // is used as the join key since the scene-actions endpoint uses the
-                  // template name lowercased as the action_key.
+                  // Social-action panel: enhancements now arrive inline on each
+                  // PlayerAction from the unified availability endpoint.  Task 27
+                  // is where the inline shape (target_spec, strain, enhancements)
+                  // is fully wired into the UI; this Task-23 placeholder retains
+                  // the previous behavior so the panel still renders.
                   const actionKey =
                     action.action_template?.name.toLowerCase() ?? action.display_name.toLowerCase();
-                  const sceneAction: AvailableSceneAction | undefined = sceneActions?.find(
-                    (sa) => sa.action_key === actionKey
-                  );
+                  const sceneAction: { enhancements: AvailableEnhancement[] } | undefined =
+                    action.enhancements.length > 0
+                      ? { enhancements: action.enhancements }
+                      : undefined;
                   const hasEnhancements =
                     sceneAction !== undefined && sceneAction.enhancements.length > 0;
                   const isExpanded = expandedAction === actionKey;
@@ -200,7 +199,7 @@ export function ActionPanel({ sceneId }: Props) {
                                 disabled={performAction.isPending}
                                 className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 disabled:opacity-50"
                               >
-                                <span className="font-medium">{enh.variant_name}</span>
+                                <span className="font-medium">{enh.technique_name}</span>
                                 <span className="ml-2 flex items-center gap-1 text-muted-foreground">
                                   {enh.soulfray_warning && (
                                     <AlertTriangle className="h-3 w-3 text-amber-400" />

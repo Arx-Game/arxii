@@ -1,7 +1,6 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   PlayerActionsResponse,
-  AvailableSceneAction,
   ActionRequest,
   ActionRequestResponse,
   Place,
@@ -13,17 +12,15 @@ import type {
  * Calls GET /api/actions/characters/<characterId>/available/ — the unified
  * challenge + combat + registry availability endpoint introduced in the
  * unified-action-interface initiative.  Returns a paginated PlayerAction list.
+ *
+ * Each PlayerAction carries inline `target_spec`, `enhancements`, and `strain`
+ * fields — the old `/api/action-requests/available/` endpoint and its
+ * `fetchSceneActions` helper have been removed in favor of this unified shape.
  */
 export async function fetchAvailableActions(characterId: number): Promise<PlayerActionsResponse> {
   const res = await apiFetch(`/api/actions/characters/${characterId}/available/`);
   if (!res.ok) throw new Error('Failed to load available actions');
   return res.json() as Promise<PlayerActionsResponse>;
-}
-
-export async function fetchSceneActions(_sceneId: string): Promise<AvailableSceneAction[]> {
-  const res = await apiFetch('/api/action-requests/available/');
-  if (!res.ok) throw new Error('Failed to load available actions');
-  return res.json() as Promise<AvailableSceneAction[]>;
 }
 
 export async function createActionRequest(
@@ -33,10 +30,12 @@ export async function createActionRequest(
     target_persona_id?: number;
     technique_id?: number;
     initiator_persona?: number;
+    strain_commitment?: number;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
-  //   scene (int), target_persona (int), action_key (str), technique_id? (int)
+  //   scene (int), target_persona (int), action_key (str), technique_id? (int),
+  //   strain_commitment? (int, validated against anima at resolution time).
   const requestBody: Record<string, unknown> = {
     scene: Number(sceneId),
     action_key: body.action_key,
@@ -49,6 +48,9 @@ export async function createActionRequest(
   }
   if (body.initiator_persona !== undefined) {
     requestBody.initiator_persona = body.initiator_persona;
+  }
+  if (body.strain_commitment !== undefined) {
+    requestBody.strain_commitment = body.strain_commitment;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
