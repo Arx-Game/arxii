@@ -165,6 +165,11 @@ class MissionTemplate(SharedMemoryModel):
     )
 
     def clean(self) -> None:
+        # When adding a new cross-field invariant here, also extend
+        # MissionTemplateSerializer.validate() (in serializers.py) so the
+        # invariant surfaces as a 400 instead of a 500 at save() time.
+        # The proxy currently mirrors: level_band_min, level_band_max,
+        # percent_replace.
         super().clean()
         errors: dict[str, str] = {}
         if self.level_band_min > self.level_band_max:
