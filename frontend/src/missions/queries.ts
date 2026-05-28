@@ -107,7 +107,6 @@ export function useMissionTemplate(id: number | undefined): UseQueryResult<Missi
 export function useMissionNodes(
   filters: {
     template?: number;
-    template_slug?: string;
     is_entry?: boolean;
     needs_rewrite?: boolean;
   } = {}

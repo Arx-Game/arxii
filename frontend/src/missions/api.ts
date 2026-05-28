@@ -121,7 +121,6 @@ export async function listMissionCategories(): Promise<PaginatedResponse<Mission
 export async function listMissionNodes(
   filters: {
     template?: number;
-    template_slug?: string;
     is_entry?: boolean;
     needs_rewrite?: boolean;
     page?: number;
