@@ -1,14 +1,17 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Swords, Zap, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import { fetchScene, sceneKeys } from '../queries';
 import type { PlayerAction, AvailableEnhancement } from '../actionTypes';
+import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
+import { StrainSlider } from './StrainSlider';
+import { TargetPicker, type TargetCandidate } from './TargetPicker';
 
 interface Props {
   sceneId: string;
@@ -17,17 +20,24 @@ interface Props {
 interface PendingWarning {
   enhancement: AvailableEnhancement;
   actionKey: string;
+  techniqueId: number;
 }
 
+/**
+ * Bottom-right floating action panel.  Reads the unified availability endpoint
+ * and renders each PlayerAction with optional enhancement list, strain slider,
+ * and target picker — all sourced from inline fields on the action.
+ */
 export function ActionPanel({ sceneId }: Props) {
   const [open, setOpen] = useState(false);
-  const [selectingTarget, setSelectingTarget] = useState<PlayerAction | null>(null);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
   const [pendingWarning, setPendingWarning] = useState<PendingWarning | null>(null);
+  const [targetingAction, setTargetingAction] = useState<PlayerAction | null>(null);
+  // Per-action strain commitment — keyed by the action's stable display key.
+  const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
   const queryClient = useQueryClient();
 
   // Resolve the active character name to its numeric ObjectDB pk.
-  // Follows the same pattern as FocusPanel and ThreadHubPage.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const characterId = useMemo(
@@ -41,41 +51,82 @@ export function ActionPanel({ sceneId }: Props) {
     enabled: open && characterId !== null,
   });
 
-  // NOTE: fetchSceneActions/AvailableSceneAction were removed in the unified
-  // action endpoint refactor. Enhancements + target_spec + strain now arrive
-  // inline on each PlayerAction; Task 27 wires those into the UI.
+  // Scene participants — used as candidates when a targeted action is selected.
+  const { data: scene } = useQuery<SceneDetail>({
+    queryKey: sceneKeys.detail(sceneId),
+    queryFn: () => fetchScene(sceneId),
+    enabled: open,
+  });
 
   const performAction = useMutation({
     mutationFn: (params: {
       action_key: string;
       target_persona_id?: number;
       technique_id?: number;
+      strain_commitment?: number;
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       setOpen(false);
-      setSelectingTarget(null);
+      setTargetingAction(null);
+      setStrainByAction({});
     },
   });
 
-  function handleSelfAction(action: PlayerAction) {
-    const techniqueId = action.ref.technique_id ?? undefined;
+  // ------------------------------------------------------------------------
+  // Stable key helpers
+  // ------------------------------------------------------------------------
+
+  function actionKeyFor(action: PlayerAction): string {
+    return action.action_template?.name.toLowerCase() ?? action.display_name.toLowerCase();
+  }
+
+  function stableId(action: PlayerAction): string {
+    return [
+      action.ref.backend,
+      action.ref.challenge_instance_id ?? '',
+      action.ref.approach_id ?? '',
+      action.ref.registry_key ?? '',
+    ].join('-');
+  }
+
+  // ------------------------------------------------------------------------
+  // Action invocation flow
+  // ------------------------------------------------------------------------
+
+  function commitAction(
+    action: PlayerAction,
+    extras: { target_persona_id?: number; technique_id?: number } = {}
+  ) {
+    const key = stableId(action);
+    const strain = strainByAction[key];
     performAction.mutate({
       action_key: action.ref.registry_key ?? action.display_name,
-      technique_id: techniqueId,
+      technique_id: extras.technique_id ?? action.ref.technique_id ?? undefined,
+      target_persona_id: extras.target_persona_id,
+      strain_commitment: strain && strain > 0 ? strain : undefined,
     });
   }
 
-  function handleTargetedAction(action: PlayerAction) {
-    setSelectingTarget(action);
+  function handleActionClick(action: PlayerAction) {
+    // Targeted actions: open the picker.  Non-targeted: commit immediately.
+    if (action.target_spec !== null) {
+      setTargetingAction(action);
+    } else {
+      commitAction(action);
+    }
   }
 
-  function handleEnhancementClick(actionKey: string, enhancement: AvailableEnhancement) {
+  function handleEnhancementClick(action: PlayerAction, enhancement: AvailableEnhancement) {
     if (enhancement.soulfray_warning) {
-      setPendingWarning({ enhancement, actionKey });
+      setPendingWarning({
+        enhancement,
+        actionKey: action.ref.registry_key ?? actionKeyFor(action),
+        techniqueId: enhancement.technique_id,
+      });
     } else {
-      performAction.mutate({ action_key: actionKey, technique_id: enhancement.technique_id });
+      commitAction(action, { technique_id: enhancement.technique_id });
     }
   }
 
@@ -83,7 +134,7 @@ export function ActionPanel({ sceneId }: Props) {
     if (!pendingWarning) return;
     performAction.mutate({
       action_key: pendingWarning.actionKey,
-      technique_id: pendingWarning.enhancement.technique_id,
+      technique_id: pendingWarning.techniqueId,
     });
     setPendingWarning(null);
   }
@@ -96,23 +147,35 @@ export function ActionPanel({ sceneId }: Props) {
     setExpandedAction((prev) => (prev === actionKey ? null : actionKey));
   }
 
-  if (selectingTarget) {
-    return (
-      <div className="fixed bottom-6 right-6 z-50">
-        <div className="rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg">
-          <p className="mb-2 text-sm font-medium">
-            Select a target for: {selectingTarget.display_name}
-          </p>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Right-click a character name in the scene to target them.
-          </p>
-          <Button size="sm" variant="outline" onClick={() => setSelectingTarget(null)}>
-            Cancel
-          </Button>
-        </div>
-      </div>
-    );
+  function handleStrainChange(action: PlayerAction, value: number) {
+    setStrainByAction((prev) => ({ ...prev, [stableId(action)]: value }));
   }
+
+  function handleTargetConfirm(ids: number[]) {
+    if (!targetingAction || ids.length === 0) return;
+    // The non-clash backend currently accepts a single target_persona; with
+    // multi-cardinality specs we send the first id.  When the backend grows
+    // multi-target support this path will fan out to a separate endpoint.
+    commitAction(targetingAction, { target_persona_id: ids[0] });
+    setTargetingAction(null);
+  }
+
+  function handleTargetCancel() {
+    setTargetingAction(null);
+  }
+
+  // ------------------------------------------------------------------------
+  // Target candidates from scene participants
+  // ------------------------------------------------------------------------
+
+  const candidates: TargetCandidate[] = useMemo(() => {
+    const participants: SceneParticipant[] = scene?.participants ?? [];
+    return participants.map((p) => ({ id: p.id, name: p.name }));
+  }, [scene]);
+
+  // ------------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------------
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
@@ -122,7 +185,7 @@ export function ActionPanel({ sceneId }: Props) {
             <Swords className="h-5 w-5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent side="top" align="end" className="w-72">
+        <PopoverContent side="top" align="end" className="w-80">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Actions</h3>
 
@@ -131,33 +194,19 @@ export function ActionPanel({ sceneId }: Props) {
             {data && data.results.length > 0 && (
               <div className="space-y-1.5">
                 {data.results.map((action) => {
-                  // Social-action panel: enhancements now arrive inline on each
-                  // PlayerAction from the unified availability endpoint.  Task 27
-                  // is where the inline shape (target_spec, strain, enhancements)
-                  // is fully wired into the UI; this Task-23 placeholder retains
-                  // the previous behavior so the panel still renders.
-                  const actionKey =
-                    action.action_template?.name.toLowerCase() ?? action.display_name.toLowerCase();
-                  const sceneAction: { enhancements: AvailableEnhancement[] } | undefined =
-                    action.enhancements.length > 0
-                      ? { enhancements: action.enhancements }
-                      : undefined;
-                  const hasEnhancements =
-                    sceneAction !== undefined && sceneAction.enhancements.length > 0;
+                  const actionKey = actionKeyFor(action);
+                  const hasEnhancements = action.enhancements.length > 0;
                   const isExpanded = expandedAction === actionKey;
+                  const hasStrain = action.strain !== null && action.strain.cap > 0;
+                  const stable = stableId(action);
+                  const strainValue = strainByAction[stable] ?? 0;
                   return (
-                    <div
-                      key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
-                    >
+                    <div key={stable}>
                       <div className="flex items-center gap-1">
                         <Button
                           size="sm"
                           variant={action.prerequisite_met ? 'outline' : 'ghost'}
-                          onClick={() =>
-                            action.prerequisite_met
-                              ? handleSelfAction(action)
-                              : handleTargetedAction(action)
-                          }
+                          onClick={() => handleActionClick(action)}
                           disabled={performAction.isPending || !action.prerequisite_met}
                           className="flex-1"
                           title={action.prerequisite_reasons.join('; ') || undefined}
@@ -187,15 +236,15 @@ export function ActionPanel({ sceneId }: Props) {
                           </Button>
                         )}
                       </div>
-                      {isExpanded && sceneAction && (
+                      {isExpanded && hasEnhancements && (
                         <div className="ml-2 mt-1 space-y-1 border-l border-muted pl-2">
-                          {sceneAction.enhancements.map((enh) => {
+                          {action.enhancements.map((enh) => {
                             const costLabel =
                               enh.effective_cost === 0 ? 'Free' : `${enh.effective_cost} anima`;
                             return (
                               <button
                                 key={enh.technique_id}
-                                onClick={() => handleEnhancementClick(actionKey, enh)}
+                                onClick={() => handleEnhancementClick(action, enh)}
                                 disabled={performAction.isPending}
                                 className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 disabled:opacity-50"
                               >
@@ -209,6 +258,16 @@ export function ActionPanel({ sceneId }: Props) {
                               </button>
                             );
                           })}
+                        </div>
+                      )}
+                      {hasStrain && action.strain && (
+                        <div className="ml-2 mt-2 border-l border-muted pl-2">
+                          <StrainSlider
+                            value={strainValue}
+                            cap={action.strain.cap}
+                            baseEffectiveCost={0}
+                            onChange={(v) => handleStrainChange(action, v)}
+                          />
                         </div>
                       )}
                     </div>
@@ -233,6 +292,15 @@ export function ActionPanel({ sceneId }: Props) {
           </div>
         </PopoverContent>
       </Popover>
+
+      {targetingAction && targetingAction.target_spec && (
+        <TargetPicker
+          spec={targetingAction.target_spec}
+          candidates={candidates}
+          onConfirm={handleTargetConfirm}
+          onCancel={handleTargetCancel}
+        />
+      )}
     </div>
   );
 }
