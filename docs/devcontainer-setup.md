@@ -237,6 +237,27 @@ ngrok is intentionally not in the allowlist. The container is not designed for
 integration tests that need an inbound tunnel. If you need that, add the relevant
 ngrok API and tunnel hosts to `init-firewall.sh` and rebuild.
 
+## Git author identity
+
+`post-create.sh` wires your name + email into the container's `~/.gitconfig`
+so commits made inside the devcontainer attribute to you. The values are
+read from `.devcontainer/dev.env` (gitignored, per-contributor):
+
+```
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=you@example.com
+```
+
+`sync-env.sh` includes empty placeholders for these when it generates
+`dev.env` for the first time. Fill them in before running `just dc-up`,
+or `post-create.sh` will skip the git identity step and print a hint
+telling you to set them yourself.
+
+If you change them later, edit `dev.env` and rebuild the container
+(`just dc-down && just dc-up`) so `post-create.sh` re-runs and picks up
+the new values, or run `git config --global user.name/email ...` directly
+inside the container for an immediate one-off override.
+
 ## GitHub access for the issue→PR workflow
 
 The container ships with `gh` installed and reads `GH_TOKEN` from `dev.env`
