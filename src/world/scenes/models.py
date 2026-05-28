@@ -418,6 +418,13 @@ class Interaction(SharedMemoryModel):
         default=0,
         help_text="Number of weekly votes (nominations for Memorable Poses)",
     )
+    strain_committed = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Canonical post-resolution audit of strain the player actually "
+            "committed for this action. Populated for both clash and non-clash."
+        ),
+    )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

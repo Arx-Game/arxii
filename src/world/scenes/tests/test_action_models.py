@@ -12,6 +12,7 @@ from world.scenes.factories import (
     SceneActionRequestFactory,
     SceneFactory,
 )
+from world.scenes.models import Interaction
 
 
 class TestSceneActionRequest(TestCase):
@@ -137,4 +138,10 @@ class TestSceneActionRequest(TestCase):
 class SceneActionRequestStrainFieldTests(TestCase):
     def test_strain_commitment_field_exists(self) -> None:
         field = SceneActionRequest._meta.get_field("strain_commitment")
+        self.assertEqual(field.default, 0)
+
+
+class InteractionStrainCommittedTests(TestCase):
+    def test_strain_committed_field_exists(self) -> None:
+        field = Interaction._meta.get_field("strain_committed")
         self.assertEqual(field.default, 0)
