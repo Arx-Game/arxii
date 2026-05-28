@@ -108,6 +108,17 @@ class CopyTemplateActionTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("new_name", res.json())
 
+    def test_copy_carries_source_categories(self) -> None:
+        from world.missions.factories import MissionCategoryFactory
+
+        cat_a = MissionCategoryFactory(name="copy-cat-a")
+        cat_b = MissionCategoryFactory(name="copy-cat-b")
+        self.source.categories.add(cat_a, cat_b)
+
+        res = self.client.post(f"/api/missions/templates/{self.source.pk}/copy/", {}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(sorted(res.json()["categories"]), sorted([cat_a.pk, cat_b.pk]))
+
     def test_copy_auto_suffixes_when_source_already_copied(self) -> None:
         src = MissionTemplateFactory(name="Original")
         url = f"/api/missions/templates/{src.pk}/copy/"
