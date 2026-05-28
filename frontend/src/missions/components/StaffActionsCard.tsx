@@ -135,14 +135,18 @@ function CopyRow({ template }: { template: MissionTemplate }) {
     );
   }
   const onSubmit = async () => {
-    const created = await copy.mutateAsync({
-      id: template.id,
-      new_name: newName || undefined,
-    });
-    setOpen(false);
-    setNewName('');
-    // Land on the new template's panel.
-    navigate(`/staff/missions?id=${created.id}`);
+    try {
+      const created = await copy.mutateAsync({
+        id: template.id,
+        new_name: newName || undefined,
+      });
+      setOpen(false);
+      setNewName('');
+      // Land on the new template's panel.
+      navigate(`/staff/missions?id=${created.id}`);
+    } catch {
+      // The mutation's `error` state is surfaced in the UI; no further action needed.
+    }
   };
   return (
     <div className="space-y-2 rounded border p-2">

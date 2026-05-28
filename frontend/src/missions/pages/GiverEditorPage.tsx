@@ -1,7 +1,7 @@
 /**
  * GiverEditorPage — edit one MissionGiver + manage its offerings.
  *
- * Routes: /staff/missions/givers/:slug. The page wires three D3
+ * Routes: /staff/missions/givers/:id. The page wires three D3
  * surfaces:
  *
  * - MissionGiverViewSet (PATCH/DELETE on the giver row itself)
@@ -104,7 +104,7 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
   const onSave = () => patch.mutate({ id: giver.id, body: draft });
 
   const onDelete = async () => {
-    if (!confirm(`Delete giver "${giver.name}" (slug=${giver.slug})? This cannot be undone.`)) {
+    if (!confirm(`Delete giver "${giver.name}"? This cannot be undone.`)) {
       return;
     }
     await del.mutateAsync(giver.id);
@@ -117,7 +117,6 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
         <CardTitle className="flex items-center justify-between gap-2">
           <span>Giver: {giver.name}</span>
           <span className="flex items-center gap-2 text-sm font-normal">
-            <Badge variant="outline">slug: {giver.slug}</Badge>
             {giver.is_publishable ? (
               <Badge variant="secondary">publishable</Badge>
             ) : (

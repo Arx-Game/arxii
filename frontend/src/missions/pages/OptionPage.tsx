@@ -1,7 +1,7 @@
 /**
  * OptionPage — edit one MissionOption, list its routes.
  *
- * Routes: /staff/missions/:slug/nodes/:nodeId/options/:optionId. PATCH
+ * Routes: /staff/missions/:id/nodes/:nodeId/options/:optionId. PATCH
  * on save via D2's MissionOptionViewSet. Routes listed by tier with a
  * tag for is_random_set (= "random pool"); per-route candidate / reward
  * editing is a future enhancement (D2's nested CRUD endpoints exist;
@@ -79,7 +79,10 @@ export function OptionPage() {
           },
           {
             label: 'Node',
-            to: `/staff/missions/${templateId}/nodes/${numericNodeId}`,
+            to:
+              templateId !== undefined && Number.isFinite(templateId)
+                ? `/staff/missions/${templateId}/nodes/${numericNodeId}`
+                : '/staff/missions',
           },
           { label: option ? `Option #${option.order}` : '…' },
         ]}

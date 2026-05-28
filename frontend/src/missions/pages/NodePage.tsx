@@ -1,7 +1,7 @@
 /**
  * NodePage — edit one MissionNode, list its authored options.
  *
- * Routes: /staff/missions/:slug/nodes/:nodeId. PATCH on save via D2's
+ * Routes: /staff/missions/:id/nodes/:nodeId. PATCH on save via D2's
  * MissionNodeViewSet. Options listed with click-through to OptionPage.
  *
  * Scope (E3): node settings + flavor text + option list. Cross-tool
@@ -77,7 +77,11 @@ export function NodePage() {
             optionsPage.results.map((opt) => (
               <Link
                 key={opt.id}
-                to={`/staff/missions/${templateId}/nodes/${numericNodeId}/options/${opt.id}`}
+                to={
+                  templateId !== undefined && Number.isFinite(templateId)
+                    ? `/staff/missions/${templateId}/nodes/${numericNodeId}/options/${opt.id}`
+                    : '/staff/missions'
+                }
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 <span>
