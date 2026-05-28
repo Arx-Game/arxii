@@ -71,26 +71,44 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         # UniqueValidator firing before create() would block that logic.
         extra_kwargs = {"name": {"validators": []}}
 
-    def validate(self, attrs: dict) -> dict:
-        """Proxy MissionTemplate.clean() so level-band and other model
-        invariants surface as 400 responses rather than 500s.
+    def validate_name(self, value: str) -> str:
+        """On UPDATE: reject names already taken by another template.
 
-        DRF's ModelSerializer skips model-level clean() by default; we
-        build a temporary (unsaved) instance and call clean() here so
-        validation errors are caught in the serializer layer.
+        On CREATE: ``create()`` calls ``next_available_name`` to auto-suffix
+        collisions, so this validator returns the value unchanged. We can't
+        use DRF's default ``UniqueValidator`` here because it runs before
+        ``create()`` and would block the auto-suffix path. PATCH renames
+        are intentionally strict — deliberate user choices deserve explicit
+        feedback when they conflict.
+        """
+        if self.instance is None:
+            return value
+        if MissionTemplate.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
+            msg = "A mission with this name already exists."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """Run ``MissionTemplate.clean()`` so its invariants surface as DRF 400.
+
+        DRF doesn't call ``Model.clean()`` automatically. We re-construct
+        a candidate instance from incoming attrs (merging in ``self.instance``
+        field values for partial PATCH), call ``clean()``, and translate
+        its ``DjangoValidationError`` into the DRF shape so callers get
+        field-keyed 400s instead of an unhandled 500 at ``save()`` time.
         """
         attrs = super().validate(attrs)
-        # Only validate scalar fields reachable at this point (M2M
-        # categories are processed post-save, so we skip them here).
+
+        def field(name: str, default: object) -> object:
+            if name in attrs:
+                return attrs[name]
+            if self.instance is not None:
+                return getattr(self.instance, name, default)
+            return default
+
         candidate = MissionTemplate(
-            name=attrs.get("name", ""),
-            summary=attrs.get("summary", ""),
-            level_band_min=attrs.get("level_band_min", 0),
-            level_band_max=attrs.get("level_band_max", 0),
-            risk_tier=attrs.get("risk_tier", 0),
-            arc_scope=attrs.get("arc_scope", ""),
-            cooldown=attrs.get("cooldown"),
-            percent_replace=attrs.get("percent_replace", 0),
+            level_band_min=field("level_band_min", 0),
+            level_band_max=field("level_band_max", 0),
         )
         try:
             candidate.clean()
@@ -387,9 +405,28 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             "is_publishable",
         ]
         read_only_fields = ["id", "is_publishable"]
+        # Suppress DRF's auto-generated UniqueValidator on ``name``.
+        # The create() override calls next_available_name() to resolve
+        # collisions via auto-suffix before the DB write, so a
+        # UniqueValidator firing before create() would block that logic.
+        extra_kwargs = {"name": {"validators": []}}
 
     # Field key used when proxying clean() errors back to the API client.
     _TARGET_FIELD = "target"
+
+    def validate_name(self, value: str) -> str:
+        """On UPDATE: reject names already taken by another giver.
+
+        On CREATE: ``create()`` auto-suffixes via ``next_available_name``,
+        so this validator is a no-op. PATCH renames are intentionally
+        strict — see MissionTemplateSerializer.validate_name.
+        """
+        if self.instance is None:
+            return value
+        if MissionGiver.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
+            msg = "A giver with this name already exists."
+            raise serializers.ValidationError(msg)
+        return value
 
     def validate(self, attrs: dict) -> dict:
         # Build the candidate instance and run clean() so typeclass

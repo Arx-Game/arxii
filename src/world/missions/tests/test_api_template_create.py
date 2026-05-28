@@ -100,3 +100,83 @@ class MissionTemplateCreateTests(TestCase):
         client.force_authenticate(user=non_staff)
         res = client.post(URL, self._valid_body(), format="json")
         self.assertEqual(res.status_code, 403)
+
+
+class MissionTemplatePatchRenameTests(TestCase):
+    """PATCH /api/missions/templates/<pk>/ rename collision behavior.
+
+    Create-path auto-suffixes; PATCH path must error explicitly so the
+    author sees their choice was rejected.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="staff-patch-rename-tc", is_staff=True)
+        cls.tmpl_a = MissionTemplateFactory(name="alpha-patch")
+        cls.tmpl_b = MissionTemplateFactory(name="beta-patch")
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+
+    def test_patch_rename_to_taken_name_returns_400(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl_a.pk}/"
+        res = self.client.patch(url, {"name": "beta-patch"}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertIn("name", res.json())
+
+    def test_patch_rename_to_free_name_succeeds(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl_a.pk}/"
+        res = self.client.patch(url, {"name": "gamma-patch"}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["name"], "gamma-patch")
+
+    def test_patch_rename_to_own_name_succeeds(self) -> None:
+        """Patching to the SAME current name is a no-op rename — must NOT 400."""
+        url = f"/api/missions/templates/{self.tmpl_a.pk}/"
+        res = self.client.patch(url, {"name": "alpha-patch"}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+
+
+class MissionTemplatePatchLevelBandTests(TestCase):
+    """Partial PATCH on level_band_min / level_band_max must respect
+    the other field's existing value on the instance, not 0.
+
+    Uses setUp (per-test fixture) rather than setUpTestData to avoid
+    SharedMemoryModel identity-map staleness: successful PATCHes mutate
+    the Python object in the identity map, and even though Django's
+    savepoint rolls back the DB after each test, the identity map retains
+    stale field values that would corrupt validate()'s fallback reads.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="staff-patch-band-tc", is_staff=True)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+        # Create fresh per-test to avoid SharedMemoryModel identity-map
+        # staleness from successful PATCHes in earlier tests.
+        self.tmpl = MissionTemplateFactory(name="bands-patch", level_band_min=1, level_band_max=5)
+
+    def test_patch_only_min_within_existing_max_succeeds(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"level_band_min": 3}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+
+    def test_patch_only_min_above_existing_max_returns_400(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"level_band_min": 10}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertIn("level_band_min", res.json())
+
+    def test_patch_only_max_above_existing_min_succeeds(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"level_band_max": 10}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+
+    def test_patch_only_max_below_existing_min_returns_400(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"level_band_max": 0}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
