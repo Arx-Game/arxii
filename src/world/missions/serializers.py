@@ -34,7 +34,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
     ``validate_access_tier`` below — if any attached giver is not
     ``is_publishable`` (no target FK), the flip is refused with the
-    list of unready givers' slugs so the Studio can show "needs-work."
+    list of unready givers' names so the Studio can show "needs-work."
     """
 
     # Module-level constants — bare strings as field/error keys would
@@ -79,7 +79,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         if instance is None:
             return value  # create — let the model layer accept either tier
         unready: list[str] = [
-            giver.slug for giver in instance.givers.all() if not giver.is_publishable
+            giver.name for giver in instance.givers.all() if not giver.is_publishable
         ]
         if unready:
             msg = (

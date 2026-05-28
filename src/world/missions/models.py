@@ -843,7 +843,7 @@ class MissionInstance(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return f"{self.template.slug} ({self.status})"
+        return f"{self.template.name} ({self.status})"
 
 
 class MissionParticipant(SharedMemoryModel):

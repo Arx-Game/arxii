@@ -227,14 +227,14 @@ def _resolve_has_skill(ctx: ResolverContext, *, skill: str) -> bool:
 def _resolve_min_giver_standing(ctx: ResolverContext, *, giver: str, min_affection: int) -> bool:
     """True if the character's standing with the named giver is >= ``min_affection``.
 
-    ``giver`` is the ``MissionGiver.slug``. Standing is the giver's
+    ``giver`` is the ``MissionGiver.name``. Standing is the giver's
     affection toward the character. No standing row means affection is
-    implicitly 0. An unknown giver slug fails closed (returns False).
+    implicitly 0. An unknown giver name fails closed (returns False).
     """
     from world.missions.models import MissionGiverStanding  # noqa: PLC0415
 
     standing = (
-        MissionGiverStanding.objects.filter(giver__slug=giver, character=ctx.character)
+        MissionGiverStanding.objects.filter(giver__name=giver, character=ctx.character)
         .values_list("affection", flat=True)
         .first()
     )
@@ -245,11 +245,11 @@ def _resolve_min_giver_standing(ctx: ResolverContext, *, giver: str, min_affecti
     return standing >= min_affection
 
 
-def _giver_exists(slug: str) -> bool:
-    """Internal helper: True if a MissionGiver with this slug exists."""
+def _giver_exists(name: str) -> bool:
+    """Internal helper: True if a MissionGiver with this name exists."""
     from world.missions.models import MissionGiver  # noqa: PLC0415
 
-    return MissionGiver.objects.filter(slug=slug).exists()
+    return MissionGiver.objects.filter(name=name).exists()
 
 
 def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:

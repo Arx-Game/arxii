@@ -185,16 +185,22 @@ def _copy_options_routes_rewards(
 
 
 @transaction.atomic
-def copy_template(source: MissionTemplate, *, new_slug: str, new_name: str) -> MissionTemplate:
+def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> MissionTemplate:
     """Duplicate a whole template + its graph.
 
+    If ``new_name`` is None, derives one via ``next_available_name`` from
+    ``"<source.name> (copy)"``. Caller-provided ``new_name`` is also
+    auto-suffixed if it collides — copy never errors on name conflict.
     All routes' target_node FKs stay internal (re-pointed to copies).
     Lands with ``access_tier=STAFF_ONLY`` so the author can fix flavor
-    before publishing. Slug + name must be unique.
+    before publishing.
     """
+    from world.missions.services.naming import next_available_name  # noqa: PLC0415
+
+    base = new_name if new_name is not None else f"{source.name} (copy)"
+    final_name = next_available_name(base, MissionTemplate.objects.all())
     new_template = MissionTemplate.objects.create(
-        name=new_name,
-        slug=new_slug,
+        name=final_name,
         summary=source.summary,
         epilogue=source.epilogue,
         level_band_min=source.level_band_min,
