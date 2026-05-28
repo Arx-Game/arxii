@@ -26,7 +26,7 @@ from world.missions.models import (
 class MissionTemplateSerializer(serializers.ModelSerializer):
     """List + detail serializer for MissionTemplate browse.
 
-    Read-only fields cover the authoring footprint: name, slug, summary,
+    Read-only fields cover the authoring footprint: name, summary,
     epilogue, level band, risk tier, weighting, era association, scope,
     cooldown, reward-group rule, active flag, access tier, categories,
     availability rule.
