@@ -60,6 +60,11 @@ const GiverEditorPage = lazy(() =>
     default: m.GiverEditorPage,
   }))
 );
+const CreateMissionPage = lazy(() =>
+  import('@/missions/pages/CreateMissionPage').then((m) => ({
+    default: m.CreateMissionPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -305,6 +310,16 @@ function App() {
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                 <MissionBrowserPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/missions/new"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <CreateMissionPage />
               </Suspense>
             </StaffRoute>
           }
