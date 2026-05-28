@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -60,6 +61,9 @@ export function EditCategoriesDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit categories</DialogTitle>
+          <DialogDescription className="sr-only">
+            Select categories for this template.
+          </DialogDescription>
         </DialogHeader>
         <CategoryMultiSelect value={value} onChange={setValue} />
         <DialogFooter>

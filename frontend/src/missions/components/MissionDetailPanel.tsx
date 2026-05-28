@@ -24,6 +24,8 @@ import { StaffActionsCard } from './StaffActionsCard';
 import { TemplateRuleSection } from './TemplateRuleSection';
 import { useDeleteMissionInstance, useMissionCategories, useMissionTemplate } from '../queries';
 
+const EMPTY_CATEGORIES: readonly number[] = [];
+
 interface MissionDetailPanelProps {
   /** Template id — the PK for the detail endpoint. */
   id: number | undefined;
@@ -86,7 +88,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
           <MetadataGrid template={template} />
           <div className="flex items-start gap-2">
             <div className="flex-1">
-              <CategoriesRow categories={template.categories ?? []} />
+              <CategoriesRow categories={template.categories ?? EMPTY_CATEGORIES} />
             </div>
             <Button
               variant="ghost"
@@ -101,7 +103,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
             open={editOpen}
             onOpenChange={setEditOpen}
             templateId={template.id}
-            initialCategories={template.categories ?? []}
+            initialCategories={template.categories ?? EMPTY_CATEGORIES}
           />
           <FootprintBlock
             lifetimeCompletions={template.lifetime_completions}
