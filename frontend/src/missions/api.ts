@@ -369,7 +369,13 @@ export async function copyTemplate(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to copy template');
+  if (!res.ok) {
+    // Mirror createMissionTemplate: parse the body and throw ApiValidationError
+    // so consumers (StaffActionsCard CopyRow) can surface specific field messages
+    // (e.g. {"new_name": ["May not be blank."]}), not just "Failed to copy template".
+    const detail = await res.json().catch(() => ({}));
+    throw new ApiValidationError(detail);
+  }
   return res.json();
 }
 
