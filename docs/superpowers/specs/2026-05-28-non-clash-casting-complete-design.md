@@ -109,6 +109,13 @@ Gains `strain_committed = PositiveIntegerField(default=0)` — canonical post-re
 
 Location: `src/actions/types.py`
 
+**Reused surfaces (no new dataclasses, no new enums for these):**
+- `AvailableEnhancement` dataclass already lives at `src/world/scenes/action_availability.py` with fields `enhancement`, `technique`, `effective_cost`, `soulfray_warning`. **Reuse it.** Re-export from `src/actions/types.py` if cross-app import friction comes up.
+- `TargetType` StrEnum at `src/actions/types.py:27-33` and `ActionTargetType` TextChoices at `src/actions/constants.py:36-42` already describe target cardinality (`SELF | SINGLE | AREA | FILTERED_GROUP`). **Reuse them for cardinality.**
+- `Action` base class at `src/actions/base.py` already has `target_type` as a class field (alongside `get_prerequisites`, `execute`, `check_availability`). **Extend with class fields** — no new method needed.
+
+**New dataclasses (only the genuinely missing surfaces):**
+
 ```python
 @dataclass(frozen=True)
 class TargetFilters:
@@ -119,35 +126,30 @@ class TargetFilters:
 
 @dataclass(frozen=True)
 class TargetSpec:
-    kind: TargetKind  # TextChoices: PERSONA | CHARACTER | ITEM | ROOM
+    kind: TargetKind          # NEW TextChoices below — entity type axis
+    cardinality: TargetType   # REUSED existing enum — SELF/SINGLE/AREA/FILTERED_GROUP
     filters: TargetFilters
-    multi: bool = False
-
-@dataclass(frozen=True)
-class ActionEnhancement:
-    technique_id: int
-    technique_name: str
-    variant_name: str
-    effective_cost: int
-    soulfray_warning: SoulfrayWarning | None  # existing type
 
 @dataclass(frozen=True)
 class StrainAvailability:
     cap: int
     default: int = 0
+```
 
+**PlayerAction extensions** (note: `is_targeted` deliberately omitted — `target_spec is None` is the source of truth; `multi` deliberately omitted — `cardinality in {AREA, FILTERED_GROUP}` covers it):
+
+```python
 @dataclass(frozen=True)
 class PlayerAction:
     # ...existing fields...
-    is_targeted: bool = False
-    target_spec: TargetSpec | None = None
-    enhancements: tuple[ActionEnhancement, ...] = ()
+    target_spec: TargetSpec | None = None       # None = self-action
+    enhancements: tuple[AvailableEnhancement, ...] = ()  # reusing existing dataclass
     strain: StrainAvailability | None = None
 ```
 
 ### New: `TargetKind` TextChoices
 
-Location: `src/actions/constants.py`
+Location: `src/actions/constants.py` (sibling to existing `ActionTargetType`)
 
 ```python
 class TargetKind(TextChoices):
@@ -156,6 +158,8 @@ class TargetKind(TextChoices):
     ITEM = "item", "Item"
     ROOM = "room", "Room"
 ```
+
+This is orthogonal to `ActionTargetType` (cardinality). Kind = *what type of entity*; cardinality = *how many / how selected*.
 
 ### Migrations
 
@@ -187,16 +191,15 @@ All numbered chronologically; only AddField operations. No data migrations.
       "prerequisite_met": true,
       "prerequisite_reasons": [],
 
-      "is_targeted": true,
       "target_spec": {
         "kind": "persona",
+        "cardinality": "single",
         "filters": {
           "in_same_scene": true,
           "in_same_zone": false,
           "exclude_self": true,
           "must_be_conscious": true
-        },
-        "multi": false
+        }
       },
 
       "enhancements": [
@@ -236,8 +239,8 @@ All numbered chronologically; only AddField operations. No data migrations.
 }
 ```
 
-- `target_persona_id` required when `target_spec.kind == "persona"` and `multi=false`.
-- `target_persona_ids` required when `target_spec.multi=true`.
+- `target_persona_id` required when `target_spec.kind == "persona"` and `cardinality == "single"`.
+- `target_persona_ids` required when `target_spec.cardinality in ("area", "filtered_group")`.
 - `strain_commitment` optional, default 0; serializer validates `0 ≤ strain_commitment ≤ initiator.anima.current`.
 - Validation errors raise `serializers.ValidationError` with `user_message` per the typed-exception pattern.
 
@@ -308,25 +311,22 @@ Already reads `declaration.strain_commitment` and passes to `use_technique`. Add
 
 Location: `src/world/combat/interaction_services.py`. Same pattern as `_create_result_interaction`.
 
-### `Action.get_target_spec` — new optional method on action subclasses
+### `Action` subclass extensions — class fields, not methods
 
-Each `Action` subclass (Challenge / Combat / Registry) can override:
+Existing pattern: `Action` base class at `src/actions/base.py` already has `target_type` as a class field. Mirror that — add `target_kind` and `target_filters` as class fields on action subclasses that target other entities. No new method introduced.
 
 ```python
-def get_target_spec(self, actor, context) -> TargetSpec | None:
-    return None  # default: self-action, not targeted
+class IntimidateAction(Action):
+    target_type = TargetType.SINGLE         # existing class field, reused
+    target_kind = TargetKind.PERSONA        # NEW class field
+    target_filters = TargetFilters(         # NEW class field
+        in_same_scene=True,
+        exclude_self=True,
+        must_be_conscious=True,
+    )
 ```
 
-Magic offensive actions return:
-```python
-TargetSpec(
-    kind=TargetKind.PERSONA,
-    filters=TargetFilters(in_same_scene=True, exclude_self=True, must_be_conscious=True),
-    multi=False,
-)
-```
-
-`get_player_actions(character)` calls `get_target_spec` per action and sets `is_targeted=(spec is not None)` + attaches `target_spec`.
+Self-actions leave `target_kind` and `target_filters` at their defaults (`None`). `get_player_actions(character)` reads the three class fields; if `target_type == SELF` (or `target_kind is None`), the descriptor's `target_spec` is `None`. Otherwise it assembles `TargetSpec(kind=target_kind, cardinality=target_type, filters=target_filters)`.
 
 ### Performance budget
 
@@ -344,39 +344,66 @@ Asserted via `CaptureQueriesContext` in the unified endpoint test.
 ### `ActionPanel.tsx` — refactored
 
 - Drop `useAvailableSceneActions` hook and the lowercased-template-name join.
-- Read `enhancements`, `is_targeted`, `target_spec`, `strain` directly off each PlayerAction.
+- Read `enhancements`, `target_spec`, `strain` directly off each PlayerAction.
 - Action row layout:
   - Label + description
   - Expand button → enhancements list (sourced from unified payload)
   - If `strain.cap > 0`, inline `<StrainSlider />` in the dispatch flow
-  - Dispatch button enabled when `prerequisite_met === true`. Targeted-check is now driven by `is_targeted`, not `!prerequisite_met`.
+  - Dispatch button enabled when `prerequisite_met === true`. Targeted-check is driven by `target_spec !== null` (no separate `is_targeted` field).
 
 ### `<TargetPicker />` — new component
 
 Location: `frontend/src/scenes/components/TargetPicker.tsx`
 
-- Popover anchored to action button (modal on small screens).
+**Reused primitives:** `<Popover>` from `frontend/src/components/ui/popover.tsx`; `<Dialog>` from `frontend/src/components/ui/dialog.tsx` for small-screen fallback. No new modal/popover infra.
+
+- Popover anchored to action button (Dialog fallback on small screens).
 - Reads scene members from existing React Query cache (`useScene(sceneId)`).
 - Filters by `target_spec.kind` + `target_spec.filters` client-side.
 - For `kind="persona"`: lists scene-present personas with avatar + display name.
 - Keyboard nav: arrow keys + Enter. Search-on-typing if >10 candidates.
-- Selecting target → `dispatchAction(playerAction, { target_persona_id })` and closes.
-- Multi-select mode (`target_spec.multi`): checkboxes + "Confirm" button.
-- Right-click character shortcut stays (modal is primary path).
+- Single-select (`cardinality === "single"`): click → `dispatchAction(playerAction, { target_persona_id })` and closes.
+- Multi-select (`cardinality in ("area", "filtered_group")`): checkboxes + "Confirm" button → `dispatchAction(playerAction, { target_persona_ids })`.
+- Right-click character shortcut (existing `PersonaContextMenu`) stays as a fast path; the popover is the primary discoverable UI.
 
 ### `<StrainSlider />` — new component
 
 Location: `frontend/src/scenes/components/StrainSlider.tsx`
 
+**Reused primitives:** `<Slider>` from `frontend/src/components/ui/slider.tsx`; `<SoulfrayWarning>` from `frontend/src/scenes/components/SoulfrayWarning.tsx`. No new range-input or warning UI.
+
 - Range slider `0…strain.cap` ("Strain (extra anima)").
-- Live readout: `Effective cost: X anima` (recomputed from `enhancement.effective_cost + strain`).
-- If projected cost > current anima → Soulfray-risk badge (existing `<SoulfrayWarning />`).
+- Live readout: `Effective cost: X anima` (recomputed via shared utility — see below).
+- If projected cost > current anima → render `<SoulfrayWarning>` inline with the projected severity.
 - Default 0; persists per-action across Action Panel session; resets on dispatch.
 
-### `<ConsentPrompt />` — extended
+### Effective-cost utility — new hook/util
 
-- If `request.strain_commitment > 0`: "Alice is committing 3 strain on this Intimidate."
-- No additional input from target; same Accept / Easy / Standard / Hard buttons.
+Location: `frontend/src/scenes/lib/computeEffectiveCost.ts`
+
+Today, `ActionPanel.tsx` line 108 statically renders `enh.effective_cost`. The strain slider needs dynamic recomputation as the user moves the slider. The backend formula (from `use_technique`) is:
+
+```ts
+function computeEffectiveCost(baseEffectiveCost: number, strain: number): number {
+  return baseEffectiveCost + Math.max(strain, 0);
+}
+```
+
+(Backend's full formula already accounts for `control - intensity` adjustments; the API returns `effective_cost` post-adjustment, so the frontend only needs to add strain.)
+
+### `<ConsentPrompt />` — extended (not rewritten)
+
+Existing component at `frontend/src/scenes/components/ConsentPrompt.tsx`. **Reuse as-is**, with one conditional line added after the action/technique display:
+
+```tsx
+{req.strain_commitment > 0 && (
+  <span className="text-xs text-muted-foreground">
+    {req.initiator_persona.name} is committing {req.strain_commitment} strain.
+  </span>
+)}
+```
+
+No structural refactor.
 
 ## Testing strategy
 
@@ -391,7 +418,7 @@ Location: `frontend/src/scenes/components/StrainSlider.tsx`
 2. **Strain exceeds available anima → 400 ValidationError** — dispatch rejects `strain_commitment=20` when `anima.current=5`.
 
 3. **Unified endpoint contract** (`src/actions/tests/test_unified_player_actions.py`)
-   - GET `/api/actions/characters/<id>/available/` returns `is_targeted`, `target_spec`, `enhancements`, `strain` on appropriate rows.
+   - GET `/api/actions/characters/<id>/available/` returns `target_spec`, `enhancements`, `strain` on appropriate rows; `target_spec is null` for self-actions.
    - GET `/api/action-requests/available/` returns 404 (deleted route).
    - Performance: ≤ 5 queries via `CaptureQueriesContext`.
 
@@ -419,6 +446,39 @@ None of these tests are PG-specific. They run on both the SQLite inner-loop tier
 ### Pre-push regression
 
 Per [[feedback-run-full-suites-pre-push]], before opening the PR: `pnpm test --run` and `just regression` (no-keepdb, fresh DB) both pass locally.
+
+## Anti-reinvention pass (per CLAUDE.md)
+
+Scan executed 2026-05-28 against the codebase. Outcome:
+
+**Reused (no new code):**
+- `<Slider>` — `frontend/src/components/ui/slider.tsx`
+- `<Popover>`, `<Dialog>` — `frontend/src/components/ui/`
+- `<SoulfrayWarning>` — `frontend/src/scenes/components/SoulfrayWarning.tsx`
+- `<ConsentPrompt>` — `frontend/src/scenes/components/ConsentPrompt.tsx` (one conditional line added, no refactor)
+- `AvailableEnhancement` dataclass — `src/world/scenes/action_availability.py`
+- `TargetType` StrEnum — `src/actions/types.py:27-33`
+- `ActionTargetType` TextChoices — `src/actions/constants.py:36-42`
+- `available_strain` pattern from `CombatParticipant` — `src/world/combat/models.py:569-583`
+- `Action.target_type` class field pattern — `src/actions/base.py`
+- `use_technique` signature — `src/world/magic/services/techniques.py:241` (already accepts `strain_commitment`)
+- `PersonaContextMenu` right-click flow — stays as fast-path shortcut
+
+**Built new (legitimately missing):**
+- `CommittingDeclaration` abstract mixin — no shared base class exists for declaration models
+- `TargetKind` TextChoices — orthogonal axis to existing `ActionTargetType`; no entity-type enum exists
+- `<TargetPicker>` component — no popover-based target picker exists today (`PersonaContextMenu` is context-menu only)
+- `<StrainSlider>` component — composes `<Slider>` + `<SoulfrayWarning>`; no equivalent composite exists
+- `computeEffectiveCost` utility — no shared util for dynamic cost recomputation client-side
+- `Interaction.strain_committed` field — no canonical audit column today (clash uses `anima_committed` for total spent, not strain isolated)
+- `SceneActionRequest.strain_commitment` field — inherited via the new mixin
+- `Action.target_kind` + `Action.target_filters` class fields — pattern mirrors existing `target_type`; declared on action subclasses
+
+**Surfaces removed in this PR (reuse-by-deletion):**
+- `SceneActionRequestViewSet.available` method
+- `AvailableSceneActionSerializer`
+- `get_available_scene_actions` service function
+- `useAvailableSceneActions` frontend hook + `fetchAvailableSceneActions`
 
 ## Risk and rollback
 

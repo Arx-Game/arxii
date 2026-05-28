@@ -167,6 +167,25 @@ Individual system docs (e.g., `docs/systems/magic.md`) contain:
 - API endpoint references
 - Frontend integration details
 
+## Anti-Reinvention Pass — REQUIRED for feature design
+
+**Every feature-design workflow MUST include an explicit "no reinventing the wheel" pass before the spec is finalized.** This is not optional. Sprawl from parallel components/dataclasses/enums/helpers is the most expensive failure mode in this codebase.
+
+When designing a new feature or bundled PR:
+
+1. After drafting the design sections but **before** committing the spec, scan the codebase for every proposed new surface — component, dataclass, enum, Django model, helper, UI primitive, hook, serializer.
+2. Use a thorough Explore agent (or equivalent grep pass). For each proposed new thing, the answer must be one of: **EXISTS** (with path + line numbers), **PARTIAL** (close but needs extension), or **DOES NOT EXIST** (legitimately new).
+3. Cross-check against `docs/systems/INDEX.md` and `docs/systems/MODEL_MAP.md`. They're the curated systems-discovery surface; consult them in addition to grep.
+4. Consolidate: drop or rename newly-proposed surfaces that overlap with existing ones. Prefer **reuse-with-extension** over **build-new**.
+5. Present the consolidations to the user for ratification before committing the updated spec.
+
+Recurring traps to watch for:
+- Inventing a new dataclass that mirrors an existing `AvailableX` / `XAvailability` / `XDescriptor`.
+- Adding a new TextChoices that overlaps with an existing one along a different axis (check whether the axes are genuinely orthogonal before adding).
+- Building a UI component when a shadcn/radix primitive in `frontend/src/components/ui/` already covers it.
+- Adding a method to a base class when there's already a class field that captures the same data.
+- Adding boolean fields that duplicate information already derivable from another field (e.g., `is_targeted` when `target_spec is not None` already says it).
+
 ### Model Map
 
 **For cross-app FK relationships and service function signatures, consult `docs/systems/MODEL_MAP.md`.**
