@@ -40,19 +40,30 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend
+from actions.constants import ActionBackend, TargetKind
 from actions.errors import ActionDispatchError
 from actions.registry import get_action
 from actions.round_context import get_active_round_context
-from actions.types import ActionRef, DispatchResult, PlayerAction
+from actions.types import (
+    ActionRef,
+    DispatchResult,
+    PlayerAction,
+    StrainAvailability,
+    TargetFilters,
+    TargetSpec,
+    TargetType,
+)
 from world.magic.models import CharacterTechnique
 from world.mechanics.services import get_available_actions
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models import ActionTemplate
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import CharacterAnima
     from world.mechanics.types import AvailableAction
+    from world.scenes.action_availability import AvailableEnhancement
 
 
 def dispatch_player_action(
@@ -148,6 +159,18 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     Merges the challenge, combat, and registry backends into a single homogeneous
     list.  Recomputed on every call — no caching.
 
+    Each ``PlayerAction`` is enriched with:
+    - ``enhancements``: tuple of ``AvailableEnhancement`` (techniques the
+      character knows whose ``ActionEnhancement`` rows reference the action's
+      key/template).
+    - ``target_spec``: ``TargetSpec`` for hand-coded actions that set
+      ``target_kind`` / ``target_filters`` on the class; synthesized for
+      data-driven social ``ActionTemplate``-backed actions; ``None`` for
+      self-actions or unknown shapes.
+    - ``strain``: ``StrainAvailability`` carrying the character's anima cap
+      when at least one enhancement is reachable AND the character has a
+      ``CharacterAnima`` row.
+
     Args:
         character: The character's ``ObjectDB`` instance (the game object, not
             ``CharacterSheet``).  The character's ``db_location`` is used to look
@@ -163,9 +186,14 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_challenge_actions(character))
     actions.extend(_combat_actions(character))
     actions.extend(_clash_contribution_actions(character))
+    actions.extend(_scene_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
     # — see module docstring.  When registry actions gain ActionTemplate backing,
     # uncomment and implement _registry_actions(character).
+
+    # Single batched pass: attach enhancements/target_spec/strain to each
+    # PlayerAction. All queries happen once for the whole character.
+    _enrich_player_actions(character, actions)
 
     return actions
 
@@ -543,4 +571,249 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
         # subclass of AttributeError, so this catches both "no sheet" and "no relation".
         # Bare `except Exception` was wrong: it masked DB errors (OperationalError etc.)
         # as "no sheet → empty list".
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Scene-action adapter (social ActionTemplates with technique enhancements)
+# ---------------------------------------------------------------------------
+
+
+_SOCIAL_CATEGORY = "social"  # noqa: STRING_LITERAL — mirrors ActionTemplate.category column, no TextChoices for it yet
+
+
+def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface social ``ActionTemplate`` rows as ``PlayerAction``s.
+
+    These are the data-driven social actions (Intimidate, Persuade, Flirt, …)
+    that previously lived behind ``world.scenes.action_availability.
+    get_available_scene_actions``. For v1 they emit as REGISTRY-backend
+    descriptors keyed by the lowercased template name — the legacy scene-action
+    endpoint still handles dispatch. A follow-up PR will introduce a dedicated
+    backend value for these once the legacy endpoint is removed.
+
+    Enhancements / target_spec / strain are NOT populated here — they are
+    attached uniformly by ``_enrich_player_actions`` so every backend's actions
+    pass through one batched pass of the same queries.
+
+    Currently ignores *character*; in a follow-up this becomes the place where
+    per-character availability filters (e.g. residence-only social actions)
+    apply.
+    """
+    del character  # placeholder for per-character filtering in a follow-up PR
+    from actions.models import ActionTemplate  # noqa: PLC0415
+
+    templates = list(ActionTemplate.objects.filter(category=_SOCIAL_CATEGORY))
+    result: list[PlayerAction] = []
+    for template in templates:
+        action_key = template.name.lower()
+        ref = ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key=action_key,
+        )
+        result.append(
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=template.name,
+                ref=ref,
+                check_type=template.check_type,
+                action_template=template,
+            )
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Enrichment: enhancements + target_spec + strain
+# ---------------------------------------------------------------------------
+
+
+def _enrich_player_actions(
+    character: ObjectDB,
+    actions: list[PlayerAction],
+) -> None:
+    """Mutate *actions* in place, attaching enhancements / target_spec / strain.
+
+    Single batched pass:
+    - Query the character's known techniques once.
+    - Query ActionEnhancement rows joining those techniques once.
+    - Bucket enhancements by ``action_template_id`` and ``base_action_key`` so a
+      PlayerAction can find its enhancements via either path.
+    - Fetch CharacterAnima once for the strain cap snapshot.
+
+    Self-actions / unknown target shapes leave ``target_spec=None``.
+    """
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return
+
+    known_technique_ids = set(
+        CharacterTechnique.objects.filter(character=sheet).values_list("technique_id", flat=True)
+    )
+
+    anima = _get_character_anima(character)
+
+    enhancements_by_action_key = _build_enhancement_index(
+        character=character,
+        known_technique_ids=known_technique_ids,
+        anima=anima,
+    )
+
+    strain_cap = anima.current if anima is not None else None
+
+    for action in actions:
+        enhancements = _enhancements_for_action(
+            action=action,
+            enhancements_by_action_key=enhancements_by_action_key,
+        )
+        action.enhancements = enhancements
+        action.target_spec = _target_spec_for_action(action)
+        if enhancements and strain_cap is not None:
+            action.strain = StrainAvailability(cap=strain_cap)
+
+
+def _build_enhancement_index(
+    *,
+    character: ObjectDB,
+    known_technique_ids: set[int],
+    anima: CharacterAnima | None,
+) -> dict[str, list[AvailableEnhancement]]:
+    """Return an index of available enhancements keyed by ``base_action_key``.
+
+    Pure: one query for ActionEnhancement rows, plus a per-technique runtime
+    stats lookup that is identical to what ``get_available_scene_actions``
+    performs. Identity-map caching keeps the cost low across repeated calls
+    in the same request.
+
+    Receives ``anima`` from the caller so we don't issue a duplicate
+    CharacterAnima lookup just to compute effective costs.
+    """
+    from actions.models import ActionEnhancement  # noqa: PLC0415
+    from world.magic.services import (  # noqa: PLC0415
+        calculate_effective_anima_cost,
+        get_runtime_technique_stats,
+        get_soulfray_warning,
+    )
+    from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
+
+    by_action_key: dict[str, list[AvailableEnhancement]] = {}
+
+    if not known_technique_ids:
+        return by_action_key
+
+    rows = list(
+        ActionEnhancement.objects.filter(
+            source_type="technique",
+            technique_id__in=known_technique_ids,
+        ).select_related("technique")
+    )
+    if not rows:
+        return by_action_key
+
+    soulfray_warning = get_soulfray_warning(character) if rows else None
+    stats_cache: dict[int, tuple[int, int]] = {}
+
+    for row in rows:
+        technique = row.technique
+        if technique is None:
+            continue
+        if technique.pk not in stats_cache:
+            stats = get_runtime_technique_stats(technique, character)
+            stats_cache[technique.pk] = (stats.intensity, stats.control)
+        intensity, control = stats_cache[technique.pk]
+
+        if anima is not None:
+            cost = calculate_effective_anima_cost(
+                base_cost=technique.anima_cost,
+                runtime_intensity=intensity,
+                runtime_control=control,
+                current_anima=anima.current,
+            )
+            effective_cost = cost.effective_cost
+        else:
+            effective_cost = 0
+
+        warning = soulfray_warning if effective_cost > 0 else None
+        available = AvailableEnhancement(
+            enhancement=row,
+            technique=technique,
+            effective_cost=effective_cost,
+            soulfray_warning=warning,
+        )
+
+        if row.base_action_key:
+            by_action_key.setdefault(row.base_action_key, []).append(available)
+
+    return by_action_key
+
+
+def _enhancements_for_action(
+    *,
+    action: PlayerAction,
+    enhancements_by_action_key: dict[str, list[AvailableEnhancement]],
+) -> tuple[AvailableEnhancement, ...]:
+    """Return enhancements for *action* via ``base_action_key`` indexing."""
+    action_key = _resolve_action_key(action)
+    if action_key and action_key in enhancements_by_action_key:
+        return tuple(enhancements_by_action_key[action_key])
+
+    return ()
+
+
+def _resolve_action_key(action: PlayerAction) -> str:
+    """Return the action key for *action* used to find ActionEnhancement rows."""
+    template = action.action_template
+    if template is not None:
+        return template.name.lower()
+    if action.ref.registry_key:
+        return action.ref.registry_key
+    return ""
+
+
+def _target_spec_for_action(action: PlayerAction) -> TargetSpec | None:
+    """Synthesize a ``TargetSpec`` for *action* by inspecting available metadata.
+
+    Resolution order:
+    1. Hand-coded ``Action`` subclass via the dispatch ref's ``registry_key``;
+       read its ``target_kind`` and ``target_filters`` class fields.
+    2. Data-driven social ``ActionTemplate`` (category=="social"): synthesize
+       a PERSONA + SINGLE + in_same_scene/exclude_self default.
+    3. Anything else: ``None`` (self-action or shape we don't know yet).
+    """
+    if action.ref.registry_key:
+        registry_action = get_action(action.ref.registry_key)
+        if registry_action is not None and registry_action.target_kind is not None:
+            return TargetSpec(
+                kind=registry_action.target_kind,
+                cardinality=registry_action.target_type,
+                filters=registry_action.target_filters or TargetFilters(),
+            )
+
+    template = action.action_template
+    if template is not None and _template_is_social(template):
+        return TargetSpec(
+            kind=TargetKind.PERSONA,
+            cardinality=TargetType.SINGLE,
+            filters=TargetFilters(in_same_scene=True, exclude_self=True),
+        )
+
+    return None
+
+
+def _template_is_social(template: ActionTemplate) -> bool:
+    """Return True if *template* is a social-category data-driven action."""
+    return template.category == _SOCIAL_CATEGORY
+
+
+def _get_character_anima(character: ObjectDB) -> CharacterAnima | None:
+    """Return the character's CharacterAnima row, or None when unset.
+
+    Shared by ``_build_enhancement_index`` and the strain attachment so the
+    identity map serves both reads from a single fetch.
+    """
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+
+    try:
+        return CharacterAnima.objects.get(character=character)
+    except CharacterAnima.DoesNotExist:
         return None
