@@ -147,12 +147,22 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data: dict) -> MissionTemplate:  # type: ignore[override]
+        from django.db import IntegrityError  # noqa: PLC0415
+
         from world.missions.services.naming import next_available_name  # noqa: PLC0415
 
-        validated_data["name"] = next_available_name(
-            validated_data["name"], MissionTemplate.objects.all()
-        )
-        return super().create(validated_data)  # type: ignore[return-value]
+        original_name = validated_data["name"]
+        validated_data["name"] = next_available_name(original_name, MissionTemplate.objects.all())
+        try:
+            return super().create(validated_data)  # type: ignore[return-value]
+        except IntegrityError:
+            # Concurrent create with the same name beat us between the
+            # next_available_name SELECT and our INSERT. Recompute the
+            # suffix (now seeing the just-committed row) and retry once.
+            validated_data["name"] = next_available_name(
+                original_name, MissionTemplate.objects.all()
+            )
+            return super().create(validated_data)  # type: ignore[return-value]
 
 
 class _ActiveInstanceSerializer(serializers.Serializer):
@@ -453,12 +463,20 @@ class MissionGiverSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]
+        from django.db import IntegrityError  # noqa: PLC0415
+
         from world.missions.services.naming import next_available_name  # noqa: PLC0415
 
-        validated_data["name"] = next_available_name(
-            validated_data["name"], MissionGiver.objects.all()
-        )
-        return super().create(validated_data)  # type: ignore[return-value]
+        original_name = validated_data["name"]
+        validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
+        try:
+            return super().create(validated_data)  # type: ignore[return-value]
+        except IntegrityError:
+            # Concurrent create with the same name beat us between the
+            # next_available_name SELECT and our INSERT. Recompute the
+            # suffix (now seeing the just-committed row) and retry once.
+            validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
+            return super().create(validated_data)  # type: ignore[return-value]
 
 
 class MissionGiverOfferingSerializer(serializers.ModelSerializer):

@@ -195,27 +195,39 @@ def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> Mi
     Lands with ``access_tier=STAFF_ONLY`` so the author can fix flavor
     before publishing.
     """
+    from django.db import IntegrityError  # noqa: PLC0415
+
     from world.missions.services.naming import next_available_name  # noqa: PLC0415
 
     base = new_name if new_name is not None else f"{source.name} (copy)"
+
+    # Build the fields dict once so both INSERT attempts use the same values.
+    fields = {
+        "summary": source.summary,
+        "epilogue": source.epilogue,
+        "level_band_min": source.level_band_min,
+        "level_band_max": source.level_band_max,
+        "risk_tier": source.risk_tier,
+        "base_weight": source.base_weight,
+        "created_in_era": source.created_in_era,
+        "arc_scope": source.arc_scope,
+        "percent_replace": source.percent_replace,
+        "cooldown": source.cooldown,
+        "reward_group_rule": source.reward_group_rule,
+        "availability_rule": dict(source.availability_rule or {}),
+        "is_active": source.is_active,
+        "access_tier": AccessTier.STAFF_ONLY,  # copies always land unpublished
+    }
+
     final_name = next_available_name(base, MissionTemplate.objects.all())
-    new_template = MissionTemplate.objects.create(
-        name=final_name,
-        summary=source.summary,
-        epilogue=source.epilogue,
-        level_band_min=source.level_band_min,
-        level_band_max=source.level_band_max,
-        risk_tier=source.risk_tier,
-        base_weight=source.base_weight,
-        created_in_era=source.created_in_era,
-        arc_scope=source.arc_scope,
-        percent_replace=source.percent_replace,
-        cooldown=source.cooldown,
-        reward_group_rule=source.reward_group_rule,
-        availability_rule=dict(source.availability_rule or {}),
-        is_active=source.is_active,
-        access_tier=AccessTier.STAFF_ONLY,  # copies always land unpublished
-    )
+    try:
+        with transaction.atomic():  # savepoint so the outer atomic isn't poisoned on failure
+            new_template = MissionTemplate.objects.create(name=final_name, **fields)
+    except IntegrityError:
+        # Concurrent create stole our name between the SELECT and INSERT.
+        # Recompute the suffix (now seeing the just-committed row) and retry once.
+        final_name = next_available_name(base, MissionTemplate.objects.all())
+        new_template = MissionTemplate.objects.create(name=final_name, **fields)
     new_template.categories.set(source.categories.all())
     # First pass — clone every node so the node_map is complete before
     # we wire routes.
