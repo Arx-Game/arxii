@@ -57,7 +57,7 @@ const ACCESS_TIERS: { value: AccessTier; label: string }[] = [
 
 function cooldownToISO(amount: number, unit: CooldownUnit): string {
   if (unit === 'hours') return `PT${amount}H`;
-  if (unit === 'weeks') return `P${amount * 7}D`;
+  if (unit === 'weeks') return `P${amount}W`;
   return `P${amount}D`;
 }
 
@@ -86,6 +86,23 @@ export function CreateMissionPage() {
   const onSubmit = async () => {
     setFieldErrors({});
     setLocalError(null);
+
+    // Reject any non-finite numeric input (e.g., user pasted text or
+    // cleared a number field — Number('') is 0 which is OK; Number('abc') is NaN).
+    const numericFields: Record<string, number> = {
+      'Level band min': levelMin,
+      'Level band max': levelMax,
+      'Risk tier': riskTier,
+      'Base weight': baseWeight,
+      'Cooldown amount': cooldownAmount,
+      'Percent replace': percentReplace,
+    };
+    for (const [label, value] of Object.entries(numericFields)) {
+      if (!Number.isFinite(value)) {
+        setLocalError(`${label} must be a number.`);
+        return;
+      }
+    }
 
     if (levelMin > levelMax) {
       setLocalError('Level band min cannot exceed max.');
@@ -120,10 +137,23 @@ export function CreateMissionPage() {
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const flat: Record<string, string> = {};
+        const nonFieldMessages: string[] = [];
         for (const [key, msgs] of Object.entries(err.fieldErrors)) {
-          flat[key] = Array.isArray(msgs) ? msgs[0] : String(msgs);
+          const message = Array.isArray(msgs) ? msgs[0] : String(msgs);
+          // DRF's top-level "detail" and "non_field_errors" don't map to
+          // any form field — surface them as a banner instead.
+          if (key === 'detail' || key === 'non_field_errors') {
+            nonFieldMessages.push(message);
+          } else {
+            flat[key] = message;
+          }
         }
         setFieldErrors(flat);
+        if (nonFieldMessages.length > 0 || Object.keys(flat).length === 0) {
+          setLocalError(
+            nonFieldMessages.length > 0 ? nonFieldMessages.join(' ') : 'Could not create mission.'
+          );
+        }
       } else {
         setLocalError('Could not create mission.');
       }
@@ -208,7 +238,7 @@ export function CreateMissionPage() {
               </SelectContent>
             </Select>
           </FormRow>
-          <FormRow label="% replace" error={fieldErrors.percent_replace}>
+          <FormRow label="Percent replace" error={fieldErrors.percent_replace}>
             <Input
               id="field-percent-replace"
               type="number"

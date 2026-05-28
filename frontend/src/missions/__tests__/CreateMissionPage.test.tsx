@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { CreateMissionPage } from '../pages/CreateMissionPage';
 import * as queries from '../queries';
+import { ApiValidationError } from '../api';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -116,6 +117,54 @@ describe('CreateMissionPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /create/i }));
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Saved as "Heist 2" — "Heist" was taken.');
+    });
+  });
+
+  it('displays inline field errors when API returns 400 with field errors', async () => {
+    const mutateAsync = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiValidationError({ name: ['A mission with this name already exists.'] })
+      );
+    vi.spyOn(queries, 'useCreateMissionTemplate').mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useCreateMissionTemplate>);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Taken' } });
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'lore' } });
+    fireEvent.change(screen.getByLabelText(/level band min/i), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/level band max/i), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText(/risk tier/i), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/cooldown.*amount/i), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/already exists/i)).toBeInTheDocument();
+    });
+  });
+
+  it('displays a banner when API returns a detail-only error (401/403/500)', async () => {
+    const mutateAsync = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiValidationError({ detail: 'Authentication credentials were not provided.' })
+      );
+    vi.spyOn(queries, 'useCreateMissionTemplate').mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useCreateMissionTemplate>);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'X' } });
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'lore' } });
+    fireEvent.change(screen.getByLabelText(/level band min/i), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/level band max/i), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText(/risk tier/i), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/cooldown.*amount/i), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/authentication credentials/i)).toBeInTheDocument();
     });
   });
 });
