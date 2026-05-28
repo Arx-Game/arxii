@@ -14,8 +14,8 @@ eval "$(~/.local/bin/mise activate bash)"
 # author. ~/.gitconfig lives in the container's writable layer (not a named
 # volume), so this needs to re-run on every fresh container — cheap and
 # idempotent. Values mirror the host's bare-metal identity.
-git config --global user.name "Dave Brannigan"
-git config --global user.email "surly.mime@gmail.com"
+git config --global user.name "Dan Brannigan"
+git config --global user.email "apostatecd@yahoo.com"
 # Safe-directory exemption: git in modern versions refuses to operate on a
 # repo owned by a different uid than the current user. The bind-mounted repo
 # is owned by whoever owns it on Windows, which isn't the container's vscode
