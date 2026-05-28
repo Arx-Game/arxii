@@ -49,7 +49,7 @@ class GiverViewSetTests(TestCase):
             target=cls.room,
             org=cls.org,
         )
-        MissionGiverFactory(name="Bare Drafty", giver_kind=GiverKind.NPC)
+        cls.drafty = MissionGiverFactory(name="Bare Drafty", giver_kind=GiverKind.NPC)
 
     def setUp(self) -> None:
         self.client = APIClient()
@@ -68,8 +68,7 @@ class GiverViewSetTests(TestCase):
         self.assertTrue(response.data["is_publishable"])
 
     def test_detail_drafty_giver_not_publishable(self) -> None:
-        drafty = MissionGiverFactory(name="Bare Drafty")
-        response = self.client.get(f"{self.URL}{drafty.pk}/")
+        response = self.client.get(f"{self.URL}{self.drafty.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["is_publishable"])
 
