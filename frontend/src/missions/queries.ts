@@ -355,6 +355,8 @@ export function useMissionCategories(): UseQueryResult<PaginatedResponse<Mission
     queryKey: missionKeys.categories(),
     queryFn: listMissionCategories,
     staleTime: FIVE_MINUTES,
-    throwOnError: true,
+    // Intentionally no throwOnError here: the picker consumers (CreateMissionPage,
+    // EditCategoriesDialog) check isError and render inline so a categories
+    // fetch failure doesn't nuke the user's half-filled form.
   });
 }
