@@ -48,14 +48,19 @@ const KINDS = ['branch', 'check'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
 
 export function OptionPage() {
-  const { slug, nodeId, optionId } = useParams<{
-    slug: string;
+  const {
+    id: idStr,
+    nodeId,
+    optionId,
+  } = useParams<{
+    id: string;
     nodeId: string;
     optionId: string;
   }>();
+  const templateId = idStr ? Number(idStr) : undefined;
   const numericOptionId = Number(optionId);
   const numericNodeId = Number(nodeId);
-  const { data: template } = useMissionTemplate(slug);
+  const { data: template } = useMissionTemplate(templateId);
   const { data: option, isLoading } = useOption(numericOptionId);
   const { data: routesPage } = useMissionRoutes({ option: numericOptionId });
 
@@ -69,12 +74,12 @@ export function OptionPage() {
         crumbs={[
           { label: 'Missions', to: '/staff/missions' },
           {
-            label: template?.name ?? slug ?? '…',
-            to: `/staff/missions?slug=${slug ?? ''}`,
+            label: template?.name ?? (templateId ? `#${templateId}` : '…'),
+            to: `/staff/missions?id=${templateId ?? ''}`,
           },
           {
             label: 'Node',
-            to: `/staff/missions/${slug}/nodes/${numericNodeId}`,
+            to: `/staff/missions/${templateId}/nodes/${numericNodeId}`,
           },
           { label: option ? `Option #${option.order}` : '…' },
         ]}

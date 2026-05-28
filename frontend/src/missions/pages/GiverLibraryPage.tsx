@@ -35,7 +35,8 @@ const ANY_VALUE = '__any__';
 
 export function GiverLibraryPage() {
   const [params, setParams] = useSearchParams();
-  const selectedSlug = params.get('slug') ?? undefined;
+  const selectedIdStr = params.get('id');
+  const selectedId = selectedIdStr ? Number(selectedIdStr) : undefined;
 
   const [nameFilter, setNameFilter] = useState('');
   const [kindFilter, setKindFilter] = useState<string>(ANY_VALUE);
@@ -48,9 +49,9 @@ export function GiverLibraryPage() {
   };
   const { data, isLoading } = useMissionGivers(filters);
 
-  const handleSelect = (slug: string) => {
+  const handleSelect = (id: number) => {
     const next = new URLSearchParams(params);
-    next.set('slug', slug);
+    next.set('id', String(id));
     setParams(next, { replace: true });
   };
 
@@ -113,10 +114,10 @@ export function GiverLibraryPage() {
             ) : (
               (data?.results ?? []).map((g) => (
                 <GiverRow
-                  key={g.slug}
+                  key={g.id}
                   giver={g}
-                  selected={g.slug === selectedSlug}
-                  onSelect={() => handleSelect(g.slug)}
+                  selected={g.id === selectedId}
+                  onSelect={() => handleSelect(g.id)}
                 />
               ))
             )}
@@ -124,7 +125,7 @@ export function GiverLibraryPage() {
         </Card>
         <div className="space-y-4">
           <NewGiverCard />
-          <GiverPreview slug={selectedSlug} />
+          <GiverPreview id={selectedId} />
         </div>
       </div>
     </div>
@@ -145,7 +146,7 @@ function GiverRow({
       type="button"
       onClick={onSelect}
       data-testid="giver-row"
-      data-slug={giver.slug}
+      data-id={giver.id}
       className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm transition ${
         selected ? 'bg-primary/10 font-medium' : 'hover:bg-muted'
       }`}
@@ -170,10 +171,10 @@ function ListSkeleton() {
   );
 }
 
-function GiverPreview({ slug }: { slug: string | undefined }) {
-  const { data: giver, isLoading } = useMissionGiver(slug);
+function GiverPreview({ id }: { id: number | undefined }) {
+  const { data: giver, isLoading } = useMissionGiver(id);
 
-  if (!slug) {
+  if (!id) {
     return (
       <Card>
         <CardHeader>
@@ -194,7 +195,7 @@ function GiverPreview({ slug }: { slug: string | undefined }) {
         <CardTitle className="flex items-center justify-between">
           <span>{giver.name}</span>
           <Link
-            to={`/staff/missions/givers/${giver.slug}`}
+            to={`/staff/missions/givers/${giver.id}`}
             className="text-sm font-normal text-primary hover:underline"
           >
             Open editor →
@@ -240,7 +241,7 @@ function NewGiverCard() {
     if (!name || !slug) return;
     const created = await create.mutateAsync({ name, slug, giver_kind: kind });
     reset();
-    navigate(`/staff/missions/givers/${created.slug}`);
+    navigate(`/staff/missions/givers/${created.id}`);
   };
 
   if (!open) {

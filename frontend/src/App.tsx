@@ -310,7 +310,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/canvas"
+          path="/staff/missions/:id/canvas"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -320,7 +320,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/nodes/:nodeId"
+          path="/staff/missions/:id/nodes/:nodeId"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -330,7 +330,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/nodes/:nodeId/options/:optionId"
+          path="/staff/missions/:id/nodes/:nodeId/options/:optionId"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -350,7 +350,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/givers/:slug"
+          path="/staff/missions/givers/:id"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>

@@ -6,9 +6,10 @@
  *
  * - Publish / Withdraw: PATCH access_tier between "open" and
  *   "staff_only" (gate for player-facing visibility).
- * - Copy template: POST D4.2 copy action with new_slug + new_name.
+ * - Copy template: POST D4.2 copy action with optional new_name.
  *   Lands the copy as staff_only with all flavor flagged needs_rewrite
  *   (so the new template doesn't accidentally publish stale text).
+ *   The server auto-suffixes the name; new_name is optional override.
  * - Assign: POST D4.3 staff-power assign action with a character pk.
  *   Bypasses availability filters — explicit operator gesture per the
  *   D4.3 contract, not a normal acceptance flow.
@@ -58,7 +59,7 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
               variant={isOpen ? 'secondary' : 'default'}
               onClick={() =>
                 patch.mutate({
-                  slug: template.slug,
+                  id: template.id,
                   body: { access_tier: nextTier },
                 })
               }
@@ -116,7 +117,6 @@ function CopyRow({ template }: { template: MissionTemplate }) {
   const navigate = useNavigate();
   const copy = useCopyTemplate();
   const [open, setOpen] = useState(false);
-  const [newSlug, setNewSlug] = useState('');
   const [newName, setNewName] = useState('');
 
   if (!open) {
@@ -135,35 +135,21 @@ function CopyRow({ template }: { template: MissionTemplate }) {
     );
   }
   const onSubmit = async () => {
-    if (!newSlug || !newName) return;
     const created = await copy.mutateAsync({
-      slug: template.slug,
-      new_slug: newSlug,
-      new_name: newName,
+      id: template.id,
+      new_name: newName || undefined,
     });
     setOpen(false);
-    setNewSlug('');
     setNewName('');
     // Land on the new template's panel.
-    navigate(`/staff/missions?slug=${created.slug}`);
+    navigate(`/staff/missions?id=${created.id}`);
   };
   return (
     <div className="space-y-2 rounded border p-2">
       <div className="text-sm font-medium">Copy template</div>
-      <div className="grid gap-2 md:grid-cols-2">
-        <div>
-          <Label htmlFor="copy-new-slug">New slug</Label>
-          <Input
-            id="copy-new-slug"
-            value={newSlug}
-            onChange={(e) => setNewSlug(e.target.value)}
-            placeholder="urlsafe-slug"
-          />
-        </div>
-        <div>
-          <Label htmlFor="copy-new-name">New name</Label>
-          <Input id="copy-new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        </div>
+      <div>
+        <Label htmlFor="copy-new-name">New name (optional — server auto-suffixes if blank)</Label>
+        <Input id="copy-new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
       </div>
       {copy.error ? (
         <div className="text-xs text-destructive">
@@ -174,7 +160,7 @@ function CopyRow({ template }: { template: MissionTemplate }) {
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cancel
         </Button>
-        <Button size="sm" onClick={onSubmit} disabled={!newSlug || !newName || copy.isPending}>
+        <Button size="sm" onClick={onSubmit} disabled={copy.isPending}>
           {copy.isPending ? 'Copying…' : 'Copy'}
         </Button>
       </div>
@@ -211,7 +197,7 @@ function AssignRow({ template }: { template: MissionTemplate }) {
     }
     setFeedback(null);
     try {
-      const instance = await assign.mutateAsync({ slug: template.slug, character: pk });
+      const instance = await assign.mutateAsync({ id: template.id, character: pk });
       setFeedback(`Created instance #${instance.id}.`);
       setCharacterPk('');
     } catch (e) {

@@ -60,11 +60,12 @@ import {
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
 export function GiverEditorPage() {
-  const { slug } = useParams<{ slug: string }>();
-  const { data: giver, isLoading } = useMissionGiver(slug);
+  const { id: idStr } = useParams<{ id: string }>();
+  const giverId = idStr ? Number(idStr) : undefined;
+  const { data: giver, isLoading } = useMissionGiver(giverId);
 
-  if (!slug) {
-    return <div className="p-6 text-destructive">Missing slug in URL.</div>;
+  if (!giverId) {
+    return <div className="p-6 text-destructive">Missing id in URL.</div>;
   }
 
   return (
@@ -73,7 +74,7 @@ export function GiverEditorPage() {
         crumbs={[
           { label: 'Missions', to: '/staff/missions' },
           { label: 'Givers', to: '/staff/missions/givers' },
-          { label: giver?.name ?? slug },
+          { label: giver?.name ?? (giverId ? `#${giverId}` : '…') },
         ]}
       />
       {isLoading || !giver ? (
@@ -100,13 +101,13 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
     is_active: g.is_active ?? true,
   }));
 
-  const onSave = () => patch.mutate({ slug: giver.slug, body: draft });
+  const onSave = () => patch.mutate({ id: giver.id, body: draft });
 
   const onDelete = async () => {
     if (!confirm(`Delete giver "${giver.name}" (slug=${giver.slug})? This cannot be undone.`)) {
       return;
     }
-    await del.mutateAsync(giver.slug);
+    await del.mutateAsync(giver.id);
     navigate('/staff/missions/givers');
   };
 
@@ -368,7 +369,7 @@ function NewOfferingRow({ giverId, onDone }: { giverId: number; onDone: () => vo
             </SelectTrigger>
             <SelectContent>
               {(templates?.results ?? []).map((t) => (
-                <SelectItem key={t.slug} value={String(t.id)}>
+                <SelectItem key={t.id} value={String(t.id)}>
                   {t.name}
                 </SelectItem>
               ))}

@@ -44,9 +44,10 @@ import { useQuery } from '@tanstack/react-query';
 const CONFLICT_MODES: Array<MissionNode['conflict_mode']> = ['coinflip', 'vote', 'joint'];
 
 export function NodePage() {
-  const { slug, nodeId } = useParams<{ slug: string; nodeId: string }>();
+  const { id: idStr, nodeId } = useParams<{ id: string; nodeId: string }>();
+  const templateId = idStr ? Number(idStr) : undefined;
   const numericNodeId = Number(nodeId);
-  const { data: template } = useMissionTemplate(slug);
+  const { data: template } = useMissionTemplate(templateId);
   const { data: node, isLoading } = useNode(numericNodeId);
   const { data: optionsPage } = useMissionOptions({ node: numericNodeId });
 
@@ -60,8 +61,8 @@ export function NodePage() {
         crumbs={[
           { label: 'Missions', to: '/staff/missions' },
           {
-            label: template?.name ?? slug ?? '…',
-            to: `/staff/missions?slug=${slug ?? ''}`,
+            label: template?.name ?? (templateId ? `#${templateId}` : '…'),
+            to: `/staff/missions?id=${templateId ?? ''}`,
           },
           { label: node ? `Node "${node.key}"` : '…' },
         ]}
@@ -76,7 +77,7 @@ export function NodePage() {
             optionsPage.results.map((opt) => (
               <Link
                 key={opt.id}
-                to={`/staff/missions/${slug}/nodes/${numericNodeId}/options/${opt.id}`}
+                to={`/staff/missions/${templateId}/nodes/${numericNodeId}/options/${opt.id}`}
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 <span>
