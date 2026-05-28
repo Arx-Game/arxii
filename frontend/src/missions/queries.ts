@@ -92,7 +92,10 @@ export function useMissionTemplates(
     queryKey: missionKeys.templateList(filters),
     queryFn: () => listMissionTemplates(filters),
     staleTime: 30_000,
-    throwOnError: true,
+    // No throwOnError: MissionBrowserPage handles isError inline so a list
+    // fetch failure shows a "couldn't load" card rather than crashing to the
+    // global ErrorBoundary. Other drill-down hooks still use throwOnError —
+    // tracked as a follow-up to align them; out of scope for this PR.
   });
 }
 
@@ -174,7 +177,10 @@ export function useMissionGivers(
   return useQuery({
     queryKey: missionKeys.giverList(filters),
     queryFn: () => listMissionGivers(filters),
-    throwOnError: true,
+    // No throwOnError: GiverLibraryPage handles isError inline so a list
+    // fetch failure shows a "couldn't load" card rather than crashing to the
+    // global ErrorBoundary. Other drill-down hooks still use throwOnError —
+    // tracked as a follow-up to align them; out of scope for this PR.
   });
 }
 

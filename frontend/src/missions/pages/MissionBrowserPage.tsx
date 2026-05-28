@@ -48,7 +48,7 @@ export function MissionBrowserPage() {
     page,
   };
 
-  const { data, isLoading } = useMissionTemplates(filters);
+  const { data, isLoading, isError, refetch } = useMissionTemplates(filters);
 
   const handleSelectId = (id: number) => {
     const next = new URLSearchParams(params);
@@ -77,7 +77,18 @@ export function MissionBrowserPage() {
       <div className="mt-4 grid gap-4 md:grid-cols-[1fr_2fr]">
         <Card>
           <CardContent className="space-y-1 p-3" data-testid="mission-list">
-            {isLoading ? (
+            {isError ? (
+              <div
+                className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+                role="alert"
+                data-testid="mission-list-error"
+              >
+                <p className="font-medium">Couldn't load missions.</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
               <ListSkeleton />
             ) : (data?.results?.length ?? 0) === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">

@@ -47,7 +47,7 @@ export function GiverLibraryPage() {
     giver_kind: kindFilter === ANY_VALUE ? undefined : kindFilter,
     is_active: activeFilter === ANY_VALUE ? undefined : activeFilter === 'true' ? true : false,
   };
-  const { data, isLoading } = useMissionGivers(filters);
+  const { data, isLoading, isError, refetch } = useMissionGivers(filters);
 
   const handleSelect = (id: number) => {
     const next = new URLSearchParams(params);
@@ -107,7 +107,18 @@ export function GiverLibraryPage() {
       <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
         <Card>
           <CardContent className="space-y-1 p-3" data-testid="giver-list">
-            {isLoading ? (
+            {isError ? (
+              <div
+                className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+                role="alert"
+                data-testid="giver-list-error"
+              >
+                <p className="font-medium">Couldn't load givers.</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
               <ListSkeleton />
             ) : (data?.results?.length ?? 0) === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No givers match.</div>
