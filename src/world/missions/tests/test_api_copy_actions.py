@@ -109,13 +109,21 @@ class CopyTemplateActionTests(TestCase):
         self.assertIn("new_name", res.json())
 
     def test_copy_carries_source_categories(self) -> None:
-        from world.missions.factories import MissionCategoryFactory
+        from world.missions.factories import (
+            MissionCategoryFactory,
+            MissionTemplateFactory,
+        )
 
+        # Use a local template (not self.source) so the M2M add doesn't
+        # pollute the shared setUpTestData fixture for sibling tests.
+        local_source = MissionTemplateFactory(name="cat-copy-source")
         cat_a = MissionCategoryFactory(name="copy-cat-a")
         cat_b = MissionCategoryFactory(name="copy-cat-b")
-        self.source.categories.add(cat_a, cat_b)
+        local_source.categories.add(cat_a, cat_b)
 
-        res = self.client.post(f"/api/missions/templates/{self.source.pk}/copy/", {}, format="json")
+        res = self.client.post(
+            f"/api/missions/templates/{local_source.pk}/copy/", {}, format="json"
+        )
         self.assertEqual(res.status_code, 201, res.content)
         self.assertEqual(sorted(res.json()["categories"]), sorted([cat_a.pk, cat_b.pk]))
 
