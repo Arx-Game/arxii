@@ -55,6 +55,23 @@ const ACCESS_TIERS: { value: AccessTier; label: string }[] = [
   { value: 'open', label: 'Open' },
 ];
 
+function flattenErrorMessage(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const flat = value.map(flattenErrorMessage).filter(Boolean);
+    return flat.length > 0 ? flat[0] : '';
+  }
+  if (value !== null && typeof value === 'object') {
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(value)) {
+      const sub = flattenErrorMessage(v);
+      if (sub) parts.push(`${k}: ${sub}`);
+    }
+    return parts.join('; ');
+  }
+  return String(value);
+}
+
 function cooldownToISO(amount: number, unit: CooldownUnit): string {
   if (unit === 'hours') return `PT${amount}H`;
   if (unit === 'weeks') return `P${amount}W`;
@@ -139,12 +156,12 @@ export function CreateMissionPage() {
         const flat: Record<string, string> = {};
         const nonFieldMessages: string[] = [];
         for (const [key, msgs] of Object.entries(err.fieldErrors)) {
-          const message = Array.isArray(msgs) ? msgs[0] : String(msgs);
+          const message = flattenErrorMessage(msgs);
           // DRF's top-level "detail" and "non_field_errors" don't map to
           // any form field — surface them as a banner instead.
           if (key === 'detail' || key === 'non_field_errors') {
             nonFieldMessages.push(message);
-          } else {
+          } else if (message) {
             flat[key] = message;
           }
         }
