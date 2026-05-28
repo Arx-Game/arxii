@@ -60,6 +60,11 @@ export function ConsentPrompt({ sceneId }: Props) {
               </span>{' '}
               on your character.
             </p>
+            {req.strain_commitment > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {req.initiator_persona.name} is committing {req.strain_commitment} strain.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <Button
