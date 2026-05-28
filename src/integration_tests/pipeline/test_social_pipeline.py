@@ -6,7 +6,6 @@ These tests serve two purposes:
      realistic social action content via FactoryBoy.
 
 Test structure:
-  SocialActionAvailabilityTests — get_available_scene_actions returns social templates
   SocialActionConsentFlowTests  — ACCEPT/DENY consent flow mechanics
   SocialActionConsequenceTests  — full resolution: condition applied to TARGET
 """
@@ -18,38 +17,11 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from integration_tests.game_content.characters import CharacterContent
-from integration_tests.game_content.checks import CheckContent
 from integration_tests.game_content.social import ACTION_CONDITION_MAP, SocialContent
 from world.conditions.services import has_condition
-from world.scenes.action_availability import get_available_scene_actions
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import SceneFactory
-
-
-class SocialActionAvailabilityTests(TestCase):
-    """get_available_scene_actions returns the 6 wired social actions."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.action_templates = CheckContent.create_action_templates()
-        cls.character, cls.persona = CharacterContent.create_base_social_character(name="Aria")
-
-    def test_returns_six_social_actions(self) -> None:
-        actions = get_available_scene_actions(character=self.character)
-        assert len(actions) == 6
-
-    def test_action_keys_match_template_names(self) -> None:
-        actions = get_available_scene_actions(character=self.character)
-        keys = {a.action_key for a in actions}
-        expected = {"intimidate", "persuade", "deceive", "flirt", "perform", "entrance"}
-        assert keys == expected
-
-    def test_no_enhancements_without_techniques(self) -> None:
-        """Baseline: no technique enhancements for a character with no techniques."""
-        actions = get_available_scene_actions(character=self.character)
-        for action in actions:
-            assert action.enhancements == []
 
 
 class SocialActionConsentFlowTests(TestCase):

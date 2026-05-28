@@ -585,12 +585,9 @@ _SOCIAL_CATEGORY = "social"  # noqa: STRING_LITERAL — mirrors ActionTemplate.c
 def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     """Surface social ``ActionTemplate`` rows as ``PlayerAction``s.
 
-    These are the data-driven social actions (Intimidate, Persuade, Flirt, …)
-    that previously lived behind ``world.scenes.action_availability.
-    get_available_scene_actions``. For v1 they emit as REGISTRY-backend
-    descriptors keyed by the lowercased template name — the legacy scene-action
-    endpoint still handles dispatch. A follow-up PR will introduce a dedicated
-    backend value for these once the legacy endpoint is removed.
+    These are the data-driven social actions (Intimidate, Persuade, Flirt, …).
+    For v1 they emit as REGISTRY-backend descriptors keyed by the lowercased
+    template name. A follow-up PR may introduce a dedicated backend value.
 
     Enhancements / target_spec / strain are NOT populated here — they are
     attached uniformly by ``_enrich_player_actions`` so every backend's actions
@@ -681,8 +678,7 @@ def _build_enhancement_index(
     """Return an index of available enhancements keyed by ``base_action_key``.
 
     Pure: one query for ActionEnhancement rows, plus a per-technique runtime
-    stats lookup that is identical to what ``get_available_scene_actions``
-    performs. Identity-map caching keeps the cost low across repeated calls
+    stats lookup. Identity-map caching keeps the cost low across repeated calls
     in the same request.
 
     Receives ``anima`` from the caller so we don't issue a duplicate
