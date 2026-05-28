@@ -16,10 +16,8 @@ from actions.models import ActionEnhancement
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
 from world.conditions.factories import (
-    ConditionStageFactory,
     ConditionTemplateFactory,
 )
-from world.conditions.models import ConditionInstance
 from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -28,7 +26,6 @@ from world.magic.factories import (
     SoulfrayConfigFactory,
     TechniqueFactory,
 )
-from world.scenes.action_availability import get_available_scene_actions
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -176,21 +173,6 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
         anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
         assert anima.current < 20
 
-    def test_free_technique_no_soulfray_warning(self) -> None:
-        """Technique where control >> intensity has no Soulfray warning in available actions."""
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
-        assert flirt_action is not None
-
-        charm_enhancement = next(
-            (e for e in flirt_action.enhancements if e.technique == self.charm_technique),
-            None,
-        )
-        assert charm_enhancement is not None
-        # High control means effective_cost == 0, so no Soulfray warning
-        assert charm_enhancement.effective_cost == 0
-        assert charm_enhancement.soulfray_warning is None
-
     def test_enhancement_rejected_without_record(self) -> None:
         """Cannot attach a technique without a matching ActionEnhancement (raises
         ValidationError)."""
@@ -234,93 +216,8 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
         assert self.charm_technique.name in request.result_interaction.content
 
 
-class TestAvailableActionsFiltering(SceneMagicTestMixin, TestCase):
-    """Verifies the available-actions service filtering logic."""
-
-    def test_only_known_techniques_appear(self) -> None:
-        """Unknown techniques are excluded from enhancements."""
-        unknown_technique = TechniqueFactory(name="Forbidden Spell")
-        ActionEnhancement.objects.create(
-            base_action_key="flirt",
-            variant_name="Forbidden Flirt",
-            source_type="technique",
-            technique=unknown_technique,
-        )
-
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next(a for a in actions if a.action_key == "flirt")
-
-        technique_ids = {e.technique.pk for e in flirt_action.enhancements}
-        assert unknown_technique.pk not in technique_ids
-        assert self.charm_technique.pk in technique_ids
-
-    def test_non_magical_character_has_no_enhancements(self) -> None:
-        """Characters without known techniques have no enhancements on any action."""
-        non_magical = PersonaFactory()
-
-        actions = get_available_scene_actions(character=non_magical.character_sheet.character)
-        for action in actions:
-            assert len(action.enhancements) == 0
-
-
 class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
-    """Soulfray warning in available actions, severity accumulation, and mishap evaluation."""
-
-    def test_soulfray_warning_appears_in_available_actions(self) -> None:
-        """A character with an existing Soulfray condition and a costly technique sees the
-        warning in available-actions data for that enhancement."""
-        # Create a costly technique: intensity >> control so effective_cost > 0
-        # runtime_control = 1 + social_safety(10) = 11
-        # runtime_intensity = 15; control_delta = 11 - 15 = -4
-        # effective_cost = max(5 - (-4), 0) = 9
-        costly_technique = TechniqueFactory(
-            name="Soulfray Warning Test Technique",
-            intensity=15,
-            control=1,
-            anima_cost=5,
-        )
-        initiator_sheet = CharacterSheet.objects.get(
-            character=self.initiator.character_sheet.character
-        )
-        CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
-        ActionEnhancement.objects.create(
-            base_action_key="flirt",
-            variant_name="Soulfray Warning Flirt",
-            source_type="technique",
-            technique=costly_technique,
-        )
-
-        # Create a Soulfray condition template, a stage, and an active instance.
-        # get_soulfray_warning() returns None when current_stage is None, so we
-        # must set current_stage to get a real warning object.
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
-            has_progression=True,
-        )
-        soulfray_stage = ConditionStageFactory(
-            condition=soulfray_template,
-            stage_order=1,
-            name="Flickering",
-            severity_threshold=1,
-        )
-        ConditionInstance.objects.create(
-            target=self.initiator.character_sheet.character,
-            condition=soulfray_template,
-            current_stage=soulfray_stage,
-            severity=5,
-        )
-
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
-        assert flirt_action is not None
-
-        costly_enhancement = next(
-            (e for e in flirt_action.enhancements if e.technique == costly_technique),
-            None,
-        )
-        assert costly_enhancement is not None
-        assert costly_enhancement.effective_cost > 0
-        assert costly_enhancement.soulfray_warning is not None
+    """Severity accumulation and mishap evaluation for technique-enhanced actions."""
 
     def test_soulfray_accumulates_on_depleted_character(self) -> None:
         """A character with very low anima using a costly technique accumulates Soulfray."""

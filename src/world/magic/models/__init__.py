@@ -57,6 +57,7 @@ from world.magic.models.aura import (
     CharacterResonance,
 )
 from world.magic.models.cantrips import Cantrip
+from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.endorsement import PoseEndorsement, SceneEntryEndorsement
 from world.magic.models.gain_config import ResonanceGainConfig

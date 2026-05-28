@@ -53,6 +53,9 @@ function makeAction(
       technique_id: null,
       registry_key: 'test_action',
     },
+    target_spec: null,
+    enhancements: [],
+    strain: null,
     ...overrides,
   };
 }

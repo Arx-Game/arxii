@@ -20,7 +20,6 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
-from world.scenes.action_resolvers import _MENU_CONTRIBUTORS, register_menu_contributor
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
@@ -172,8 +171,6 @@ class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
 
-        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
-
         # PersonaFactory ensures a CharacterSheet exists for its character.
         cls.initiator_sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(name="Mesmerizing Gaze")
@@ -184,7 +181,6 @@ class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
 
     def test_create_request_with_valid_technique(self) -> None:
         """Technique is stored when ActionEnhancement exists and character knows it."""
-        from actions.models import ActionEnhancement
 
         ActionEnhancement.objects.create(
             base_action_key="flirt",
@@ -205,8 +201,6 @@ class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
         """Technique rejected when no ActionEnhancement record exists."""
         from django.core.exceptions import ValidationError
 
-        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
-
         rogue_technique = TechniqueFactory(name="Teleportation")
         CharacterTechniqueFactory(character=self.initiator_sheet, technique=rogue_technique)
         with self.assertRaises(ValidationError):
@@ -222,7 +216,6 @@ class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
         """Technique rejected when character doesn't know it."""
         from django.core.exceptions import ValidationError
 
-        from actions.models import ActionEnhancement
         from world.magic.factories import TechniqueFactory
 
         unknown_technique = TechniqueFactory(name="Unknown Spell")
@@ -296,9 +289,7 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
 
-        from actions.models import ActionEnhancement
         from world.magic.factories import (
-            CharacterAnimaFactory,
             CharacterTechniqueFactory,
             TechniqueFactory,
         )
@@ -409,166 +400,3 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
         assert request.result_interaction is not None
         assert request.status == ActionRequestStatus.RESOLVED
         assert self.technique.name in request.result_interaction.content
-
-
-class TestAvailableActionsService(_BaseActionIntegrationTest):
-    """Unit tests for get_available_scene_actions service function."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        CheckSystemSetupFactory.create()
-        templates = create_social_action_templates()
-        cls.flirt_template = next(t for t in templates if t.name == "Flirt")
-
-        cls.scene = SceneFactory()
-        cls.initiator = PersonaFactory()
-
-        cls.initiator_sheet = cls.initiator.character_sheet
-        cls.technique = TechniqueFactory(
-            name="Mesmerizing Gaze",
-            intensity=5,
-            control=8,
-            anima_cost=3,
-        )
-        CharacterTechniqueFactory(
-            character=cls.initiator_sheet,
-            technique=cls.technique,
-        )
-        CharacterAnimaFactory(
-            character=cls.initiator.character_sheet.character,
-            current=20,
-            maximum=30,
-        )
-        ActionEnhancement.objects.create(
-            base_action_key="flirt",
-            variant_name="Enchanted Flirt",
-            source_type="technique",
-            technique=cls.technique,
-        )
-
-    def test_returns_enhancements_for_known_techniques(self) -> None:
-        """Characters with known techniques see enhancement options for matching actions."""
-        from world.scenes.action_availability import get_available_scene_actions
-
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
-        assert flirt_action is not None
-        assert len(flirt_action.enhancements) == 1
-        assert flirt_action.enhancements[0].technique == self.technique
-
-    def test_excludes_unknown_techniques(self) -> None:
-        """Techniques the character does not know are excluded from enhancements."""
-        from world.scenes.action_availability import get_available_scene_actions
-
-        unknown = TechniqueFactory(name="Unknown Spell")
-        ActionEnhancement.objects.create(
-            base_action_key="flirt",
-            variant_name="Unknown Flirt",
-            source_type="technique",
-            technique=unknown,
-        )
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next(a for a in actions if a.action_key == "flirt")
-        # Only the known technique's enhancement is present
-        assert len(flirt_action.enhancements) == 1
-        assert flirt_action.enhancements[0].technique == self.technique
-
-    def test_non_magical_character_has_no_enhancements(self) -> None:
-        """Characters with no known techniques have no enhancements on any action."""
-        from world.scenes.action_availability import get_available_scene_actions
-
-        non_magical = PersonaFactory()
-        actions = get_available_scene_actions(character=non_magical.character_sheet.character)
-        for action in actions:
-            assert len(action.enhancements) == 0
-
-    def test_returns_all_social_action_templates(self) -> None:
-        """All social ActionTemplates are returned, even without enhancements."""
-        from actions.models import ActionTemplate
-        from world.scenes.action_availability import get_available_scene_actions
-
-        social_count = ActionTemplate.objects.filter(category="social").count()
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        assert len(actions) == social_count
-
-    def test_effective_cost_calculated(self) -> None:
-        """Effective anima cost is pre-calculated for each enhancement."""
-        from world.scenes.action_availability import get_available_scene_actions
-
-        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
-        flirt_action = next(a for a in actions if a.action_key == "flirt")
-        enhancement = flirt_action.enhancements[0]
-        # Cost is an integer (non-negative)
-        assert isinstance(enhancement.effective_cost, int)
-        assert enhancement.effective_cost >= 0
-
-
-class TestMenuContributorMerge(_BaseActionIntegrationTest):
-    """Tests that registered menu contributors are merged into get_available_scene_actions."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.persona = PersonaFactory()
-        cls.character = cls.persona.character_sheet.character
-
-    def setUp(self) -> None:
-        self._original_contributors = list(_MENU_CONTRIBUTORS)
-
-    def tearDown(self) -> None:
-        _MENU_CONTRIBUTORS.clear()
-        _MENU_CONTRIBUTORS.extend(self._original_contributors)
-
-    def test_contributor_entries_merged_into_result(self) -> None:
-        from world.scenes.action_availability import (
-            AvailableSceneAction,
-            get_available_scene_actions,
-        )
-
-        def fake_contributor(character, scene):
-            return [
-                AvailableSceneAction(
-                    action_key="anima_ritual",
-                    display_name="Anima Ritual",
-                    ritual_id=99,
-                )
-            ]
-
-        register_menu_contributor(fake_contributor)
-
-        actions = get_available_scene_actions(character=self.character)
-        ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
-        self.assertEqual(len(ritual_entries), 1)
-        self.assertEqual(ritual_entries[0].display_name, "Anima Ritual")
-        self.assertEqual(ritual_entries[0].ritual_id, 99)
-        self.assertIsNone(ritual_entries[0].action_template)
-
-    def test_contributor_receives_scene_arg(self) -> None:
-        """Contributor callable receives the scene passed to get_available_scene_actions."""
-        from world.scenes.action_availability import get_available_scene_actions
-
-        received: list[object] = []
-
-        def capturing_contributor(character, scene):
-            received.append(scene)
-            return []
-
-        register_menu_contributor(capturing_contributor)
-
-        scene = SceneFactory()
-        get_available_scene_actions(character=self.character, scene=scene)
-        self.assertEqual(len(received), 1)
-        self.assertIs(received[0], scene)
-
-    def test_contributor_receives_none_when_no_scene(self) -> None:
-        from world.scenes.action_availability import get_available_scene_actions
-
-        received: list[object] = []
-
-        def capturing_contributor(character, scene):
-            received.append(scene)
-            return []
-
-        register_menu_contributor(capturing_contributor)
-
-        get_available_scene_actions(character=self.character)
-        self.assertIsNone(received[0])

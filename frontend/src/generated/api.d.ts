@@ -142,29 +142,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/action-requests/available/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Return social actions available to the requesting user's character.
-     *
-     *     Resolves the character from the first persona owned by the account,
-     *     then returns all social ActionTemplates with technique enhancement
-     *     options for that character.
-     */
-    get: operations['action_requests_available_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -10753,6 +10730,7 @@ export interface components {
       readonly id: number;
       readonly beat: number;
       readonly assistant_gm: number;
+      /** @default requested */
       readonly status: components['schemas']['AssistantGMClaimStatusEnum'];
       /** @description The Lead GM or Staff member who approved/rejected. */
       readonly approved_by: number | null;
@@ -10774,6 +10752,13 @@ export interface components {
      * @enum {string}
      */
     AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
+    /** @description Read-only serializer for AvailableEnhancement (technique enhancement option). */
+    AvailableEnhancement: {
+      readonly technique_id: number;
+      readonly technique_name: string;
+      readonly effective_cost: number;
+      readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -10782,7 +10767,8 @@ export interface components {
       readonly chapter_title: string;
       readonly story_id: number;
       readonly story_title: string;
-      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /** @default gm_marked */
+      predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
        *
@@ -10872,7 +10858,8 @@ export interface components {
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
       episode: number;
-      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /** @default gm_marked */
+      predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
        *
@@ -11810,7 +11797,7 @@ export interface components {
       category: number;
       readonly category_name: string;
       /** @description Parent subject for nesting. Leave blank for top-level. */
-      parent: number | null;
+      parent?: number | null;
       readonly parent_name: string | null;
       /** @description Return the full path with IDs, preferring materialized view cache. */
       readonly path: {
@@ -11957,6 +11944,7 @@ export interface components {
        *
        *     * `durance` - Covenant of the Durance
        *     * `battle` - Covenant of Battle
+       * @default durance
        */
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
       readonly covenant_type_display: string;
@@ -12854,7 +12842,7 @@ export interface components {
       /** @description Facet name (e.g., 'Wolf', 'Silk', 'Creatures'). */
       name: string;
       /** @description Parent facet for hierarchy (null = top-level category). */
-      parent: number | null;
+      parent?: number | null;
       readonly parent_name: string | null;
       /** @description Description of this facet's thematic meaning. */
       description?: string;
@@ -14645,7 +14633,7 @@ export interface components {
     PaceModeEnum: 'timed' | 'ready' | 'manual';
     PaginatedAggregateBeatContributionList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14656,11 +14644,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['AggregateBeatContribution'][];
+      results: components['schemas']['AggregateBeatContribution'][];
     };
     PaginatedAreaListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14671,11 +14659,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['AreaList'][];
+      results: components['schemas']['AreaList'][];
     };
     PaginatedAreaRoomList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14686,11 +14674,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['AreaRoom'][];
+      results: components['schemas']['AreaRoom'][];
     };
     PaginatedAssistantGMClaimList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14701,11 +14689,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['AssistantGMClaim'][];
+      results: components['schemas']['AssistantGMClaim'][];
     };
     PaginatedBeatList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14716,11 +14704,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Beat'][];
+      results: components['schemas']['Beat'][];
     };
     PaginatedBugReportDetailList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14731,11 +14719,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['BugReportDetail'][];
+      results: components['schemas']['BugReportDetail'][];
     };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14746,11 +14734,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['ChallengeInstance'][];
+      results: components['schemas']['ChallengeInstance'][];
     };
     PaginatedChallengeTemplateListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14761,11 +14749,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['ChallengeTemplateList'][];
+      results: components['schemas']['ChallengeTemplateList'][];
     };
     PaginatedChapterListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14776,11 +14764,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['ChapterList'][];
+      results: components['schemas']['ChapterList'][];
     };
     PaginatedCharacterCovenantRoleList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14791,11 +14779,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['CharacterCovenantRole'][];
+      results: components['schemas']['CharacterCovenantRole'][];
     };
     PaginatedCharacterRelationshipListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14806,11 +14794,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['CharacterRelationshipList'][];
+      results: components['schemas']['CharacterRelationshipList'][];
     };
     PaginatedCovenantList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14821,11 +14809,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Covenant'][];
+      results: components['schemas']['Covenant'][];
     };
     PaginatedDraftApplicationList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14836,11 +14824,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['DraftApplication'][];
+      results: components['schemas']['DraftApplication'][];
     };
     PaginatedEncounterListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14851,11 +14839,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EncounterList'][];
+      results: components['schemas']['EncounterList'][];
     };
     PaginatedEpisodeListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14866,11 +14854,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EpisodeList'][];
+      results: components['schemas']['EpisodeList'][];
     };
     PaginatedEpisodeProgressionRequirementList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14881,11 +14869,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EpisodeProgressionRequirement'][];
+      results: components['schemas']['EpisodeProgressionRequirement'][];
     };
     PaginatedEpisodeSceneList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14896,7 +14884,7 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EpisodeScene'][];
+      results: components['schemas']['EpisodeScene'][];
     };
     PaginatedEquippedItemReadList: {
       count: number;
@@ -14908,7 +14896,7 @@ export interface components {
     };
     PaginatedEraList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14919,11 +14907,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Era'][];
+      results: components['schemas']['Era'][];
     };
     PaginatedEventInvitationList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14934,11 +14922,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EventInvitation'][];
+      results: components['schemas']['EventInvitation'][];
     };
     PaginatedEventListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14949,11 +14937,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['EventList'][];
+      results: components['schemas']['EventList'][];
     };
     PaginatedGMApplicationDetailList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14964,11 +14952,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMApplicationDetail'][];
+      results: components['schemas']['GMApplicationDetail'][];
     };
     PaginatedGMApplicationQueueList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14979,11 +14967,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMApplicationQueue'][];
+      results: components['schemas']['GMApplicationQueue'][];
     };
     PaginatedGMProfileList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -14994,11 +14982,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMProfile'][];
+      results: components['schemas']['GMProfile'][];
     };
     PaginatedGMRosterInviteList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15009,11 +14997,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMRosterInvite'][];
+      results: components['schemas']['GMRosterInvite'][];
     };
     PaginatedGMTableList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15024,11 +15012,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMTable'][];
+      results: components['schemas']['GMTable'][];
     };
     PaginatedGMTableMembershipList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15039,11 +15027,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GMTableMembership'][];
+      results: components['schemas']['GMTableMembership'][];
     };
     PaginatedGemitList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15054,11 +15042,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Gemit'][];
+      results: components['schemas']['Gemit'][];
     };
     PaginatedGiftListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15069,11 +15057,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GiftList'][];
+      results: components['schemas']['GiftList'][];
     };
     PaginatedGlobalStoryProgressList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15084,11 +15072,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GlobalStoryProgress'][];
+      results: components['schemas']['GlobalStoryProgress'][];
     };
     PaginatedGroupStoryProgressList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15099,11 +15087,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['GroupStoryProgress'][];
+      results: components['schemas']['GroupStoryProgress'][];
     };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15114,12 +15102,20 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['InteractionFavorite'][];
+      results: components['schemas']['InteractionFavorite'][];
     };
     PaginatedInteractionListList: {
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?cursor=cD00ODY%3D"
+       */
       next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+       */
       previous?: string | null;
-      results?: components['schemas']['InteractionList'][];
+      results: components['schemas']['InteractionList'][];
     };
     PaginatedItemFacetReadList: {
       count: number;
@@ -15139,7 +15135,7 @@ export interface components {
     };
     PaginatedItemTemplateListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15150,11 +15146,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['ItemTemplateList'][];
+      results: components['schemas']['ItemTemplateList'][];
     };
     PaginatedMissionGiverList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15165,11 +15161,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionGiver'][];
+      results: components['schemas']['MissionGiver'][];
     };
     PaginatedMissionGiverOfferingList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15180,11 +15176,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionGiverOffering'][];
+      results: components['schemas']['MissionGiverOffering'][];
     };
     PaginatedMissionGiverStandingList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15195,11 +15191,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionGiverStanding'][];
+      results: components['schemas']['MissionGiverStanding'][];
     };
     PaginatedMissionInstanceList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15210,11 +15206,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionInstance'][];
+      results: components['schemas']['MissionInstance'][];
     };
     PaginatedMissionNodeList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15225,11 +15221,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionNode'][];
+      results: components['schemas']['MissionNode'][];
     };
     PaginatedMissionOptionList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15240,11 +15236,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionOption'][];
+      results: components['schemas']['MissionOption'][];
     };
     PaginatedMissionOptionRouteCandidateList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15255,11 +15251,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionOptionRouteCandidate'][];
+      results: components['schemas']['MissionOptionRouteCandidate'][];
     };
     PaginatedMissionOptionRouteList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15270,11 +15266,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionOptionRoute'][];
+      results: components['schemas']['MissionOptionRoute'][];
     };
     PaginatedMissionOptionRouteRewardList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15285,11 +15281,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionOptionRouteReward'][];
+      results: components['schemas']['MissionOptionRouteReward'][];
     };
     PaginatedMissionTemplateList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15300,11 +15296,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['MissionTemplate'][];
+      results: components['schemas']['MissionTemplate'][];
     };
     PaginatedNarrativeMessageDeliveryList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15315,11 +15311,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['NarrativeMessageDelivery'][];
+      results: components['schemas']['NarrativeMessageDelivery'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15330,7 +15326,7 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['OrganizationSearch'][];
+      results: components['schemas']['OrganizationSearch'][];
     };
     PaginatedOutfitReadList: {
       count: number;
@@ -15350,7 +15346,7 @@ export interface components {
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15361,11 +15357,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PendingAlteration'][];
+      results: components['schemas']['PendingAlteration'][];
     };
     PaginatedPendingStageAdvanceOfferList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15376,11 +15372,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PendingStageAdvanceOffer'][];
+      results: components['schemas']['PendingStageAdvanceOffer'][];
     };
     PaginatedPersonaList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15391,11 +15387,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Persona'][];
+      results: components['schemas']['Persona'][];
     };
     PaginatedPlaceList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15406,11 +15402,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Place'][];
+      results: components['schemas']['Place'][];
     };
     PaginatedPlayerActionList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15421,11 +15417,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PlayerAction'][];
+      results: components['schemas']['PlayerAction'][];
     };
     PaginatedPlayerFeedbackDetailList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15436,11 +15432,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PlayerFeedbackDetail'][];
+      results: components['schemas']['PlayerFeedbackDetail'][];
     };
     PaginatedPlayerMailList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15451,11 +15447,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PlayerMail'][];
+      results: components['schemas']['PlayerMail'][];
     };
     PaginatedPlayerReportDetailList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15466,11 +15462,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PlayerReportDetail'][];
+      results: components['schemas']['PlayerReportDetail'][];
     };
     PaginatedPlayerTrustList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15481,11 +15477,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['PlayerTrust'][];
+      results: components['schemas']['PlayerTrust'][];
     };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15496,11 +15492,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['RelationshipCapstone'][];
+      results: components['schemas']['RelationshipCapstone'][];
     };
     PaginatedRitualList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15511,11 +15507,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Ritual'][];
+      results: components['schemas']['Ritual'][];
     };
     PaginatedRosterEntryList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15526,11 +15522,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['RosterEntry'][];
+      results: components['schemas']['RosterEntry'][];
     };
     PaginatedRosterTenureLookupList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15541,11 +15537,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['RosterTenureLookup'][];
+      results: components['schemas']['RosterTenureLookup'][];
     };
     PaginatedSceneActionRequestList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15556,11 +15552,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SceneActionRequest'][];
+      results: components['schemas']['SceneActionRequest'][];
     };
     PaginatedSceneListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15571,11 +15567,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SceneList'][];
+      results: components['schemas']['SceneList'][];
     };
     PaginatedSceneSummaryRevisionList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15586,11 +15582,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SceneSummaryRevision'][];
+      results: components['schemas']['SceneSummaryRevision'][];
     };
     PaginatedSessionRequestList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15601,11 +15597,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SessionRequest'][];
+      results: components['schemas']['SessionRequest'][];
     };
     PaginatedSineatingPendingOfferList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15616,11 +15612,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SineatingPendingOffer'][];
+      results: components['schemas']['SineatingPendingOffer'][];
     };
     PaginatedSituationInstanceList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15631,11 +15627,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SituationInstance'][];
+      results: components['schemas']['SituationInstance'][];
     };
     PaginatedSituationTemplateListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15646,11 +15642,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SituationTemplateList'][];
+      results: components['schemas']['SituationTemplateList'][];
     };
     PaginatedSocietySearchList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15661,11 +15657,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['SocietySearch'][];
+      results: components['schemas']['SocietySearch'][];
     };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15676,11 +15672,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['StoryFeedback'][];
+      results: components['schemas']['StoryFeedback'][];
     };
     PaginatedStoryGMOfferList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15691,11 +15687,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['StoryGMOffer'][];
+      results: components['schemas']['StoryGMOffer'][];
     };
     PaginatedStoryListList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15706,11 +15702,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['StoryList'][];
+      results: components['schemas']['StoryList'][];
     };
     PaginatedStoryNoteList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15721,11 +15717,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['StoryNote'][];
+      results: components['schemas']['StoryNote'][];
     };
     PaginatedStoryParticipationList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15736,11 +15732,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['StoryParticipation'][];
+      results: components['schemas']['StoryParticipation'][];
     };
     PaginatedTableBulletinPostList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15751,11 +15747,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['TableBulletinPost'][];
+      results: components['schemas']['TableBulletinPost'][];
     };
     PaginatedTableBulletinReplyList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15766,11 +15762,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['TableBulletinReply'][];
+      results: components['schemas']['TableBulletinReply'][];
     };
     PaginatedTechniqueList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15781,11 +15777,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Technique'][];
+      results: components['schemas']['Technique'][];
     };
     PaginatedThreadList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15796,11 +15792,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Thread'][];
+      results: components['schemas']['Thread'][];
     };
     PaginatedThreadWeavingTeachingOfferList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15811,11 +15807,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['ThreadWeavingTeachingOffer'][];
+      results: components['schemas']['ThreadWeavingTeachingOffer'][];
     };
     PaginatedTransitionList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15826,11 +15822,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['Transition'][];
+      results: components['schemas']['Transition'][];
     };
     PaginatedTransitionRequiredOutcomeList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15841,11 +15837,11 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['TransitionRequiredOutcome'][];
+      results: components['schemas']['TransitionRequiredOutcome'][];
     };
     PaginatedUserStoryMuteList: {
       /** @example 123 */
-      count?: number;
+      count: number;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
@@ -15856,7 +15852,7 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results?: components['schemas']['UserStoryMute'][];
+      results: components['schemas']['UserStoryMute'][];
     };
     /**
      * @description Read serializer for combat participants.
@@ -15918,7 +15914,8 @@ export interface components {
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
       episode?: number;
-      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /** @default gm_marked */
+      predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
        *
@@ -17074,6 +17071,9 @@ export interface components {
       readonly check_type: components['schemas']['CheckTypeMinimal'];
       readonly action_template: components['schemas']['ActionTemplateMinimal'];
       readonly ref: components['schemas']['ActionRef'];
+      readonly target_spec: components['schemas']['TargetSpec'] | null;
+      readonly enhancements: components['schemas']['AvailableEnhancement'][];
+      readonly strain: components['schemas']['StrainAvailability'] | null;
     };
     /**
      * @description Write serializer - player creates feedback.
@@ -17998,6 +17998,8 @@ export interface components {
       readonly resolved_difficulty: number | null;
       /** @description The interaction recording the result of this action */
       readonly result_interaction: number | null;
+      /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
+      strain_commitment?: number;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -18029,6 +18031,8 @@ export interface components {
        *     * `daunting` - Daunting
        */
       difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
+      /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
+      strain_commitment?: number;
     };
     /**
      * @description * `pending` - Pending
@@ -18356,6 +18360,12 @@ export interface components {
      * @enum {string}
      */
     SoulTetherRoleEnum: 'SINEATER' | 'SINNER';
+    /** @description Minimal read-only representation of a SoulfrayWarning dataclass. */
+    SoulfrayWarning: {
+      readonly stage_name: string;
+      readonly stage_description: string;
+      readonly has_death_risk: boolean;
+    };
     /**
      * @description * `POSE_ENDORSEMENT` - Pose endorsement
      *     * `SCENE_ENTRY` - Scene entry endorsement
@@ -18663,6 +18673,7 @@ export interface components {
       readonly story: number;
       readonly offered_to: number;
       readonly offered_by_account: number;
+      /** @default pending */
       readonly status: components['schemas']['StoryGMOfferStatusEnum'];
       /** @description Optional note from offerer. */
       readonly message: string;
@@ -18749,6 +18760,11 @@ export interface components {
       trusted_by_owner?: boolean;
       is_active?: boolean;
     };
+    /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
+    StrainAvailability: {
+      readonly cap: number;
+      readonly default: number;
+    };
     /**
      * @description * `swords` - Swords
      *     * `cups` - Cups
@@ -18788,6 +18804,13 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description Read-only serializer for TargetFilters — boolean filter flags. */
+    TargetFilters: {
+      readonly in_same_scene: boolean;
+      readonly in_same_zone: boolean;
+      readonly exclude_self: boolean;
+      readonly must_be_conscious: boolean;
+    };
     /**
      * @description * `TRAIT` - Trait
      *     * `TECHNIQUE` - Technique
@@ -18806,6 +18829,12 @@ export interface components {
       | 'RELATIONSHIP_TRACK'
       | 'RELATIONSHIP_CAPSTONE'
       | 'COVENANT_ROLE';
+    /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
+    TargetSpec: {
+      readonly kind: string;
+      readonly cardinality: string;
+      readonly filters: components['schemas']['TargetFilters'];
+    };
     /**
      * @description * `persona` - Persona
      *     * `organization` - Organization
@@ -18833,7 +18862,7 @@ export interface components {
        *     * `wands` - Wands
        *     * `coins` - Coins
        */
-      suit:
+      suit?:
         | (
             | components['schemas']['SuitEnum']
             | components['schemas']['BlankEnum']
@@ -19709,25 +19738,6 @@ export interface operations {
         'application/json': components['schemas']['SceneActionRequestRequest'];
       };
     };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SceneActionRequest'];
-        };
-      };
-    };
-  };
-  action_requests_available_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -21515,7 +21525,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };

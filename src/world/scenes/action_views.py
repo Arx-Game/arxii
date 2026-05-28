@@ -19,7 +19,6 @@ from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_filters import SceneActionRequestFilter
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_serializers import (
-    AvailableSceneActionSerializer,
     ConsentResponseSerializer,
     EnhancedSceneActionResultSerializer,
     SceneActionRequestCreateSerializer,
@@ -107,6 +106,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
             technique = get_object_or_404(Technique, pk=technique_id)
 
+        strain_commitment = serializer.validated_data.get("strain_commitment", 0) or 0
+
         action_request = create_action_request(
             scene=scene,
             initiator_persona=initiator_persona,
@@ -114,39 +115,13 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             action_key=action_key,
             difficulty_choice=difficulty_choice,
             technique=technique,
+            strain_commitment=strain_commitment,
         )
 
         return Response(
             SceneActionRequestSerializer(action_request).data,
             status=status.HTTP_201_CREATED,
         )
-
-    @action(detail=False, methods=[HTTPMethod.GET], url_path="available")
-    def available(self, request: Request) -> Response:
-        """Return social actions available to the requesting user's character.
-
-        Resolves the character from the first persona owned by the account,
-        then returns all social ActionTemplates with technique enhancement
-        options for that character.
-        """
-        from world.scenes.action_availability import get_available_scene_actions  # noqa: PLC0415
-        from world.scenes.interaction_permissions import get_account_roster_entries  # noqa: PLC0415
-
-        roster_entries = get_account_roster_entries(request)
-        if not roster_entries:
-            return Response([], status=status.HTTP_200_OK)
-
-        character_id = roster_entries[0].character_id
-        from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-        try:
-            character = ObjectDB.objects.get(pk=character_id)
-        except ObjectDB.DoesNotExist:
-            return Response([], status=status.HTTP_200_OK)
-
-        actions = get_available_scene_actions(character=character)
-        serializer = AvailableSceneActionSerializer(actions, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
     def respond(self, request: Request, pk: int | None = None) -> Response:

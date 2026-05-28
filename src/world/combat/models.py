@@ -34,6 +34,7 @@ from world.combat.constants import (
 )
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
+from world.magic.models.commitments import CommittingDeclaration
 
 
 class CombatEncounter(SharedMemoryModel):
@@ -1473,7 +1474,7 @@ class ClashContribution(SharedMemoryModel):
 # =============================================================================
 
 
-class ClashContributionDeclaration(SharedMemoryModel):
+class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
     """A PC's declared clash contribution for one round, awaiting resolve_round's post-pass.
 
     Written by Task 7.1's player-facing surface (``declare_clash_contribution``)
@@ -1520,10 +1521,6 @@ class ClashContributionDeclaration(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The Technique the PC is using for this clash contribution.",
-    )
-    strain_commitment = models.PositiveIntegerField(
-        default=0,
-        help_text="Extra anima committed on top of the technique's effective cost floor.",
     )
 
     class Meta:

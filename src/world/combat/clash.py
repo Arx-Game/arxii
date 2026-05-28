@@ -139,7 +139,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     *,
     character_sheet: CharacterSheet,
     technique: Technique,
-    clash: Clash,  # noqa: ARG001 — carried for future round-aggregation context; not used in v1
+    clash: Clash,
     strain_commitment: int,
     action_slot: str,
     config_clash: ClashConfig,
@@ -269,6 +269,29 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
         if technique_use_result.soulfray_result is not None
         else 0
     )
+
+    # 9. Record the canonical strain audit on an ACTION-mode Interaction.
+    #    The participant is resolved from clash.encounter + character_sheet so
+    #    commit_to_clash callers don't need to thread it explicitly. When the
+    #    participant lookup fails (legacy fixtures, isolated unit tests that do
+    #    not wire a CombatParticipant), skip Interaction creation rather than
+    #    fail the whole pipeline.
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        create_action_interaction,
+    )
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    participant = CombatParticipant.objects.filter(
+        encounter_id=clash.encounter_id,
+        character_sheet=character_sheet,
+    ).first()
+    if participant is not None:
+        create_action_interaction(
+            participant=participant,
+            round_number=clash.started_round,
+            summary_label=f"{technique.name} → clash contribution",
+            strain_committed=strain_commitment,
+        )
 
     return ClashContributionResult(
         character=character_sheet,

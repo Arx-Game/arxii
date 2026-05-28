@@ -187,6 +187,7 @@ class SceneActionRequestFactory(factory_django.DjangoModelFactory):
     action_key = "intimidate"
     status = ActionRequestStatus.PENDING
     difficulty_choice = DifficultyChoice.NORMAL
+    strain_commitment = 0
 
 
 class InteractionActionFactory(factory_django.DjangoModelFactory):

@@ -7,9 +7,30 @@ import type { PlayerActionsResponse } from '../actionTypes';
 
 vi.mock('../actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
-  fetchSceneActions: vi.fn(() => Promise.resolve([])),
   createActionRequest: vi.fn(),
 }));
+
+vi.mock('../queries', async () => {
+  const actual = await vi.importActual<typeof import('../queries')>('../queries');
+  return {
+    ...actual,
+    fetchScene: vi.fn(() =>
+      Promise.resolve({
+        id: 42,
+        name: 'Test Scene',
+        description: '',
+        date_started: '',
+        location: null,
+        participants: [
+          { id: 100, name: 'Alice' },
+          { id: 101, name: 'Bob' },
+        ],
+        is_active: true,
+        is_owner: false,
+      })
+    ),
+  };
+});
 
 // Mock the roster query — component resolves active character → characterId
 vi.mock('@/roster/queries', () => ({
@@ -65,6 +86,9 @@ function makeAction(
       technique_id: null,
       registry_key: 'test_action',
     },
+    target_spec: null,
+    enhancements: [],
+    strain: null,
     ...overrides,
   };
 }
@@ -314,5 +338,108 @@ describe('ActionPanel', () => {
     // No target-selection overlay and no Cancel button in the main panel
     expect(screen.queryByText(/select a target for/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+  });
+
+  it('renders inline enhancements when an action carries them', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Cast Light',
+          enhancements: [
+            {
+              technique_id: 9,
+              technique_name: 'Gentle Wax',
+              effective_cost: 2,
+              soulfray_warning: null,
+            },
+          ],
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'cast_light',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast Light')).toBeInTheDocument();
+    });
+
+    // Expand the enhancements list
+    const expandButton = screen.getByRole('button', { name: /show enhancements/i });
+    await user.click(expandButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Gentle Wax')).toBeInTheDocument();
+    });
+    expect(screen.getByText('2 anima')).toBeInTheDocument();
+  });
+
+  it('opens TargetPicker when a targeted action is clicked', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Charm',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'single',
+            filters: {
+              in_same_scene: true,
+              in_same_zone: false,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          },
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'charm',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Charm')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /charm/i }));
+
+    // TargetPicker should render with scene participants.  The string
+    // "Select target" appears twice (a sr-only span on the popover trigger
+    // and the visible header inside the popover) so getAllByText is correct.
+    await waitFor(() => {
+      expect(screen.getAllByText(/select target/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+
+    // createActionRequest should NOT have been called yet
+    expect(createActionRequest).not.toHaveBeenCalled();
   });
 });

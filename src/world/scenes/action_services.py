@@ -91,6 +91,7 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
     ritual_id: int | None = None,
+    strain_commitment: int = 0,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -114,6 +115,10 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
         ritual_id: Optional Ritual PK (execution_kind=SCENE_ACTION). When provided,
             snapshot fields (stat, skill, specialization, resonance, check_type,
             target_difficulty) are populated from the ritual's sidecar config.
+        strain_commitment: Optional non-negative scalar of self-strain the
+            initiator commits to this action. Persisted via the
+            CommittingDeclaration mixin and consumed downstream when the
+            interaction is recorded.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -140,6 +145,7 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
         difficulty_choice=difficulty_choice,
         status=ActionRequestStatus.PENDING,
         technique=technique,
+        strain_commitment=strain_commitment,
         **snapshot_kwargs,
     )
 
@@ -231,6 +237,7 @@ def respond_to_action_request(
                     action_key=action_request.action_key,
                     difficulty=difficulty,
                     context=context,
+                    strain_commitment=action_request.strain_commitment,
                 )
             else:
                 action_resolution = start_action_resolution(
@@ -252,6 +259,7 @@ def respond_to_action_request(
             result_interaction = _create_result_interaction(
                 action_request=action_request,
                 result=result,
+                strain_committed=action_request.strain_commitment,
             )
             if result_interaction is not None:
                 action_request.result_interaction = result_interaction
@@ -293,6 +301,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params 
     action_key: str,
     difficulty: int,
     context: ResolutionContext,
+    strain_commitment: int = 0,
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
 
@@ -307,6 +316,9 @@ def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params 
         action_key: The action key (e.g. "flirt").
         difficulty: The resolved numeric difficulty.
         context: Resolution context carrying character data.
+        strain_commitment: Optional extra anima the caster commits beyond the
+            technique's baseline cost. Forwarded to use_technique so the cost
+            calculation accounts for the strain.
 
     Returns:
         EnhancedSceneActionResult with both action_resolution and technique_result.
@@ -323,6 +335,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params 
             context=context,
         ),
         confirm_soulfray_risk=True,
+        strain_commitment=strain_commitment,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
@@ -337,8 +350,16 @@ def _create_result_interaction(
     *,
     action_request: SceneActionRequest,
     result: EnhancedSceneActionResult,
+    strain_committed: int = 0,
 ) -> Interaction | None:
-    """Create an interaction recording the result of a scene action."""
+    """Create an interaction recording the result of a scene action.
+
+    Args:
+        action_request: The resolved SceneActionRequest.
+        result: The resolution outcome (including optional technique result).
+        strain_committed: Strain the initiator actually committed; recorded on
+            the resulting Interaction for canonical audit.
+    """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
     success = (check_result.success_level > 0) if check_result is not None else False
@@ -369,4 +390,5 @@ def _create_result_interaction(
         scene=action_request.scene,
         receivers=[action_request.target_persona],
         target_personas=[action_request.target_persona],
+        strain_committed=strain_committed,
     )

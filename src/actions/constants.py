@@ -42,6 +42,19 @@ class ActionTargetType(models.TextChoices):
     FILTERED_GROUP = "filtered_group", "Filtered Group"
 
 
+class TargetKind(models.TextChoices):
+    """Entity-type axis for action targeting.
+
+    Orthogonal to ActionTargetType (cardinality). Kind = what type of entity
+    the action targets; cardinality = how many / how they're selected.
+    """
+
+    PERSONA = "persona", "Persona"
+    CHARACTER = "character", "Character"
+    ITEM = "item", "Item"
+    ROOM = "room", "Room"
+
+
 class ActionBackend(models.TextChoices):
     """Which backend system resolves a PlayerAction."""
 

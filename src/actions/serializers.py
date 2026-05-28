@@ -65,6 +65,47 @@ class ActionRefSerializer(serializers.Serializer):
     clash_action_slot = serializers.CharField(allow_null=True, required=False)
 
 
+class SoulfrayWarningSerializer(serializers.Serializer):
+    """Minimal read-only representation of a SoulfrayWarning dataclass."""
+
+    stage_name = serializers.CharField(read_only=True)
+    stage_description = serializers.CharField(read_only=True)
+    has_death_risk = serializers.BooleanField(read_only=True)
+
+
+class AvailableEnhancementSerializer(serializers.Serializer):
+    """Read-only serializer for AvailableEnhancement (technique enhancement option)."""
+
+    technique_id = serializers.IntegerField(source="technique.id", read_only=True)
+    technique_name = serializers.CharField(source="technique.name", read_only=True)
+    effective_cost = serializers.IntegerField(read_only=True)
+    soulfray_warning = SoulfrayWarningSerializer(allow_null=True, read_only=True)
+
+
+class TargetFiltersSerializer(serializers.Serializer):
+    """Read-only serializer for TargetFilters — boolean filter flags."""
+
+    in_same_scene = serializers.BooleanField(read_only=True)
+    in_same_zone = serializers.BooleanField(read_only=True)
+    exclude_self = serializers.BooleanField(read_only=True)
+    must_be_conscious = serializers.BooleanField(read_only=True)
+
+
+class TargetSpecSerializer(serializers.Serializer):
+    """Read-only serializer for TargetSpec — entity kind + cardinality + filters."""
+
+    kind = serializers.CharField(read_only=True)
+    cardinality = serializers.CharField(read_only=True)
+    filters = TargetFiltersSerializer(read_only=True)
+
+
+class StrainAvailabilitySerializer(serializers.Serializer):
+    """Read-only serializer for StrainAvailability — per-character strain cap snapshot."""
+
+    cap = serializers.IntegerField(read_only=True)
+    default = serializers.IntegerField(read_only=True)
+
+
 class PlayerActionSerializer(serializers.Serializer):
     """Read-only serializer for PlayerAction — the homogeneous availability descriptor.
 
@@ -82,6 +123,9 @@ class PlayerActionSerializer(serializers.Serializer):
     check_type = serializers.SerializerMethodField()
     action_template = serializers.SerializerMethodField()
     ref = ActionRefSerializer(read_only=True)
+    target_spec = TargetSpecSerializer(read_only=True, allow_null=True)
+    enhancements = AvailableEnhancementSerializer(many=True, read_only=True)
+    strain = StrainAvailabilitySerializer(read_only=True, allow_null=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""

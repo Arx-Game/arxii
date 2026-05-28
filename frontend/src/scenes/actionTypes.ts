@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Legacy scene action types (used by the AvailableSceneAction / fetchSceneActions path)
+// Legacy scene action types (now slimmed — fetchSceneActions has been removed)
 // ---------------------------------------------------------------------------
 
 export interface TechniqueOption {
@@ -33,23 +33,26 @@ export interface ActionRef {
   clash_action_slot?: string | null;
 }
 
-export interface PlayerAction {
-  backend: string;
-  display_name: string;
-  description: string;
-  difficulty: string | null;
-  prerequisite_met: boolean;
-  prerequisite_reasons: string[];
-  check_type: ActionCheckType;
-  action_template: ActionTemplateMinimal | null;
-  ref: ActionRef;
+// ---------------------------------------------------------------------------
+// Inline shape carried by PlayerAction — target spec, strain, and enhancements
+// ---------------------------------------------------------------------------
+
+export interface TargetFilters {
+  in_same_scene: boolean;
+  in_same_zone: boolean;
+  exclude_self: boolean;
+  must_be_conscious: boolean;
 }
 
-export interface PlayerActionsResponse {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: PlayerAction[];
+export interface TargetSpec {
+  kind: string;
+  cardinality: string;
+  filters: TargetFilters;
+}
+
+export interface StrainAvailability {
+  cap: number;
+  default: number;
 }
 
 export interface SoulfrayWarningData {
@@ -61,16 +64,30 @@ export interface SoulfrayWarningData {
 export interface AvailableEnhancement {
   technique_id: number;
   technique_name: string;
-  variant_name: string;
   effective_cost: number;
   soulfray_warning: SoulfrayWarningData | null;
 }
 
-export interface AvailableSceneAction {
-  action_key: string;
-  action_template_name: string;
-  icon: string;
+export interface PlayerAction {
+  backend: string;
+  display_name: string;
+  description: string;
+  difficulty: string | null;
+  prerequisite_met: boolean;
+  prerequisite_reasons: string[];
+  check_type: ActionCheckType;
+  action_template: ActionTemplateMinimal | null;
+  ref: ActionRef;
+  target_spec: TargetSpec | null;
   enhancements: AvailableEnhancement[];
+  strain: StrainAvailability | null;
+}
+
+export interface PlayerActionsResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PlayerAction[];
 }
 
 export interface ActionRequest {
@@ -78,6 +95,7 @@ export interface ActionRequest {
   initiator_persona: { id: number; name: string };
   action_name: string;
   technique_name: string | null;
+  strain_commitment: number;
   created_at: string;
 }
 
