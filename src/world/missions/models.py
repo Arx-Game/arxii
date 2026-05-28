@@ -339,7 +339,7 @@ class MissionNode(SharedMemoryModel):
     # MissionOptionRoute DESIGN note. This split is intentional-on-record.
 
     def __str__(self) -> str:
-        return f"{self.template.slug}:{self.key}"
+        return f"{self.template.name}:{self.key}"
 
 
 class MissionOption(SharedMemoryModel):
