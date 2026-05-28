@@ -108,8 +108,13 @@ export async function createMissionTemplate(
 // MissionCategory read-only browse
 // ---------------------------------------------------------------------------
 
+/**
+ * Loads up to 100 categories in one request (backend's max_page_size cap).
+ * If the category set ever exceeds 100, switch to useInfiniteQuery or
+ * surface a paginated picker UI.
+ */
 export async function listMissionCategories(): Promise<PaginatedResponse<MissionCategory>> {
-  const res = await apiFetch(`${BASE_URL}/categories/`);
+  const res = await apiFetch(`${BASE_URL}/categories/?page_size=100`);
   if (!res.ok) throw new Error('Failed to load categories');
   return res.json();
 }

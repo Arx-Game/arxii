@@ -60,4 +60,15 @@ describe('CategoryMultiSelect', () => {
     fireEvent.click(screen.getByLabelText('courtly'));
     expect(onChange).toHaveBeenCalledWith([]);
   });
+
+  it('renders error state when query fails', () => {
+    vi.spyOn(queries, 'useMissionCategories').mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    } as unknown as MockQueryResult);
+
+    render(<CategoryMultiSelect value={[]} onChange={() => {}} />);
+    expect(screen.getByText(/failed to load categories/i)).toBeInTheDocument();
+  });
 });

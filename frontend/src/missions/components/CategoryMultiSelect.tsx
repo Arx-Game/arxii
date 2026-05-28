@@ -15,10 +15,14 @@ interface CategoryMultiSelectProps {
 }
 
 export function CategoryMultiSelect({ value, onChange }: CategoryMultiSelectProps) {
-  const { data, isLoading } = useMissionCategories();
+  const { data, isLoading, isError } = useMissionCategories();
 
   if (isLoading) {
     return <div className="text-xs text-muted-foreground">Loading categories…</div>;
+  }
+
+  if (isError) {
+    return <div className="text-xs text-destructive">Failed to load categories.</div>;
   }
 
   const categories = data?.results ?? [];
@@ -46,7 +50,6 @@ export function CategoryMultiSelect({ value, onChange }: CategoryMultiSelectProp
         >
           <input
             type="checkbox"
-            id={`category-${cat.id}`}
             checked={selected.has(cat.id)}
             onChange={() => toggle(cat.id)}
             aria-label={cat.name}

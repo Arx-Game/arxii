@@ -80,6 +80,7 @@ export const missionKeys = {
   standings: () => [...missionKeys.all, 'standings'] as const,
   standingsFor: (filters: object) => [...missionKeys.standings(), filters] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
+  categories: () => [...missionKeys.all, 'categories'] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -353,8 +354,9 @@ export function useCreateMissionTemplate() {
 
 export function useMissionCategories(): UseQueryResult<PaginatedResponse<MissionCategory>> {
   return useQuery({
-    queryKey: ['missions', 'categories'],
+    queryKey: missionKeys.categories(),
     queryFn: listMissionCategories,
     staleTime: FIVE_MINUTES,
+    throwOnError: true,
   });
 }
