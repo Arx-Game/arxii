@@ -96,6 +96,11 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         field values for partial PATCH), call ``clean()``, and translate
         its ``DjangoValidationError`` into the DRF shape so callers get
         field-keyed 400s instead of an unhandled 500 at ``save()`` time.
+
+        Currently MissionTemplate.clean() checks level_band_min/max and
+        percent_replace. If a new cross-field invariant is added there,
+        add the field to the candidate construction below or it will
+        bypass this proxy and surface as a 500.
         """
         attrs = super().validate(attrs)
 
@@ -109,6 +114,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         candidate = MissionTemplate(
             level_band_min=field("level_band_min", 0),
             level_band_max=field("level_band_max", 0),
+            percent_replace=field("percent_replace", 0),
         )
         try:
             candidate.clean()

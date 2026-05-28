@@ -101,6 +101,16 @@ class MissionTemplateCreateTests(TestCase):
         res = client.post(URL, self._valid_body(), format="json")
         self.assertEqual(res.status_code, 403)
 
+    def test_rejects_percent_replace_above_max(self) -> None:
+        res = self.client.post(URL, self._valid_body(percent_replace=201), format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertIn("percent_replace", res.json())
+
+    def test_accepts_percent_replace_at_max(self) -> None:
+        # 100 is the documented max for percent_replace.
+        res = self.client.post(URL, self._valid_body(percent_replace=100), format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+
 
 class MissionTemplatePatchRenameTests(TestCase):
     """PATCH /api/missions/templates/<pk>/ rename collision behavior.
@@ -180,3 +190,14 @@ class MissionTemplatePatchLevelBandTests(TestCase):
         url = f"/api/missions/templates/{self.tmpl.pk}/"
         res = self.client.patch(url, {"level_band_max": 0}, format="json")
         self.assertEqual(res.status_code, 400, res.content)
+
+    def test_patch_only_percent_replace_above_max_returns_400(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"percent_replace": 201}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertIn("percent_replace", res.json())
+
+    def test_patch_only_percent_replace_within_max_succeeds(self) -> None:
+        url = f"/api/missions/templates/{self.tmpl.pk}/"
+        res = self.client.patch(url, {"percent_replace": 50}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
