@@ -105,6 +105,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     place: Place | None = None,
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
+    strain_committed: int = 0,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -124,6 +125,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         place: Sub-location where this interaction occurred.
         receivers: Explicit list of personas who should receive this.
         target_personas: Explicit IC targets for thread derivation.
+        strain_committed: Strain the initiator actually committed for this
+            action. Persisted onto the resulting Interaction for audit.
 
     Returns:
         The created Interaction.
@@ -134,6 +137,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         mode=mode,
         scene=scene,
         place=place,
+        strain_committed=strain_committed,
     )
 
     # Determine receiver list

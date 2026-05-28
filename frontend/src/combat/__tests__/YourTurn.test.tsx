@@ -192,6 +192,9 @@ function makePlayerAction(clashId: number | null, displayName: string): PlayerAc
       clash_id: clashId,
       clash_action_slot: clashId !== null ? 'FOCUSED' : null,
     },
+    target_spec: null,
+    enhancements: [],
+    strain: null,
   };
 }
 

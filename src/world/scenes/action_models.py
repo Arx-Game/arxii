@@ -7,10 +7,11 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.magic.models.commitments import CommittingDeclaration
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 
 
-class SceneActionRequest(SharedMemoryModel):
+class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     """A request to perform a social action against another character in a scene.
 
     Represents the full lifecycle of a contested social action: request,

@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
-from actions.types import ActionContext, ActionResult, TargetType
+from actions.constants import TargetKind
+from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
 from world.scenes.constants import InteractionMode
@@ -18,6 +19,11 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.scenes.models import Persona
+
+
+# Module-level filter constants used as dataclass defaults (RUF009: no calls in defaults).
+# TargetFilters is frozen, so sharing a single instance is safe.
+_WHISPER_TARGET_FILTERS = TargetFilters(in_same_scene=True, exclude_self=True)
 
 
 def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] | None:
@@ -191,6 +197,8 @@ class WhisperAction(Action):
     icon: str = "whisper"
     category: str = "communication"
     target_type: TargetType = TargetType.SINGLE
+    target_kind: TargetKind | None = TargetKind.PERSONA
+    target_filters: TargetFilters | None = _WHISPER_TARGET_FILTERS
 
     intent_event: str | None = "before_whisper"
     result_event: str | None = "whisper"

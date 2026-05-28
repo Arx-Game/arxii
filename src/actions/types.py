@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend
+from actions.constants import ActionBackend, TargetKind
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
     from world.mechanics.types import ChallengeResolutionResult
+    from world.scenes.action_availability import AvailableEnhancement
     from world.traits.models import CheckOutcome
 
 
@@ -210,6 +211,15 @@ class PlayerAction:
     prerequisite_met: bool = True
     prerequisite_reasons: list[str] = field(default_factory=list)
 
+    # Targeting / enhancement / strain descriptors for the frontend.
+    # ``target_spec=None`` means a self-action; otherwise it describes the
+    # entity-type axis plus cardinality and filters. ``enhancements`` reuses
+    # the existing ``AvailableEnhancement`` shape from scenes/action_availability.
+    # ``strain`` carries the per-character cap snapshot when applicable.
+    target_spec: TargetSpec | None = None
+    enhancements: tuple[AvailableEnhancement, ...] = ()
+    strain: StrainAvailability | None = None
+
 
 class ActionInterrupted(Exception):
     """Raised when a trigger stops an action's intent event."""
@@ -318,3 +328,35 @@ class PendingActionResolution:
     awaiting_confirmation: bool = False
     awaiting_intervention: bool = False
     intervention_options: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TargetFilters:
+    """Boolean filter flags applied client-side to candidate targets."""
+
+    in_same_scene: bool = False
+    in_same_zone: bool = False
+    exclude_self: bool = False
+    must_be_conscious: bool = False
+
+
+@dataclass(frozen=True)
+class TargetSpec:
+    """Describes what a targeted action accepts as its target.
+
+    ``cardinality`` is the existing ``TargetType`` enum (SINGLE / AREA /
+    FILTERED_GROUP); self-actions have ``target_spec=None`` on
+    ``PlayerAction`` rather than ``cardinality=SELF``.
+    """
+
+    kind: TargetKind
+    cardinality: TargetType
+    filters: TargetFilters
+
+
+@dataclass(frozen=True)
+class StrainAvailability:
+    """Per-character strain cap snapshot for a single GET of available actions."""
+
+    cap: int
+    default: int = 0

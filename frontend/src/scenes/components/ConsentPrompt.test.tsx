@@ -28,6 +28,7 @@ const MOCK_REQUEST: ActionRequest = {
   action_name: 'Intimidate',
   technique_name: null,
   created_at: '2026-03-22T12:00:00Z',
+  strain_commitment: 0,
 };
 
 const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
@@ -36,6 +37,7 @@ const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
   action_name: 'Enchant',
   technique_name: 'Mind Whisper',
   created_at: '2026-03-22T12:05:00Z',
+  strain_commitment: 0,
 };
 
 describe('ConsentPrompt', () => {
