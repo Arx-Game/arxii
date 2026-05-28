@@ -5,6 +5,7 @@ CRUD serializers for nodes / options / routes / candidates / rewards
 land in D2; giver-library serializers in D3; predicate-tree in D5.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
@@ -64,6 +65,38 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             "availability_rule",
         ]
         read_only_fields = ["id"]
+        # Suppress DRF's auto-generated UniqueValidator on ``name``.
+        # The create() override calls next_available_name() to resolve
+        # collisions via auto-suffix before the DB write, so a
+        # UniqueValidator firing before create() would block that logic.
+        extra_kwargs = {"name": {"validators": []}}
+
+    def validate(self, attrs: dict) -> dict:
+        """Proxy MissionTemplate.clean() so level-band and other model
+        invariants surface as 400 responses rather than 500s.
+
+        DRF's ModelSerializer skips model-level clean() by default; we
+        build a temporary (unsaved) instance and call clean() here so
+        validation errors are caught in the serializer layer.
+        """
+        attrs = super().validate(attrs)
+        # Only validate scalar fields reachable at this point (M2M
+        # categories are processed post-save, so we skip them here).
+        candidate = MissionTemplate(
+            name=attrs.get("name", ""),
+            summary=attrs.get("summary", ""),
+            level_band_min=attrs.get("level_band_min", 0),
+            level_band_max=attrs.get("level_band_max", 0),
+            risk_tier=attrs.get("risk_tier", 0),
+            arc_scope=attrs.get("arc_scope", ""),
+            cooldown=attrs.get("cooldown"),
+            percent_replace=attrs.get("percent_replace", 0),
+        )
+        try:
+            candidate.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs
 
     def validate_access_tier(self, value: str) -> str:
         """Guard the flip to OPEN: every attached giver must be publishable.
