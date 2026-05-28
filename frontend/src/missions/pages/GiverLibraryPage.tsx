@@ -2,12 +2,12 @@
  * GiverLibraryPage — staff browse + create for MissionGiver rows.
  *
  * Two-pane like MissionBrowserPage: filters + list on the left, detail
- * preview on the right (slug query-param for share/refresh). "New
+ * preview on the right (?id= query-param for share/refresh). "New
  * giver" opens an inline form that POSTs via D3.MissionGiverViewSet
- * and routes to /staff/missions/givers/:slug on success.
+ * and routes to /staff/missions/givers/:id on success.
  *
  * Per "no implicit first-item selection": the only way to land on a
- * giver is to click one (or arrive via URL ?slug=). No auto-select.
+ * giver is to click one (or arrive via URL ?id=). No auto-select.
  */
 
 import { useState } from 'react';
@@ -204,9 +204,6 @@ function GiverPreview({ id }: { id: number | undefined }) {
       </CardHeader>
       <CardContent className="space-y-1 text-sm">
         <div>
-          <span className="text-muted-foreground">slug:</span> {giver.slug}
-        </div>
-        <div>
           <span className="text-muted-foreground">kind:</span> {giver.giver_kind ?? '—'}
         </div>
         <div>
@@ -224,22 +221,20 @@ function GiverPreview({ id }: { id: number | undefined }) {
 function NewGiverCard() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
   const [kind, setKind] = useState<GiverKind>('npc');
   const navigate = useNavigate();
   const create = useCreateMissionGiver();
 
   const reset = () => {
     setName('');
-    setSlug('');
     setKind('npc');
     setOpen(false);
     create.reset();
   };
 
   const onSubmit = async () => {
-    if (!name || !slug) return;
-    const created = await create.mutateAsync({ name, slug, giver_kind: kind });
+    if (!name) return;
+    const created = await create.mutateAsync({ name, giver_kind: kind });
     reset();
     navigate(`/staff/missions/givers/${created.id}`);
   };
@@ -267,15 +262,6 @@ function NewGiverCard() {
           <Input id="new-giver-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <Label htmlFor="new-giver-slug">Slug</Label>
-          <Input
-            id="new-giver-slug"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="urlsafe-slug"
-          />
-        </div>
-        <div>
           <Label htmlFor="new-giver-kind">Kind</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as GiverKind)}>
             <SelectTrigger id="new-giver-kind">
@@ -299,7 +285,7 @@ function NewGiverCard() {
           <Button variant="ghost" size="sm" onClick={reset}>
             Cancel
           </Button>
-          <Button size="sm" onClick={onSubmit} disabled={!name || !slug || create.isPending}>
+          <Button size="sm" onClick={onSubmit} disabled={!name || create.isPending}>
             {create.isPending ? 'Creating…' : 'Create'}
           </Button>
         </div>

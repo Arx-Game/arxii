@@ -16,7 +16,7 @@ import { vi } from 'vitest';
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
 // Stable fixtures shared across both page mounts.
-// MissionGiver still has slug — only MissionTemplate dropped slug in T2.
+// slug is still present in generated api.d.ts (awaiting gen-api-types rerun after T2 migration).
 const FAKE_GIVER: MissionGiver = {
   id: 7,
   name: 'Old Hag',
@@ -109,7 +109,8 @@ describe('GiverLibraryPage', () => {
       wrapper: withProviders('/staff/missions/givers'),
     });
     await user.click(screen.getByRole('button', { name: /new giver/i }));
-    expect(screen.getByLabelText('Slug')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Slug')).not.toBeInTheDocument();
   });
 });
 
