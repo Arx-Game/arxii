@@ -99,6 +99,15 @@ class CopyTemplateActionTests(TestCase):
         copied_option = MissionOption.objects.get(node=copied_node)
         self.assertTrue(copied_option.authored_ic_framing_needs_rewrite)
 
+    def test_copy_rejects_blank_new_name(self) -> None:
+        res = self.client.post(
+            f"/api/missions/templates/{self.source.pk}/copy/",
+            {"new_name": "   "},  # whitespace-only
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("new_name", res.json())
+
     def test_copy_auto_suffixes_when_source_already_copied(self) -> None:
         src = MissionTemplateFactory(name="Original")
         url = f"/api/missions/templates/{src.pk}/copy/"

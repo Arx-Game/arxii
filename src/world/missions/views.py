@@ -125,6 +125,11 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
 
         source = self.get_object()
         new_name = request.data.get("new_name")
+        if new_name is not None and not new_name.strip():
+            return Response(
+                {"new_name": ["May not be blank."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         new_template = copy_template(source, new_name=new_name)
         serializer = MissionTemplateSerializer(new_template, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
