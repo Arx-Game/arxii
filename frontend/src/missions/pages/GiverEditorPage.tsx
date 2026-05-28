@@ -62,10 +62,31 @@ import type { MissionGiver, MissionGiverOffering } from '../types';
 export function GiverEditorPage() {
   const { id: idStr } = useParams<{ id: string }>();
   const giverId = idStr ? Number(idStr) : undefined;
-  const { data: giver, isLoading } = useMissionGiver(giverId);
+  const navigate = useNavigate();
+  const { data: giver, isLoading, isError } = useMissionGiver(giverId);
 
   if (!giverId) {
     return <div className="p-6 text-destructive">Missing id in URL.</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div className="rounded border border-destructive bg-destructive/10 p-4 text-sm">
+          <p className="font-medium">Couldn't load this giver.</p>
+          <p className="mt-1 text-muted-foreground">
+            The giver may not exist or you may not have access.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-3"
+            onClick={() => navigate('/staff/missions/givers')}
+          >
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

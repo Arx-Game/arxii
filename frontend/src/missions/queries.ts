@@ -101,7 +101,6 @@ export function useMissionTemplate(id: number | undefined): UseQueryResult<Missi
     queryKey: missionKeys.templateDetail(id ?? 0),
     queryFn: () => getMissionTemplate(id as number),
     enabled: id !== undefined && id !== 0 && Number.isFinite(id),
-    throwOnError: true,
   });
 }
 
@@ -184,7 +183,6 @@ export function useMissionGiver(id: number | undefined): UseQueryResult<MissionG
     queryKey: missionKeys.giverDetail(id ?? 0),
     queryFn: () => getMissionGiver(id as number),
     enabled: id !== undefined && id !== 0 && Number.isFinite(id),
-    throwOnError: true,
   });
 }
 
