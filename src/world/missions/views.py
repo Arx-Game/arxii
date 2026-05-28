@@ -95,7 +95,17 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
     only mutates MissionTemplate's own fields.
     """
 
-    queryset = MissionTemplate.objects.all().order_by("pk")
+    # `prefetch_related("categories")` is intentionally a bare string here
+    # rather than `Prefetch(..., to_attr=...)`: DRF's default M2M serialization
+    # reads `.categories.all()`, which uses the prefetched cache for bare-string
+    # prefetches. Switching to `to_attr` would require a custom serializer field
+    # to read from the alias, which is more code than the perf win warrants for
+    # a simple PK-list M2M.
+    queryset = (
+        MissionTemplate.objects.all()
+        .prefetch_related("categories")  # noqa: PREFETCH_STRING
+        .order_by("pk")
+    )
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
