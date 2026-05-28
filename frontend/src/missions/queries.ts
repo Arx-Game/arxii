@@ -346,7 +346,14 @@ export function useCreateMissionTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<MissionTemplate>) => createMissionTemplate(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.templates() }),
+    onSuccess: (created) => {
+      // Prime the detail cache with the create response so MissionCanvasPage
+      // renders instantly on the post-create navigate instead of firing a
+      // cold fetch and showing a spinner. Invalidate the list so the browser
+      // shows the new row.
+      qc.setQueryData(missionKeys.templateDetail(created.id), created);
+      qc.invalidateQueries({ queryKey: missionKeys.templates() });
+    },
   });
 }
 
