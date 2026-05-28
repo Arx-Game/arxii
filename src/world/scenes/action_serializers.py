@@ -48,6 +48,49 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     action_key = serializers.CharField(max_length=100)
     difficulty_choice = serializers.CharField(max_length=20, required=False)
     technique_id = serializers.IntegerField(required=False, allow_null=True)
+    strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+
+    def validate(self, attrs: dict) -> dict:
+        """Cap strain_commitment by the initiator's available anima.
+
+        Looks up the Persona → CharacterSheet → character → CharacterAnima chain;
+        if the row is missing, treat the cap as 0 (any non-zero strain rejects).
+        Done here (serializer), not in the view, per the validation-in-serializer rule.
+        """
+        from world.magic.models import CharacterAnima  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        strain = attrs.get("strain_commitment", 0) or 0
+        if strain <= 0:
+            return attrs
+
+        initiator_persona_id = attrs["initiator_persona"]
+        try:
+            persona = Persona.objects.select_related(
+                "character_sheet__character",
+            ).get(pk=initiator_persona_id)
+        except Persona.DoesNotExist:
+            raise serializers.ValidationError(
+                {"strain_commitment": "Initiator persona not found."}
+            ) from None
+
+        character = persona.character_sheet.character
+        try:
+            anima = CharacterAnima.objects.get(character=character)
+            cap = anima.current
+        except CharacterAnima.DoesNotExist:
+            cap = 0
+
+        if strain > cap:
+            raise serializers.ValidationError(
+                {
+                    "strain_commitment": (
+                        f"Strain commitment ({strain}) exceeds available anima ({cap})."
+                    )
+                }
+            )
+
+        return attrs
 
 
 class ConsentResponseSerializer(serializers.Serializer):

@@ -107,6 +107,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
             technique = get_object_or_404(Technique, pk=technique_id)
 
+        strain_commitment = serializer.validated_data.get("strain_commitment", 0) or 0
+
         action_request = create_action_request(
             scene=scene,
             initiator_persona=initiator_persona,
@@ -114,6 +116,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             action_key=action_key,
             difficulty_choice=difficulty_choice,
             technique=technique,
+            strain_commitment=strain_commitment,
         )
 
         return Response(
