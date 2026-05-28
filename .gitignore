@@ -90,6 +90,8 @@ frontend/.vite/
 frontend/.env
 !frontend/src/lib/
 !frontend/src/lib/**
+!frontend/src/**/lib/
+!frontend/src/**/lib/**
 src/web/static/dist/
 
 # Playwright
