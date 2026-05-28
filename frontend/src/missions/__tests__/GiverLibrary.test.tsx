@@ -16,6 +16,7 @@ import { vi } from 'vitest';
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
 // Stable fixtures shared across both page mounts.
+// slug is still present in generated api.d.ts (awaiting gen-api-types rerun after T2 migration).
 const FAKE_GIVER: MissionGiver = {
   id: 7,
   name: 'Old Hag',
@@ -45,8 +46,8 @@ vi.mock('../queries', async () => {
       data: { count: 1, next: null, previous: null, results: [FAKE_GIVER] },
       isLoading: false,
     }),
-    useMissionGiver: (slug: string | undefined) => ({
-      data: slug === FAKE_GIVER.slug ? FAKE_GIVER : undefined,
+    useMissionGiver: (id: number | undefined) => ({
+      data: id === FAKE_GIVER.id ? FAKE_GIVER : undefined,
       isLoading: false,
     }),
     useGiverOfferings: () => ({
@@ -85,7 +86,7 @@ function withProviders(initial: string) {
       <MemoryRouter initialEntries={[initial]}>
         <Routes>
           <Route path="/staff/missions/givers" element={children} />
-          <Route path="/staff/missions/givers/:slug" element={children} />
+          <Route path="/staff/missions/givers/:id" element={children} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -108,17 +109,17 @@ describe('GiverLibraryPage', () => {
       wrapper: withProviders('/staff/missions/givers'),
     });
     await user.click(screen.getByRole('button', { name: /new giver/i }));
-    expect(screen.getByLabelText('Slug')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Slug')).not.toBeInTheDocument();
   });
 });
 
 describe('GiverEditorPage', () => {
   it('renders giver fields populated from data', () => {
     render(<GiverEditorPage />, {
-      wrapper: withProviders('/staff/missions/givers/old-hag'),
+      wrapper: withProviders('/staff/missions/givers/7'),
     });
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Old Hag');
-    expect(screen.getByText(/slug: old-hag/i)).toBeInTheDocument();
     expect(screen.getByText('Mission offerings')).toBeInTheDocument();
     // One offering row in the fixture.
     expect(screen.getAllByTestId('offering-row')).toHaveLength(1);
@@ -127,7 +128,7 @@ describe('GiverEditorPage', () => {
   it('disables Save until a field is changed', async () => {
     const user = userEvent.setup();
     render(<GiverEditorPage />, {
-      wrapper: withProviders('/staff/missions/givers/old-hag'),
+      wrapper: withProviders('/staff/missions/givers/7'),
     });
     // Disambiguate from "Save" on each offering row via the giver-card Save:
     // the first Save in document order is the giver one.

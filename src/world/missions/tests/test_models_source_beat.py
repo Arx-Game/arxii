@@ -24,7 +24,7 @@ class MissionInstanceSourceBeatTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="source-beat-tmpl")
+        cls.template = MissionTemplateFactory(name="source-beat-tmpl")
 
     def test_source_beat_field_exists_on_model(self) -> None:
         field_names = {f.name for f in MissionInstance._meta.get_fields()}

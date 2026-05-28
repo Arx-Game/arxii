@@ -1,0 +1,23 @@
+# Hand-written migration — drop slug fields from MissionTemplate and MissionGiver.
+# MissionTemplate.slug was present since the initial migration.
+# MissionGiver.slug was added in 0003_missiongiver_slug.
+# PK becomes the canonical identifier going forward.
+
+from django.db import migrations
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("missions", "0004_missionnode_mn_flag_partial_idx_and_more"),
+    ]
+
+    operations = [
+        migrations.RemoveField(
+            model_name="missiontemplate",
+            name="slug",
+        ),
+        migrations.RemoveField(
+            model_name="missiongiver",
+            name="slug",
+        ),
+    ]

@@ -86,7 +86,6 @@ class MissionNodeFilterSet(django_filters.FilterSet):
     """
 
     template = django_filters.NumberFilter(field_name="template_id")
-    template_slug = django_filters.CharFilter(field_name="template__slug")
     is_entry = django_filters.BooleanFilter(field_name="is_entry")
     needs_rewrite = django_filters.BooleanFilter(field_name="flavor_text_needs_rewrite")
 
@@ -176,9 +175,7 @@ class MissionGiverOfferingFilterSet(django_filters.FilterSet):
     """Filter MissionGiverOffering rows by giver / template."""
 
     giver = django_filters.NumberFilter(field_name="giver_id")
-    giver_slug = django_filters.CharFilter(field_name="giver__slug")
     template = django_filters.NumberFilter(field_name="template_id")
-    template_slug = django_filters.CharFilter(field_name="template__slug")
 
     class Meta:
         model = MissionGiverOffering
@@ -194,7 +191,6 @@ class MissionGiverStandingFilterSet(django_filters.FilterSet):
     """
 
     giver = django_filters.NumberFilter(field_name="giver_id")
-    giver_slug = django_filters.CharFilter(field_name="giver__slug")
     character = django_filters.NumberFilter(field_name="character_id")
 
     class Meta:

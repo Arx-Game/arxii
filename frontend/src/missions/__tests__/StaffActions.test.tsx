@@ -18,7 +18,6 @@ import type { MissionTemplate } from '../types';
 
 const FAKE_TEMPLATE: MissionTemplate = {
   id: 11,
-  slug: 'foo',
   name: 'Foo Mission',
   summary: 'lore',
   level_band_min: 1,
@@ -27,10 +26,11 @@ const FAKE_TEMPLATE: MissionTemplate = {
   cooldown: '0',
   arc_scope: 'global',
   access_tier: 'staff_only',
+  categories: [],
 } as MissionTemplate;
 
 const patchMutate = vi.fn();
-const copyMutateAsync = vi.fn().mockResolvedValue({ ...FAKE_TEMPLATE, slug: 'bar' });
+const copyMutateAsync = vi.fn().mockResolvedValue({ ...FAKE_TEMPLATE, id: 12 });
 const assignMutateAsync = vi.fn().mockResolvedValue({ id: 99 });
 // Spies on the rewrite-queue hooks so the test can assert that the
 // FlavorRewriteCard sent {template, needs_rewrite: true} — without this
@@ -115,21 +115,19 @@ describe('StaffActionsCard', () => {
     render(withProviders(<StaffActionsCard template={FAKE_TEMPLATE} />));
     await user.click(screen.getByTestId('access-tier-flip'));
     expect(patchMutate).toHaveBeenCalledWith({
-      slug: 'foo',
+      id: 11,
       body: { access_tier: 'open' },
     });
   });
 
-  it('opens the copy form and POSTs new_slug/new_name on submit', async () => {
+  it('opens the copy form and POSTs new_name on submit', async () => {
     const user = userEvent.setup();
     render(withProviders(<StaffActionsCard template={FAKE_TEMPLATE} />));
     await user.click(screen.getByRole('button', { name: /copy…/i }));
-    await user.type(screen.getByLabelText('New slug'), 'foo-v2');
-    await user.type(screen.getByLabelText('New name'), 'Foo Mission v2');
+    await user.type(screen.getByLabelText(/new name/i), 'Foo Mission v2');
     await user.click(screen.getByRole('button', { name: /^copy$/i }));
     expect(copyMutateAsync).toHaveBeenCalledWith({
-      slug: 'foo',
-      new_slug: 'foo-v2',
+      id: 11,
       new_name: 'Foo Mission v2',
     });
   });
@@ -140,7 +138,7 @@ describe('StaffActionsCard', () => {
     await user.click(screen.getByRole('button', { name: /assign…/i }));
     await user.type(screen.getByLabelText('Character ObjectDB pk'), '42');
     await user.click(screen.getByRole('button', { name: /^assign$/i }));
-    expect(assignMutateAsync).toHaveBeenCalledWith({ slug: 'foo', character: 42 });
+    expect(assignMutateAsync).toHaveBeenCalledWith({ id: 11, character: 42 });
   });
 });
 

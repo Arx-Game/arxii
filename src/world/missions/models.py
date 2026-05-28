@@ -90,7 +90,6 @@ class MissionTemplate(SharedMemoryModel):
     """
 
     name = models.CharField(max_length=200, unique=True)
-    slug = models.SlugField(max_length=200, unique=True)
     summary = models.TextField(help_text="Rich IC opening lore (mission bookend).")
     epilogue = models.TextField(blank=True, help_text="Rich IC wrap-up lore.")
     level_band_min = models.PositiveSmallIntegerField()
@@ -166,6 +165,11 @@ class MissionTemplate(SharedMemoryModel):
     )
 
     def clean(self) -> None:
+        # When adding a new cross-field invariant here, also extend
+        # MissionTemplateSerializer.validate() (in serializers.py) so the
+        # invariant surfaces as a 400 instead of a 500 at save() time.
+        # The proxy currently mirrors: level_band_min, level_band_max,
+        # percent_replace.
         super().clean()
         errors: dict[str, str] = {}
         if self.level_band_min > self.level_band_max:
@@ -340,7 +344,7 @@ class MissionNode(SharedMemoryModel):
     # MissionOptionRoute DESIGN note. This split is intentional-on-record.
 
     def __str__(self) -> str:
-        return f"{self.template.slug}:{self.key}"
+        return f"{self.template.name}:{self.key}"
 
 
 class MissionOption(SharedMemoryModel):
@@ -844,7 +848,7 @@ class MissionInstance(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return f"{self.template.slug} ({self.status})"
+        return f"{self.template.name} ({self.status})"
 
 
 class MissionParticipant(SharedMemoryModel):
@@ -989,17 +993,7 @@ class MissionGiver(SharedMemoryModel):
     ``is_publishable`` today (Phase D's offering surface will).
     """
 
-    name = models.CharField(max_length=200)
-    slug = models.SlugField(
-        max_length=200,
-        unique=True,
-        help_text=(
-            "Stable string identifier (URL-safe). Used by predicate authoring "
-            "(e.g. min_giver_standing references a giver by slug) and by "
-            "future authoring-tool URLs. Required so that templates and "
-            "predicates have a refactor-safe pointer to a specific giver."
-        ),
-    )
+    name = models.CharField(max_length=200, unique=True)
     giver_kind = models.CharField(
         max_length=20,
         choices=GiverKind.choices,

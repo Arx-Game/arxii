@@ -52,8 +52,8 @@ class OfferMissionsFilterTests(TestCase):
 
     def test_inactive_template_excluded(self) -> None:
         giver = MissionGiverFactory()
-        active = MissionTemplateFactory(slug="active-t", is_active=True)
-        inactive = MissionTemplateFactory(slug="inactive-t", is_active=False)
+        active = MissionTemplateFactory(name="active-t", is_active=True)
+        inactive = MissionTemplateFactory(name="inactive-t", is_active=False)
         giver.templates.add(active, inactive)
         character = _make_character_with_level(level=1)
 
@@ -64,8 +64,8 @@ class OfferMissionsFilterTests(TestCase):
 
     def test_cooldown_excludes_template(self) -> None:
         giver = MissionGiverFactory()
-        cooled = MissionTemplateFactory(slug="cooled-t")
-        fresh = MissionTemplateFactory(slug="fresh-t")
+        cooled = MissionTemplateFactory(name="cooled-t")
+        fresh = MissionTemplateFactory(name="fresh-t")
         giver.templates.add(cooled, fresh)
         character = _make_character_with_level(level=1)
 
@@ -90,13 +90,13 @@ class OfferMissionsFilterTests(TestCase):
         # Template gates on owning a distinction the character does NOT have.
         required = DistinctionFactory(slug="required-distinction")
         gated = MissionTemplateFactory(
-            slug="gated-t",
+            name="gated-t",
             availability_rule={
                 "leaf": "has_distinction",
                 "params": {"slug": "required-distinction"},
             },
         )
-        ungated = MissionTemplateFactory(slug="ungated-t")
+        ungated = MissionTemplateFactory(name="ungated-t")
         giver.templates.add(gated, ungated)
         character = _make_character_with_level(level=1)
 
@@ -112,8 +112,8 @@ class OfferMissionsFilterTests(TestCase):
 
     def test_level_band_excludes(self) -> None:
         giver = MissionGiverFactory()
-        high = MissionTemplateFactory(slug="high-t", level_band_min=10, level_band_max=15)
-        mid = MissionTemplateFactory(slug="mid-t", level_band_min=1, level_band_max=5)
+        high = MissionTemplateFactory(name="high-t", level_band_min=10, level_band_max=15)
+        mid = MissionTemplateFactory(name="mid-t", level_band_min=1, level_band_max=5)
         giver.templates.add(high, mid)
         character = _make_character_with_level(level=3)
 
@@ -124,7 +124,7 @@ class OfferMissionsFilterTests(TestCase):
 
     def test_risk_dial_widens_upper_band(self) -> None:
         giver = MissionGiverFactory()
-        stretch = MissionTemplateFactory(slug="stretch-t", level_band_min=1, level_band_max=5)
+        stretch = MissionTemplateFactory(name="stretch-t", level_band_min=1, level_band_max=5)
         giver.templates.add(stretch)
         character = _make_character_with_level(level=7)
 
@@ -139,7 +139,7 @@ class OfferMissionsWeightedDrawTests(TestCase):
 
     def test_subset_of_eligible_and_capped_by_count(self) -> None:
         giver = MissionGiverFactory()
-        templates = [MissionTemplateFactory(slug=f"draw-t-{i}", base_weight=1) for i in range(8)]
+        templates = [MissionTemplateFactory(name=f"draw-t-{i}", base_weight=1) for i in range(8)]
         for t in templates:
             giver.templates.add(t)
         character = _make_character_with_level(level=1)
@@ -154,7 +154,7 @@ class OfferMissionsWeightedDrawTests(TestCase):
 
     def test_count_zero_returns_empty(self) -> None:
         giver = MissionGiverFactory()
-        giver.templates.add(MissionTemplateFactory(slug="t-zero"))
+        giver.templates.add(MissionTemplateFactory(name="t-zero"))
         character = _make_character_with_level(level=1)
         self.assertEqual(offer_missions(giver, character, count=0), [])
 
@@ -165,8 +165,8 @@ class OfferMissionsWeightedDrawTests(TestCase):
         fixed pick, just that the heavy template dominates over many draws.
         """
         giver = MissionGiverFactory()
-        heavy = MissionTemplateFactory(slug="heavy-t", base_weight=1000)
-        light = MissionTemplateFactory(slug="light-t", base_weight=1)
+        heavy = MissionTemplateFactory(name="heavy-t", base_weight=1000)
+        light = MissionTemplateFactory(name="light-t", base_weight=1)
         giver.templates.add(heavy, light)
         character = _make_character_with_level(level=1)
 
@@ -188,9 +188,9 @@ class OfferMissionsArcReplaceTests(TestCase):
         # No era ACTIVE — arc-tagged templates never replace.
         era = EraFactory(name="dormant-era", status=EraStatus.CONCLUDED)
         giver = MissionGiverFactory()
-        ambient = MissionTemplateFactory(slug="ambient-only-t")
+        ambient = MissionTemplateFactory(name="ambient-only-t")
         arc = MissionTemplateFactory(
-            slug="arc-only-t",
+            name="arc-only-t",
             created_in_era=era,
             arc_scope=ArcScope.GLOBAL,
             percent_replace=100,
@@ -213,11 +213,11 @@ class OfferMissionsArcReplaceTests(TestCase):
         # Ambient slot pool (base templates with percent_replace=100 — every
         # picked slot WILL be replaced when arc pool has anything).
         ambient = MissionTemplateFactory(
-            slug="ambient-replace-t", percent_replace=100, base_weight=1
+            name="ambient-replace-t", percent_replace=100, base_weight=1
         )
         # Arc-eligible template (tagged with the active era, GLOBAL scope).
         arc = MissionTemplateFactory(
-            slug="arc-replace-t",
+            name="arc-replace-t",
             created_in_era=era,
             arc_scope=ArcScope.GLOBAL,
             base_weight=1,
@@ -240,11 +240,11 @@ class OfferMissionsArcReplaceTests(TestCase):
         """Arc-eligible subpool still respects predicate/level/cooldown."""
         era = EraFactory(name="filtered-era", status=EraStatus.ACTIVE)
         giver = MissionGiverFactory()
-        ambient = MissionTemplateFactory(slug="ambient-keep-t", percent_replace=100, base_weight=1)
+        ambient = MissionTemplateFactory(name="ambient-keep-t", percent_replace=100, base_weight=1)
         # Arc template's level band excludes the character — it must NOT
         # replace the ambient pick even with percent_replace=100.
         out_of_band_arc = MissionTemplateFactory(
-            slug="oob-arc-t",
+            name="oob-arc-t",
             created_in_era=era,
             arc_scope=ArcScope.GLOBAL,
             level_band_min=10,
@@ -265,12 +265,12 @@ class OfferMissionsArcReplaceTests(TestCase):
         # attachment to *that* giver — both meet this, so the arc-replace
         # path can engage from either. We assert from the anchor giver only.
         arc = MissionTemplateFactory(
-            slug="giver-arc-t",
+            name="giver-arc-t",
             created_in_era=era,
             arc_scope=ArcScope.GIVER,
             percent_replace=100,
         )
-        ambient = MissionTemplateFactory(slug="giver-arc-ambient-t", percent_replace=100)
+        ambient = MissionTemplateFactory(name="giver-arc-ambient-t", percent_replace=100)
         anchor_giver.templates.add(arc, ambient)
         other_giver.templates.add(ambient)
         character = _make_character_with_level(level=1)
@@ -292,15 +292,15 @@ class OfferMissionsArcReplaceTests(TestCase):
         org_giver = MissionGiverFactory(name="org-giver", org=org)
         no_org_giver = MissionGiverFactory(name="loose-giver", org=None)
         arc = MissionTemplateFactory(
-            slug="org-arc-t",
+            name="org-arc-t",
             created_in_era=era,
             arc_scope=ArcScope.ORG,
             percent_replace=100,
         )
         # Ambient template attached only to the no-org giver so the ambient
         # pool there is a singleton, isolating the arc-pool emptiness check.
-        ambient_no_org = MissionTemplateFactory(slug="org-arc-ambient-noorg-t", percent_replace=100)
-        ambient_org = MissionTemplateFactory(slug="org-arc-ambient-org-t", percent_replace=100)
+        ambient_no_org = MissionTemplateFactory(name="org-arc-ambient-noorg-t", percent_replace=100)
+        ambient_org = MissionTemplateFactory(name="org-arc-ambient-org-t", percent_replace=100)
         no_org_giver.templates.add(ambient_no_org)
         org_giver.templates.add(arc, ambient_org)
         character = _make_character_with_level(level=1)
@@ -346,7 +346,7 @@ class OfferMissionsAccessTierTests(TestCase):
 
     def test_open_template_visible_to_non_staff(self) -> None:
         giver = MissionGiverFactory()
-        template = MissionTemplateFactory(slug="open-tier-t", access_tier=AccessTier.OPEN)
+        template = MissionTemplateFactory(name="open-tier-t", access_tier=AccessTier.OPEN)
         giver.templates.add(template)
         character = _make_character_with_account(level=1, is_staff=False)
 
@@ -357,7 +357,7 @@ class OfferMissionsAccessTierTests(TestCase):
     def test_staff_only_template_excluded_for_non_staff(self) -> None:
         giver = MissionGiverFactory()
         staff_only = MissionTemplateFactory(
-            slug="staff-only-tier-t", access_tier=AccessTier.STAFF_ONLY
+            name="staff-only-tier-t", access_tier=AccessTier.STAFF_ONLY
         )
         giver.templates.add(staff_only)
         character = _make_character_with_account(level=1, is_staff=False)
@@ -370,7 +370,7 @@ class OfferMissionsAccessTierTests(TestCase):
     def test_staff_only_template_visible_to_staff(self) -> None:
         giver = MissionGiverFactory()
         staff_only = MissionTemplateFactory(
-            slug="staff-only-staff-sees-t", access_tier=AccessTier.STAFF_ONLY
+            name="staff-only-staff-sees-t", access_tier=AccessTier.STAFF_ONLY
         )
         giver.templates.add(staff_only)
         staff_character = _make_character_with_account(level=1, is_staff=True)
@@ -382,8 +382,8 @@ class OfferMissionsAccessTierTests(TestCase):
     def test_staff_sees_both_open_and_staff_only(self) -> None:
         """Staff aren't gated AWAY from OPEN — they're a superset audience."""
         giver = MissionGiverFactory()
-        open_t = MissionTemplateFactory(slug="mixed-open-t", access_tier=AccessTier.OPEN)
-        staff_t = MissionTemplateFactory(slug="mixed-staff-t", access_tier=AccessTier.STAFF_ONLY)
+        open_t = MissionTemplateFactory(name="mixed-open-t", access_tier=AccessTier.OPEN)
+        staff_t = MissionTemplateFactory(name="mixed-staff-t", access_tier=AccessTier.STAFF_ONLY)
         giver.templates.add(open_t, staff_t)
         staff_character = _make_character_with_account(level=1, is_staff=True)
 

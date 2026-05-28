@@ -366,9 +366,9 @@ class GiverStandingResolverTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.liked_giver = MissionGiverFactory(slug="liked-giver", name="Liked")
-        cls.disliked_giver = MissionGiverFactory(slug="disliked-giver", name="Disliked")
-        cls.unknown_giver = MissionGiverFactory(slug="unknown-giver", name="Unknown")
+        cls.liked_giver = MissionGiverFactory(name="liked-giver")
+        cls.disliked_giver = MissionGiverFactory(name="disliked-giver")
+        cls.unknown_giver = MissionGiverFactory(name="unknown-giver")
         MissionGiverStandingFactory(giver=cls.liked_giver, character=cls.character, affection=50)
         MissionGiverStandingFactory(
             giver=cls.disliked_giver, character=cls.character, affection=-20

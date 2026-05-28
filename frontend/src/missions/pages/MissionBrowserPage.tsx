@@ -3,14 +3,14 @@
  *
  * Two-pane layout: filter bar at top, paginated list on the left,
  * MissionDetailPanel on the right. Clicking a row sets the selected
- * slug via URL params so the panel state is shareable / refreshable.
+ * id via URL params so the panel state is shareable / refreshable.
  *
  * E2's MissionCanvas (graph viz) lands as a tab on this same page;
- * E3's NodePage / OptionPage are drill-down routes (`/missions/:slug/nodes/:key`).
+ * E3's NodePage / OptionPage are drill-down routes (`/missions/:id/nodes/:key`).
  */
 
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,9 @@ const ANY_VALUE = '__any__';
 
 export function MissionBrowserPage() {
   const [params, setParams] = useSearchParams();
-  const selectedSlug = params.get('slug') ?? undefined;
+  const navigate = useNavigate();
+  const selectedIdStr = params.get('id');
+  const selectedId = selectedIdStr ? Number(selectedIdStr) : undefined;
 
   const [nameFilter, setNameFilter] = useState('');
   const [accessTier, setAccessTier] = useState<string>(ANY_VALUE);
@@ -46,17 +48,20 @@ export function MissionBrowserPage() {
     page,
   };
 
-  const { data, isLoading } = useMissionTemplates(filters);
+  const { data, isLoading, isError, refetch } = useMissionTemplates(filters);
 
-  const handleSelectSlug = (slug: string) => {
+  const handleSelectId = (id: number) => {
     const next = new URLSearchParams(params);
-    next.set('slug', slug);
+    next.set('id', String(id));
     setParams(next, { replace: true });
   };
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <h1 className="mb-4 text-2xl font-semibold">Mission Studio — Browse</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Mission Studio — Browse</h1>
+        <Button onClick={() => navigate('/staff/missions/new')}>+ New Mission</Button>
+      </div>
       <FiltersBar
         nameFilter={nameFilter}
         onNameChange={(v) => {
@@ -72,7 +77,18 @@ export function MissionBrowserPage() {
       <div className="mt-4 grid gap-4 md:grid-cols-[1fr_2fr]">
         <Card>
           <CardContent className="space-y-1 p-3" data-testid="mission-list">
-            {isLoading ? (
+            {isError ? (
+              <div
+                className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+                role="alert"
+                data-testid="mission-list-error"
+              >
+                <p className="font-medium">Couldn't load missions.</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
               <ListSkeleton />
             ) : (data?.results?.length ?? 0) === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">
@@ -81,10 +97,10 @@ export function MissionBrowserPage() {
             ) : (
               (data?.results ?? []).map((t) => (
                 <MissionRow
-                  key={t.slug}
+                  key={t.id}
                   template={t}
-                  selected={t.slug === selectedSlug}
-                  onSelect={() => handleSelectSlug(t.slug)}
+                  selected={t.id === selectedId}
+                  onSelect={() => handleSelectId(t.id)}
                 />
               ))
             )}
@@ -98,7 +114,7 @@ export function MissionBrowserPage() {
             ) : null}
           </CardContent>
         </Card>
-        <MissionDetailPanel slug={selectedSlug} />
+        <MissionDetailPanel id={selectedId} />
       </div>
     </div>
   );
@@ -158,7 +174,7 @@ function MissionRow({
       type="button"
       onClick={onSelect}
       data-testid="mission-row"
-      data-slug={template.slug}
+      data-id={template.id}
       className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm transition ${
         selected ? 'bg-primary/10 font-medium' : 'hover:bg-muted'
       }`}

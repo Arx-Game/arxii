@@ -47,7 +47,7 @@ class ResolveOptionAdvanceFalseTests(TestCase):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
-        cls.template = MissionTemplateFactory(slug="advance-tmpl", risk_tier=3)
+        cls.template = MissionTemplateFactory(name="advance-tmpl", risk_tier=3)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.dest = MissionNodeFactory(template=cls.template, key="dest")
         cls.instance = MissionInstanceFactory(

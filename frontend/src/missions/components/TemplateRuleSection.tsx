@@ -46,12 +46,12 @@ export function TemplateRuleSection({ template }: Props) {
 
   const mutation = useMutation({
     mutationFn: () =>
-      patchMissionTemplate(template.slug, {
+      patchMissionTemplate(template.id, {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         availability_rule: coercePredicate(draft.availability_rule, leaves.data ?? []) as any,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(template.slug) });
+      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(template.id) });
       qc.invalidateQueries({ queryKey: missionKeys.templates() });
     },
   });

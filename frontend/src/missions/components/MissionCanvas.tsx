@@ -42,8 +42,6 @@ import type { MissionNode, MissionOption, MissionOptionRoute } from '../types';
 import '@xyflow/react/dist/style.css';
 
 interface MissionCanvasProps {
-  /** Template slug. Canvas fetches nodes/options/routes scoped to this template. */
-  templateSlug: string | undefined;
   /** Template primary key (needed for the nodes-by-template filter). */
   templateId: number | undefined;
 }
@@ -51,8 +49,8 @@ interface MissionCanvasProps {
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 60;
 
-export function MissionCanvas({ templateSlug, templateId }: MissionCanvasProps) {
-  if (!templateSlug || !templateId) {
+export function MissionCanvas({ templateId }: MissionCanvasProps) {
+  if (!templateId) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">

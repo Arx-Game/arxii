@@ -60,6 +60,11 @@ const GiverEditorPage = lazy(() =>
     default: m.GiverEditorPage,
   }))
 );
+const CreateMissionPage = lazy(() =>
+  import('@/missions/pages/CreateMissionPage').then((m) => ({
+    default: m.CreateMissionPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -310,7 +315,17 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/canvas"
+          path="/staff/missions/new"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <CreateMissionPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/missions/:id/canvas"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -320,7 +335,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/nodes/:nodeId"
+          path="/staff/missions/:id/nodes/:nodeId"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -330,7 +345,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/:slug/nodes/:nodeId/options/:optionId"
+          path="/staff/missions/:id/nodes/:nodeId/options/:optionId"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
@@ -350,7 +365,7 @@ function App() {
           }
         />
         <Route
-          path="/staff/missions/givers/:slug"
+          path="/staff/missions/givers/:id"
           element={
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>

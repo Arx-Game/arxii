@@ -40,7 +40,7 @@ class MissionInstanceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="inst-tmpl")
+        cls.template = MissionTemplateFactory(name="inst-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.instance = MissionInstanceFactory(
             template=cls.template,
@@ -81,7 +81,7 @@ class MissionParticipantTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.instance = MissionInstanceFactory(template__slug="part-tmpl")
+        cls.instance = MissionInstanceFactory(template__name="part-tmpl")
         cls.char_a = CharacterFactory(db_key="Holder")
         cls.char_b = CharacterFactory(db_key="Tagalong")
         cls.holder = MissionParticipantFactory(
@@ -136,7 +136,7 @@ class MissionNodeSnapshotTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="snap-tmpl")
+        cls.template = MissionTemplateFactory(name="snap-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.instance = MissionInstanceFactory(template=cls.template, current_node=cls.node)
         cls.participant = MissionParticipantFactory(
@@ -162,7 +162,7 @@ class MissionDeedRecordTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="deed-tmpl")
+        cls.template = MissionTemplateFactory(name="deed-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.instance = MissionInstanceFactory(template=cls.template, current_node=cls.node)
         cls.actor = CharacterFactory(db_key="Actor")

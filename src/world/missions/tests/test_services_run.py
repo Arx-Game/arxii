@@ -51,7 +51,7 @@ class AcceptMissionTests(TestCase):
 
     def setUp(self) -> None:
         self.giver = MissionGiverFactory()
-        self.template = MissionTemplateFactory(slug="accept-t", cooldown=timedelta(days=2))
+        self.template = MissionTemplateFactory(name="accept-t", cooldown=timedelta(days=2))
         self.entry_node = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
         self.character = _make_character()
@@ -103,7 +103,7 @@ class ShareMissionTests(TestCase):
 
     def setUp(self) -> None:
         self.giver = MissionGiverFactory()
-        self.template = MissionTemplateFactory(slug="share-t")
+        self.template = MissionTemplateFactory(name="share-t")
         MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
         self.holder = _make_character()
@@ -141,7 +141,7 @@ class AcceptIntegrationWithEnterNodeTests(TestCase):
 
     def test_no_entry_node_raises(self) -> None:
         giver = MissionGiverFactory()
-        template = MissionTemplateFactory(slug="no-entry-t")
+        template = MissionTemplateFactory(name="no-entry-t")
         giver.templates.add(template)
         character = _make_character()
         with self.assertRaises(Exception) as ctx:

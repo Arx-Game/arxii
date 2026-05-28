@@ -57,7 +57,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
                 {nodeRows.map((n) => (
                   <Link
                     key={n.id}
-                    to={`/staff/missions/${template.slug}/nodes/${n.id}`}
+                    to={`/staff/missions/${template.id}/nodes/${n.id}`}
                     className="block rounded border px-2 py-1 text-sm hover:bg-muted"
                   >
                     {n.key}
@@ -70,7 +70,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
                 {optionRows.map((o) => (
                   <Link
                     key={o.id}
-                    to={`/staff/missions/${template.slug}/nodes/${o.node}/options/${o.id}`}
+                    to={`/staff/missions/${template.id}/nodes/${o.node}/options/${o.id}`}
                     className="block rounded border px-2 py-1 text-sm hover:bg-muted"
                   >
                     Node {o.node} · option #{o.order} ({o.option_kind})

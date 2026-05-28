@@ -15,6 +15,7 @@ import {
   copyTemplate,
   createGiverOffering,
   createMissionGiver,
+  createMissionTemplate,
   deleteGiverOffering,
   deleteMissionGiver,
   deleteMissionInstance,
@@ -22,6 +23,7 @@ import {
   getMissionTemplate,
   listGiverOfferings,
   listGiverStandings,
+  listMissionCategories,
   listMissionGivers,
   listMissionNodes,
   listMissionOptions,
@@ -38,6 +40,7 @@ import {
 import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './api';
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
+  MissionCategory,
   MissionGiver,
   MissionGiverOffering,
   MissionGiverStanding,
@@ -58,7 +61,7 @@ export const missionKeys = {
   templates: () => [...missionKeys.all, 'templates'] as const,
   templateList: (filters: MissionTemplateFilters & { page?: number }) =>
     [...missionKeys.templates(), 'list', filters] as const,
-  templateDetail: (slug: string) => [...missionKeys.templates(), 'detail', slug] as const,
+  templateDetail: (id: number) => [...missionKeys.templates(), 'detail', id] as const,
   nodes: () => [...missionKeys.all, 'nodes'] as const,
   nodesFor: (filters: object) => [...missionKeys.nodes(), filters] as const,
   options: () => [...missionKeys.all, 'options'] as const,
@@ -71,12 +74,13 @@ export const missionKeys = {
   rewardsFor: (filters: object) => [...missionKeys.rewards(), filters] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
   giverList: (filters: object) => [...missionKeys.givers(), 'list', filters] as const,
-  giverDetail: (slug: string) => [...missionKeys.givers(), 'detail', slug] as const,
+  giverDetail: (id: number) => [...missionKeys.givers(), 'detail', id] as const,
   offerings: () => [...missionKeys.all, 'offerings'] as const,
   offeringsFor: (filters: object) => [...missionKeys.offerings(), filters] as const,
   standings: () => [...missionKeys.all, 'standings'] as const,
   standingsFor: (filters: object) => [...missionKeys.standings(), filters] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
+  categories: () => [...missionKeys.all, 'categories'] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -88,25 +92,24 @@ export function useMissionTemplates(
     queryKey: missionKeys.templateList(filters),
     queryFn: () => listMissionTemplates(filters),
     staleTime: 30_000,
-    throwOnError: true,
+    // No throwOnError: MissionBrowserPage handles isError inline so a list
+    // fetch failure shows a "couldn't load" card rather than crashing to the
+    // global ErrorBoundary. Other drill-down hooks still use throwOnError —
+    // tracked as a follow-up to align them; out of scope for this PR.
   });
 }
 
-export function useMissionTemplate(
-  slug: string | undefined
-): UseQueryResult<MissionTemplateDetail> {
+export function useMissionTemplate(id: number | undefined): UseQueryResult<MissionTemplateDetail> {
   return useQuery({
-    queryKey: missionKeys.templateDetail(slug ?? ''),
-    queryFn: () => getMissionTemplate(slug as string),
-    enabled: Boolean(slug),
-    throwOnError: true,
+    queryKey: missionKeys.templateDetail(id ?? 0),
+    queryFn: () => getMissionTemplate(id as number),
+    enabled: id !== undefined && id !== 0 && Number.isFinite(id),
   });
 }
 
 export function useMissionNodes(
   filters: {
     template?: number;
-    template_slug?: string;
     is_entry?: boolean;
     needs_rewrite?: boolean;
   } = {}
@@ -174,16 +177,18 @@ export function useMissionGivers(
   return useQuery({
     queryKey: missionKeys.giverList(filters),
     queryFn: () => listMissionGivers(filters),
-    throwOnError: true,
+    // No throwOnError: GiverLibraryPage handles isError inline so a list
+    // fetch failure shows a "couldn't load" card rather than crashing to the
+    // global ErrorBoundary. Other drill-down hooks still use throwOnError —
+    // tracked as a follow-up to align them; out of scope for this PR.
   });
 }
 
-export function useMissionGiver(slug: string | undefined): UseQueryResult<MissionGiver> {
+export function useMissionGiver(id: number | undefined): UseQueryResult<MissionGiver> {
   return useQuery({
-    queryKey: missionKeys.giverDetail(slug ?? ''),
-    queryFn: () => getMissionGiver(slug as string),
-    enabled: Boolean(slug),
-    throwOnError: true,
+    queryKey: missionKeys.giverDetail(id ?? 0),
+    queryFn: () => getMissionGiver(id as number),
+    enabled: id !== undefined && id !== 0 && Number.isFinite(id),
   });
 }
 
@@ -225,10 +230,10 @@ export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
 export function usePatchMissionTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, body }: { slug: string; body: Partial<MissionTemplate> }) =>
-      patchMissionTemplate(slug, body),
-    onSuccess: (_data, { slug }) => {
-      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(slug) });
+    mutationFn: ({ id, body }: { id: number; body: Partial<MissionTemplate> }) =>
+      patchMissionTemplate(id, body),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(id) });
       qc.invalidateQueries({ queryKey: missionKeys.templates() });
     },
   });
@@ -248,15 +253,8 @@ export function usePatchMissionNode() {
 export function useCopyTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      slug,
-      new_slug,
-      new_name,
-    }: {
-      slug: string;
-      new_slug: string;
-      new_name: string;
-    }) => copyTemplate(slug, { new_slug, new_name }),
+    mutationFn: ({ id, new_name }: { id: number; new_name?: string }) =>
+      copyTemplate(id, { new_name }),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.templates() }),
   });
 }
@@ -281,10 +279,10 @@ export function useCopySubtree() {
 export function useAssignMission() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, character }: { slug: string; character: number }) =>
-      assignMission(slug, { character }),
-    onSuccess: (_inst: MissionInstance, { slug }) => {
-      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(slug) });
+    mutationFn: ({ id, character }: { id: number; character: number }) =>
+      assignMission(id, { character }),
+    onSuccess: (_inst: MissionInstance, { id }) => {
+      qc.invalidateQueries({ queryKey: missionKeys.templateDetail(id) });
     },
   });
 }
@@ -308,10 +306,10 @@ export function useCreateMissionGiver() {
 export function usePatchMissionGiver() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, body }: { slug: string; body: Partial<MissionGiver> }) =>
-      patchMissionGiver(slug, body),
-    onSuccess: (_data, { slug }) => {
-      qc.invalidateQueries({ queryKey: missionKeys.giverDetail(slug) });
+    mutationFn: ({ id, body }: { id: number; body: Partial<MissionGiver> }) =>
+      patchMissionGiver(id, body),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: missionKeys.giverDetail(id) });
       qc.invalidateQueries({ queryKey: missionKeys.givers() });
     },
   });
@@ -320,7 +318,7 @@ export function usePatchMissionGiver() {
 export function useDeleteMissionGiver() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (slug: string) => deleteMissionGiver(slug),
+    mutationFn: (id: number) => deleteMissionGiver(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
   });
 }
@@ -347,5 +345,31 @@ export function useDeleteGiverOffering() {
   return useMutation({
     mutationFn: (id: number) => deleteGiverOffering(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
+  });
+}
+
+export function useCreateMissionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<MissionTemplate>) => createMissionTemplate(body),
+    onSuccess: (created) => {
+      // Prime the detail cache with the create response so MissionCanvasPage
+      // renders instantly on the post-create navigate instead of firing a
+      // cold fetch and showing a spinner. Invalidate the list so the browser
+      // shows the new row.
+      qc.setQueryData(missionKeys.templateDetail(created.id), created);
+      qc.invalidateQueries({ queryKey: missionKeys.templates() });
+    },
+  });
+}
+
+export function useMissionCategories(): UseQueryResult<PaginatedResponse<MissionCategory>> {
+  return useQuery({
+    queryKey: missionKeys.categories(),
+    queryFn: listMissionCategories,
+    staleTime: FIVE_MINUTES,
+    // Intentionally no throwOnError here: the picker consumers (CreateMissionPage,
+    // EditCategoriesDialog) check isError and render inline so a categories
+    // fetch failure doesn't nuke the user's half-filled form.
   });
 }

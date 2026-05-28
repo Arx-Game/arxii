@@ -5,10 +5,12 @@ CRUD serializers for nodes / options / routes / candidates / rewards
 land in D2; giver-library serializers in D3; predicate-tree in D5.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
 from world.missions.models import (
+    MissionCategory,
     MissionGiver,
     MissionGiverOffering,
     MissionGiverStanding,
@@ -25,7 +27,7 @@ from world.missions.models import (
 class MissionTemplateSerializer(serializers.ModelSerializer):
     """List + detail serializer for MissionTemplate browse.
 
-    Read-only fields cover the authoring footprint: name, slug, summary,
+    Read-only fields cover the authoring footprint: name, summary,
     epilogue, level band, risk tier, weighting, era association, scope,
     cooldown, reward-group rule, active flag, access tier, categories,
     availability rule.
@@ -33,14 +35,8 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
     ``validate_access_tier`` below — if any attached giver is not
     ``is_publishable`` (no target FK), the flip is refused with the
-    list of unready givers' slugs so the Studio can show "needs-work."
+    list of unready givers' names so the Studio can show "needs-work."
     """
-
-    categories = serializers.SlugRelatedField(
-        many=True,
-        slug_field="name",
-        read_only=True,
-    )
 
     # Module-level constants — bare strings as field/error keys would
     # trip STRING_LITERAL pre-commit.
@@ -52,7 +48,6 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "summary",
             "epilogue",
             "level_band_min",
@@ -70,6 +65,62 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             "availability_rule",
         ]
         read_only_fields = ["id"]
+        # Suppress DRF's auto-generated UniqueValidator on ``name``.
+        # The create() override calls next_available_name() to resolve
+        # collisions via auto-suffix before the DB write, so a
+        # UniqueValidator firing before create() would block that logic.
+        extra_kwargs = {"name": {"validators": []}}
+
+    def validate_name(self, value: str) -> str:
+        """On UPDATE: reject names already taken by another template.
+
+        On CREATE: ``create()`` calls ``next_available_name`` to auto-suffix
+        collisions, so this validator returns the value unchanged. We can't
+        use DRF's default ``UniqueValidator`` here because it runs before
+        ``create()`` and would block the auto-suffix path. PATCH renames
+        are intentionally strict — deliberate user choices deserve explicit
+        feedback when they conflict.
+        """
+        if self.instance is None:
+            return value
+        if MissionTemplate.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
+            msg = "A mission with this name already exists."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """Run ``MissionTemplate.clean()`` so its invariants surface as DRF 400.
+
+        DRF doesn't call ``Model.clean()`` automatically. We re-construct
+        a candidate instance from incoming attrs (merging in ``self.instance``
+        field values for partial PATCH), call ``clean()``, and translate
+        its ``DjangoValidationError`` into the DRF shape so callers get
+        field-keyed 400s instead of an unhandled 500 at ``save()`` time.
+
+        Currently MissionTemplate.clean() checks level_band_min/max and
+        percent_replace. If a new cross-field invariant is added there,
+        add the field to the candidate construction below or it will
+        bypass this proxy and surface as a 500.
+        """
+        attrs = super().validate(attrs)
+
+        def field(name: str, default: object) -> object:
+            if name in attrs:
+                return attrs[name]
+            if self.instance is not None:
+                return getattr(self.instance, name, default)
+            return default
+
+        candidate = MissionTemplate(
+            level_band_min=field("level_band_min", 0),
+            level_band_max=field("level_band_max", 0),
+            percent_replace=field("percent_replace", 0),
+        )
+        try:
+            candidate.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs
 
     def validate_access_tier(self, value: str) -> str:
         """Guard the flip to OPEN: every attached giver must be publishable.
@@ -85,7 +136,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         if instance is None:
             return value  # create — let the model layer accept either tier
         unready: list[str] = [
-            giver.slug for giver in instance.givers.all() if not giver.is_publishable
+            giver.name for giver in instance.givers.all() if not giver.is_publishable
         ]
         if unready:
             msg = (
@@ -94,6 +145,28 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             )
             raise serializers.ValidationError(msg)
         return value
+
+    def create(self, validated_data: dict) -> MissionTemplate:  # type: ignore[override]
+        from django.db import IntegrityError, transaction  # noqa: PLC0415
+
+        from world.missions.services.naming import next_available_name  # noqa: PLC0415
+
+        original_name = validated_data["name"]
+        validated_data["name"] = next_available_name(original_name, MissionTemplate.objects.all())
+        try:
+            # Wrap in a savepoint so that if the INSERT fails with
+            # IntegrityError, any enclosing @transaction.atomic caller's
+            # transaction is NOT poisoned ("current transaction is aborted").
+            with transaction.atomic():
+                return super().create(validated_data)  # type: ignore[return-value]
+        except IntegrityError:
+            # Concurrent create with the same name beat us between the
+            # next_available_name SELECT and our INSERT. Recompute the
+            # suffix (now seeing the just-committed row) and retry once.
+            validated_data["name"] = next_available_name(
+                original_name, MissionTemplate.objects.all()
+            )
+            return super().create(validated_data)  # type: ignore[return-value]
 
 
 class _ActiveInstanceSerializer(serializers.Serializer):
@@ -345,7 +418,6 @@ class MissionGiverSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "giver_kind",
             "target",
             "org",
@@ -353,9 +425,28 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             "is_publishable",
         ]
         read_only_fields = ["id", "is_publishable"]
+        # Suppress DRF's auto-generated UniqueValidator on ``name``.
+        # The create() override calls next_available_name() to resolve
+        # collisions via auto-suffix before the DB write, so a
+        # UniqueValidator firing before create() would block that logic.
+        extra_kwargs = {"name": {"validators": []}}
 
     # Field key used when proxying clean() errors back to the API client.
     _TARGET_FIELD = "target"
+
+    def validate_name(self, value: str) -> str:
+        """On UPDATE: reject names already taken by another giver.
+
+        On CREATE: ``create()`` auto-suffixes via ``next_available_name``,
+        so this validator is a no-op. PATCH renames are intentionally
+        strict — see MissionTemplateSerializer.validate_name.
+        """
+        if self.instance is None:
+            return value
+        if MissionGiver.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
+            msg = "A giver with this name already exists."
+            raise serializers.ValidationError(msg)
+        return value
 
     def validate(self, attrs: dict) -> dict:
         # Build the candidate instance and run clean() so typeclass
@@ -374,6 +465,26 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             except Exception as exc:
                 raise serializers.ValidationError({self._TARGET_FIELD: str(exc)}) from exc
         return attrs
+
+    def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]
+        from django.db import IntegrityError, transaction  # noqa: PLC0415
+
+        from world.missions.services.naming import next_available_name  # noqa: PLC0415
+
+        original_name = validated_data["name"]
+        validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
+        try:
+            # Wrap in a savepoint so that if the INSERT fails with
+            # IntegrityError, any enclosing @transaction.atomic caller's
+            # transaction is NOT poisoned ("current transaction is aborted").
+            with transaction.atomic():
+                return super().create(validated_data)  # type: ignore[return-value]
+        except IntegrityError:
+            # Concurrent create with the same name beat us between the
+            # next_available_name SELECT and our INSERT. Recompute the
+            # suffix (now seeing the just-committed row) and retry once.
+            validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
+            return super().create(validated_data)  # type: ignore[return-value]
 
 
 class MissionGiverOfferingSerializer(serializers.ModelSerializer):
@@ -442,4 +553,17 @@ class MissionGiverStandingSerializer(serializers.ModelSerializer):
     class Meta:
         model = MissionGiverStanding
         fields = ["id", "giver", "character", "available_at", "affection"]
+        read_only_fields = ["id"]
+
+
+class MissionCategorySerializer(serializers.ModelSerializer):
+    """List + detail serializer for MissionCategory browse.
+
+    Read-only resource exposed via MissionCategoryViewSet; categories
+    are seeded via fixture/admin, not authored through the API.
+    """
+
+    class Meta:
+        model = MissionCategory
+        fields = ["id", "name", "description", "display_order"]
         read_only_fields = ["id"]
