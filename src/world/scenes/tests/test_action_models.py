@@ -6,6 +6,7 @@ from django.test import TestCase
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import (
     PersonaFactory,
     SceneActionRequestFactory,
@@ -131,3 +132,9 @@ class TestSceneActionRequest(TestCase):
         self.assertEqual(request.snapshot_resonance, config.resonance)
         self.assertEqual(request.snapshot_check_type, config.check_type)
         self.assertEqual(request.snapshot_target_difficulty, config.target_difficulty)
+
+
+class SceneActionRequestStrainFieldTests(TestCase):
+    def test_strain_commitment_field_exists(self) -> None:
+        field = SceneActionRequest._meta.get_field("strain_commitment")
+        self.assertEqual(field.default, 0)
