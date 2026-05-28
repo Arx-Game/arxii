@@ -10,12 +10,15 @@
  * land in E6 and reuse the mutation hooks already in queries.ts.
  */
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EditCategoriesDialog } from './EditCategoriesDialog';
 import { FlavorRewriteCard } from './FlavorRewriteCard';
 import { StaffActionsCard } from './StaffActionsCard';
 import { TemplateRuleSection } from './TemplateRuleSection';
@@ -28,6 +31,7 @@ interface MissionDetailPanelProps {
 
 export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
   const { data: template, isLoading, error } = useMissionTemplate(id);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (!id) {
     return (
@@ -80,8 +84,25 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
             <DescriptionBlock label="Epilogue" text={template.epilogue} />
           ) : null}
           <MetadataGrid template={template} />
-          {/* TODO Task 12: add edit-categories pencil button + EditCategoriesDialog here */}
-          <CategoriesRow categories={template.categories ?? []} />
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <CategoriesRow categories={template.categories ?? []} />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setEditOpen(true)}
+              aria-label="Edit categories"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
+          <EditCategoriesDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            templateId={template.id}
+            initialCategories={template.categories ?? []}
+          />
           <FootprintBlock
             lifetimeCompletions={template.lifetime_completions}
             activeInstances={
