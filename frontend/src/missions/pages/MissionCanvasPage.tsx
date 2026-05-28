@@ -15,14 +15,36 @@ import { useMissionTemplate } from '../queries';
 
 export function MissionCanvasPage() {
   const { id: idStr } = useParams<{ id: string }>();
-  const id = idStr ? Number(idStr) : undefined;
+  // Guard against non-numeric route params (e.g. /canvas/abc → Number("abc") = NaN).
+  // useMissionTemplate's enabled guard would disable the query on NaN, leaving the
+  // page in a silent "nothing renders" state; show an explicit error card instead.
+  const id = idStr && Number.isFinite(Number(idStr)) ? Number(idStr) : undefined;
   const { data: template, isLoading, isError } = useMissionTemplate(id);
   const navigate = useNavigate();
+
+  if (id === undefined) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium">Missing or invalid id in URL.</p>
+          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     return (
       <div className="container mx-auto max-w-3xl px-4 py-6">
-        <div className="rounded border border-destructive bg-destructive/10 p-4 text-sm">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
           <p className="font-medium">Couldn't load this mission.</p>
           <p className="mt-1 text-muted-foreground">
             The mission may not exist or you may not have access.
