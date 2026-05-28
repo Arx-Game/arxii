@@ -30,6 +30,7 @@ def create_action_interaction(
     participant: CombatParticipant,
     round_number: int,
     summary_label: str,
+    strain_committed: int = 0,
 ) -> Interaction | None:
     """Create one ACTION-mode Interaction for a resolved action.
 
@@ -41,6 +42,10 @@ def create_action_interaction(
         summary_label: Short label for ``Interaction.content`` — the action's
             declaration text. Examples: "Frost Bolt at Pyromancer",
             "Strain commitment to Suppress vs Pyromancer".
+        strain_committed: Strain the participant actually committed for this
+            action. Recorded on the resulting Interaction's canonical
+            ``strain_committed`` audit column. Defaults to 0 for non-clash
+            actions that do not commit strain.
 
     Returns:
         The newly-created Interaction row, or ``None`` if the participant's
@@ -72,6 +77,7 @@ def create_action_interaction(
         scene=scene,
         content=summary_label,
         mode=InteractionMode.ACTION,
+        strain_committed=strain_committed,
     )
 
 
