@@ -53,7 +53,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.template = MissionTemplateFactory(
-            slug="emit-all-equal-tmpl",
+            name="emit-all-equal-tmpl",
             reward_group_rule=RewardGroupRule.ALL_EQUAL,
         )
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
@@ -219,14 +219,14 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.node_template = MissionNodeFactory(
-            template=MissionTemplateFactory(slug="stub-template"),
+            template=MissionTemplateFactory(name="stub-template"),
             key="stub-entry",
             is_entry=True,
         )
 
     def _setup_for_rule(self, rule: str) -> tuple[object, object, object, object]:
         template = MissionTemplateFactory(
-            slug=f"stub-{rule}-tmpl",
+            name=f"stub-{rule}-tmpl",
             reward_group_rule=rule,
         )
         node = MissionNodeFactory(template=template, key="entry", is_entry=True)
@@ -269,7 +269,7 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
         # that *would* succeed on their own — we do not want partial
         # emission. The whole call must abort.
         template = MissionTemplateFactory(
-            slug="stub-partial-tmpl",
+            name="stub-partial-tmpl",
             reward_group_rule=RewardGroupRule.BY_ROLE,
         )
         node = MissionNodeFactory(template=template, key="entry", is_entry=True)
@@ -311,7 +311,7 @@ class EmitTerminalRewardsGuardTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="guard-tmpl")
+        cls.template = MissionTemplateFactory(name="guard-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.dest = MissionNodeFactory(template=cls.template, key="dest")
         cls.option = MissionOptionFactory(

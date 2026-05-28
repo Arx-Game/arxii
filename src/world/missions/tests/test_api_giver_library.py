@@ -45,12 +45,11 @@ class GiverViewSetTests(TestCase):
         cls.room = _room()
         cls.giver = MissionGiverFactory(
             name="The Lockbreaker",
-            slug="lockbreaker",
             giver_kind=GiverKind.ROOM_TRIGGER,
             target=cls.room,
             org=cls.org,
         )
-        MissionGiverFactory(name="Bare Drafty", slug="bare-drafty", giver_kind=GiverKind.NPC)
+        MissionGiverFactory(name="Bare Drafty", giver_kind=GiverKind.NPC)
 
     def setUp(self) -> None:
         self.client = APIClient()
@@ -59,17 +58,18 @@ class GiverViewSetTests(TestCase):
     def test_list_filters_by_org_name(self) -> None:
         response = self.client.get(self.URL, {"org_name": "Crime Guild"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        slugs = {row["slug"] for row in response.data["results"]}
-        self.assertEqual(slugs, {"lockbreaker"})
+        names = {row["name"] for row in response.data["results"]}
+        self.assertEqual(names, {"The Lockbreaker"})
 
-    def test_detail_slug_lookup(self) -> None:
-        response = self.client.get(f"{self.URL}lockbreaker/")
+    def test_detail_pk_lookup(self) -> None:
+        response = self.client.get(f"{self.URL}{self.giver.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], "The Lockbreaker")
         self.assertTrue(response.data["is_publishable"])
 
     def test_detail_drafty_giver_not_publishable(self) -> None:
-        response = self.client.get(f"{self.URL}bare-drafty/")
+        drafty = MissionGiverFactory(name="Bare Drafty")
+        response = self.client.get(f"{self.URL}{drafty.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["is_publishable"])
 
@@ -79,7 +79,6 @@ class GiverViewSetTests(TestCase):
             self.URL,
             {
                 "name": "Brand New",
-                "slug": "brand-new",
                 "giver_kind": GiverKind.ROOM_TRIGGER,
                 "target": room.pk,
             },
@@ -94,7 +93,6 @@ class GiverViewSetTests(TestCase):
             self.URL,
             {
                 "name": "Bad Combo",
-                "slug": "bad-combo",
                 "giver_kind": GiverKind.NPC,
                 "target": room.pk,
             },
@@ -109,8 +107,8 @@ class OfferingViewSetTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = _staff_account("staff-off-vs")
-        cls.giver = MissionGiverFactory(slug="off-giver")
-        cls.template = MissionTemplateFactory(slug="off-tmpl")
+        cls.giver = MissionGiverFactory(name="off-giver")
+        cls.template = MissionTemplateFactory(name="off-tmpl")
         MissionGiverOfferingFactory(giver=cls.giver, template=cls.template)
 
     def setUp(self) -> None:
@@ -123,7 +121,7 @@ class OfferingViewSetTests(TestCase):
         self.assertEqual(len(response.data["results"]), 1)
 
     def test_create_with_weight_override(self) -> None:
-        other = MissionTemplateFactory(slug="off-tmpl-2")
+        other = MissionTemplateFactory(name="off-tmpl-2")
         response = self.client.post(
             self.URL,
             {
@@ -138,7 +136,7 @@ class OfferingViewSetTests(TestCase):
         self.assertEqual(response.data["weight_override"], 7)
 
     def test_create_rejects_zero_weight_override(self) -> None:
-        other = MissionTemplateFactory(slug="off-tmpl-3")
+        other = MissionTemplateFactory(name="off-tmpl-3")
         response = self.client.post(
             self.URL,
             {
@@ -158,7 +156,7 @@ class StandingViewSetTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = _staff_account("staff-std-vs")
-        cls.giver = MissionGiverFactory(slug="std-giver")
+        cls.giver = MissionGiverFactory(name="std-giver")
         cls.character = CharacterFactory()
         cls.standing = MissionGiverStandingFactory(
             giver=cls.giver, character=cls.character, affection=42
@@ -192,7 +190,7 @@ class StandingViewSetTests(TestCase):
         self.assertEqual(response.data["affection"], -10)
 
     def test_create_new_standing(self) -> None:
-        other_giver = MissionGiverFactory(slug="std-other")
+        other_giver = MissionGiverFactory(name="std-other")
         response = self.client.post(
             self.URL,
             {

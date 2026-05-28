@@ -23,7 +23,7 @@ class EnterNodeTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="enter-tmpl")
+        cls.template = MissionTemplateFactory(name="enter-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.next_node = MissionNodeFactory(template=cls.template, key="next")

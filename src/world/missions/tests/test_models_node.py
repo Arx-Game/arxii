@@ -31,7 +31,7 @@ class MissionNodeInvariantTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="node-tmpl")
+        cls.template = MissionTemplateFactory(name="node-tmpl")
         cls.entry = MissionNodeFactory(
             template=cls.template,
             key="start",
@@ -70,7 +70,7 @@ class MissionNodeInvariantTests(TestCase):
             )
 
     def test_same_key_different_template_allowed(self) -> None:
-        other_tmpl = MissionTemplateFactory(slug="other-tmpl")
+        other_tmpl = MissionTemplateFactory(name="other-tmpl")
         node = MissionNodeFactory(template=other_tmpl, key="start", is_entry=True)
         self.assertEqual(node.key, "start")
 
@@ -158,7 +158,7 @@ class MissionNodeFlavorTextTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="flavor-tmpl")
+        cls.template = MissionTemplateFactory(name="flavor-tmpl")
 
     def test_flavor_text_defaults_blank(self) -> None:
         node = MissionNodeFactory(template=self.template, key="flav-default", is_entry=True)
@@ -187,7 +187,7 @@ class MissionNodeEditorLayoutTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="layout-tmpl")
+        cls.template = MissionTemplateFactory(name="layout-tmpl")
 
     def test_editor_coordinates_default_zero(self) -> None:
         node = MissionNodeFactory(template=self.template, key="default-layout", is_entry=True)
@@ -212,7 +212,7 @@ class MissionOptionInvariantTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="opt-tmpl")
+        cls.template = MissionTemplateFactory(name="opt-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="n", is_entry=True)
         cls.target = MissionNodeFactory(template=cls.template, key="t")
         cls.check_type = CheckTypeFactory(name="Lockpick")
@@ -317,7 +317,7 @@ class MissionOptionChallengeSourceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="ch-opt-tmpl")
+        cls.template = MissionTemplateFactory(name="ch-opt-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="n", is_entry=True)
         cls.challenge = ChallengeTemplateFactory(name="Locked Vault")
         cls.check_type = CheckTypeFactory(name="Vault-Lockpick")

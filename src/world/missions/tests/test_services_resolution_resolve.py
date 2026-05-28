@@ -59,7 +59,7 @@ class ResolveCheckOptionTests(TestCase):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
-        cls.template = MissionTemplateFactory(slug="resolve-tmpl", risk_tier=4)
+        cls.template = MissionTemplateFactory(name="resolve-tmpl", risk_tier=4)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.node_a = MissionNodeFactory(template=cls.template, key="a")
@@ -159,7 +159,7 @@ class ResolveChallengeOptionTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.template = MissionTemplateFactory(slug="ch-resolve-tmpl", risk_tier=4)
+        cls.template = MissionTemplateFactory(name="ch-resolve-tmpl", risk_tier=4)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.node_a = MissionNodeFactory(template=cls.template, key="a")
@@ -287,7 +287,7 @@ class AutoSuccessNoOutcomeTiersTest(TestCase):
     def test_raises_when_no_outcome_tiers(self) -> None:
         character = CharacterFactory()
         CharacterSheetFactory(character=character)
-        template = MissionTemplateFactory(slug="no-outcomes-tmpl", risk_tier=1)
+        template = MissionTemplateFactory(name="no-outcomes-tmpl", risk_tier=1)
         instance = MissionInstanceFactory(template=template)
         entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
         actor = MissionParticipantFactory(
@@ -317,7 +317,7 @@ class ResolveBranchOptionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="branch-tmpl")
+        cls.template = MissionTemplateFactory(name="branch-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.target = MissionNodeFactory(template=cls.template, key="target")
@@ -363,7 +363,7 @@ class TerminalCompletionTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.template = MissionTemplateFactory(slug="terminal-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="terminal-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(
@@ -438,7 +438,7 @@ class TerminalRewardEmissionTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.template = MissionTemplateFactory(slug="emit-int-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="emit-int-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(

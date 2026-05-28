@@ -36,7 +36,7 @@ class BuildOptionListTests(TestCase):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
-        cls.template = MissionTemplateFactory(slug="opt-list-tmpl")
+        cls.template = MissionTemplateFactory(name="opt-list-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.participant = MissionParticipantFactory(
@@ -119,7 +119,7 @@ class BuildOptionListChallengeTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.template = MissionTemplateFactory(slug="ch-opt-list-tmpl")
+        cls.template = MissionTemplateFactory(name="ch-opt-list-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.participant = MissionParticipantFactory(

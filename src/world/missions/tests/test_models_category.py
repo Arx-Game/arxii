@@ -22,7 +22,7 @@ class MissionCategoryModelTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.category = MissionCategoryFactory(name="Assassination")
-        cls.template = MissionTemplateFactory(slug="cat-tmpl")
+        cls.template = MissionTemplateFactory(name="cat-tmpl")
 
     def test_round_trips_by_name(self) -> None:
         fetched = MissionCategory.objects.get(name="Assassination")
