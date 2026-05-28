@@ -28,6 +28,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "difficulty_choice",
             "resolved_difficulty",
             "result_interaction",
+            "strain_commitment",
             "created_at",
             "resolved_at",
         ]
