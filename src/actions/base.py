@@ -11,7 +11,9 @@ from actions.types import ActionAvailability, ActionContext, ActionResult, Targe
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.constants import TargetKind
     from actions.models import ActionEnhancement
+    from actions.types import TargetFilters
 
 
 @dataclass
@@ -47,6 +49,8 @@ class Action:
     icon: str
     category: str
     target_type: TargetType
+    target_kind: TargetKind | None = None
+    target_filters: TargetFilters | None = None
 
     intent_event: str | None = None
     result_event: str | None = None

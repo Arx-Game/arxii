@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from actions.base import Action
 from actions.constants import TargetKind
 from actions.types import StrainAvailability, TargetFilters, TargetSpec, TargetType
 
@@ -26,3 +27,11 @@ class TargetSpecTests(TestCase):
         a = StrainAvailability(cap=10)
         self.assertEqual(a.cap, 10)
         self.assertEqual(a.default, 0)
+
+
+class ActionBaseClassFieldsTests(TestCase):
+    def test_action_has_target_kind_default_none(self) -> None:
+        self.assertIsNone(Action.target_kind)
+
+    def test_action_has_target_filters_default_none(self) -> None:
+        self.assertIsNone(Action.target_filters)
