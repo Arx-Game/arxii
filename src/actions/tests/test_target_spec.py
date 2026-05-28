@@ -35,3 +35,12 @@ class ActionBaseClassFieldsTests(TestCase):
 
     def test_action_has_target_filters_default_none(self) -> None:
         self.assertIsNone(Action.target_filters)
+
+
+class PersonaTargetedActionSubclassTests(TestCase):
+    def test_whisper_action_targets_persona(self) -> None:
+        from actions.definitions.communication import WhisperAction
+
+        self.assertEqual(WhisperAction.target_kind, TargetKind.PERSONA)
+        self.assertIsNotNone(WhisperAction.target_filters)
+        self.assertTrue(WhisperAction.target_filters.in_same_scene)
