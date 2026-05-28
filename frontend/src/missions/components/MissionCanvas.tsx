@@ -44,8 +44,6 @@ import '@xyflow/react/dist/style.css';
 interface MissionCanvasProps {
   /** Template primary key (needed for the nodes-by-template filter). */
   templateId: number | undefined;
-  /** @deprecated No longer used — pass only templateId. Will be removed in a follow-up. */
-  templateSlug?: string | undefined;
 }
 
 const NODE_WIDTH = 200;
