@@ -69,25 +69,35 @@ roll reconciliation is **PR B** (#560/#561).
 
 ## Design
 
-### 1. Foundational capabilities + baselines
+### 1. Foundational capabilities + composable baselines
 
-Foundational capacities every character has by default — `awareness`,
-`movement`, `limb_use` (extensible) — modeled as `CapabilityType` rows with an
-**innate baseline** value (a "baseline" capability source; primitive/default-
-backed, per the project-lead lean that these are "so basic they may be enums /
-derived from primitives"). Conditions impair them via the existing
-`ConditionCapabilityEffect`.
+Foundational capacities — `awareness`, `movement`, `limb_use`, … (extensible)
+— modeled as `CapabilityType` rows. A character's value for one is **composed
+from multiple sources**, not a single innate constant:
 
-New `get_effective_capability_value(character, capability) -> int` =
-`innate_baseline + condition_modifiers`, floored at 0. (This is the
-agency/requirement value — intrinsic capacity impaired by conditions. It is
-distinct from the challenge backend's *per-source* action paths, which are
-unchanged. Trait/technique/equipment contributions to baselines are a
-follow-up.)
+`get_effective_capability_value(character, capability) -> int` =
+`innate_baseline + CharacterModifier(target_capability) + condition_modifiers`,
+floored at 0.
 
-**[SPEC-REVIEW FLAG]** Baseline source representation — innate-default vs a
-`baseline` pseudo-source row vs trait-derivation — is the one open modeling
-choice; this spec assumes innate defaults for foundational capabilities.
+- **Innate baseline** — the default every character has (primitive/default-
+  backed, per "so basic they may be enums").
+- **`CharacterModifier` on a capability-typed `ModifierTarget`** — this is how
+  **distinctions** (e.g. "Crippled" → negative `movement`) and, later,
+  **species** (winged → grants `flight`; aquatic → `swim`; extra limbs →
+  higher `limb_use`) impair or enhance foundational capabilities. The
+  `ModifierTarget.target_capability` link and `create_distinction_modifiers`
+  **already exist** — they are just not yet read into capability values. This
+  PR wires that link for foundational capabilities (closing a BUILT-NOT-WIRED
+  gap). Species itself is unbuilt, but the model accommodates it the moment it
+  grants `CharacterModifier`s or capability sources — no new mechanism needed.
+- **Condition modifiers** — the existing `ConditionCapabilityEffect` (transient
+  impairment).
+
+This effective value is the agency/requirement value (intrinsic capacity from
+identity + transient state). It is distinct from the challenge backend's
+*per-source* action paths (unchanged). Trait-derivation contributions
+(`TraitCapabilityDerivation`) to baselines remain a follow-up — additive when
+wired, no re-architecture.
 
 ### 2. Per-technique capability requirements (new model)
 
@@ -163,9 +173,10 @@ swaps the binary/ad-hoc internals for the consequence-pool pipeline.
 | capability→action pipeline, CHALLENGE backend | REUSE (untouched) |
 | `ConditionCapabilityEffect`, `get_capability_value`, condition apply/cure, `ConditionStage` resist | REUSE |
 | `CapabilityType`, `TechniqueCapabilityGrant` (pattern) | REUSE |
+| `CharacterModifier` + `ModifierTarget.target_capability`, `create_distinction_modifiers` | REUSE + WIRE (distinctions/species impair/enhance foundational capabilities; link exists, now read into values) |
 | `TechniqueCapabilityRequirement` (technique → capability + min_value) | NEW |
-| `get_effective_capability_value` (baseline + conditions) | NEW |
-| foundational capability baselines (innate defaults) | NEW |
+| `get_effective_capability_value` (innate + CharacterModifier + conditions) | NEW |
+| foundational capability baselines (innate defaults, composable) | NEW |
 | `technique_performable` + combat eligibility refactor | NEW |
 | `CharacterVitals.life_state` (ALIVE/DEAD) replacing `status` | NEW (slim) |
 | Unconscious / Bleeding-Out conditions + foundational capabilities | NEW (mechanism; content authored) |
@@ -189,8 +200,15 @@ swaps the binary/ad-hoc internals for the consequence-pool pipeline.
 
 - PR B (#560/#561): consequence-pool reconciliation of the rolls.
 - Style-level technique requirements (inherited by techniques).
-- Trait/technique/equipment contributions to foundational capability baselines;
-  unified effective-value across all sources.
+- **Species** capability grants (winged→`flight`, aquatic→`swim`, extra
+  limbs→`limb_use`) — species is unbuilt; the composable effective-value model
+  accommodates it via `CharacterModifier`/capability grants with no new
+  mechanism. Distinctions impairing/enhancing foundational capabilities
+  (e.g. "Crippled") are **in scope** here via the wired
+  `CharacterModifier`→`target_capability` link.
+- Trait-derivation (`TraitCapabilityDerivation`) contributions to foundational
+  baselines, and a unified effective-value across the challenge backend's
+  per-source paths — additive follow-ups.
 - Non-combat / time-based bleed-out progression (#523).
 - `Situation`/`ChallengeInstance` instantiation service (live challenge
   content) — separate from this PR.
