@@ -24,7 +24,6 @@ from world.combat.factories import CombatEncounterFactory, CombatParticipantFact
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeInstanceFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -178,7 +177,6 @@ def _make_declaring_encounter_with_vitals() -> tuple:
         character_sheet=participant.character_sheet,
         health=100,
         max_health=100,
-        status=CharacterStatus.ALIVE,
     )
     return encounter, participant
 

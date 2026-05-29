@@ -18,6 +18,10 @@ from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
     DEATH_HEALTH_THRESHOLD,
     DEATH_SCALING_PER_PERCENT,
+    DERIVED_STATUS_ALIVE,
+    DERIVED_STATUS_DEAD,
+    DERIVED_STATUS_DYING,
+    DERIVED_STATUS_INCAPACITATED,
     KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_HEALTH_THRESHOLD,
     KNOCKOUT_SCALING_PER_PERCENT,
@@ -25,7 +29,6 @@ from world.vitals.constants import (
     WOUND_BASE_DIFFICULTY,
     WOUND_SCALING_PER_PERCENT,
     CharacterLifeState,
-    CharacterStatus,
 )
 from world.vitals.types import DamageConsequenceResult
 
@@ -86,6 +89,37 @@ def can_act(character: ObjectDB) -> bool:
     if awareness is None:
         return True
     return get_effective_capability_value(character, awareness) > 0
+
+
+def derive_character_status(character: ObjectDB) -> str:
+    """Derive a coarse, read-only life-status string for the wire/API.
+
+    This replaces the removed persisted CharacterVitals.status field. It is
+    computed at read time from the mortality marker, active conditions, and
+    agency — there is no stored status. The richer frontend status surface is
+    tracked by #521/#522.
+
+    Precedence: dead > dying (active Bleeding-Out condition) > incapacitated
+    (cannot act) > alive.
+    """
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        BLEED_OUT_CONDITION_NAME,
+    )
+    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        ConditionInstance,
+    )
+
+    if is_dead(character):
+        return DERIVED_STATUS_DEAD
+    dying = ConditionInstance.objects.filter(
+        target=character,
+        condition__name=BLEED_OUT_CONDITION_NAME,
+    ).exists()
+    if dying:
+        return DERIVED_STATUS_DYING
+    if not can_act(character):
+        return DERIVED_STATUS_INCAPACITATED
+    return DERIVED_STATUS_ALIVE
 
 
 def calculate_knockout_difficulty(*, health_pct: float) -> int:
@@ -203,8 +237,6 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
         if death_result.outcome and death_result.outcome.success_level <= 0:
             _apply_consequence_condition(character, BLEED_OUT_CONDITION_NAME)
             result.dying = True
-            result.dying_final_round = True
-            result.final_status = CharacterStatus.DYING
             result.message = "took a lethal hit and is dying"
             return result
 
@@ -222,11 +254,9 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
         if ko_result.outcome and ko_result.outcome.success_level <= 0:
             _apply_consequence_condition(character, UNCONSCIOUS_CONDITION_NAME)
             result.knocked_out = True
-            result.final_status = CharacterStatus.UNCONSCIOUS
             result.message = "was knocked unconscious"
             return result
 
-    result.final_status = CharacterStatus.ALIVE
     return result
 
 

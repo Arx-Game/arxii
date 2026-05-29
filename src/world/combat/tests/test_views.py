@@ -35,7 +35,6 @@ from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -522,10 +521,7 @@ class DeclareAndResolveE2ETest(TestCase):
 
         # Vitals, anima, engagement — required by the real magic pipeline
         CharacterVitals.objects.create(
-            character_sheet=self.player_sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
+            character_sheet=self.player_sheet, health=100, max_health=100
         )
         CharacterAnimaFactory(
             character=self.player_character,

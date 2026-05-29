@@ -169,7 +169,10 @@ class _RoundActionEffects:
             )
         target_ally = self.action.focused_ally_target
         if target_ally is not None:
-            from world.vitals.services import can_act, is_dead  # noqa: PLC0415
+            from world.vitals.services import (  # noqa: PLC0415 — combat→vitals deferred import
+                can_act,
+                is_dead,
+            )
 
             ally_character = target_ally.character_sheet.character
             status_word: str | None = None

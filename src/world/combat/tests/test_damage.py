@@ -30,7 +30,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.vitals.constants import CharacterStatus
+from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
 
 
@@ -117,7 +117,7 @@ class ApplyDamageToParticipantTest(TestCase):
         )
         self.vitals.health = 100
         self.vitals.max_health = 100
-        self.vitals.status = CharacterStatus.ALIVE
+        self.vitals.life_state = CharacterLifeState.ALIVE
         self.vitals.save()
 
     def test_damage_reduces_health(self) -> None:
@@ -165,8 +165,6 @@ class ApplyDamageToParticipantTest(TestCase):
         assert self.vitals.health == 90
         # death_eligible is health-derived (not force_death-derived); 90hp → False.
         assert result.death_eligible is False
-        from world.vitals.constants import CharacterLifeState
-
         assert self.vitals.life_state == CharacterLifeState.ALIVE
 
 
@@ -212,7 +210,6 @@ class KnockoutDeathProcessingTest(TestCase):
             character_sheet=sheet,
             health=pc_health,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
@@ -249,7 +246,7 @@ class KnockoutDeathProcessingTest(TestCase):
         result = resolve_round(encounter)
 
         vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
-        self.assertEqual(vitals.status, CharacterStatus.ALIVE)
+        self.assertEqual(vitals.life_state, CharacterLifeState.ALIVE)
         # Damage consequence should still be recorded
         npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
         self.assertTrue(any(o.damage_consequences for o in npc_outcomes))
@@ -261,7 +258,7 @@ class KnockoutDeathProcessingTest(TestCase):
         result = resolve_round(encounter)
 
         vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
-        self.assertEqual(vitals.status, CharacterStatus.ALIVE)
+        self.assertEqual(vitals.life_state, CharacterLifeState.ALIVE)
         # Damage consequence should still be recorded
         npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
         self.assertTrue(any(o.damage_consequences for o in npc_outcomes))
@@ -281,7 +278,6 @@ class KnockoutDeathProcessingTest(TestCase):
         )
         from world.covenants.factories import CovenantRoleFactory
         from world.traits.factories import CheckOutcomeFactory
-        from world.vitals.constants import CharacterLifeState
 
         encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
@@ -429,12 +425,12 @@ class ApplyDamageToParticipantResistanceTests(EvenniaTestCase):
 
         CharacterVitals.objects.get_or_create(
             character_sheet=participant.character_sheet,
-            defaults={"health": 100, "max_health": 100, "status": CharacterStatus.ALIVE},
+            defaults={"health": 100, "max_health": 100},
         )
         vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
         vitals.health = 100
         vitals.max_health = 100
-        vitals.status = CharacterStatus.ALIVE
+        vitals.life_state = CharacterLifeState.ALIVE
         vitals.save()
 
         fire = DamageTypeFactory(name="Fire")

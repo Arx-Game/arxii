@@ -109,17 +109,23 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 3 queries on the warm call: session + encounter + the lone
-        # remaining roster lookup the permission classes need. The
-        # account-level ``played_character_sheet_ids`` cached_property
-        # makes that lookup a single Account attribute read after the
-        # first request fills the cache, but the cache itself wasn't
-        # filled before this test class's warm-up call, so it still
-        # fires once during warm-up. (After warm-up: zero roster
-        # queries.) The participants/opponents prefetches do not fire
-        # on the warm call — they ran during warm-up and the
-        # identity-mapped encounter retains the attribute.
-        with self.assertNumQueries(3):
+        # 5 queries on the warm call:
+        #   1. session + 2. encounter + 3. the lone remaining roster lookup
+        #      the permission classes need (served by the account-level
+        #      ``played_character_sheet_ids`` cached_property after warm-up).
+        #   4. Bleeding-Out EXISTS + 5. awareness CapabilityType lookup —
+        #      both fired by ``derive_character_status`` (#595), which now
+        #      computes the participant's coarse life status at read time
+        #      from life_state + active conditions + agency instead of
+        #      reading the removed persisted ``CharacterVitals.status``
+        #      field. These two queries are bounded per request (only the
+        #      viewer's own participant is vitals-visible — others return
+        #      None before any lookup), so they do NOT scale with the
+        #      participant count. The richer status surface is #521/#522.
+        # The participants/opponents prefetches do not fire on the warm
+        # call — they ran during warm-up and the identity-mapped encounter
+        # retains the attribute.
+        with self.assertNumQueries(5):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
