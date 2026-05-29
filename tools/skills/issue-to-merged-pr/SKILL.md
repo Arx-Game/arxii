@@ -114,6 +114,13 @@ section.
 
 ### 3. Implementation
 
+When `superpowers:writing-plans` reaches its execution-handoff (the
+"Subagent-Driven vs. Inline? Which approach?" prompt), **do NOT prompt — go
+straight to `superpowers:subagent-driven-development`.** Subagent-driven is the
+standing default for this project; the execution-mode selection is not a
+decision the user wants to make. (Inline execution is only for when subagents
+are unavailable.)
+
 Follow the plan if one exists; otherwise implement directly. Commit
 frequently. The plan's spec-review-loop applies to brainstorming runs; for
 skipped-design tasks, just edit and commit.

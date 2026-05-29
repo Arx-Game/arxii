@@ -1969,7 +1969,7 @@ def _resolve_npc_action(
         consequence = process_damage_consequences(
             character=target_participant.character_sheet.character,
             damage_dealt=dmg_result.damage_dealt,
-            damage_type=None,
+            damage_type=npc_action.threat_entry.damage_type,
         )
         outcome.damage_consequences.append(consequence)
 

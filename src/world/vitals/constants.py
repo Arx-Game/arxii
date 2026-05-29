@@ -74,3 +74,11 @@ DEATH_SCALING_PER_PERCENT: int = 5
 WOUND_BASE_DIFFICULTY: int = 15
 # Additional difficulty per percentage point of max_health over threshold
 WOUND_SCALING_PER_PERCENT: int = 2
+
+# ---------------------------------------------------------------------------
+# Survivability resistance checks (seeded on first use, like fatigue endurance)
+# ---------------------------------------------------------------------------
+
+ENDURANCE_CHECK_NAME: str = "Endurance"  # shared: knockout + permanent wound
+DEATH_CHECK_NAME: str = "Mortal Resolve"  # distinct, high-stakes (death)
+SURVIVABILITY_CHECK_CATEGORY: str = "Survival"

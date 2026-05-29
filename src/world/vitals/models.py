@@ -69,3 +69,37 @@ class CharacterVitals(SharedMemoryModel):
             if pct >= threshold:
                 return description
         return WOUND_DESCRIPTIONS[-1][1]
+
+
+class VitalsConsequenceConfig(SharedMemoryModel):
+    """Singleton (pk=1): global knockout pool + default wound/death pools used
+    when a DamageType doesn't specify its own. Authored via admin."""
+
+    knockout_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Global knockout consequence pool (damage-type-agnostic).",
+    )
+    default_wound_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Fallback permanent-wound pool when DamageType.wound_pool is null.",
+    )
+    default_death_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Fallback death pool when DamageType.death_pool is null.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"VitalsConsequenceConfig(pk={self.pk})"

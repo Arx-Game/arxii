@@ -7,25 +7,28 @@ or any damage source.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
+from world.checks.models import CheckCategory, CheckType
 from world.checks.services import perform_check
 from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
+    DEATH_CHECK_NAME,
     DEATH_HEALTH_THRESHOLD,
     DEATH_SCALING_PER_PERCENT,
     DERIVED_STATUS_ALIVE,
     DERIVED_STATUS_DEAD,
     DERIVED_STATUS_DYING,
     DERIVED_STATUS_INCAPACITATED,
+    ENDURANCE_CHECK_NAME,
     KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_HEALTH_THRESHOLD,
     KNOCKOUT_SCALING_PER_PERCENT,
     PERMANENT_WOUND_THRESHOLD,
+    SURVIVABILITY_CHECK_CATEGORY,
     WOUND_BASE_DIFFICULTY,
     WOUND_SCALING_PER_PERCENT,
     CharacterLifeState,
@@ -33,13 +36,16 @@ from world.vitals.constants import (
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import CheckType
+    from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
+    from world.checks.types import PendingResolution
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
-
-logger = logging.getLogger(__name__)
+    from world.vitals.models import VitalsConsequenceConfig
 
 
 def is_dead(character: ObjectDB) -> bool:
@@ -158,31 +164,158 @@ def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     return WOUND_BASE_DIFFICULTY + (pct_over * WOUND_SCALING_PER_PERCENT)
 
 
-def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline needs all params
+def _ensure_survival_category() -> CheckCategory:
+    """Get or create the Survival CheckCategory, creating it if absent.
+
+    Seeded on first use — no Trait fixtures required.
+    """
+    cat, _ = CheckCategory.objects.get_or_create(
+        name=SURVIVABILITY_CHECK_CATEGORY,
+        defaults={"description": "Survivability resistance checks", "display_order": 98},
+    )
+    return cat
+
+
+def _ensure_endurance_check_type() -> CheckType:
+    """Get or create the Endurance CheckType, creating it if absent.
+
+    Used for both knockout and permanent wound resistance checks. Seeded on
+    first use — trait-weightings are authored content and not seeded here.
+    """
+    check, _ = CheckType.objects.get_or_create(
+        name=ENDURANCE_CHECK_NAME,
+        defaults={
+            "category": _ensure_survival_category(),
+            "description": "Resist knockout and permanent wounds.",
+        },
+    )
+    return check
+
+
+def _ensure_death_check_type() -> CheckType:
+    """Get or create the Mortal Resolve CheckType, creating it if absent.
+
+    Used for death resistance when a character is brought below zero health.
+    Seeded on first use — trait-weightings are authored content and not seeded here.
+    """
+    check, _ = CheckType.objects.get_or_create(
+        name=DEATH_CHECK_NAME,
+        defaults={
+            "category": _ensure_survival_category(),
+            "description": "Resist death when brought below zero health.",
+        },
+    )
+    return check
+
+
+def _wound_pool(damage_type: DamageType | None) -> ConsequencePool | None:
+    """Resolve the wound pool for a damage type, falling back to the config default."""
+    cfg = get_vitals_consequence_config()
+    return (damage_type.wound_pool if damage_type else None) or cfg.default_wound_pool
+
+
+def _death_pool(damage_type: DamageType | None) -> ConsequencePool | None:
+    """Resolve the death pool for a damage type, falling back to the config default."""
+    cfg = get_vitals_consequence_config()
+    return (damage_type.death_pool if damage_type else None) or cfg.default_death_pool
+
+
+def _knockout_pool() -> ConsequencePool | None:
+    """Return the global knockout pool from the vitals consequence config."""
+    return get_vitals_consequence_config().knockout_pool
+
+
+def _unwrap_consequence(pending: PendingResolution) -> Consequence | None:
+    """Unwrap WeightedConsequence; return None for unsaved fallback consequences."""
+    from actions.types import WeightedConsequence  # noqa: PLC0415 — avoid cycle
+
+    c = pending.selected_consequence
+    if isinstance(c, WeightedConsequence):
+        c = c.consequence
+    return None if c.pk is None else c
+
+
+def _apply_condition_effects(pending: PendingResolution) -> Iterator[ConsequenceEffect]:
+    """Yield APPLY_CONDITION effects (with a condition_template) from the selected consequence."""
+    from world.checks.constants import EffectType  # noqa: PLC0415 — avoid cycle
+
+    c = _unwrap_consequence(pending)
+    if c is None:
+        return
+    for effect in c.effects.all():
+        if (
+            effect.effect_type == EffectType.APPLY_CONDITION
+            and effect.condition_template is not None
+        ):
+            yield effect
+
+
+def _applied_condition_names(pending: PendingResolution) -> set[str]:
+    """Return the names of every ConditionTemplate applied by the selected consequence.
+
+    Inspects the selected consequence's APPLY_CONDITION ConsequenceEffects. Unwraps a
+    WeightedConsequence to its underlying Consequence model (mirrors apply_resolution).
+    Returns an empty set for unsaved (fallback) consequences.
+    """
+    return {e.condition_template.name for e in _apply_condition_effects(pending)}
+
+
+def _applied_bleed_out(pending: PendingResolution) -> bool:
+    """True if the selected consequence applied the Bleeding-Out condition."""
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        BLEED_OUT_CONDITION_NAME,
+    )
+
+    return BLEED_OUT_CONDITION_NAME in _applied_condition_names(pending)
+
+
+def _applied_unconscious(pending: PendingResolution) -> bool:
+    """True if the selected consequence applied the Unconscious condition."""
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        UNCONSCIOUS_CONDITION_NAME,
+    )
+
+    return UNCONSCIOUS_CONDITION_NAME in _applied_condition_names(pending)
+
+
+def _wounds_from(pending: PendingResolution) -> list[ConditionTemplate]:
+    """Return the ConditionTemplates applied by the selected wound consequence.
+
+    A wound pool's consequences apply permanent-wound ConditionTemplates via
+    APPLY_CONDITION effects — every applied template is a wound by construction.
+    """
+    return [e.condition_template for e in _apply_condition_effects(pending)]
+
+
+def process_damage_consequences(
     character: ObjectDB,
     damage_dealt: int,
     damage_type: DamageType | None,
     *,
-    knockout_check_type: CheckType | None = None,
-    death_check_type: CheckType | None = None,
-    wound_check_type: CheckType | None = None,
     extra_modifiers: int = 0,
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
-    Checks thresholds in order: permanent wound, death, knockout.
-    Each uses perform_check with scaled difficulty so character stats,
-    conditions, and modifiers always influence the outcome.
+    Checks thresholds in order: permanent wound, death, knockout. Each tier that
+    fires resolves through a consequence pool (tiered, weighted, character-loss
+    filtered) rather than a binary success/fail branch. Character stats,
+    conditions, and modifiers always influence the outcome via the check.
+
+    Death is condition-driven: the death pool applies Bleeding-Out (which
+    advance_bleed_out drives toward death). The pool's character_loss row applies
+    terminal-severity Bleeding-Out, which filter_character_loss swaps for a
+    survivable tier when the character has positive rollmod.
+
+    Pools degrade gracefully: a missing pool (unseeded DB) skips that tier so
+    combat never crashes. Check types are self-seeded internally via
+    _ensure_endurance_check_type and _ensure_death_check_type.
 
     Call AFTER writing the health change to CharacterVitals.
 
     Args:
         character: The damaged character (ObjectDB).
         damage_dealt: How much damage was dealt this hit.
-        damage_type: Type of damage (for wound pool routing).
-        knockout_check_type: CheckType for knockout resistance.
-        death_check_type: CheckType for death resistance.
-        wound_check_type: CheckType for wound resistance.
+        damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
     """
     try:
@@ -194,12 +327,6 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
     # Unconscious/dying characters (now conditions) CAN still take damage.
     if is_dead(character):
         return DamageConsequenceResult(message="Character is dead")
-
-    # Deferred imports — vitals→conditions cross-domain; same pattern as advance_bleed_out.
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
-        BLEED_OUT_CONDITION_NAME,
-        UNCONSCIOUS_CONDITION_NAME,
-    )
 
     result = DamageConsequenceResult()
 
@@ -213,29 +340,29 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
         damage=damage_dealt,
         max_health=vitals.max_health,
     )
-    if wound_difficulty > 0 and wound_check_type:
-        wound_result = perform_check(
+    wound_pool = _wound_pool(damage_type)
+    if wound_difficulty > 0 and wound_pool is not None:
+        pending = resolve_vitals_consequence(
             character,
-            wound_check_type,
-            target_difficulty=wound_difficulty,
+            _ensure_endurance_check_type(),
+            wound_difficulty,
+            wound_pool,
             extra_modifiers=extra_modifiers,
         )
-        if wound_result.outcome and wound_result.outcome.success_level <= 0:
-            wound = _select_and_apply_wound(character, damage_type)
-            if wound:
-                result.wounds_applied.append(wound)
+        result.wounds_applied.extend(_wounds_from(pending))
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
-    if death_difficulty > 0 and death_check_type:
-        death_result = perform_check(
+    death_pool = _death_pool(damage_type)
+    if death_difficulty > 0 and death_pool is not None:
+        pending = resolve_vitals_consequence(
             character,
-            death_check_type,
-            target_difficulty=death_difficulty,
+            _ensure_death_check_type(),
+            death_difficulty,
+            death_pool,
             extra_modifiers=extra_modifiers,
         )
-        if death_result.outcome and death_result.outcome.success_level <= 0:
-            _apply_consequence_condition(character, BLEED_OUT_CONDITION_NAME)
+        if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
             return result
@@ -244,53 +371,21 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
     knockout_difficulty = calculate_knockout_difficulty(
         health_pct=health_pct,
     )
-    if knockout_difficulty > 0 and knockout_check_type:
-        ko_result = perform_check(
+    knockout_pool = _knockout_pool()
+    if knockout_difficulty > 0 and knockout_pool is not None:
+        pending = resolve_vitals_consequence(
             character,
-            knockout_check_type,
-            target_difficulty=knockout_difficulty,
+            _ensure_endurance_check_type(),
+            knockout_difficulty,
+            knockout_pool,
             extra_modifiers=extra_modifiers,
         )
-        if ko_result.outcome and ko_result.outcome.success_level <= 0:
-            _apply_consequence_condition(character, UNCONSCIOUS_CONDITION_NAME)
+        if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
             return result
 
     return result
-
-
-def _apply_consequence_condition(character: ObjectDB, name: str) -> ConditionInstance | None:
-    """Apply a named condition template to character, with graceful degradation.
-
-    Looks up the ConditionTemplate by name. If the template is not found (e.g.,
-    on a fresh DB without authored content), this is a no-op — combat must not
-    crash on unseeded environments. If found, delegates to apply_condition.
-
-    Args:
-        character: The character to apply the condition to.
-        name: The condition template name constant (e.g., UNCONSCIOUS_CONDITION_NAME).
-
-    Returns:
-        The applied ConditionInstance, or None if the template was not found or
-        apply_condition did not create an instance.
-    """
-    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
-        ConditionTemplate,
-    )
-    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
-        apply_condition,
-    )
-
-    template = ConditionTemplate.objects.filter(name=name).first()
-    if template is None:
-        logger.debug(
-            "process_damage_consequences: condition template %r not found; skipping apply",
-            name,
-        )
-        return None
-    result = apply_condition(character, template)
-    return result.instance
 
 
 def _is_terminal_stage(instance: ConditionInstance) -> bool:
@@ -430,16 +525,47 @@ def recompute_max_health(
     return new_max
 
 
-def _select_and_apply_wound(
-    character: ObjectDB,  # noqa: ARG001 — stub pending wound pool content
-    damage_type: DamageType | None,  # noqa: ARG001 — stub pending wound pool content
-) -> ConditionTemplate | None:
-    """Select and apply a permanent wound from the appropriate pool.
+def get_vitals_consequence_config() -> VitalsConsequenceConfig:
+    """Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.
 
-    Routes to damage-type-specific wound pools. Returns the applied
-    ConditionTemplate, or None if no pool is configured.
-
-    Stub for Phase 3 — wound pool routing logic will be fleshed out
-    as content is created. The infrastructure is ready.
+    Holds the global knockout pool and the default wound/death pools used when a
+    DamageType doesn't specify its own. Configure via the Django admin.
     """
-    return None
+    from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415 — avoid import cycle
+
+    cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def resolve_vitals_consequence(
+    character: ObjectDB,
+    check_type: CheckTypeHint,
+    target_difficulty: int,
+    pool: ConsequencePool,
+    *,
+    extra_modifiers: int = 0,
+) -> PendingResolution:
+    """Resolve one survivability consequence through the consequence-pool pipeline.
+
+    Performs the check, selects a tier-matched + character-loss-filtered Consequence
+    from the pool, and applies its effects. Returns the PendingResolution.
+
+    This is the seam Task 5 uses to route knockout/wound/death through pools.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415 — avoid cycle
+        apply_resolution,
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415 — avoid cycle
+
+    consequences = resolve_pool_consequences(pool)
+    pending = select_consequence(
+        character,
+        check_type,
+        target_difficulty,
+        consequences,
+        extra_modifiers=extra_modifiers,
+    )
+    apply_resolution(pending, ResolutionContext(character=character))
+    return pending
