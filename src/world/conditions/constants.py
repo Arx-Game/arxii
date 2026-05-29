@@ -67,6 +67,14 @@ class TreatmentTargetKind(models.TextChoices):
 # capability identifiers, not an enumerated selection set.
 # Each has innate_baseline >= 1 on its CapabilityType row, meaning every
 # character possesses them by default before any condition modifier is applied.
+# Condition name constants for the core incapacitation conditions.
+# These are plain strings (not TextChoices) — they are identity keys,
+# not an enumerated selection set. Factories use them to seed the
+# ConditionTemplate rows; services use them to locate active instances.
+UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
+BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
+
+
 class FoundationalCapability:
     """String constants for capabilities every character has innately.
 

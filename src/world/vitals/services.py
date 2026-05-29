@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.conditions.models import ConditionTemplate, DamageType
+    from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
 
 
 def is_dead(character: ObjectDB) -> bool:
@@ -196,6 +196,98 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
 
     result.final_status = CharacterStatus.ALIVE
     return result
+
+
+def _is_terminal_stage(instance: ConditionInstance) -> bool:
+    """Return True when instance.current_stage is the last stage for its condition.
+
+    A stage is terminal when no stage with a higher stage_order exists for the
+    same ConditionTemplate.
+    """
+    from world.conditions.models import ConditionStage  # noqa: PLC0415 — avoids circular import
+
+    if instance.current_stage is None:
+        return False
+    return not ConditionStage.objects.filter(
+        condition=instance.condition,
+        stage_order__gt=instance.current_stage.stage_order,
+    ).exists()
+
+
+def _mark_dead(character: ObjectDB) -> None:
+    """Stamp life_state=DEAD and died_at on the character's vitals row.
+
+    No-op when the character has no vitals row (defensive; callers should
+    gate on vitals existing before calling advance_bleed_out).
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        vitals = character.sheet_data.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    vitals.life_state = CharacterLifeState.DEAD
+    vitals.died_at = timezone.now()
+    vitals.save(update_fields=["life_state", "died_at"])
+
+
+def advance_bleed_out(character: ObjectDB) -> bool:
+    """Advance staged bleed-out conditions toward death.
+
+    For each active ConditionInstance whose condition.name == BLEED_OUT_CONDITION_NAME:
+    - If current_stage is None or has no resist_check_type, skip.
+    - Perform the resist check at the stage's resist_difficulty.
+    - On failure (success_level < 0):
+        - If this is the terminal stage (no higher stage_order exists), call
+          _mark_dead(character) and return True.
+        - Otherwise advance current_stage to the next higher stage_order and save.
+    - On success / non-failure: hold (no change).
+
+    Returns True if the character died during this call, else False.
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415 — avoids circular import
+    from world.conditions.constants import (  # noqa: PLC0415 — avoids circular import
+        BLEED_OUT_CONDITION_NAME,
+    )
+    from world.conditions.models import ConditionInstance, ConditionStage  # noqa: PLC0415
+
+    instances = list(
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=BLEED_OUT_CONDITION_NAME,
+        ).select_related("condition", "current_stage", "current_stage__resist_check_type")
+    )
+
+    for instance in instances:
+        stage = instance.current_stage
+        if stage is None or stage.resist_check_type is None:
+            continue
+
+        result = perform_check(
+            character,
+            stage.resist_check_type,
+            target_difficulty=stage.resist_difficulty,
+        )
+
+        if int(result.success_level) < 0:
+            # Failed resist: advance or die
+            if _is_terminal_stage(instance):
+                _mark_dead(character)
+                return True
+            # Advance to the next stage
+            next_stage = (
+                ConditionStage.objects.filter(
+                    condition=instance.condition,
+                    stage_order__gt=stage.stage_order,
+                )
+                .order_by("stage_order")
+                .first()
+            )
+            if next_stage is not None:
+                instance.current_stage = next_stage
+                instance.save(update_fields=["current_stage"])
+
+    return False
 
 
 def recompute_max_health(
