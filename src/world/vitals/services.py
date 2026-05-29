@@ -220,8 +220,6 @@ def _mark_dead(character: ObjectDB) -> None:
     No-op when the character has no vitals row (defensive; callers should
     gate on vitals existing before calling advance_bleed_out).
     """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
     try:
         vitals = character.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
@@ -245,11 +243,13 @@ def advance_bleed_out(character: ObjectDB) -> bool:
 
     Returns True if the character died during this call, else False.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415 — avoids circular import
-    from world.conditions.constants import (  # noqa: PLC0415 — avoids circular import
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
         BLEED_OUT_CONDITION_NAME,
     )
-    from world.conditions.models import ConditionInstance, ConditionStage  # noqa: PLC0415
+    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        ConditionInstance,
+        ConditionStage,
+    )
 
     instances = list(
         ConditionInstance.objects.filter(
