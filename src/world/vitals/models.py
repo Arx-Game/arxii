@@ -3,7 +3,7 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterStatus
+from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterLifeState, CharacterStatus
 
 
 class CharacterVitals(SharedMemoryModel):
@@ -56,6 +56,12 @@ class CharacterVitals(SharedMemoryModel):
     dying_final_round = models.BooleanField(
         default=False,
         help_text="Whether the character gets one final action before death.",
+    )
+    life_state = models.CharField(
+        max_length=10,
+        choices=CharacterLifeState.choices,
+        default=CharacterLifeState.ALIVE,
+        help_text="Mortality axis. Consciousness/dying are conditions, not vitals.",
     )
 
     def __str__(self) -> str:

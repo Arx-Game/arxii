@@ -20,6 +20,13 @@ class CharacterStatus(models.TextChoices):
     DEAD = "dead", "Dead"
 
 
+class CharacterLifeState(models.TextChoices):
+    """Mortality axis only. Consciousness/dying live in the conditions system."""
+
+    ALIVE = "alive", "Alive"
+    DEAD = "dead", "Dead"
+
+
 # ---------------------------------------------------------------------------
 # Health thresholds
 # ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ from world.vitals.constants import (
     PERMANENT_WOUND_THRESHOLD,
     WOUND_BASE_DIFFICULTY,
     WOUND_SCALING_PER_PERCENT,
+    CharacterLifeState,
     CharacterStatus,
 )
 from world.vitals.types import DamageConsequenceResult
@@ -33,6 +34,27 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.conditions.models import ConditionTemplate, DamageType
+
+
+def is_dead(character: ObjectDB) -> bool:
+    """Return True if the character's mortality marker is DEAD.
+
+    Returns False when the character has no vitals row (e.g., NPCs not yet
+    set up with health tracking).
+    """
+    try:
+        return character.sheet_data.vitals.life_state == CharacterLifeState.DEAD
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+
+
+def is_alive(character: ObjectDB) -> bool:
+    """Return True if the character is not dead.
+
+    Convenience inverse of is_dead. A character with no vitals row is
+    considered alive (same defensive assumption as is_dead returning False).
+    """
+    return not is_dead(character)
 
 
 def calculate_knockout_difficulty(*, health_pct: float) -> int:
