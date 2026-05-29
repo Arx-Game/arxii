@@ -60,3 +60,22 @@ class TreatmentTargetKind(models.TextChoices):
     PRIMARY = "primary", "Primary condition severity"
     AFTERMATH = "aftermath", "Aftermath child condition severity"
     PENDING_ALTERATION = "pending_alteration", "Pending alteration tier"
+
+
+# Foundational capability name constants.
+# These are plain string constants (not Django choices) because they are
+# capability identifiers, not an enumerated selection set.
+# Each has innate_baseline >= 1 on its CapabilityType row, meaning every
+# character possesses them by default before any condition modifier is applied.
+class FoundationalCapability:
+    """String constants for capabilities every character has innately.
+
+    The default value (baseline) each character has for these capabilities
+    lives on CapabilityType.innate_baseline. Conditions that zero out these
+    capabilities (e.g., unconscious zeroes AWARENESS, rooted zeroes MOVEMENT)
+    use a sufficiently large negative ConditionCapabilityEffect.
+    """
+
+    AWARENESS = "awareness"  # required by ~all techniques; unconscious zeroes it
+    MOVEMENT = "movement"  # locomotion; immobilized/rooted zeroes it
+    LIMB_USE = "limb_use"  # using arms/hands; bound reduces it

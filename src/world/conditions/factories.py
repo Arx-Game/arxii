@@ -59,6 +59,7 @@ class CapabilityTypeFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Capability {n}")
     description = "Test capability"
+    innate_baseline = 0
 
 
 class DamageTypeFactory(DjangoModelFactory):
