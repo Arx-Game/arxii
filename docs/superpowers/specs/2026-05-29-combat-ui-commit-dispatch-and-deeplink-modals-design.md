@@ -25,25 +25,29 @@ Two orthogonal frontend wiring tasks against the unified combat UI. #555 reuses 
 
 ## #555 — Commit dispatch + remove Lend
 
-**Remove Lend (no CLASH_SUPPORT exists; #559 closed):**
-- Delete the `onLendClick` prop + the Lend `<button>` from `ActiveState.tsx`.
+**Resolution: ActiveState becomes read-only (ratified 2026-05-29).** Code review found the
+commit UX the issue asks for **already exists and works** in `YourTurn`'s `ClashContributionRow`
+(`YourTurn.tsx:122` — select clash + strain + dispatch the COMBAT `ActionRef` at
+`YourTurn.tsx:310-327`). The declaration state it needs (`selectedClashRef`, `strainByClash`,
+focused technique) lives **entirely in `YourTurn`'s local `useState`**; there is **no shared
+store/context**. Wiring `ActiveState`'s Commit to dispatch would therefore either duplicate
+YourTurn's commit logic (a second parallel "commit to clash" implementation — forbidden tech debt)
+or require lifting all of YourTurn's declaration state into a shared store. Neither is warranted: the
+single commit path stays in `YourTurn`. `ActiveState` reverts to a pure read-only overview.
+
+- Delete the `onCommitClick` **and** `onLendClick` props from `ActiveState.tsx` (`:29-38`).
+- Delete the Commit **and** Lend `<button>`s (the button row, `ActiveState.tsx:160-184`).
 - Delete the disabled `lend-to-clash-stub` block in `YourTurn.tsx:433-447`.
-- Update `ActiveState.tsx` header docstring (drop the Commit/Lend "Phase 11" TODO).
+- Update `ActiveState.tsx` header docstring: drop the "Commit/Lend stubbed — wired Phase 11" lines;
+  describe it as a read-only clash/ward/break/lock overview.
+- `CombatTurnPanel.tsx:166` already passes no handlers — no change needed there beyond confirming.
 
-**Wire Commit to the existing dispatch path:**
-- `ActiveState` keeps `onCommitClick?(clashId: number)`. The parent supplies it.
-- The dispatch is identical to the clash-contribution dispatch already in `YourTurn.tsx:310-327`:
-  ```ts
-  dispatchAction({
-    ref: { backend: 'COMBAT', clash_id: clashId, clash_action_slot: <focused slot ref> },
-    kwargs: { technique_id: <focused technique>, strain_commitment: <strain> },
-  })
-  ```
-- **Where the handler lives:** `ActiveState` is a rail-overview section. The Commit button there is a shortcut that commits the player's *currently-focused* clash action. The handler is owned by the same component that owns the focused clash ref + strain state (the combat turn container, `CombatTurnPanel`/`CombatScenePage`). It calls `useDispatchPlayerAction` and passes `onCommitClick` down to `ActiveState`. **No new dispatch infra** — reuse the hook + ActionRef shape.
-- **Optimistic / error handling:** mirror `YourTurn`'s pattern — `try { await mutateAsync(...) } catch { setError(...) }`, disable the button while `isPending`, surface failure inline on the clash card. No optimistic cache mutation (the round refetch is the source of truth, matching YourTurn).
-- **Guard:** Commit is disabled when there is no selected focused clash ref (no implicit first-item selection, per CLAUDE.md).
+**Tests (vitest):** `ActiveState` renders clash/ward/break/lock cards with **no** Commit or Lend
+button and accepts no `onCommitClick`/`onLendClick` props; existing overview rendering unaffected.
 
-**Tests (vitest):** ActiveState renders Commit (no Lend); clicking Commit calls `onCommitClick(clashId)`; CombatTurnPanel passes a handler that invokes the dispatch mutation with the COMBAT ActionRef; disabled-while-pending + error-surface.
+**#555 closure note:** the "commit to a clash" capability the issue requested ships via
+`ClashContributionRow`; this change removes the redundant dead stubs rather than building a second
+path. Document this in the PR/issue so it does not read as unfulfilled.
 
 ## #551 — Deep-link modal routing (5 kinds)
 
