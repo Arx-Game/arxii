@@ -172,6 +172,28 @@ demo-combat:
 dc-test *args:
     devcontainer exec --workspace-folder . bash -lc "uv run arx test {{args}}"
 
+# Copy the Windows host's per-project Claude memory dir into the running devcontainer.
+# Fresh devcontainers start with empty in-container memory; this recipe bridges the
+# gap so Claude has continuity across container rebuilds.
+#
+# NOTE: This recipe runs on the Windows host (Git Bash), not inside the
+# container. Mac/Linux contributors can ignore it.
+#
+# Hardcodes container name (arxii-devcontainer-app-1) — matches the compose
+# project name; fragile if anyone renames the compose stack.
+dc-sync-memory:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    WIN_PROJ=$(pwd -W | sed 's|/|\\|g; s|\\|/|g; s|:||; s|^|/|')
+    SRC="$USERPROFILE/.claude/projects/${WIN_PROJ//\//-}/memory"
+    DEST="/home/vscode/.claude/projects/-workspaces-arxii/memory"
+    if [ ! -d "$SRC" ]; then
+        echo "No memory dir found at $SRC — nothing to sync." >&2
+        exit 1
+    fi
+    MSYS_NO_PATHCONV=1 docker cp "$SRC/." "arxii-devcontainer-app-1:$DEST/"
+    echo "Synced $(ls "$SRC" | wc -l) file(s) to container:$DEST"
+
 # Stop the stack (named db volume is preserved by the pinned project name)
 dc-down:
     docker compose -p arxii-devcontainer -f {{_dc}} down
