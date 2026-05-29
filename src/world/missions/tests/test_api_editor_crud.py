@@ -47,9 +47,9 @@ class NodeViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-node-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="node-tmpl")
+        cls.template = MissionTemplateFactory(name="node-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
-        cls.other_template = MissionTemplateFactory(slug="node-tmpl-other")
+        cls.other_template = MissionTemplateFactory(name="node-tmpl-other")
         MissionNodeFactory(template=cls.other_template, key="other-entry")
 
     def setUp(self) -> None:
@@ -132,7 +132,7 @@ class OptionViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-opt-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="opt-tmpl")
+        cls.template = MissionTemplateFactory(name="opt-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="n1")
         cls.other_node = MissionNodeFactory(template=cls.template, key="n2")
         cls.check_type = CheckTypeFactory()
@@ -212,7 +212,7 @@ class RouteViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-route-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="rt-tmpl")
+        cls.template = MissionTemplateFactory(name="rt-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="rt-n")
         cls.check_type = CheckTypeFactory()
         cls.option = MissionOptionFactory(
@@ -260,7 +260,7 @@ class CandidateViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-cand-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="cand-tmpl")
+        cls.template = MissionTemplateFactory(name="cand-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="c-n")
         cls.check_type = CheckTypeFactory()
         cls.option = MissionOptionFactory(
@@ -315,7 +315,7 @@ class RewardViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-rew-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="rew-tmpl")
+        cls.template = MissionTemplateFactory(name="rew-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="rw-n")
         cls.check_type = CheckTypeFactory()
         cls.option = MissionOptionFactory(

@@ -25,9 +25,7 @@ class CopyTemplateActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-copy-tmpl", is_staff=True)
-        cls.source = MissionTemplateFactory(
-            slug="src-tmpl", name="Source", access_tier=AccessTier.OPEN
-        )
+        cls.source = MissionTemplateFactory(name="Source", access_tier=AccessTier.OPEN)
         cls.entry = MissionNodeFactory(template=cls.source, key="entry", is_entry=True)
         cls.target = MissionNodeFactory(template=cls.source, key="target")
         cls.check_type = CheckTypeFactory()
@@ -47,61 +45,99 @@ class CopyTemplateActionTests(TestCase):
         self.client.force_authenticate(self.staff)
 
     def _url(self) -> str:
-        return f"/api/missions/templates/{self.source.slug}/copy/"
+        return f"/api/missions/templates/{self.source.pk}/copy/"
 
     def test_copy_returns_201_with_new_template(self) -> None:
         response = self.client.post(
             self._url(),
-            {"new_slug": "src-tmpl-copy", "new_name": "Source (Copy)"},
+            {"new_name": "Source (Copy)"},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertEqual(response.data["slug"], "src-tmpl-copy")
+        self.assertEqual(response.data["name"], "Source (Copy)")
         # Copy always lands STAFF_ONLY regardless of source tier.
         self.assertEqual(response.data["access_tier"], AccessTier.STAFF_ONLY)
 
     def test_copy_duplicates_all_nodes(self) -> None:
-        self.client.post(
+        res = self.client.post(
             self._url(),
-            {"new_slug": "src-tmpl-copy2", "new_name": "Source Copy 2"},
+            {"new_name": "Source Copy 2"},
             format="json",
         )
-        new_template_nodes = MissionNode.objects.filter(template__slug="src-tmpl-copy2")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+        new_template_pk = res.data["id"]
+        new_template_nodes = MissionNode.objects.filter(template_id=new_template_pk)
         self.assertEqual(new_template_nodes.count(), 2)
         # Entry flag preserved on the copied entry node.
         self.assertEqual(new_template_nodes.filter(is_entry=True).count(), 1)
 
     def test_copy_repoints_internal_route_targets(self) -> None:
-        self.client.post(
+        res = self.client.post(
             self._url(),
-            {"new_slug": "src-tmpl-copy3", "new_name": "Source Copy 3"},
+            {"new_name": "Source Copy 3"},
             format="json",
         )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+        new_template_pk = res.data["id"]
         # The copied route should target the COPIED 'target' node, not
         # the original 'target' node (re-pointing within the new template).
         copied_route = MissionOptionRoute.objects.filter(
-            option__node__template__slug="src-tmpl-copy3",
+            option__node__template_id=new_template_pk,
         ).get()
-        self.assertEqual(copied_route.target_node.template.slug, "src-tmpl-copy3")
+        self.assertEqual(copied_route.target_node.template_id, new_template_pk)
 
     def test_copy_flags_flavor_needs_rewrite(self) -> None:
-        self.client.post(
+        res = self.client.post(
             self._url(),
-            {"new_slug": "src-tmpl-copy4", "new_name": "Source Copy 4"},
+            {"new_name": "Source Copy 4"},
             format="json",
         )
-        copied_node = MissionNode.objects.get(template__slug="src-tmpl-copy4", key="entry")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+        new_template_pk = res.data["id"]
+        copied_node = MissionNode.objects.get(template_id=new_template_pk, key="entry")
         self.assertTrue(copied_node.flavor_text_needs_rewrite)
         copied_option = MissionOption.objects.get(node=copied_node)
         self.assertTrue(copied_option.authored_ic_framing_needs_rewrite)
 
-    def test_copy_requires_both_slug_and_name(self) -> None:
-        response = self.client.post(
-            self._url(),
-            {"new_slug": "no-name"},
+    def test_copy_rejects_blank_new_name(self) -> None:
+        res = self.client.post(
+            f"/api/missions/templates/{self.source.pk}/copy/",
+            {"new_name": "   "},  # whitespace-only
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("new_name", res.json())
+
+    def test_copy_carries_source_categories(self) -> None:
+        from world.missions.factories import (
+            MissionCategoryFactory,
+            MissionTemplateFactory,
+        )
+
+        # Use a local template (not self.source) so the M2M add doesn't
+        # pollute the shared setUpTestData fixture for sibling tests.
+        local_source = MissionTemplateFactory(name="cat-copy-source")
+        cat_a = MissionCategoryFactory(name="copy-cat-a")
+        cat_b = MissionCategoryFactory(name="copy-cat-b")
+        local_source.categories.add(cat_a, cat_b)
+
+        res = self.client.post(
+            f"/api/missions/templates/{local_source.pk}/copy/", {}, format="json"
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(sorted(res.json()["categories"]), sorted([cat_a.pk, cat_b.pk]))
+
+    def test_copy_auto_suffixes_when_source_already_copied(self) -> None:
+        src = MissionTemplateFactory(name="Original")
+        url = f"/api/missions/templates/{src.pk}/copy/"
+        # First copy gets the default name.
+        res1 = self.client.post(url, {}, format="json")
+        self.assertEqual(res1.status_code, 201)
+        self.assertEqual(res1.json()["name"], "Original (copy)")
+        # Second copy must suffix.
+        res2 = self.client.post(url, {}, format="json")
+        self.assertEqual(res2.status_code, 201)
+        self.assertEqual(res2.json()["name"], "Original (copy) 2")
 
 
 class CopyNodeActionTests(TestCase):
@@ -110,7 +146,7 @@ class CopyNodeActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-copy-node", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="cn-tmpl")
+        cls.template = MissionTemplateFactory(name="cn-tmpl")
         cls.source = MissionNodeFactory(template=cls.template, key="cn-source")
         cls.target = MissionNodeFactory(template=cls.template, key="cn-target")
         cls.check_type = CheckTypeFactory()
@@ -158,7 +194,7 @@ class CopySubtreeActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-copy-sub", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="cs-tmpl")
+        cls.template = MissionTemplateFactory(name="cs-tmpl")
         # Reachable closure from A: A -> B -> C. D is an orphan (no
         # route from the A-reachable set points at it), so D stays out
         # of the copy.

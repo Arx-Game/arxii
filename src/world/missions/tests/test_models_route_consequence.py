@@ -23,7 +23,7 @@ class MissionOptionRouteConsequenceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="route-conseq-tmpl")
+        cls.template = MissionTemplateFactory(name="route-conseq-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.node_a = MissionNodeFactory(template=cls.template, key="a")
         cls.success = CheckOutcomeFactory(name="Success")

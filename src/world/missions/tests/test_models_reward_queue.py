@@ -33,7 +33,7 @@ class MissionRewardQueueShapeTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="queue-tmpl")
+        cls.template = MissionTemplateFactory(name="queue-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = CharacterFactory(db_key="QueueActor")
         cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor)

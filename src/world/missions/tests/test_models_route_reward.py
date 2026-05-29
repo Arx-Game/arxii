@@ -40,7 +40,7 @@ class MissionOptionRouteRewardTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="route-reward-tmpl")
+        cls.template = MissionTemplateFactory(name="route-reward-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.success = CheckOutcomeFactory(name="RewardSuccess", success_level=3)
         cls.sneak = CheckTypeFactory(name="RewardSneak")
@@ -164,7 +164,7 @@ class MissionDeedRewardLineRecipientTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="reward-recipient-tmpl")
+        cls.template = MissionTemplateFactory(name="reward-recipient-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = CharacterFactory(db_key="RecipientActor")
         cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor)

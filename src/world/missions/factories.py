@@ -61,10 +61,9 @@ class MissionTemplateFactory(DjangoModelFactory):
 
     class Meta:
         model = MissionTemplate
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Mission {n}")
-    slug = factory.Sequence(lambda n: f"mission-{n}")
     summary = factory.Faker("paragraph")
     epilogue = ""
     level_band_min = 1
@@ -84,16 +83,13 @@ class MissionTemplateFactory(DjangoModelFactory):
     # without every caller passing access_tier. Tests covering the
     # STAFF_ONLY tier set access_tier explicitly.
     #
-    # CAVEAT: per ``feedback_factory_get_or_create_kwargs``, factory_boy's
-    # ``django_get_or_create`` silently drops non-lookup kwargs when the
-    # row pre-exists. If a test calls ``MissionTemplateFactory(slug="x",
-    # access_tier=AccessTier.STAFF_ONLY)`` after another call has already
-    # created slug="x" (with the default OPEN), the second call returns
-    # the existing OPEN row and the access_tier kwarg is silently dropped.
-    # Tests that care about the tier MUST use a unique slug (the convention
-    # in OfferMissionsAccessTierTests). If a future test pattern needs to
-    # share a slug across factories with different tiers, override _create
-    # here per the project memory's pattern.
+    # NOTE: factory_boy's ``django_get_or_create`` silently drops non-lookup
+    # kwargs when the row pre-exists. If a test calls
+    # ``MissionTemplateFactory(name="x", access_tier=AccessTier.STAFF_ONLY)``
+    # after another call has already created name="x" (with the default OPEN),
+    # the second call returns the existing OPEN row and the access_tier kwarg
+    # is silently dropped. Tests that care about the tier MUST use a unique
+    # name (the convention in OfferMissionsAccessTierTests).
     access_tier = AccessTier.OPEN
 
 
@@ -218,9 +214,9 @@ class MissionGiverFactory(DjangoModelFactory):
 
     class Meta:
         model = MissionGiver
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Giver {n}")
-    slug = factory.Sequence(lambda n: f"giver-{n}")
     giver_kind = GiverKind.ROOM_TRIGGER
     target = None
     org = None

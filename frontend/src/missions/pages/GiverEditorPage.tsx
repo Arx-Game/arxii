@@ -1,7 +1,7 @@
 /**
  * GiverEditorPage — edit one MissionGiver + manage its offerings.
  *
- * Routes: /staff/missions/givers/:slug. The page wires three D3
+ * Routes: /staff/missions/givers/:id. The page wires three D3
  * surfaces:
  *
  * - MissionGiverViewSet (PATCH/DELETE on the giver row itself)
@@ -60,11 +60,55 @@ import {
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
 export function GiverEditorPage() {
-  const { slug } = useParams<{ slug: string }>();
-  const { data: giver, isLoading } = useMissionGiver(slug);
+  const { id: idStr } = useParams<{ id: string }>();
+  // Guard against non-numeric route params (e.g. /givers/abc → Number("abc") = NaN).
+  // useMissionGiver's enabled guard would disable the query on NaN, leaving the
+  // page in a silent "nothing renders" state; show an explicit error card instead.
+  const giverId = idStr && Number.isFinite(Number(idStr)) ? Number(idStr) : undefined;
+  const navigate = useNavigate();
+  const { data: giver, isLoading, isError } = useMissionGiver(giverId);
 
-  if (!slug) {
-    return <div className="p-6 text-destructive">Missing slug in URL.</div>;
+  if (giverId === undefined) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium">Missing or invalid id in URL.</p>
+          <Button
+            variant="outline"
+            className="mt-3"
+            onClick={() => navigate('/staff/missions/givers')}
+          >
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium">Couldn't load this giver.</p>
+          <p className="mt-1 text-muted-foreground">
+            The giver may not exist or you may not have access.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-3"
+            onClick={() => navigate('/staff/missions/givers')}
+          >
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -73,7 +117,7 @@ export function GiverEditorPage() {
         crumbs={[
           { label: 'Missions', to: '/staff/missions' },
           { label: 'Givers', to: '/staff/missions/givers' },
-          { label: giver?.name ?? slug },
+          { label: giver?.name ?? (giverId ? `#${giverId}` : '…') },
         ]}
       />
       {isLoading || !giver ? (
@@ -100,13 +144,13 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
     is_active: g.is_active ?? true,
   }));
 
-  const onSave = () => patch.mutate({ slug: giver.slug, body: draft });
+  const onSave = () => patch.mutate({ id: giver.id, body: draft });
 
   const onDelete = async () => {
-    if (!confirm(`Delete giver "${giver.name}" (slug=${giver.slug})? This cannot be undone.`)) {
+    if (!confirm(`Delete giver "${giver.name}"? This cannot be undone.`)) {
       return;
     }
-    await del.mutateAsync(giver.slug);
+    await del.mutateAsync(giver.id);
     navigate('/staff/missions/givers');
   };
 
@@ -116,7 +160,6 @@ function GiverFields({ giver }: { giver: MissionGiver }) {
         <CardTitle className="flex items-center justify-between gap-2">
           <span>Giver: {giver.name}</span>
           <span className="flex items-center gap-2 text-sm font-normal">
-            <Badge variant="outline">slug: {giver.slug}</Badge>
             {giver.is_publishable ? (
               <Badge variant="secondary">publishable</Badge>
             ) : (
@@ -368,7 +411,7 @@ function NewOfferingRow({ giverId, onDone }: { giverId: number; onDone: () => vo
             </SelectTrigger>
             <SelectContent>
               {(templates?.results ?? []).map((t) => (
-                <SelectItem key={t.slug} value={String(t.id)}>
+                <SelectItem key={t.id} value={String(t.id)}>
                   {t.name}
                 </SelectItem>
               ))}

@@ -24,7 +24,6 @@ class MissionTemplateModelTests(TestCase):
         cls.era = EraFactory(name="season-one")
         cls.template = MissionTemplateFactory(
             name="The Heist",
-            slug="the-heist",
             level_band_min=2,
             level_band_max=8,
             risk_tier=3,
@@ -37,7 +36,6 @@ class MissionTemplateModelTests(TestCase):
     def test_factory_round_trips(self) -> None:
         fetched = MissionTemplate.objects.get(pk=self.template.pk)
         self.assertEqual(fetched.name, "The Heist")
-        self.assertEqual(fetched.slug, "the-heist")
         self.assertEqual(fetched.level_band_min, 2)
         self.assertEqual(fetched.level_band_max, 8)
         self.assertEqual(fetched.arc_scope, ArcScope.ORG)
@@ -49,7 +47,6 @@ class MissionTemplateModelTests(TestCase):
 
     def test_level_band_min_above_max_rejected(self) -> None:
         bad = MissionTemplateFactory.build(
-            slug="bad-band",
             name="Bad Band",
             level_band_min=9,
             level_band_max=4,
@@ -59,7 +56,6 @@ class MissionTemplateModelTests(TestCase):
 
     def test_percent_replace_above_100_rejected(self) -> None:
         bad = MissionTemplateFactory.build(
-            slug="bad-pct",
             name="Bad Pct",
             percent_replace=150,
         )
@@ -72,7 +68,6 @@ class MissionTemplateModelTests(TestCase):
         # override this silently persisted an invalid row.
         with self.assertRaises(ValidationError):
             MissionTemplateFactory(
-                slug="save-bad-band",
                 name="Save Bad Band",
                 level_band_min=5,
                 level_band_max=2,
@@ -81,7 +76,6 @@ class MissionTemplateModelTests(TestCase):
     def test_save_enforces_percent_replace_invariant(self) -> None:
         with self.assertRaises(ValidationError):
             MissionTemplateFactory(
-                slug="save-bad-pct",
                 name="Save Bad Pct",
                 percent_replace=101,
             )
@@ -100,7 +94,6 @@ class MissionTemplateModelTests(TestCase):
         # ergonomics.
         bare = MissionTemplate(
             name="Bare-Default",
-            slug="bare-default",
             summary="x",
             level_band_min=1,
             level_band_max=5,

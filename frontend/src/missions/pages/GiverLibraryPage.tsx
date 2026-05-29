@@ -2,12 +2,12 @@
  * GiverLibraryPage — staff browse + create for MissionGiver rows.
  *
  * Two-pane like MissionBrowserPage: filters + list on the left, detail
- * preview on the right (slug query-param for share/refresh). "New
+ * preview on the right (?id= query-param for share/refresh). "New
  * giver" opens an inline form that POSTs via D3.MissionGiverViewSet
- * and routes to /staff/missions/givers/:slug on success.
+ * and routes to /staff/missions/givers/:id on success.
  *
  * Per "no implicit first-item selection": the only way to land on a
- * giver is to click one (or arrive via URL ?slug=). No auto-select.
+ * giver is to click one (or arrive via URL ?id=). No auto-select.
  */
 
 import { useState } from 'react';
@@ -35,7 +35,8 @@ const ANY_VALUE = '__any__';
 
 export function GiverLibraryPage() {
   const [params, setParams] = useSearchParams();
-  const selectedSlug = params.get('slug') ?? undefined;
+  const selectedIdStr = params.get('id');
+  const selectedId = selectedIdStr ? Number(selectedIdStr) : undefined;
 
   const [nameFilter, setNameFilter] = useState('');
   const [kindFilter, setKindFilter] = useState<string>(ANY_VALUE);
@@ -46,11 +47,11 @@ export function GiverLibraryPage() {
     giver_kind: kindFilter === ANY_VALUE ? undefined : kindFilter,
     is_active: activeFilter === ANY_VALUE ? undefined : activeFilter === 'true' ? true : false,
   };
-  const { data, isLoading } = useMissionGivers(filters);
+  const { data, isLoading, isError, refetch } = useMissionGivers(filters);
 
-  const handleSelect = (slug: string) => {
+  const handleSelect = (id: number) => {
     const next = new URLSearchParams(params);
-    next.set('slug', slug);
+    next.set('id', String(id));
     setParams(next, { replace: true });
   };
 
@@ -106,17 +107,28 @@ export function GiverLibraryPage() {
       <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
         <Card>
           <CardContent className="space-y-1 p-3" data-testid="giver-list">
-            {isLoading ? (
+            {isError ? (
+              <div
+                className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+                role="alert"
+                data-testid="giver-list-error"
+              >
+                <p className="font-medium">Couldn't load givers.</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
               <ListSkeleton />
             ) : (data?.results?.length ?? 0) === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No givers match.</div>
             ) : (
               (data?.results ?? []).map((g) => (
                 <GiverRow
-                  key={g.slug}
+                  key={g.id}
                   giver={g}
-                  selected={g.slug === selectedSlug}
-                  onSelect={() => handleSelect(g.slug)}
+                  selected={g.id === selectedId}
+                  onSelect={() => handleSelect(g.id)}
                 />
               ))
             )}
@@ -124,7 +136,7 @@ export function GiverLibraryPage() {
         </Card>
         <div className="space-y-4">
           <NewGiverCard />
-          <GiverPreview slug={selectedSlug} />
+          <GiverPreview id={selectedId} />
         </div>
       </div>
     </div>
@@ -145,7 +157,7 @@ function GiverRow({
       type="button"
       onClick={onSelect}
       data-testid="giver-row"
-      data-slug={giver.slug}
+      data-id={giver.id}
       className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm transition ${
         selected ? 'bg-primary/10 font-medium' : 'hover:bg-muted'
       }`}
@@ -170,10 +182,10 @@ function ListSkeleton() {
   );
 }
 
-function GiverPreview({ slug }: { slug: string | undefined }) {
-  const { data: giver, isLoading } = useMissionGiver(slug);
+function GiverPreview({ id }: { id: number | undefined }) {
+  const { data: giver, isLoading } = useMissionGiver(id);
 
-  if (!slug) {
+  if (!id) {
     return (
       <Card>
         <CardHeader>
@@ -194,7 +206,7 @@ function GiverPreview({ slug }: { slug: string | undefined }) {
         <CardTitle className="flex items-center justify-between">
           <span>{giver.name}</span>
           <Link
-            to={`/staff/missions/givers/${giver.slug}`}
+            to={`/staff/missions/givers/${giver.id}`}
             className="text-sm font-normal text-primary hover:underline"
           >
             Open editor →
@@ -202,9 +214,6 @@ function GiverPreview({ slug }: { slug: string | undefined }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1 text-sm">
-        <div>
-          <span className="text-muted-foreground">slug:</span> {giver.slug}
-        </div>
         <div>
           <span className="text-muted-foreground">kind:</span> {giver.giver_kind ?? '—'}
         </div>
@@ -223,24 +232,22 @@ function GiverPreview({ slug }: { slug: string | undefined }) {
 function NewGiverCard() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
   const [kind, setKind] = useState<GiverKind>('npc');
   const navigate = useNavigate();
   const create = useCreateMissionGiver();
 
   const reset = () => {
     setName('');
-    setSlug('');
     setKind('npc');
     setOpen(false);
     create.reset();
   };
 
   const onSubmit = async () => {
-    if (!name || !slug) return;
-    const created = await create.mutateAsync({ name, slug, giver_kind: kind });
+    if (!name) return;
+    const created = await create.mutateAsync({ name, giver_kind: kind });
     reset();
-    navigate(`/staff/missions/givers/${created.slug}`);
+    navigate(`/staff/missions/givers/${created.id}`);
   };
 
   if (!open) {
@@ -266,15 +273,6 @@ function NewGiverCard() {
           <Input id="new-giver-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <Label htmlFor="new-giver-slug">Slug</Label>
-          <Input
-            id="new-giver-slug"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="urlsafe-slug"
-          />
-        </div>
-        <div>
           <Label htmlFor="new-giver-kind">Kind</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as GiverKind)}>
             <SelectTrigger id="new-giver-kind">
@@ -298,7 +296,7 @@ function NewGiverCard() {
           <Button variant="ghost" size="sm" onClick={reset}>
             Cancel
           </Button>
-          <Button size="sm" onClick={onSubmit} disabled={!name || !slug || create.isPending}>
+          <Button size="sm" onClick={onSubmit} disabled={!name || create.isPending}>
             {create.isPending ? 'Creating…' : 'Create'}
           </Button>
         </div>

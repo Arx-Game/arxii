@@ -10,26 +10,32 @@
  * land in E6 and reuse the mutation hooks already in queries.ts.
  */
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EditCategoriesDialog } from './EditCategoriesDialog';
 import { FlavorRewriteCard } from './FlavorRewriteCard';
 import { StaffActionsCard } from './StaffActionsCard';
 import { TemplateRuleSection } from './TemplateRuleSection';
-import { useDeleteMissionInstance, useMissionTemplate } from '../queries';
+import { useDeleteMissionInstance, useMissionCategories, useMissionTemplate } from '../queries';
+
+const EMPTY_CATEGORIES: readonly number[] = [];
 
 interface MissionDetailPanelProps {
-  /** Template slug — the URL key for the detail endpoint. */
-  slug: string | undefined;
+  /** Template id — the PK for the detail endpoint. */
+  id: number | undefined;
 }
 
-export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
-  const { data: template, isLoading, error } = useMissionTemplate(slug);
+export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
+  const { data: template, isLoading, error } = useMissionTemplate(id);
+  const [editOpen, setEditOpen] = useState(false);
 
-  if (!slug) {
+  if (!id) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">
@@ -54,7 +60,7 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
   if (error || !template) {
     return (
       <Card>
-        <CardContent className="p-6 text-destructive">Failed to load mission {slug}.</CardContent>
+        <CardContent className="p-6 text-destructive">Failed to load mission #{id}.</CardContent>
       </Card>
     );
   }
@@ -68,9 +74,9 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
             <AccessTierBadge tier={template.access_tier ?? 'staff_only'} />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">{template.slug}</div>
+            <div className="text-xs text-muted-foreground">#{template.id}</div>
             <Button asChild size="sm" variant="outline">
-              <Link to={`/staff/missions/${template.slug}/canvas`}>Graph view →</Link>
+              <Link to={`/staff/missions/${template.id}/canvas`}>Graph view →</Link>
             </Button>
           </div>
         </CardHeader>
@@ -80,7 +86,25 @@ export function MissionDetailPanel({ slug }: MissionDetailPanelProps) {
             <DescriptionBlock label="Epilogue" text={template.epilogue} />
           ) : null}
           <MetadataGrid template={template} />
-          <CategoriesRow categories={template.categories ?? []} />
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <CategoriesRow categories={template.categories ?? EMPTY_CATEGORIES} />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setEditOpen(true)}
+              aria-label="Edit categories"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
+          <EditCategoriesDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            templateId={template.id}
+            initialCategories={template.categories ?? EMPTY_CATEGORIES}
+          />
           <FootprintBlock
             lifetimeCompletions={template.lifetime_completions}
             activeInstances={
@@ -152,17 +176,22 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function CategoriesRow({ categories }: { categories: readonly string[] }) {
+function CategoriesRow({ categories }: { categories: readonly number[] }) {
+  const { data } = useMissionCategories();
+  const byId = new Map((data?.results ?? []).map((c) => [c.id, c]));
   if (categories.length === 0) {
     return <div className="text-xs text-muted-foreground">No categories assigned.</div>;
   }
   return (
     <div className="flex flex-wrap gap-1">
-      {categories.map((c) => (
-        <Badge key={c} variant="outline">
-          {c}
-        </Badge>
-      ))}
+      {categories.map((catId) => {
+        const cat = byId.get(catId);
+        return (
+          <Badge key={catId} variant="secondary">
+            {cat?.name ?? `#${catId}`}
+          </Badge>
+        );
+      })}
     </div>
   );
 }

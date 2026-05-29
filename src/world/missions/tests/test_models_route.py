@@ -31,7 +31,7 @@ class MissionOptionRouteTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="route-tmpl")
+        cls.template = MissionTemplateFactory(name="route-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.node_a = MissionNodeFactory(template=cls.template, key="a")
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
@@ -121,7 +121,7 @@ class MissionOptionRouteCandidateEnrichmentTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="cand-enrich-tmpl")
+        cls.template = MissionTemplateFactory(name="cand-enrich-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.dest = MissionNodeFactory(template=cls.template, key="dest")
         cls.option = MissionOptionFactory(
@@ -170,7 +170,7 @@ class MissionOptionRouteRewardParentTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="reward-parent-tmpl")
+        cls.template = MissionTemplateFactory(name="reward-parent-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.option = MissionOptionFactory(
             node=cls.entry,
@@ -281,7 +281,7 @@ class MissionOptionRouteOutcomeTextTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="route-outcome-tmpl")
+        cls.template = MissionTemplateFactory(name="route-outcome-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.option = MissionOptionFactory(
             node=cls.entry,

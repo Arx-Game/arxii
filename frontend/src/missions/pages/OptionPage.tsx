@@ -1,7 +1,7 @@
 /**
  * OptionPage — edit one MissionOption, list its routes.
  *
- * Routes: /staff/missions/:slug/nodes/:nodeId/options/:optionId. PATCH
+ * Routes: /staff/missions/:id/nodes/:nodeId/options/:optionId. PATCH
  * on save via D2's MissionOptionViewSet. Routes listed by tier with a
  * tag for is_random_set (= "random pool"); per-route candidate / reward
  * editing is a future enhancement (D2's nested CRUD endpoints exist;
@@ -48,14 +48,19 @@ const KINDS = ['branch', 'check'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
 
 export function OptionPage() {
-  const { slug, nodeId, optionId } = useParams<{
-    slug: string;
+  const {
+    id: idStr,
+    nodeId,
+    optionId,
+  } = useParams<{
+    id: string;
     nodeId: string;
     optionId: string;
   }>();
+  const templateId = idStr ? Number(idStr) : undefined;
   const numericOptionId = Number(optionId);
   const numericNodeId = Number(nodeId);
-  const { data: template } = useMissionTemplate(slug);
+  const { data: template } = useMissionTemplate(templateId);
   const { data: option, isLoading } = useOption(numericOptionId);
   const { data: routesPage } = useMissionRoutes({ option: numericOptionId });
 
@@ -69,12 +74,15 @@ export function OptionPage() {
         crumbs={[
           { label: 'Missions', to: '/staff/missions' },
           {
-            label: template?.name ?? slug ?? '…',
-            to: `/staff/missions?slug=${slug ?? ''}`,
+            label: template?.name ?? (templateId ? `#${templateId}` : '…'),
+            to: `/staff/missions?id=${templateId ?? ''}`,
           },
           {
             label: 'Node',
-            to: `/staff/missions/${slug}/nodes/${numericNodeId}`,
+            to:
+              templateId !== undefined && Number.isFinite(templateId)
+                ? `/staff/missions/${templateId}/nodes/${numericNodeId}`
+                : '/staff/missions',
           },
           { label: option ? `Option #${option.order}` : '…' },
         ]}

@@ -16,7 +16,7 @@ class RewardGroupRuleFieldTests(TestCase):
     """Field default + round-trip across the three rules."""
 
     def test_default_is_all_equal(self) -> None:
-        template = MissionTemplateFactory(slug="rgr-default")
+        template = MissionTemplateFactory(name="rgr-default")
         template.refresh_from_db()
         self.assertEqual(template.reward_group_rule, RewardGroupRule.ALL_EQUAL)
 
@@ -27,7 +27,7 @@ class RewardGroupRuleFieldTests(TestCase):
             RewardGroupRule.BY_PARTICIPATION,
         ):
             template = MissionTemplateFactory(
-                slug=f"rgr-{rule}",
+                name=f"rgr-{rule}",
                 reward_group_rule=rule,
             )
             reloaded = MissionTemplate.objects.get(pk=template.pk)

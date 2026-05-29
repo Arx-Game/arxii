@@ -81,7 +81,7 @@ class BuildGroupOptionListTests(TestCase):
         CharacterSheetFactory(character=cls.char_a)
         CharacterSheetFactory(character=cls.char_b)
 
-        cls.template = MissionTemplateFactory(slug="grp-opt-tmpl")
+        cls.template = MissionTemplateFactory(name="grp-opt-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.p_a = MissionParticipantFactory(
@@ -162,7 +162,7 @@ class SelectGroupChoiceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="sgc-tmpl")
+        cls.template = MissionTemplateFactory(name="sgc-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.holder = MissionParticipantFactory(
             instance=cls.instance,
@@ -269,7 +269,7 @@ class GroupResolveCoinflipVoteTests(TestCase):
         CharacterSheetFactory(character=cls.char_h)
         CharacterSheetFactory(character=cls.char_2)
 
-        cls.template = MissionTemplateFactory(slug="grp-cv-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="grp-cv-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(
             template=cls.template,
@@ -323,7 +323,7 @@ class GroupResolveJointTests(TestCase):
         CharacterSheetFactory(character=cls.char_h)
         CharacterSheetFactory(character=cls.char_2)
 
-        cls.template = MissionTemplateFactory(slug="grp-joint-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="grp-joint-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.success = CheckOutcomeFactory(name="JSuccess", success_level=3)
         cls.failure = CheckOutcomeFactory(name="JFailure", success_level=-3)
@@ -596,7 +596,7 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         CharacterSheetFactory(character=cls.char_h)
         CharacterSheetFactory(character=cls.char_2)
 
-        cls.template = MissionTemplateFactory(slug="grp-joint-term-rwd", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="grp-joint-term-rwd", risk_tier=2)
         cls.success = CheckOutcomeFactory(name="JTermSuccess", success_level=3)
         cls.failure = CheckOutcomeFactory(name="JTermFailure", success_level=-3)
         cls.sneak = CheckTypeFactory(name="JTermSneak")

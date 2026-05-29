@@ -31,7 +31,7 @@ class TemplateDetailFootprintTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-detail-ft", is_staff=True)
-        cls.template = MissionTemplateFactory(name="The Heist", slug="the-heist")
+        cls.template = MissionTemplateFactory(name="The Heist")
         cls.entry_node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
 
         # Two complete runs.
@@ -63,13 +63,12 @@ class TemplateDetailFootprintTests(TestCase):
         self.client.force_authenticate(self.staff)
 
     def _detail(self) -> dict:
-        response = self.client.get(f"/api/missions/templates/{self.template.slug}/")
+        response = self.client.get(f"/api/missions/templates/{self.template.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         return response.data
 
     def test_includes_list_fields(self) -> None:
         data = self._detail()
-        self.assertEqual(data["slug"], "the-heist")
         self.assertEqual(data["name"], "The Heist")
 
     def test_includes_lifetime_completions(self) -> None:
@@ -111,8 +110,8 @@ class TemplateDetailFootprintTests(TestCase):
         self.assertEqual(len(data["active_instances"]), 3)
 
     def test_template_with_no_runs(self) -> None:
-        empty = MissionTemplateFactory(name="No Runs", slug="no-runs")
-        response = self.client.get(f"/api/missions/templates/{empty.slug}/")
+        empty = MissionTemplateFactory(name="No Runs")
+        response = self.client.get(f"/api/missions/templates/{empty.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["lifetime_completions"], 0)
         self.assertEqual(response.data["active_instances"], [])

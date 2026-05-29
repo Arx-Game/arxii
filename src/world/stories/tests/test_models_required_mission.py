@@ -33,13 +33,13 @@ class BeatRequiredMissionTests(TestCase):
         self.assertIsNone(beat.required_mission_id)
 
     def test_required_mission_round_trips(self) -> None:
-        template = MissionTemplateFactory(slug="required-mission-tmpl")
+        template = MissionTemplateFactory(name="required-mission-tmpl")
         beat = BeatFactory(required_mission=template)
         beat.refresh_from_db()
         self.assertEqual(beat.required_mission, template)
 
     def test_mission_template_delete_set_nulls_required_mission(self) -> None:
-        template = MissionTemplateFactory(slug="required-mission-delete-tmpl")
+        template = MissionTemplateFactory(name="required-mission-delete-tmpl")
         beat = BeatFactory(required_mission=template)
         beat_pk = beat.pk
         template.delete()

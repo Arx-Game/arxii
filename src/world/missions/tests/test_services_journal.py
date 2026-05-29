@@ -44,7 +44,7 @@ class JournalForTests(TestCase):
 
     def setUp(self) -> None:
         self.giver = MissionGiverFactory()
-        self.template = MissionTemplateFactory(slug="journal-t", name="Journal Mission")
+        self.template = MissionTemplateFactory(name="Journal Mission")
         self.entry_node = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
         self.holder = _make_character()
@@ -102,7 +102,7 @@ class JournalForTests(TestCase):
     def test_deterministic_order_by_instance_id(self) -> None:
         # Two missions in order — entries must come back in instance_id order.
         instance_a = accept_mission(self.giver, self.template, self.holder)
-        t2 = MissionTemplateFactory(slug="journal-t2", name="Second")
+        t2 = MissionTemplateFactory(name="Second")
         MissionNodeFactory(template=t2, key="entry", is_entry=True)
         giver2 = MissionGiverFactory(name="Other Giver")
         giver2.templates.add(t2)
@@ -131,7 +131,7 @@ class JournalForTests(TestCase):
         templates = []
         instances = []
         for i in range(3):
-            template = MissionTemplateFactory(slug=f"journal-qc-{i}", name=f"QC Mission {i}")
+            template = MissionTemplateFactory(name=f"QC Mission {i}")
             entry_node = MissionNodeFactory(template=template, key="entry", is_entry=True)
             giver = MissionGiverFactory(name=f"QC Giver {i}")
             giver.templates.add(template)

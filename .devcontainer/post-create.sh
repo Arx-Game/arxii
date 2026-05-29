@@ -13,9 +13,23 @@ eval "$(~/.local/bin/mise activate bash)"
 # Git identity so commits made from inside the container land with the right
 # author. ~/.gitconfig lives in the container's writable layer (not a named
 # volume), so this needs to re-run on every fresh container — cheap and
-# idempotent. Values mirror the host's bare-metal identity.
-git config --global user.name "Dave Brannigan"
-git config --global user.email "surly.mime@gmail.com"
+# idempotent. Read each contributor's personal identity from dev.env
+# (gitignored, per-contributor) so we don't have to hardcode anyone's name
+# in the script.
+if [ -f .devcontainer/dev.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .devcontainer/dev.env
+  set +a
+fi
+if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
+  git config --global user.name "$GIT_USER_NAME"
+  git config --global user.email "$GIT_USER_EMAIL"
+else
+  echo "[post-create] GIT_USER_NAME / GIT_USER_EMAIL not set in .devcontainer/dev.env." >&2
+  echo "[post-create] Add them there (see sync-env.sh placeholders), or run" >&2
+  echo "[post-create] 'git config --global user.name ...' yourself in the container." >&2
+fi
 # Safe-directory exemption: git in modern versions refuses to operate on a
 # repo owned by a different uid than the current user. The bind-mounted repo
 # is owned by whoever owns it on Windows, which isn't the container's vscode

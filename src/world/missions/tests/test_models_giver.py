@@ -76,8 +76,8 @@ class MissionGiverModelTests(TestCase):
 
     def test_templates_m2m_reverse_relation(self) -> None:
         giver = MissionGiverFactory()
-        tmpl_a = MissionTemplateFactory(slug="g-tmpl-a")
-        tmpl_b = MissionTemplateFactory(slug="g-tmpl-b")
+        tmpl_a = MissionTemplateFactory(name="g-tmpl-a")
+        tmpl_b = MissionTemplateFactory(name="g-tmpl-b")
         giver.templates.add(tmpl_a, tmpl_b)
         self.assertEqual(set(giver.templates.all()), {tmpl_a, tmpl_b})
         # reverse: templates -> givers
@@ -258,7 +258,7 @@ class MissionGiverOfferingTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.giver = MissionGiverFactory(name="offering-giver")
-        cls.template = MissionTemplateFactory(slug="offering-tmpl")
+        cls.template = MissionTemplateFactory(name="offering-tmpl")
 
     def test_offering_round_trips_with_overrides(self) -> None:
         offering = MissionGiverOfferingFactory(
@@ -309,7 +309,7 @@ class MissionGiverOfferingTests(TestCase):
         with self.assertRaises(ValidationError):
             MissionGiverOfferingFactory(
                 giver=self.giver,
-                template=MissionTemplateFactory(slug="offering-save-tmpl"),
+                template=MissionTemplateFactory(name="offering-save-tmpl"),
                 weight_override=0,
             )
 

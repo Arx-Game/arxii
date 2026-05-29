@@ -66,7 +66,7 @@ class SoloTerminalBeatSeamTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         CharacterSheetFactory(character=cls.character)
-        cls.template = MissionTemplateFactory(slug="beat-seam-solo-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="beat-seam-solo-tmpl", risk_tier=2)
 
     def setUp(self) -> None:
         beat_service.clear_triggers()
@@ -121,7 +121,7 @@ class JointTerminalBeatSeamTests(TestCase):
         cls.char_2 = CharacterFactory()
         CharacterSheetFactory(character=cls.char_h)
         CharacterSheetFactory(character=cls.char_2)
-        cls.template = MissionTemplateFactory(slug="beat-seam-joint-tmpl", risk_tier=2)
+        cls.template = MissionTemplateFactory(name="beat-seam-joint-tmpl", risk_tier=2)
         cls.success = CheckOutcomeFactory(name="BeatJSuccess", success_level=3)
         cls.sneak = CheckTypeFactory(name="BeatJSneak")
 

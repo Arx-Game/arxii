@@ -42,6 +42,7 @@ from world.missions.filters import (
     MissionTemplateFilterSet,
 )
 from world.missions.models import (
+    MissionCategory,
     MissionGiver,
     MissionGiverOffering,
     MissionGiverStanding,
@@ -55,6 +56,7 @@ from world.missions.models import (
 )
 from world.missions.predicates import LEAF_RESOLVERS
 from world.missions.serializers import (
+    MissionCategorySerializer,
     MissionGiverOfferingSerializer,
     MissionGiverSerializer,
     MissionGiverStandingSerializer,
@@ -93,12 +95,21 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
     only mutates MissionTemplate's own fields.
     """
 
-    queryset = MissionTemplate.objects.all().order_by("pk")
+    # `prefetch_related("categories")` is intentionally a bare string here
+    # rather than `Prefetch(..., to_attr=...)`: DRF's default M2M serialization
+    # reads `.categories.all()`, which uses the prefetched cache for bare-string
+    # prefetches. Switching to `to_attr` would require a custom serializer field
+    # to read from the alias, which is more code than the perf win warrants for
+    # a simple PK-list M2M.
+    queryset = (
+        MissionTemplate.objects.all()
+        .prefetch_related("categories")  # noqa: PREFETCH_STRING
+        .order_by("pk")
+    )
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionTemplateFilterSet
-    lookup_field = "slug"
 
     def get_serializer_class(self) -> type[BaseSerializer[MissionTemplate]]:
         """Detail (retrieve) uses the augmented serializer; list+CRUD use the basic one.
@@ -112,29 +123,29 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
         return MissionTemplateSerializer
 
     @action(detail=True, methods=("POST",))
-    def copy(self, request: Request, slug: str | None = None) -> Response:
+    def copy(self, request: Request, pk: int | None = None) -> Response:
         """D4.2 — duplicate this template + its full graph.
 
-        POST body: ``{"new_slug": str, "new_name": str}``. Lands the copy
-        with ``access_tier=STAFF_ONLY`` so the author can fix flavor before
-        publishing. All copied flavor fields are flagged needs_rewrite.
+        POST body: ``{"new_name": str}`` — optional. If absent, the
+        service auto-suffixes the source name via next_available_name
+        (``"Heist (copy)"``, ``"Heist (copy) 2"``, ...). All copied
+        flavor fields are flagged ``needs_rewrite``.
         """
         from world.missions.services.copy import copy_template  # noqa: PLC0415
 
         source = self.get_object()
-        new_slug = request.data.get("new_slug")
         new_name = request.data.get("new_name")
-        if not new_slug or not new_name:
+        if new_name is not None and not new_name.strip():
             return Response(
-                {"detail": "new_slug and new_name are required."},
+                {"new_name": ["May not be blank."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        new_template = copy_template(source, new_slug=new_slug, new_name=new_name)
+        new_template = copy_template(source, new_name=new_name)
         serializer = MissionTemplateSerializer(new_template, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=("POST",))
-    def assign(self, request: Request, slug: str | None = None) -> Response:
+    def assign(self, request: Request, pk: int | None = None) -> Response:
         """D4.3 — staff-power: drop this mission on a character.
 
         POST body: ``{"character": <ObjectDB pk>}``. Bypasses all
@@ -277,7 +288,7 @@ class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
 
 
 class MissionGiverViewSet(viewsets.ModelViewSet):
-    """Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass."""
+    """Staff CRUD for MissionGiver. clean() validates target typeclass."""
 
     queryset = MissionGiver.objects.all().order_by("pk")
     serializer_class = MissionGiverSerializer
@@ -285,7 +296,6 @@ class MissionGiverViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverFilterSet
-    lookup_field = "slug"
 
 
 class MissionGiverOfferingViewSet(viewsets.ModelViewSet):
@@ -337,6 +347,21 @@ class MissionGiverStandingViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverStandingFilterSet
+
+
+class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """Staff-only browse of seeded MissionCategory rows.
+
+    Categories are managed via fixture/admin — no authoring endpoints.
+    The Mission Studio uses this to populate the category multi-select
+    on the create page and the edit-categories dialog.
+    """
+
+    queryset = MissionCategory.objects.all().order_by("display_order", "name")
+    serializer_class = MissionCategorySerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = []
+    pagination_class = MissionStudioPagination
 
 
 # ---------------------------------------------------------------------------

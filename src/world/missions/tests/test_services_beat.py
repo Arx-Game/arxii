@@ -18,7 +18,7 @@ class OnMissionCompleteForBeatTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(slug="beat-svc-tmpl")
+        cls.template = MissionTemplateFactory(name="beat-svc-tmpl")
 
     def setUp(self) -> None:
         beat_service.clear_triggers()

@@ -24,7 +24,7 @@ class AssignActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-assign", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="assign-tmpl")
+        cls.template = MissionTemplateFactory(name="assign-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="assign-entry", is_entry=True)
         cls.character = CharacterFactory()
 
@@ -34,7 +34,7 @@ class AssignActionTests(TestCase):
 
     def test_assign_creates_instance(self) -> None:
         response = self.client.post(
-            f"/api/missions/templates/{self.template.slug}/assign/",
+            f"/api/missions/templates/{self.template.pk}/assign/",
             {"character": self.character.pk},
             format="json",
         )
@@ -44,7 +44,7 @@ class AssignActionTests(TestCase):
 
     def test_assign_creates_contract_holder_participant(self) -> None:
         response = self.client.post(
-            f"/api/missions/templates/{self.template.slug}/assign/",
+            f"/api/missions/templates/{self.template.pk}/assign/",
             {"character": self.character.pk},
             format="json",
         )
@@ -55,7 +55,7 @@ class AssignActionTests(TestCase):
 
     def test_assign_sets_current_node_to_entry(self) -> None:
         response = self.client.post(
-            f"/api/missions/templates/{self.template.slug}/assign/",
+            f"/api/missions/templates/{self.template.pk}/assign/",
             {"character": self.character.pk},
             format="json",
         )
@@ -64,7 +64,7 @@ class AssignActionTests(TestCase):
 
     def test_assign_requires_character_id(self) -> None:
         response = self.client.post(
-            f"/api/missions/templates/{self.template.slug}/assign/",
+            f"/api/missions/templates/{self.template.pk}/assign/",
             {},
             format="json",
         )
@@ -72,7 +72,7 @@ class AssignActionTests(TestCase):
 
     def test_assign_404_when_character_missing(self) -> None:
         response = self.client.post(
-            f"/api/missions/templates/{self.template.slug}/assign/",
+            f"/api/missions/templates/{self.template.pk}/assign/",
             {"character": 999_999_999},
             format="json",
         )
@@ -103,7 +103,7 @@ class InstanceRemoveTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-rmi", is_staff=True)
-        cls.template = MissionTemplateFactory(slug="rmi-tmpl")
+        cls.template = MissionTemplateFactory(name="rmi-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
 
     def setUp(self) -> None:

@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.missions.views import (
+    MissionCategoryViewSet,
     MissionGiverOfferingViewSet,
     MissionGiverStandingViewSet,
     MissionGiverViewSet,
@@ -52,6 +53,8 @@ router.register(
 )
 # D4.3 staff-power instance ops (list/retrieve/destroy only).
 router.register(r"instances", MissionInstanceViewSet, basename="mission-instance")
+# D4 category browse (read-only; drives the category multi-select in Mission Studio).
+router.register(r"categories", MissionCategoryViewSet, basename="missioncategory")
 # D5 predicate-leaf catalog (read-only; drives the Studio builder palette).
 router.register(r"predicate-leaves", PredicateLeafCatalogViewSet, basename="mission-predicate-leaf")
 

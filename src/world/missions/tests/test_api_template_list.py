@@ -58,9 +58,9 @@ class TemplateListRoundTripTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-list-rt", is_staff=True)
-        cls.t_a = MissionTemplateFactory(name="Alpha", slug="alpha", risk_tier=1)
-        cls.t_b = MissionTemplateFactory(name="Bravo", slug="bravo", risk_tier=3)
-        cls.t_c = MissionTemplateFactory(name="Charlie", slug="charlie", risk_tier=5)
+        cls.t_a = MissionTemplateFactory(name="Alpha", risk_tier=1)
+        cls.t_b = MissionTemplateFactory(name="Bravo", risk_tier=3)
+        cls.t_c = MissionTemplateFactory(name="Charlie", risk_tier=5)
 
     def setUp(self) -> None:
         self.client = APIClient()
@@ -70,8 +70,8 @@ class TemplateListRoundTripTests(TestCase):
         response = self.client.get(LIST_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data["results"]
-        slugs = {r["slug"] for r in results}
-        self.assertEqual(slugs, {"alpha", "bravo", "charlie"})
+        names = {r["name"] for r in results}
+        self.assertEqual(names, {"Alpha", "Bravo", "Charlie"})
 
     def test_list_is_paginated(self) -> None:
         # Pagination shape: response.data has count/next/previous/results.
@@ -84,8 +84,8 @@ class TemplateListRoundTripTests(TestCase):
         first = self.client.get(LIST_URL).data["results"]
         second = self.client.get(LIST_URL).data["results"]
         self.assertEqual(
-            [r["slug"] for r in first],
-            [r["slug"] for r in second],
+            [r["name"] for r in first],
+            [r["name"] for r in second],
         )
 
 
@@ -98,54 +98,48 @@ class TemplateListFilterTests(TestCase):
         cls.cat_courtly = MissionCategoryFactory(name="courtly")
         cls.cat_heist = MissionCategoryFactory(name="heist")
         cls.org = OrganizationFactory(name="Crime Guild")
-        cls.org_giver = MissionGiverFactory(name="org-giver", slug="org-giver", org=cls.org)
+        cls.org_giver = MissionGiverFactory(name="org-giver", org=cls.org)
 
-        cls.low_risk = MissionTemplateFactory(
-            name="Low Risk", slug="low-risk", risk_tier=1, is_active=True
-        )
+        cls.low_risk = MissionTemplateFactory(name="Low Risk", risk_tier=1, is_active=True)
         cls.low_risk.categories.add(cls.cat_courtly)
 
-        cls.high_risk = MissionTemplateFactory(
-            name="High Risk", slug="high-risk", risk_tier=5, is_active=True
-        )
+        cls.high_risk = MissionTemplateFactory(name="High Risk", risk_tier=5, is_active=True)
         cls.high_risk.categories.add(cls.cat_heist)
         cls.org_giver.templates.add(cls.high_risk)
 
-        cls.inactive = MissionTemplateFactory(
-            name="Inactive", slug="inactive", risk_tier=2, is_active=False
-        )
+        cls.inactive = MissionTemplateFactory(name="Inactive", risk_tier=2, is_active=False)
 
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(self.staff)
 
-    def _slugs(self, response) -> set[str]:
-        return {r["slug"] for r in response.data["results"]}
+    def _names(self, response) -> set[str]:
+        return {r["name"] for r in response.data["results"]}
 
     def test_filter_by_name_substring(self) -> None:
         response = self.client.get(LIST_URL, {"name": "Risk"})
-        self.assertEqual(self._slugs(response), {"low-risk", "high-risk"})
+        self.assertEqual(self._names(response), {"Low Risk", "High Risk"})
 
     def test_filter_by_risk_tier_exact(self) -> None:
         response = self.client.get(LIST_URL, {"risk_tier": 5})
-        self.assertEqual(self._slugs(response), {"high-risk"})
+        self.assertEqual(self._names(response), {"High Risk"})
 
     def test_filter_by_is_active(self) -> None:
         response = self.client.get(LIST_URL, {"is_active": False})
-        self.assertEqual(self._slugs(response), {"inactive"})
+        self.assertEqual(self._names(response), {"Inactive"})
 
     def test_filter_by_category_name(self) -> None:
         response = self.client.get(LIST_URL, {"category": "heist"})
-        self.assertEqual(self._slugs(response), {"high-risk"})
+        self.assertEqual(self._names(response), {"High Risk"})
 
     def test_filter_by_org_name(self) -> None:
         # Templates available via any giver fronting for this org.
         response = self.client.get(LIST_URL, {"org": "Crime Guild"})
-        self.assertEqual(self._slugs(response), {"high-risk"})
+        self.assertEqual(self._names(response), {"High Risk"})
 
     def test_filter_by_arc_scope(self) -> None:
         cls = type(self)
         cls.high_risk.arc_scope = ArcScope.ORG
         cls.high_risk.save()
         response = self.client.get(LIST_URL, {"arc_scope": "org"})
-        self.assertEqual(self._slugs(response), {"high-risk"})
+        self.assertEqual(self._names(response), {"High Risk"})

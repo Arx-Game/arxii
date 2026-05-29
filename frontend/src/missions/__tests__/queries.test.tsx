@@ -62,7 +62,7 @@ describe('missionKeys', () => {
   it('namespaces under "missions"', () => {
     expect(missionKeys.all[0]).toBe('missions');
     expect(missionKeys.templates()).toEqual(['missions', 'templates']);
-    expect(missionKeys.templateDetail('foo')).toEqual(['missions', 'templates', 'detail', 'foo']);
+    expect(missionKeys.templateDetail(42)).toEqual(['missions', 'templates', 'detail', 42]);
     expect(missionKeys.predicateLeaves()).toEqual(['missions', 'predicate-leaves']);
   });
 
@@ -83,7 +83,6 @@ describe('useMissionTemplates', () => {
         {
           id: 1,
           name: 'Test',
-          slug: 'test',
           summary: 's',
           level_band_min: 1,
           level_band_max: 5,
@@ -103,7 +102,7 @@ describe('useMissionTemplates', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.count).toBe(1);
-    expect(result.current.data?.results[0].slug).toBe('test');
+    expect(result.current.data?.results[0].name).toBe('Test');
   });
 
   it('forwards filter args to the API', async () => {
@@ -120,7 +119,7 @@ describe('useMissionTemplates', () => {
 });
 
 describe('useMissionTemplate (detail)', () => {
-  it('is disabled when slug is undefined', () => {
+  it('is disabled when id is undefined', () => {
     const { result } = renderHook(() => useMissionTemplate(undefined), {
       wrapper: wrapper(),
     });
@@ -129,11 +128,10 @@ describe('useMissionTemplate (detail)', () => {
     expect(api.getMissionTemplate).not.toHaveBeenCalled();
   });
 
-  it('fetches when slug is provided', async () => {
+  it('fetches when id is provided', async () => {
     vi.mocked(api.getMissionTemplate).mockResolvedValue({
       id: 1,
       name: 'X',
-      slug: 'x',
       summary: 's',
       level_band_min: 1,
       level_band_max: 5,
@@ -144,11 +142,11 @@ describe('useMissionTemplate (detail)', () => {
       lifetime_completions: 0,
       active_instances: [],
     } as never);
-    const { result } = renderHook(() => useMissionTemplate('x'), {
+    const { result } = renderHook(() => useMissionTemplate(1), {
       wrapper: wrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(api.getMissionTemplate).toHaveBeenCalledWith('x');
+    expect(api.getMissionTemplate).toHaveBeenCalledWith(1);
   });
 });
 
