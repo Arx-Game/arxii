@@ -131,6 +131,42 @@ class MissionTemplateCreateTests(TestCase):
         )
         self.assertEqual(res.status_code, 201, res.content)
 
+    def test_create_then_get_round_trips(self) -> None:
+        body = self._valid_body(name="Round Trip Mission")
+        res = self.client.post(URL, body, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        created = res.json()
+        detail = self.client.get(f"{URL}{created['id']}/")
+        self.assertEqual(detail.status_code, 200, detail.content)
+        fetched = detail.json()
+        # The detail serializer extends list with active_instances/lifetime_completions;
+        # the list-shape fields must match what we sent.
+        for key in (
+            "name",
+            "summary",
+            "level_band_min",
+            "level_band_max",
+            "risk_tier",
+            "arc_scope",
+        ):
+            self.assertEqual(fetched[key], body[key], f"mismatch on {key}")
+        # DRF DurationField serializes timedelta to its own string format
+        # (e.g. "1 00:00:00"), not the ISO 8601 we POST ("P1D").
+        # Assert the cooldown round-trips as a non-null, non-empty value.
+        self.assertTrue(fetched["cooldown"], "cooldown should be present and non-empty")
+
+    def test_create_accepts_explicit_empty_categories(self) -> None:
+        res = self.client.post(URL, self._valid_body(categories=[]), format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["categories"], [])
+
+    def test_create_omitting_categories_key_defaults_to_empty(self) -> None:
+        body = self._valid_body()
+        body.pop("categories", None)
+        res = self.client.post(URL, body, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["categories"], [])
+
 
 class MissionTemplatePatchRenameTests(TestCase):
     """PATCH /api/missions/templates/<pk>/ rename collision behavior.

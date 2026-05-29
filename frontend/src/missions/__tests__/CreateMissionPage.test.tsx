@@ -169,6 +169,30 @@ describe('CreateMissionPage', () => {
     });
   });
 
+  it('flattens deeply nested error trees (3+ levels)', async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new ApiValidationError({
+        categories: [{ pk: [{ deep: ['multi-level error message'] }] }],
+      })
+    );
+    vi.spyOn(queries, 'useCreateMissionTemplate').mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useCreateMissionTemplate>);
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'X' } });
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'lore' } });
+    fireEvent.change(screen.getByLabelText(/level band min/i), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/level band max/i), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText(/risk tier/i), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/cooldown.*amount/i), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/multi-level error message/i)).toBeInTheDocument();
+      expect(screen.queryByText(/\[object Object\]/i)).not.toBeInTheDocument();
+    });
+  });
+
   it('displays a banner when API returns a detail-only error (401/403/500)', async () => {
     const mutateAsync = vi
       .fn()
