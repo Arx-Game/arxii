@@ -358,8 +358,9 @@ class ResonanceResolverTests(TestCase):
 class GiverStandingResolverTests(TestCase):
     """min_giver_standing: gates on MissionGiverStanding.affection for a giver.
 
-    The giver is referenced by slug (added in 0003); the comparison is
-    affection >= ``min``. No standing row means affection is implicitly 0.
+    The giver is referenced by PK (since #577 — giver renames no longer
+    invalidate authored rules). The comparison is affection >= ``min``.
+    No standing row means affection is implicitly 0.
     """
 
     @classmethod
@@ -379,46 +380,55 @@ class GiverStandingResolverTests(TestCase):
 
     def test_true_when_at_threshold(self) -> None:
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver="liked-giver", min_affection=50)
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=50)
         )
 
     def test_true_when_above_threshold(self) -> None:
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver="liked-giver", min_affection=10)
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=10)
         )
 
     def test_false_when_below_threshold(self) -> None:
         self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver="liked-giver", min_affection=51)
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=51)
         )
 
     def test_negative_affection_below_zero_threshold(self) -> None:
         # disliked: affection=-20; threshold 0 must FAIL.
         self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver="disliked-giver", min_affection=0)
+            self.ctx.has_leaf(
+                "min_giver_standing", giver_id=self.disliked_giver.pk, min_affection=0
+            )
         )
 
     def test_no_standing_row_means_zero_affection(self) -> None:
         # No standing row exists for unknown-giver/character → affection=0.
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver="unknown-giver", min_affection=0)
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.unknown_giver.pk, min_affection=0)
         )
         self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver="unknown-giver", min_affection=1)
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.unknown_giver.pk, min_affection=1)
         )
 
     def test_false_when_no_such_giver(self) -> None:
-        # Bogus slug — the predicate fails closed rather than raising.
-        self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver="nope-doesnt-exist", min_affection=0)
-        )
+        # Bogus PK — the predicate fails closed rather than raising.
+        self.assertFalse(self.ctx.has_leaf("min_giver_standing", giver_id=999999, min_affection=0))
 
     def test_evaluate_dispatches(self) -> None:
         rule = {
             "leaf": "min_giver_standing",
-            "params": {"giver": "liked-giver", "min_affection": 50},
+            "params": {"giver_id": self.liked_giver.pk, "min_affection": 50},
         }
         self.assertTrue(evaluate(rule, self.ctx))
+
+    def test_rename_does_not_invalidate_rule(self) -> None:
+        # The whole point of the migration to PK references: renaming the
+        # giver must NOT silently break authored rules that reference it.
+        self.liked_giver.name = "liked-giver-renamed"
+        self.liked_giver.save(update_fields=["name"])
+        self.assertTrue(
+            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=50)
+        )
 
 
 class OrgMembershipResolverTests(TestCase):
