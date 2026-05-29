@@ -106,18 +106,13 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs: dict) -> dict:
-        """Run ``MissionTemplate.clean()`` so its invariants surface as DRF 400.
+        """Run ``MissionTemplate._validate_invariants()`` so cross-field rules surface as DRF 400.
 
-        DRF doesn't call ``Model.clean()`` automatically. We re-construct
-        a candidate instance from incoming attrs (merging in ``self.instance``
-        field values for partial PATCH), call ``clean()``, and translate
-        its ``DjangoValidationError`` into the DRF shape so callers get
-        field-keyed 400s instead of an unhandled 500 at ``save()`` time.
-
-        Currently MissionTemplate.clean() checks level_band_min/max and
-        percent_replace. If a new cross-field invariant is added there,
-        add the field to the candidate construction below or it will
-        bypass this proxy and surface as a 500.
+        DRF doesn't call ``Model.clean()`` automatically. Both this method and
+        ``MissionTemplate.clean()`` delegate to ``_validate_invariants``, which
+        is the single source of truth — adding a new invariant there covers both
+        paths automatically (the explicit kwargs list makes a missing field a
+        NameError at the call site rather than a silent bypass).
         """
         attrs = super().validate(attrs)
 
@@ -128,13 +123,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
                 return getattr(self.instance, name, default)
             return default
 
-        candidate = MissionTemplate(
-            level_band_min=field("level_band_min", 0),
-            level_band_max=field("level_band_max", 0),
-            percent_replace=field("percent_replace", 0),
-        )
         try:
-            candidate.clean()
+            MissionTemplate.validate_invariants(
+                level_band_min=int(field("level_band_min", 0)),
+                level_band_max=int(field("level_band_max", 0)),
+                percent_replace=int(field("percent_replace", 0)),
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
