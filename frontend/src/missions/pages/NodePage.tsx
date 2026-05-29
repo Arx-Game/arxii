@@ -10,7 +10,7 @@
  * visibility_rule will hook into OptionPage in E4.
  */
 
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
@@ -48,11 +48,28 @@ export function NodePage() {
   const templateId = idStr ? Number(idStr) : undefined;
   const numericNodeId = Number(nodeId);
   const { data: template } = useMissionTemplate(templateId);
-  const { data: node, isLoading } = useNode(numericNodeId);
+  const { data: node, isLoading, isError } = useNode(numericNodeId);
   const { data: optionsPage } = useMissionOptions({ node: numericNodeId });
+  const navigate = useNavigate();
 
   if (Number.isNaN(numericNodeId)) {
     return <div className="p-6 text-destructive">Bad node id.</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium">Couldn't load this node.</p>
+          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -107,7 +124,8 @@ function useNode(id: number) {
     queryKey: [...missionKeys.nodes(), 'detail', id],
     queryFn: () => getMissionNode(id),
     enabled: !Number.isNaN(id) && id > 0,
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
