@@ -16,11 +16,9 @@ import { vi } from 'vitest';
 import type { MissionGiver, MissionGiverOffering } from '../types';
 
 // Stable fixtures shared across both page mounts.
-// slug is still present in generated api.d.ts (awaiting gen-api-types rerun after T2 migration).
 const FAKE_GIVER: MissionGiver = {
   id: 7,
   name: 'Old Hag',
-  slug: 'old-hag',
   giver_kind: 'npc',
   target: 42,
   org: null,

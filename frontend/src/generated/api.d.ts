@@ -7033,6 +7033,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/categories/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only browse of seeded MissionCategory rows.
+     *
+     *     Categories are managed via fixture/admin — no authoring endpoints.
+     *     The Mission Studio uses this to populate the category multi-select
+     *     on the create page and the edit-categories dialog.
+     */
+    get: operations['missions_categories_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/categories/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only browse of seeded MissionCategory rows.
+     *
+     *     Categories are managed via fixture/admin — no authoring endpoints.
+     *     The Mission Studio uses this to populate the category multi-select
+     *     on the create page and the edit-categories dialog.
+     */
+    get: operations['missions_categories_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/giver-offerings/': {
     parameters: {
       query?: never;
@@ -7152,10 +7198,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     get: operations['missions_givers_list'];
     put?: never;
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     post: operations['missions_givers_create'];
     delete?: never;
     options?: never;
@@ -7163,23 +7209,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/missions/givers/{slug}/': {
+  '/api/missions/givers/{id}/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     get: operations['missions_givers_retrieve'];
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     put: operations['missions_givers_update'];
     post?: never;
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     delete: operations['missions_givers_destroy'];
     options?: never;
     head?: never;
-    /** @description Staff CRUD for MissionGiver. Slug-keyed; clean() validates target typeclass. */
+    /** @description Staff CRUD for MissionGiver. clean() validates target typeclass. */
     patch: operations['missions_givers_partial_update'];
     trace?: never;
   };
@@ -7556,7 +7602,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/missions/templates/{slug}/': {
+  '/api/missions/templates/{id}/': {
     parameters: {
       query?: never;
       header?: never;
@@ -7628,7 +7674,7 @@ export interface paths {
     patch: operations['missions_templates_partial_update'];
     trace?: never;
   };
-  '/api/missions/templates/{slug}/assign/': {
+  '/api/missions/templates/{id}/assign/': {
     parameters: {
       query?: never;
       header?: never;
@@ -7652,7 +7698,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/missions/templates/{slug}/copy/': {
+  '/api/missions/templates/{id}/copy/': {
     parameters: {
       query?: never;
       header?: never;
@@ -7664,9 +7710,10 @@ export interface paths {
     /**
      * @description D4.2 — duplicate this template + its full graph.
      *
-     *     POST body: ``{"new_slug": str, "new_name": str}``. Lands the copy
-     *     with ``access_tier=STAFF_ONLY`` so the author can fix flavor before
-     *     publishing. All copied flavor fields are flagged needs_rewrite.
+     *     POST body: ``{"new_name": str}`` — optional. If absent, the
+     *     service auto-suffixes the source name via next_available_name
+     *     (``"Heist (copy)"``, ``"Heist (copy) 2"``, ...). All copied
+     *     flavor fields are flagged ``needs_rewrite``.
      */
     post: operations['missions_templates_copy_create'];
     delete?: never;
@@ -13736,6 +13783,19 @@ export interface components {
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
     /**
+     * @description List + detail serializer for MissionCategory browse.
+     *
+     *     Read-only resource exposed via MissionCategoryViewSet; categories
+     *     are seeded via fixture/admin, not authored through the API.
+     */
+    MissionCategory: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Browse ordering in the authoring tool (lower = earlier). No Meta.ordering on the model — callers order explicitly via ``order_by('display_order', 'name')``. */
+      display_order?: number;
+    };
+    /**
      * @description Editor CRUD for MissionGiver rows.
      *
      *     ``target`` is a generic ObjectDB FK; the model's clean() validates
@@ -13752,8 +13812,6 @@ export interface components {
     MissionGiver: {
       readonly id: number;
       name: string;
-      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
-      slug: string;
       /**
        * @description How this giver reaches the player; selects the target's expected typeclass.
        *
@@ -13816,8 +13874,6 @@ export interface components {
      */
     MissionGiverRequest: {
       name: string;
-      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
-      slug: string;
       /**
        * @description How this giver reaches the player; selects the target's expected typeclass.
        *
@@ -14193,7 +14249,7 @@ export interface components {
     /**
      * @description List + detail serializer for MissionTemplate browse.
      *
-     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
@@ -14201,12 +14257,11 @@ export interface components {
      *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
      *     ``validate_access_tier`` below — if any attached giver is not
      *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' slugs so the Studio can show "needs-work."
+     *     list of unready givers' names so the Studio can show "needs-work."
      */
     MissionTemplate: {
       readonly id: number;
       name: string;
-      slug: string;
       /** @description Rich IC opening lore (mission bookend). */
       summary: string;
       /** @description Rich IC wrap-up lore. */
@@ -14228,7 +14283,7 @@ export interface components {
       arc_scope: components['schemas']['ArcScopeEnum'];
       /** @description Percent chance this template replaces an existing offer (0-100). */
       percent_replace?: number;
-      /** @description Per-giver re-offer cooldown. */
+      /** @description Per-giver re-offer cooldown. Must be non-negative. */
       cooldown: string;
       /**
        * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
@@ -14246,7 +14301,8 @@ export interface components {
        *     * `staff_only` - Staff Only
        */
       access_tier?: components['schemas']['AccessTierEnum'];
-      readonly categories: string[];
+      /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
+      categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
@@ -14265,7 +14321,6 @@ export interface components {
     MissionTemplateDetail: {
       readonly id: number;
       name: string;
-      slug: string;
       /** @description Rich IC opening lore (mission bookend). */
       summary: string;
       /** @description Rich IC wrap-up lore. */
@@ -14287,7 +14342,7 @@ export interface components {
       arc_scope: components['schemas']['ArcScopeEnum'];
       /** @description Percent chance this template replaces an existing offer (0-100). */
       percent_replace?: number;
-      /** @description Per-giver re-offer cooldown. */
+      /** @description Per-giver re-offer cooldown. Must be non-negative. */
       cooldown: string;
       /**
        * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
@@ -14305,7 +14360,8 @@ export interface components {
        *     * `staff_only` - Staff Only
        */
       access_tier?: components['schemas']['AccessTierEnum'];
-      readonly categories: string[];
+      /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
+      categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
       readonly lifetime_completions: number;
@@ -14323,7 +14379,7 @@ export interface components {
     /**
      * @description List + detail serializer for MissionTemplate browse.
      *
-     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
@@ -14331,11 +14387,10 @@ export interface components {
      *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
      *     ``validate_access_tier`` below — if any attached giver is not
      *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' slugs so the Studio can show "needs-work."
+     *     list of unready givers' names so the Studio can show "needs-work."
      */
     MissionTemplateRequest: {
       name: string;
-      slug: string;
       /** @description Rich IC opening lore (mission bookend). */
       summary: string;
       /** @description Rich IC wrap-up lore. */
@@ -14357,7 +14412,7 @@ export interface components {
       arc_scope: components['schemas']['ArcScopeEnum'];
       /** @description Percent chance this template replaces an existing offer (0-100). */
       percent_replace?: number;
-      /** @description Per-giver re-offer cooldown. */
+      /** @description Per-giver re-offer cooldown. Must be non-negative. */
       cooldown: string;
       /**
        * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
@@ -14375,6 +14430,8 @@ export interface components {
        *     * `staff_only` - Staff Only
        */
       access_tier?: components['schemas']['AccessTierEnum'];
+      /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
+      categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
@@ -15148,6 +15205,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['ItemTemplateList'][];
     };
+    PaginatedMissionCategoryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MissionCategory'][];
+    };
     PaginatedMissionGiverList: {
       /** @example 123 */
       count: number;
@@ -15869,7 +15941,13 @@ export interface components {
       readonly health: number | null;
       /** @description Return max health — only if viewer has permission. */
       readonly max_health: number | null;
-      /** @description Return life status — only if viewer has permission. */
+      /**
+       * @description Return a coarse, read-only life status — only if viewer has permission.
+       *
+       *     Derived at read time from life_state + active conditions + agency (there
+       *     is no persisted status field anymore). The richer frontend status surface
+       *     is tracked by #521/#522.
+       */
       readonly character_status: string | null;
       /**
        * @description Return strain budget (anima pool) — only if viewer owns the PC.
@@ -16271,8 +16349,6 @@ export interface components {
      */
     PatchedMissionGiverRequest: {
       name?: string;
-      /** @description Stable string identifier (URL-safe). Used by predicate authoring (e.g. min_giver_standing references a giver by slug) and by future authoring-tool URLs. Required so that templates and predicates have a refactor-safe pointer to a specific giver. */
-      slug?: string;
       /**
        * @description How this giver reaches the player; selects the target's expected typeclass.
        *
@@ -16448,7 +16524,7 @@ export interface components {
     /**
      * @description List + detail serializer for MissionTemplate browse.
      *
-     *     Read-only fields cover the authoring footprint: name, slug, summary,
+     *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
@@ -16456,11 +16532,10 @@ export interface components {
      *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
      *     ``validate_access_tier`` below — if any attached giver is not
      *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' slugs so the Studio can show "needs-work."
+     *     list of unready givers' names so the Studio can show "needs-work."
      */
     PatchedMissionTemplateRequest: {
       name?: string;
-      slug?: string;
       /** @description Rich IC opening lore (mission bookend). */
       summary?: string;
       /** @description Rich IC wrap-up lore. */
@@ -16482,7 +16557,7 @@ export interface components {
       arc_scope?: components['schemas']['ArcScopeEnum'];
       /** @description Percent chance this template replaces an existing offer (0-100). */
       percent_replace?: number;
-      /** @description Per-giver re-offer cooldown. */
+      /** @description Per-giver re-offer cooldown. Must be non-negative. */
       cooldown?: string;
       /**
        * @description Multi-participant payout split (authoring knob only; actual distribution-by-rule is Phase 5).
@@ -16500,6 +16575,8 @@ export interface components {
        *     * `staff_only` - Staff Only
        */
       access_tier?: components['schemas']['AccessTierEnum'];
+      /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
+      categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
@@ -29115,17 +29192,61 @@ export interface operations {
       };
     };
   };
+  missions_categories_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionCategoryList'];
+        };
+      };
+    };
+  };
+  missions_categories_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission category. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionCategory'];
+        };
+      };
+    };
+  };
   missions_giver_offerings_list: {
     parameters: {
       query?: {
         giver?: number;
-        giver_slug?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
         template?: number;
-        template_slug?: string;
       };
       header?: never;
       path?: never;
@@ -29266,7 +29387,6 @@ export interface operations {
       query?: {
         character?: number;
         giver?: number;
-        giver_slug?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -29463,7 +29583,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission giver. */
+        id: number;
       };
       cookie?: never;
     };
@@ -29484,7 +29605,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission giver. */
+        id: number;
       };
       cookie?: never;
     };
@@ -29509,7 +29631,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission giver. */
+        id: number;
       };
       cookie?: never;
     };
@@ -29529,7 +29652,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission giver. */
+        id: number;
       };
       cookie?: never;
     };
@@ -29626,7 +29750,6 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         template?: number;
-        template_slug?: string;
       };
       header?: never;
       path?: never;
@@ -30492,7 +30615,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
@@ -30513,7 +30637,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
@@ -30538,7 +30663,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
@@ -30558,7 +30684,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
@@ -30583,7 +30710,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
@@ -30608,7 +30736,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        slug: string;
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
       };
       cookie?: never;
     };
