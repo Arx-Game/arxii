@@ -470,8 +470,11 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             candidate = MissionGiver(giver_kind=merged_kind, target=merged_target)
             try:
                 candidate.clean()
-            except Exception as exc:
-                raise serializers.ValidationError({self._TARGET_FIELD: str(exc)}) from exc
+            except DjangoValidationError as exc:
+                # MissionGiver.clean() raises with a field-keyed message_dict;
+                # surface those keys directly rather than stringifying the
+                # exception (which would leak typeclass paths and similar).
+                raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
 
     def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]
