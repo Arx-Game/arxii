@@ -155,6 +155,18 @@ class MissionTemplateCreateTests(TestCase):
         # Assert the cooldown round-trips as a non-null, non-empty value.
         self.assertTrue(fetched["cooldown"], "cooldown should be present and non-empty")
 
+    def test_create_accepts_explicit_empty_categories(self) -> None:
+        res = self.client.post(URL, self._valid_body(categories=[]), format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["categories"], [])
+
+    def test_create_omitting_categories_key_defaults_to_empty(self) -> None:
+        body = self._valid_body()
+        body.pop("categories", None)
+        res = self.client.post(URL, body, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["categories"], [])
+
 
 class MissionTemplatePatchRenameTests(TestCase):
     """PATCH /api/missions/templates/<pk>/ rename collision behavior.
