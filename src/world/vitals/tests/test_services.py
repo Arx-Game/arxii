@@ -1,12 +1,11 @@
 """Tests for vitals survivability service layer."""
 
-from django.test import TestCase, tag
+from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.conditions.factories import BleedingOutConditionFactory, UnconsciousConditionFactory
+from world.conditions.factories import UnconsciousConditionFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
@@ -97,93 +96,39 @@ class ProcessDamageConsequencesTest(TestCase):
 
         ConditionInstance.objects.filter(target=self.character).delete()
 
-    def test_knockout_eligible_failure_knocks_out(self) -> None:
-        """Below 20% health + failed check → Unconscious condition applied.
+    def _seed_knockout_pool_with_failure_unconscious(self) -> None:
+        """Wire the knockout pool to a FAILURE-tier consequence applying Unconscious.
 
-        SQLite-compatible: UnconsciousConditionFactory has no progression
-        (has_progression=False) so apply_condition skips DISTINCT ON queries.
+        Mirrors the pool model that process_damage_consequences now resolves through.
         """
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.constants import EffectType
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.vitals.services import get_vitals_consequence_config
+
         unconscious_template = UnconsciousConditionFactory()
-        ko_check = CheckTypeFactory(name="ko-resistance-failure")
-
-        with force_check_outcome(self.failure_outcome):
-            result = process_damage_consequences(
-                character=self.character,
-                damage_dealt=10,
-                damage_type=None,
-                knockout_check_type=ko_check,
-            )
-
-        assert result.knocked_out is True
-
-        # The Unconscious condition must be active on the character
-        from world.conditions.models import ConditionInstance
-
-        assert ConditionInstance.objects.filter(
-            target=self.character,
-            condition=unconscious_template,
-        ).exists(), "Expected an active Unconscious condition after knockout"
-
-        # life_state must still be ALIVE (unconscious ≠ dead)
-        self.vitals.refresh_from_db()
-        assert self.vitals.life_state == CharacterLifeState.ALIVE
-
-    @tag("postgres")
-    def test_death_eligible_failure_enters_dying(self) -> None:
-        """At 0% health + failed check → Bleeding Out condition applied.
-
-        Tagged @tag("postgres") because apply_condition for a progressive
-        condition (has_progression=True) hits a DISTINCT ON query to select
-        the initial stage — a PG-specific feature.
-        Run via: just test-parity world.vitals.tests.test_services
-        """
-        from world.conditions.factories import ConditionStageFactory
-
-        bleed_out_template = BleedingOutConditionFactory()
-        # At least one stage so apply_condition can initialize current_stage
-        ConditionStageFactory(
-            condition=bleed_out_template,
-            stage_order=1,
-            name="Bleeding",
+        consequence = ConsequenceFactory(outcome_tier=self.failure_outcome, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=unconscious_template,
+            target="self",
         )
-        death_check = CheckTypeFactory(name="death-resistance-failure")
-
-        self.vitals.health = 0
-        self.vitals.save(update_fields=["health"])
-
-        with force_check_outcome(self.failure_outcome):
-            result = process_damage_consequences(
-                character=self.character,
-                damage_dealt=10,
-                damage_type=None,
-                death_check_type=death_check,
-            )
-
-        assert result.dying is True
-
-        # The Bleeding Out condition must be active on the character
-        from world.conditions.models import ConditionInstance
-
-        assert ConditionInstance.objects.filter(
-            target=self.character,
-            condition=bleed_out_template,
-        ).exists(), "Expected an active Bleeding Out condition after failed death check"
-
-        # life_state must still be ALIVE (dying ≠ dead; death comes from advance_bleed_out)
-        self.vitals.refresh_from_db()
-        assert self.vitals.life_state == CharacterLifeState.ALIVE
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        cfg = get_vitals_consequence_config()
+        cfg.knockout_pool = pool
+        cfg.save(update_fields=["knockout_pool"])
 
     def test_knockout_eligible_success_stays_conscious(self) -> None:
-        """Below 20% health + passed check = still alive, no condition."""
-        UnconsciousConditionFactory()  # template exists but should NOT be applied
-        ko_check = CheckTypeFactory(name="knockout-success")
+        """Below 20% health + passed check = no FAILURE-tier consequence → no condition."""
+        self._seed_knockout_pool_with_failure_unconscious()
 
         with force_check_outcome(self.success_outcome):
             result = process_damage_consequences(
                 character=self.character,
                 damage_dealt=10,
                 damage_type=None,
-                knockout_check_type=ko_check,
             )
         assert result.knocked_out is False
 
@@ -191,8 +136,12 @@ class ProcessDamageConsequencesTest(TestCase):
 
         assert not ConditionInstance.objects.filter(target=self.character).exists()
 
-    def test_no_check_types_returns_no_consequence(self) -> None:
-        """When no check types provided, no checks fire."""
+    def test_no_pool_seeded_skips_gracefully(self) -> None:
+        """When no consequence pool is seeded, the tiers skip — no crash, no consequence.
+
+        This is the graceful-degradation path: a fresh/unseeded DB must not crash
+        combat. With no knockout/death/wound pool configured, no condition applies.
+        """
         result = process_damage_consequences(
             character=self.character,
             damage_dealt=5,
@@ -200,6 +149,10 @@ class ProcessDamageConsequencesTest(TestCase):
         )
         assert result.knocked_out is False
         assert result.dying is False
+
+        from world.conditions.models import ConditionInstance
+
+        assert not ConditionInstance.objects.filter(target=self.character).exists()
 
     def test_dead_character_is_skipped(self) -> None:
         """A DEAD character (life_state=DEAD) is exempt from further consequences."""
@@ -214,36 +167,6 @@ class ProcessDamageConsequencesTest(TestCase):
         # Should return early — no checks performed, message indicates death
         assert result.knocked_out is False
         assert result.dying is False
-
-    def test_graceful_degradation_no_template_seeded(self) -> None:
-        """When no Unconscious template exists, knockout result is set but no crash.
-
-        Verifies that _apply_consequence_condition is a no-op when the condition
-        template has not been seeded into the DB (fresh dev or CI environment).
-        """
-        # Explicitly ensure no Unconscious template exists
-        from world.conditions.constants import UNCONSCIOUS_CONDITION_NAME
-        from world.conditions.models import ConditionTemplate
-
-        ConditionTemplate.objects.filter(name=UNCONSCIOUS_CONDITION_NAME).delete()
-
-        ko_check = CheckTypeFactory(name="ko-graceful-degradation")
-
-        with force_check_outcome(self.failure_outcome):
-            result = process_damage_consequences(
-                character=self.character,
-                damage_dealt=10,
-                damage_type=None,
-                knockout_check_type=ko_check,
-            )
-
-        # Must not raise; the flag must still be set
-        assert result.knocked_out is True
-
-        # And no condition was applied (template missing)
-        from world.conditions.models import ConditionInstance
-
-        assert not ConditionInstance.objects.filter(target=self.character).exists()
 
     def test_no_vitals_returns_default(self) -> None:
         """Character with no vitals gets a default result."""

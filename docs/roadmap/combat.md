@@ -343,8 +343,18 @@ The old model stored incapacitation and dying as enum values in `CharacterVitals
 - **Combat eligibility rewired** — `declare_action` raises if `can_act` is False. `_get_combat_participants_who_can_act` filters to participants where can_act is True. `_check_encounter_completion` uses can_act (not status) to determine whether all PCs are down.
 
 **Known follow-ups:**
-- **Consequence-pool reconciliation** — the `consequence_pool` FK on `CombatOpponent` / the C-tier pool plumbing for encounter outcomes is tracked in #560/#561.
+- **Consequence-pool reconciliation** — knockout/wound/death resolution is reconciled onto the pool pipeline in Phase 9 (#560/#561). The `consequence_pool` FK on `CombatOpponent` / the C-tier pool plumbing for encounter outcomes remains future work.
 - **Frontend status surface** — the `derive_character_status` wire label is a placeholder. The richer condition-aware status surface (showing Unconscious / Bleeding-Out / other conditions to the player) is tracked in #521/#522.
+
+**Phase 9 (complete):** Reconcile survivability consequences onto the consequence-pool pipeline (#560, #561)
+
+Phase 8 made knockout/dying condition-driven but left `process_damage_consequences` resolving them through a parallel binary-pass/fail + ad-hoc-difficulty path. Phase 9 reconciles that resolution onto the existing rank → `CheckOutcome`-tier → `ConsequencePool` pipeline already used by challenges and clashes:
+
+- **`resolve_vitals_consequence(character, check_type, target_difficulty, pool)`** — thin wrapper over `resolve_pool_consequences` → `select_consequence` → `apply_resolution`. `select_consequence` rolls the check, filters to the rolled `CheckOutcome` tier, weights the survivors, and applies the selected `Consequence`'s effects. `build_outcome_display` is built from the full resolved pool (all tiers), independent of which outcome was selected.
+- **New pool surfaces** — `DamageType.wound_pool` / `death_pool` FKs to `ConsequencePool` (nullable); `VitalsConsequenceConfig` singleton (mirrors `StrainConfig` / `ClashConfig`) holding `knockout_pool` + `default_wound_pool` + `default_death_pool`. Schema migrations only — no data migration (dev DB is disposable pre-production).
+- **Seeded checks** — Endurance (shared: knockout + wound) and Death (distinct) `CheckType`s, self-seeded via `_ensure_*` on first use so a fresh DB never crashes. Every pool lookup may return `None` on an unseeded DB → the branch skips cleanly.
+- **Reconciled resolution** — knockout resolves the knockout pool (applies Unconscious); permanent wound resolves `DamageType.wound_pool` (tiered PERMANENT-wound conditions; replaces the `_select_and_apply_wound` stub); death resolves `DamageType.death_pool` (tiered outcomes apply Bleeding-Out / lesser conditions). Bleeding-Out remains one pool outcome; `advance_bleed_out` still drives dying→dead, unchanged. No `SET_LIFE_STATE`.
+- **Call sites wired** — `combat/services.py` `_resolve_npc_action` and `mechanics/effect_handlers.py` `_apply_deal_damage` now pass the threat's real `damage_type`; the vestigial `*_check_type` params are dropped. `DamageConsequenceResult` flags (`knocked_out` / `dying` / `wounds_applied`) preserved for callers.
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
