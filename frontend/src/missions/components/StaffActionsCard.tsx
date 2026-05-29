@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useAssignMission, useCopyTemplate, usePatchMissionTemplate } from '../queries';
 import type { MissionTemplate } from '../types';
 
@@ -73,9 +74,13 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
             // Adversarial review HIGH: validate_access_tier returns 400 with
             // "Cannot flip to OPEN: the following attached giver(s) are not
             // publishable: ...". Render the body so the staffer knows what
-            // to fix.
+            // to fix. patchMissionTemplate now throws ApiValidationError so
+            // we flatten fieldErrors directly; fall back to message for other
+            // error types.
             <div className="mt-2 text-xs text-destructive" data-testid="access-tier-error">
-              {formatErrorMessage(patch.error.message)}
+              {patch.error instanceof ApiValidationError
+                ? flattenErrorMessage(patch.error.fieldErrors)
+                : patch.error.message}
             </div>
           ) : null}
         </div>
@@ -84,33 +89,6 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
       </CardContent>
     </Card>
   );
-}
-
-/**
- * Try to render a DRF error-body JSON string into readable text.
- *
- * api.ts wrappers stringify the response body into ``Error.message``
- * when the request fails. The body is typically a dict like
- * ``{"field": ["msg1", "msg2"]}`` or ``{"detail": "msg"}``. Convert
- * to ``field: msg1; msg2`` so the user reads a sentence, not raw JSON.
- * Falls back to the raw string if parsing fails.
- */
-function formatErrorMessage(raw: string): string {
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      if (typeof parsed.detail === 'string') return parsed.detail;
-      return Object.entries(parsed)
-        .map(([field, value]) => {
-          const text = Array.isArray(value) ? value.join('; ') : String(value);
-          return `${field}: ${text}`;
-        })
-        .join(' / ');
-    }
-  } catch {
-    // not JSON; fall through
-  }
-  return raw;
 }
 
 function CopyRow({ template }: { template: MissionTemplate }) {
@@ -157,7 +135,9 @@ function CopyRow({ template }: { template: MissionTemplate }) {
       </div>
       {copy.error ? (
         <div className="text-xs text-destructive">
-          {formatErrorMessage(String(copy.error.message))}
+          {copy.error instanceof ApiValidationError
+            ? flattenErrorMessage(copy.error.fieldErrors)
+            : copy.error.message}
         </div>
       ) : null}
       <div className="flex justify-end gap-2">
@@ -205,9 +185,8 @@ function AssignRow({ template }: { template: MissionTemplate }) {
       setFeedback(`Created instance #${instance.id}.`);
       setCharacterPk('');
     } catch (e) {
-      // Format the DRF body if possible — assign returns 404 with
-      // {"detail": "No character with pk=..."} on missing pk.
-      setFeedback(`Error: ${formatErrorMessage(String((e as Error).message))}`);
+      // assign returns plain Error on failure; surface the message directly.
+      setFeedback(`Error: ${(e as Error).message}`);
     }
   };
   return (

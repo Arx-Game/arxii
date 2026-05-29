@@ -117,7 +117,8 @@ export function useMissionNodes(
   return useQuery({
     queryKey: missionKeys.nodesFor(filters),
     queryFn: () => listMissionNodes(filters),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -128,7 +129,8 @@ export function useMissionOptions(
     queryKey: missionKeys.optionsFor(filters),
     queryFn: () => listMissionOptions(filters),
     enabled: Boolean(filters.node ?? filters.template),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -139,7 +141,8 @@ export function useMissionRoutes(
     queryKey: missionKeys.routesFor(filters),
     queryFn: () => listMissionRoutes(filters),
     enabled: Boolean(filters.option ?? filters.template),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -150,7 +153,8 @@ export function useRouteCandidates(
     queryKey: missionKeys.candidatesFor(filters),
     queryFn: () => listRouteCandidates(filters),
     enabled: Boolean(filters.route),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -161,7 +165,8 @@ export function useRouteRewards(
     queryKey: missionKeys.rewardsFor(filters),
     queryFn: () => listRouteRewards(filters),
     enabled: Boolean(filters.route ?? filters.candidate),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -199,7 +204,8 @@ export function useGiverOfferings(
     queryKey: missionKeys.offeringsFor(filters),
     queryFn: () => listGiverOfferings(filters),
     enabled: Boolean(filters.giver ?? filters.template),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -210,7 +216,8 @@ export function useGiverStandings(
     queryKey: missionKeys.standingsFor(filters),
     queryFn: () => listGiverStandings(filters),
     enabled: Boolean(filters.giver ?? filters.character),
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 
@@ -219,7 +226,8 @@ export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
     queryKey: missionKeys.predicateLeaves(),
     queryFn: listPredicateLeaves,
     staleTime: FIVE_MINUTES,
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 

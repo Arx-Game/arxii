@@ -11,7 +11,7 @@
  * PredicateBuilder integration lands in E4.
  */
 
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -61,11 +61,28 @@ export function OptionPage() {
   const numericOptionId = Number(optionId);
   const numericNodeId = Number(nodeId);
   const { data: template } = useMissionTemplate(templateId);
-  const { data: option, isLoading } = useOption(numericOptionId);
+  const { data: option, isLoading, isError } = useOption(numericOptionId);
   const { data: routesPage } = useMissionRoutes({ option: numericOptionId });
+  const navigate = useNavigate();
 
   if (Number.isNaN(numericOptionId)) {
     return <div className="p-6 text-destructive">Bad option id.</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-6">
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium">Couldn't load this option.</p>
+          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
+            ← Back to Mission Studio
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -128,7 +145,8 @@ function useOption(id: number) {
     queryKey: [...missionKeys.options(), 'detail', id],
     queryFn: () => getMissionOption(id),
     enabled: !Number.isNaN(id) && id > 0,
-    throwOnError: true,
+    // Consumers check isError and render inline so a fetch failure doesn't
+    // nuke the whole drill-down view.
   });
 }
 

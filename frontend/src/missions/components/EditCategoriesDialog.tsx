@@ -20,13 +20,18 @@ import {
 } from '@/components/ui/dialog';
 
 import { CategoryMultiSelect } from './CategoryMultiSelect';
-import { usePatchMissionTemplate } from '../queries';
+import { useMissionCategories, usePatchMissionTemplate } from '../queries';
 
 interface EditCategoriesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   templateId: number;
   initialCategories: readonly number[];
+}
+
+/** Returns true only when both arrays contain the same values in the same order. */
+function arraysEqual(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 export function EditCategoriesDialog({
@@ -37,6 +42,9 @@ export function EditCategoriesDialog({
 }: EditCategoriesDialogProps) {
   const [value, setValue] = useState<number[]>([...initialCategories]);
   const patch = usePatchMissionTemplate();
+  // Share the same React Query cache key as CategoryMultiSelect — no extra
+  // network request; used only to gate Save when the categories fetch errored.
+  const { isError: categoriesError } = useMissionCategories();
 
   // Reset value to fresh initialCategories each time the dialog opens.
   // This ensures stale state from a previous open never bleeds into a new session.
@@ -57,7 +65,18 @@ export function EditCategoriesDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Guard outside-click / Escape: confirm before discarding pending changes.
+        if (!next && !arraysEqual(value, initialCategories)) {
+          if (!window.confirm('Discard unsaved category changes?')) {
+            return;
+          }
+        }
+        onOpenChange(next);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit categories</DialogTitle>
@@ -70,7 +89,7 @@ export function EditCategoriesDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onSave} disabled={patch.isPending}>
+          <Button onClick={onSave} disabled={patch.isPending || categoriesError}>
             Save
           </Button>
         </DialogFooter>
