@@ -24,6 +24,26 @@ from world.missions.models import (
 )
 
 
+def _validate_name_unique_on_update(
+    instance: object,
+    queryset: object,
+    value: str,
+    label: str,
+) -> str:
+    """On UPDATE: reject names already taken by another row of the same model.
+
+    On CREATE (instance is None): no-op. The serializer's create() override
+    auto-suffixes collisions via next_available_name, so the CREATE path
+    must let the value through unchanged.
+    """
+    if instance is None:
+        return value
+    if queryset.exclude(pk=instance.pk).filter(name=value).exists():  # type: ignore[union-attr]
+        msg = f"A {label} with this name already exists."
+        raise serializers.ValidationError(msg)
+    return value
+
+
 class MissionTemplateSerializer(serializers.ModelSerializer):
     """List + detail serializer for MissionTemplate browse.
 
@@ -81,12 +101,9 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         are intentionally strict — deliberate user choices deserve explicit
         feedback when they conflict.
         """
-        if self.instance is None:
-            return value
-        if MissionTemplate.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
-            msg = "A mission with this name already exists."
-            raise serializers.ValidationError(msg)
-        return value
+        return _validate_name_unique_on_update(
+            self.instance, MissionTemplate.objects.all(), value, "mission"
+        )
 
     def validate(self, attrs: dict) -> dict:
         """Run ``MissionTemplate.clean()`` so its invariants surface as DRF 400.
@@ -441,12 +458,9 @@ class MissionGiverSerializer(serializers.ModelSerializer):
         so this validator is a no-op. PATCH renames are intentionally
         strict — see MissionTemplateSerializer.validate_name.
         """
-        if self.instance is None:
-            return value
-        if MissionGiver.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
-            msg = "A giver with this name already exists."
-            raise serializers.ValidationError(msg)
-        return value
+        return _validate_name_unique_on_update(
+            self.instance, MissionGiver.objects.all(), value, "giver"
+        )
 
     def validate(self, attrs: dict) -> dict:
         # Build the candidate instance and run clean() so typeclass
