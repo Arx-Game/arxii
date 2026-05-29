@@ -86,11 +86,13 @@ test-affected *args:
         echo "yes" | uv run arx test $DOTTED {{args}}
     fi
 
-# Run the full regression suite (no --keepdb, matches CI).
-# Auto-confirms the destroy-test-DB prompt.
+# Run the full regression suite (no --keepdb, matches CI's fresh-DB behavior).
+# Uses --parallel (cpu_count workers) — local wall-clock is multiple-x faster
+# than serial; behavior matches CI in every other way (no --keepdb, full suite,
+# Postgres). Auto-confirms the destroy-test-DB prompt.
 #   just regression
 regression:
-    echo "yes" | uv run arx test
+    echo "yes" | uv run arx test --parallel
 
 # --- Lint / format -----------------------------------------------------------
 
