@@ -128,16 +128,16 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
     except (AttributeError, ObjectDoesNotExist):
         return DamageConsequenceResult(message="No vitals found")
 
+    # Dead characters are exempt from further consequences.
+    # Unconscious/dying characters (now conditions) CAN still take damage.
+    if is_dead(character):
+        return DamageConsequenceResult(message="Character is dead")
+
     # Deferred imports — vitals→conditions cross-domain; same pattern as advance_bleed_out.
     from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
         BLEED_OUT_CONDITION_NAME,
         UNCONSCIOUS_CONDITION_NAME,
     )
-
-    # Dead characters are exempt from further consequences.
-    # Unconscious/dying characters (now conditions) CAN still take damage.
-    if is_dead(character):
-        return DamageConsequenceResult(message="Character is dead")
 
     result = DamageConsequenceResult()
 

@@ -1,7 +1,5 @@
 """Tests for vitals survivability service layer."""
 
-from unittest.mock import MagicMock, patch
-
 from django.test import TestCase, tag
 
 from evennia_extensions.factories import CharacterFactory
@@ -175,24 +173,18 @@ class ProcessDamageConsequencesTest(TestCase):
         self.vitals.refresh_from_db()
         assert self.vitals.life_state == CharacterLifeState.ALIVE
 
-    @patch("world.vitals.services.perform_check")
-    def test_knockout_eligible_success_stays_conscious(
-        self,
-        mock_check: MagicMock,
-    ) -> None:
+    def test_knockout_eligible_success_stays_conscious(self) -> None:
         """Below 20% health + passed check = still alive, no condition."""
-        mock_check.return_value = MagicMock(
-            outcome=MagicMock(success_level=1),
-        )
         UnconsciousConditionFactory()  # template exists but should NOT be applied
         ko_check = CheckTypeFactory(name="knockout-success")
 
-        result = process_damage_consequences(
-            character=self.character,
-            damage_dealt=10,
-            damage_type=None,
-            knockout_check_type=ko_check,
-        )
+        with force_check_outcome(self.success_outcome):
+            result = process_damage_consequences(
+                character=self.character,
+                damage_dealt=10,
+                damage_type=None,
+                knockout_check_type=ko_check,
+            )
         assert result.knocked_out is False
 
         from world.conditions.models import ConditionInstance
@@ -230,9 +222,10 @@ class ProcessDamageConsequencesTest(TestCase):
         template has not been seeded into the DB (fresh dev or CI environment).
         """
         # Explicitly ensure no Unconscious template exists
+        from world.conditions.constants import UNCONSCIOUS_CONDITION_NAME
         from world.conditions.models import ConditionTemplate
 
-        ConditionTemplate.objects.filter(name="Unconscious").delete()
+        ConditionTemplate.objects.filter(name=UNCONSCIOUS_CONDITION_NAME).delete()
 
         ko_check = CheckTypeFactory(name="ko-graceful-degradation")
 
