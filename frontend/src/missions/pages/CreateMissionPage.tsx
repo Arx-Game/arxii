@@ -30,7 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { CategoryMultiSelect } from '../components/CategoryMultiSelect';
 import { useCreateMissionTemplate } from '../queries';
-import { ApiValidationError } from '../api';
+import { ApiValidationError, flattenErrorMessage } from '../api';
 import type { ArcScope, AccessTier } from '../types';
 import type { components } from '@/generated/api';
 
@@ -54,23 +54,6 @@ const ACCESS_TIERS: { value: AccessTier; label: string }[] = [
   { value: 'staff_only', label: 'Staff only (draft)' },
   { value: 'open', label: 'Open' },
 ];
-
-function flattenErrorMessage(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    const flat = value.map(flattenErrorMessage).filter(Boolean);
-    return flat.length > 0 ? flat[0] : '';
-  }
-  if (value !== null && typeof value === 'object') {
-    const parts: string[] = [];
-    for (const [k, v] of Object.entries(value)) {
-      const sub = flattenErrorMessage(v);
-      if (sub) parts.push(`${k}: ${sub}`);
-    }
-    return parts.join('; ');
-  }
-  return String(value);
-}
 
 function cooldownToISO(amount: number, unit: CooldownUnit): string {
   if (unit === 'hours') return `PT${amount}H`;
