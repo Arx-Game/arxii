@@ -6,6 +6,7 @@ from world.conditions.factories import (
     ConditionCapabilityEffectFactory,
     ConditionTemplateFactory,
 )
+from world.conditions.models import CapabilityType
 from world.conditions.services import apply_condition, get_effective_capability_value
 from world.mechanics.factories import ModifierCategoryFactory
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
@@ -24,11 +25,12 @@ class CapabilityInnateBaselineTests(TestCase):
 class GetEffectiveCapabilityValueTests(TestCase):
     """Tests for get_effective_capability_value: baseline + modifiers + conditions."""
 
-    def setUp(self) -> None:
-        self.sheet = CharacterSheetFactory()
-        self.character = self.sheet.character
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
-    def _make_character_modifier(self, capability, value: int) -> CharacterModifier:
+    def _make_character_modifier(self, capability: CapabilityType, value: int) -> CharacterModifier:
         """Create a CharacterModifier targeting the given capability on self.sheet."""
         category = ModifierCategoryFactory(name="capability")
         target = ModifierTarget.objects.create(
