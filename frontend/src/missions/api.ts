@@ -28,12 +28,12 @@ import type {
 const BASE_URL = '/api/missions';
 
 export class ApiValidationError extends Error {
-  readonly fieldErrors: Record<string, string[]>;
+  readonly fieldErrors: Record<string, unknown>;
   constructor(detail: unknown) {
     super('Validation error');
     this.name = 'ApiValidationError';
     this.fieldErrors =
-      typeof detail === 'object' && detail !== null ? (detail as Record<string, string[]>) : {};
+      typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>) : {};
   }
 }
 
