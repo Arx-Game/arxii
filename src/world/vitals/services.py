@@ -7,6 +7,7 @@ or any damage source.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -34,6 +35,8 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+
+logger = logging.getLogger(__name__)
 
 
 def is_dead(character: ObjectDB) -> bool:
@@ -125,11 +128,16 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
     except (AttributeError, ObjectDoesNotExist):
         return DamageConsequenceResult(message="No vitals found")
 
-    if vitals.status != CharacterStatus.ALIVE:
-        return DamageConsequenceResult(
-            final_status=vitals.status,
-            message="Character is not alive",
-        )
+    # Deferred imports — vitals→conditions cross-domain; same pattern as advance_bleed_out.
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        BLEED_OUT_CONDITION_NAME,
+        UNCONSCIOUS_CONDITION_NAME,
+    )
+
+    # Dead characters are exempt from further consequences.
+    # Unconscious/dying characters (now conditions) CAN still take damage.
+    if is_dead(character):
+        return DamageConsequenceResult(message="Character is dead")
 
     result = DamageConsequenceResult()
 
@@ -165,9 +173,7 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
             extra_modifiers=extra_modifiers,
         )
         if death_result.outcome and death_result.outcome.success_level <= 0:
-            vitals.status = CharacterStatus.DYING
-            vitals.dying_final_round = True
-            vitals.save(update_fields=["status", "dying_final_round"])
+            _apply_consequence_condition(character, BLEED_OUT_CONDITION_NAME)
             result.dying = True
             result.dying_final_round = True
             result.final_status = CharacterStatus.DYING
@@ -186,9 +192,7 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
             extra_modifiers=extra_modifiers,
         )
         if ko_result.outcome and ko_result.outcome.success_level <= 0:
-            vitals.status = CharacterStatus.UNCONSCIOUS
-            vitals.unconscious_at = timezone.now()
-            vitals.save(update_fields=["status", "unconscious_at"])
+            _apply_consequence_condition(character, UNCONSCIOUS_CONDITION_NAME)
             result.knocked_out = True
             result.final_status = CharacterStatus.UNCONSCIOUS
             result.message = "was knocked unconscious"
@@ -196,6 +200,39 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
 
     result.final_status = CharacterStatus.ALIVE
     return result
+
+
+def _apply_consequence_condition(character: ObjectDB, name: str) -> ConditionInstance | None:
+    """Apply a named condition template to character, with graceful degradation.
+
+    Looks up the ConditionTemplate by name. If the template is not found (e.g.,
+    on a fresh DB without authored content), this is a no-op — combat must not
+    crash on unseeded environments. If found, delegates to apply_condition.
+
+    Args:
+        character: The character to apply the condition to.
+        name: The condition template name constant (e.g., UNCONSCIOUS_CONDITION_NAME).
+
+    Returns:
+        The applied ConditionInstance, or None if the template was not found or
+        apply_condition did not create an instance.
+    """
+    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        ConditionTemplate,
+    )
+    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        apply_condition,
+    )
+
+    template = ConditionTemplate.objects.filter(name=name).first()
+    if template is None:
+        logger.debug(
+            "process_damage_consequences: condition template %r not found; skipping apply",
+            name,
+        )
+        return None
+    result = apply_condition(character, template)
+    return result.instance
 
 
 def _is_terminal_stage(instance: ConditionInstance) -> bool:
