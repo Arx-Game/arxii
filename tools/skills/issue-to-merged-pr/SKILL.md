@@ -95,7 +95,18 @@ Otherwise: invoke `superpowers:brainstorming`. **Override the spec-review
 substep**: when the brainstorming flow reaches "dispatch spec-document-
 reviewer," dispatch the reviewer with the prompt at
 `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead
-of superpowers' default. After the spec is approved and committed, invoke
+of superpowers' default.
+
+**MANDATORY before the spec is finalized: run the `verify-against-code` pass**
+(skill at `tools/skills/verify-against-code/`). For every new surface the design
+proposes, verify against code (not docs/summaries) and label it
+`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line + caller
+evidence; treat INDEX/MODEL_MAP/architecture docs as possibly-stale hints and
+correct any stale doc at its source. **Embed the resulting anti-reinvention
+ledger as a section in the spec.** A spec without a code-verified ledger is not
+finalized. (This codifies CLAUDE.md's "Anti-Reinvention Pass" into the workflow.)
+
+After the spec is approved and committed, invoke
 `superpowers:writing-plans` for the plan.
 
 Record the decision (ran vs. skipped) — it goes in the PR body's Notes

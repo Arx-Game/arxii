@@ -171,11 +171,13 @@ Individual system docs (e.g., `docs/systems/magic.md`) contain:
 
 **Every feature-design workflow MUST include an explicit "no reinventing the wheel" pass before the spec is finalized.** This is not optional. Sprawl from parallel components/dataclasses/enums/helpers is the most expensive failure mode in this codebase.
 
+**Use the `verify-against-code` skill** (`tools/skills/verify-against-code/`) for this pass — it carries the labeling procedure, the ledger format, and the recurring-traps list. The core rule: **existing code is the source of truth; docs are stale hints.** Repeatedly in this repo, trusting a doc's "not built" / "already does X" claim over the code has caused near-rebuilds of systems that already exist (or designs against fields that don't).
+
 When designing a new feature or bundled PR:
 
 1. After drafting the design sections but **before** committing the spec, scan the codebase for every proposed new surface — component, dataclass, enum, Django model, helper, UI primitive, hook, serializer.
-2. Use a thorough Explore agent (or equivalent grep pass). For each proposed new thing, the answer must be one of: **EXISTS** (with path + line numbers), **PARTIAL** (close but needs extension), or **DOES NOT EXIST** (legitimately new).
-3. Cross-check against `docs/systems/INDEX.md` and `docs/systems/MODEL_MAP.md`. They're the curated systems-discovery surface; consult them in addition to grep.
+2. **Verify against code, not docs.** For each proposed new thing, read the actual definition AND find a live caller, then label it exactly one of: **`[BUILT & WIRED]`** (exists with a live caller — quote it `file:line`; reuse, don't build), **`[BUILT, NOT WIRED]`** (exists but no live consumer — wire/extend, don't duplicate), or **`[ABSENT]`** (grep + read confirm it's genuinely new). A name match, a doc claim, or an Explore-agent summary is never enough for a label — confirm with code.
+3. **Treat `docs/systems/INDEX.md`, `docs/systems/MODEL_MAP.md`, architecture/roadmap docs, and prior agent summaries as HINTS that may be stale** — use them to find where to look, never as proof of what exists or doesn't. When a doc turns out to be wrong, **correct it at the source as part of this work** so it stops misleading the next person.
 4. Consolidate: drop or rename newly-proposed surfaces that overlap with existing ones. Prefer **reuse-with-extension** over **build-new**.
 5. Present the consolidations to the user for ratification before committing the updated spec.
 
