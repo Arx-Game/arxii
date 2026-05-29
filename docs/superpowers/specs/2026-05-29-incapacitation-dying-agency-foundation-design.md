@@ -1,179 +1,198 @@
-# Incapacitation & dying foundation — agency gate, condition-driven
+# Incapacitation & dying foundation — capability-gated agency
 
 **Issue:** #595 (PR A — foundation; blocks #560/#561)
 **Branch:** `feature-595-decouple-incapacitation-dying-from-vital`
-**Status:** design approved; spec under user review
+**Status:** design approved (scope revised after code-verified capability audit); spec under user review
 **Date:** 2026-05-29
+
+> **Revision note:** an earlier draft of this spec proposed a *coarse
+> `incapacitates` boolean gate*. That is superseded. A code-verified audit
+> (see "Verified system state") showed the capability→action-availability
+> pipeline largely **exists and is wired**, and that "can I act" must be
+> **per-technique**, not a global boolean (an immobilized-but-conscious mage can
+> still cast a consciousness-only spell). This spec reflects the corrected,
+> grounded design.
 
 ## Problem
 
-`CharacterVitals.status` (`ALIVE → UNCONSCIOUS → DYING → DEAD`, plus a
-`dying_final_round` boolean) conflates two orthogonal axes — **mortality**
-(alive/dying/dead) and **consciousness / ability to act**. The single ladder
-makes *dying + conscious* unrepresentable, forces "fight while dying" through
-the `dying_final_round` hack (`combat/services.py:799-801, 1335-1337`), and
-models a subset of capability-impairment (unconscious) on vitals when
-impairment is properly a **conditions** concern.
+Two coupled problems:
 
-## Goal & boundary
+1. **`CharacterVitals.status`** (`ALIVE→UNCONSCIOUS→DYING→DEAD` + a
+   `dying_final_round` boolean) conflates **mortality** with
+   **consciousness/ability to act**, so *dying + conscious* is unrepresentable
+   and "fight while dying" is a hack (`combat/services.py:794-801`).
+2. **Combat action-eligibility is hardcoded on `vitals.status`** and bypasses
+   the capability/condition system entirely. A condition that should
+   incapacitate does not stop a combat declaration today.
 
-Establish the correct **state model** so any damage source can produce
-coherent incapacitation/dying, and combat gates actions on it. This PR:
+## Verified system state (what exists, what doesn't)
 
-- **In scope:** a coarse, condition-driven **agency gate**; an `incapacitates`
-  signal on conditions; a staged **bleed-out (Dying) condition** with
-  worsening stabilization; the combat action-gating refactor; the
-  `CharacterVitals` slim-down + data migration; retargeting the *existing*
-  damage path to apply the new condition states.
-- **Out of scope (consume / defer):** the graduated capability machinery
-  (`force`/`movement`/…), the `CharacterCapabilities` facade, trait-derivation
-  wiring, and the Application/Situation/Property generalization — all described
-  in `docs/architecture/property-capability-action.md`, all separate future
-  work. The consequence-pool reconciliation of the *rolls* is **PR B**
-  (#560/#561).
+Code-verified 2026-05-29 (the architecture doc was stale):
 
-## Design decisions (ratified)
+- **[BUILT & WIRED]** Capability → available-action pipeline:
+  `get_capability_sources_for_character` → `get_available_actions` →
+  `_match_approaches` → the **CHALLENGE backend** in
+  `actions/player_interface.py` → dispatch → `resolve_challenge`.
+- **[BUILT & WIRED]** Conditions impairing capabilities already gate
+  availability: a `ConditionCapabilityEffect` driving a capability to ≤0 drops
+  its sources (`mechanics/services.py:575-595`), removing capability-derived
+  actions.
+- **[GAP] Combat bypasses this** — `_combat_actions` surfaces techniques
+  directly; eligibility is hardcoded on `vitals.status`
+  (`combat/services.py:565, 794, 1236, 2495`). Combat techniques are not gated
+  by capability impairment.
+- **[GAP] Presence-only gating** — capabilities gate by `value > 0`; there is
+  **no `min_value` threshold** on `Application`/`ChallengeApproach`/`Technique`.
+  Graduated per-technique requirements ("movement ≥ N for a running start") do
+  not exist.
+- **[GAP] No unified effective-value fn** — condition / trait-derivation /
+  technique-grant sources are siloed; conditions' `get_capability_value`
+  returns *condition-only* (0 baseline for an un-impaired capability).
+- **[BUILT, NOT WIRED]** `SituationInstance`/`ChallengeInstance` (no
+  instantiation service; test-factory only) — out of scope here.
 
-- **Agency is a coarse STATE, not a capability.** The architecture doc is
-  emphatic that capabilities are ways to *affect the world* and "passive
-  effects are not capabilities." So "can act at all" is a gate, not a
-  `CapabilityType`. Granular impairments (slowed, grounded) keep riding the
-  existing `ConditionCapabilityEffect` on real capabilities — untouched here.
-- **Mortality and consciousness are orthogonal.** `{dying + conscious}` is a
-  first-class state: a dying-but-conscious character can act (fights until they
-  drop). Retires `dying_final_round`.
-- **Dying is a staged bleed-out condition**, stabilizable, with worsening odds
-  per stage — reusing `ConditionStage.resist_check_type` / `resist_difficulty`.
-- **PR A keeps the current damage logic** (binary, existing difficulty) but
-  retargets its *output* from `vitals.status` writes to condition application,
-  so it ships without a functional gap. PR B replaces the internals with the
-  consequence-pool pipeline.
+## Scope
 
-## Architecture
+**In scope (the full "accommodate it" build, grounded in reality):**
+1. Per-technique **capability-requirement model** (the missing threshold gap).
+2. Combat eligibility routed through **capability/agency**, reusing the
+   existing condition→capability mechanism.
+3. **Vitals decouple** to a mortality marker.
+4. **Dying = staged bleed-out condition.**
+5. **Foundational capability baselines** so an un-impaired character is "able."
 
-### Agency gate
+**Out of scope (consume / defer):** the challenge content layer
+(`Situation`/`ChallengeInstance` instantiation service), unifying trait/technique
+capability sources for the challenge backend, the `CharacterModifier`→capability
+wiring, graduated requirements beyond what combat needs. The consequence-pool
+roll reconciliation is **PR B** (#560/#561).
 
-A character **can act** iff `life_state != DEAD` **and** they have no active
-**incapacitating** condition.
+## Design
 
-- New `ConditionTemplate.incapacitates` (BooleanField, default False). True for
-  Unconscious / Slept / Stunned / Paralyzed-style total-incapacitation
-  conditions. (Stage-level incapacitation — a stun that only incapacitates at
-  higher severity — is a future extension via a `ConditionStage.incapacitates`
-  override; not in v1.)
-- `world/conditions/services.py: is_incapacitated(character) -> bool` — true if
-  any active `ConditionInstance` has `condition.incapacitates`. Reuses
-  `get_active_conditions`.
-- `world/vitals/services.py: can_act(character) -> bool` — composes
-  `not is_dead(character) and not is_incapacitated(character)`.
+### 1. Foundational capabilities + baselines
 
-No new `CapabilityType`, no dependency on the capability-value query.
+Foundational capacities every character has by default — `awareness`,
+`movement`, `limb_use` (extensible) — modeled as `CapabilityType` rows with an
+**innate baseline** value (a "baseline" capability source; primitive/default-
+backed, per the project-lead lean that these are "so basic they may be enums /
+derived from primitives"). Conditions impair them via the existing
+`ConditionCapabilityEffect`.
 
-### Mortality on vitals (slim-down)
+New `get_effective_capability_value(character, capability) -> int` =
+`innate_baseline + condition_modifiers`, floored at 0. (This is the
+agency/requirement value — intrinsic capacity impaired by conditions. It is
+distinct from the challenge backend's *per-source* action paths, which are
+unchanged. Trait/technique/equipment contributions to baselines are a
+follow-up.)
+
+**[SPEC-REVIEW FLAG]** Baseline source representation — innate-default vs a
+`baseline` pseudo-source row vs trait-derivation — is the one open modeling
+choice; this spec assumes innate defaults for foundational capabilities.
+
+### 2. Per-technique capability requirements (new model)
+
+`TechniqueCapabilityRequirement` (SharedMemoryModel, in `world/magic` alongside
+`TechniqueCapabilityGrant`):
+- `technique` FK → `Technique`
+- `capability` FK → `conditions.CapabilityType`
+- `minimum_value` PositiveIntegerField (default 1 = presence)
+
+A technique declares what capacities it needs: "Flame Lance requires
+`awareness ≥ 1`"; "Two-handed cleave requires `limb_use ≥ 2`"; "Charge requires
+`movement ≥ N`". (Style-level requirements that techniques inherit are a noted
+future extension; v1 is technique-level.)
+
+`technique_performable(character, technique) -> bool` = `not is_dead(character)`
+**and** every `TechniqueCapabilityRequirement` met against
+`get_effective_capability_value`. Per-technique — the immobilized-but-conscious
+mage keeps `awareness`, so consciousness-only techniques stay available while
+movement techniques drop.
+
+### 3. Combat uses capabilities for eligibility
+
+Replace the hardcoded `vitals.status` gates (`combat/services.py:565, 794-801,
+1236-1238, 2495-2509`):
+- `_combat_actions` (player_interface) filters surfaced techniques by
+  `technique_performable`.
+- Participant declare-eligibility = `not dead` **and** has ≥1 performable
+  technique (fully-incapacitated characters surface nothing → cannot act;
+  dying+conscious can act if their techniques' requirements hold).
+- `can_join_encounter` / target-validity = mortality (`not dead`) as
+  appropriate.
+- Dying→dead consumption replaced by bleed-out condition progression (below).
+
+### 4. Incapacitation & dying as conditions
+
+- **Unconscious / Slept / Stunned** = `ConditionTemplate`s whose
+  `ConditionCapabilityEffect` drives `awareness` (and/or other foundational
+  capabilities) to 0 — so all techniques requiring awareness become
+  unperformable. No special vitals state, no `incapacitates` boolean.
+- **Immobilized / Bound / Grounded** impair `movement` / `limb_use` / a flight
+  capability — granularly removing only the techniques that need them.
+- **Bleeding Out (Dying)** = a **staged** `ConditionTemplate`; `ConditionStage`
+  per-stage `resist_check_type` + `resist_difficulty` give worsening
+  stabilization odds; terminal stage sets `life_state = DEAD`. Does **not**
+  impair `awareness` — dying characters stay able to act. Stabilization =
+  curing the condition. Combat round resolution advances active bleed-out
+  conditions (resist per stage; fail advances; terminal → dead). Non-combat
+  progression deferred (#523).
+
+These `ConditionTemplate`s + foundational `CapabilityType`s are authored content
+(admin/seed); this PR provides the **mechanism** + factory-built rows for tests.
+
+### 5. Vitals slim-down
 
 `CharacterVitals` keeps `health`, `max_health`, `base_max_health`, `died_at`.
-The 4-state `status` enum is reduced to a **mortality marker**:
+Replace the 4-state `status` with `life_state` ∈ `{ALIVE, DEAD}`. Drop
+`dying_final_round`, `unconscious_at` (now condition-derived). `is_dead` /
+`is_alive` read `life_state`. Data migration: `ALIVE→ALIVE`; `UNCONSCIOUS→ALIVE`
++ Unconscious condition; `DYING→ALIVE` + Bleeding-Out condition; `DEAD→DEAD`.
 
-- New `life_state` field: `CharacterLifeState` = `ALIVE` / `DEAD` only.
-- **Remove** `UNCONSCIOUS` / `DYING` from the life-state vocabulary (now
-  conditions), and drop `dying_final_round` and `unconscious_at` (now
-  condition-derived: an Unconscious condition's `applied_at` replaces
-  `unconscious_at`).
-- `is_dead(character)` / `is_alive(character)` read `life_state`.
+### Sequencing (no functional gap)
 
-### Dying (bleed-out) condition
-
-A staged `ConditionTemplate` ("Bleeding Out"):
-
-- Stages model worsening peril; each `ConditionStage` carries
-  `resist_check_type` + `resist_difficulty` (already exist), difficulty rising
-  per stage.
-- **Progression:** during combat round resolution, each active bleed-out
-  condition rolls its stage's resist check; failure advances a stage; the
-  terminal stage sets `life_state = DEAD`. Success holds. This reuses the
-  conditions stage-advancement/resist machinery and replaces the
-  `dying_final_round → DEAD` consumption at `combat/services.py:2495-2509`.
-- **Stabilization:** curing/reducing the condition (first aid, magic) via the
-  existing condition cure/dispel path halts progression. (Authored stabilize
-  actions are content/follow-up; the mechanism is the condition being
-  removable.)
-- Bleed-out does **not** set `incapacitates` — a dying character stays
-  conscious and able to act unless *separately* incapacitated.
-- Non-combat dying progression (time-based bleed-out outside encounters) is a
-  follow-up (#523); v1 drives progression from the combat round loop.
-
-The Unconscious and Bleeding-Out `ConditionTemplate`s themselves are authored
-content (admin/seed), not committed fixtures. This PR provides the
-**mechanism** + factory-built conditions for tests.
-
-### Retargeting the existing damage path
-
-`process_damage_consequences` (`world/vitals/services.py`) keeps its current
-binary checks and difficulty math (PR B reconciles those) but changes its
-*effects*:
-
-- knockout → apply the Unconscious condition (instead of `vitals.status =
-  UNCONSCIOUS`).
-- death-threshold → apply the Bleeding-Out condition (instead of
-  `vitals.status = DYING` + `dying_final_round`).
-- `DamageConsequenceResult` keeps its fields (`knocked_out`, `dying`,
-  `final_status` → re-expressed via `life_state` + flags) so callers/tests keep
-  working.
-
-### Combat action-gating refactor
-
-Replace the ~8 `vitals.status` / `dying_final_round` read sites
-(`combat/services.py:578-582, 799-801, 1220-1240, 1321-1337, 1966-1975, 2117,
-2495-2509`) with the new gate:
-
-- Declare-action gate → `can_act(character)` (dying+conscious now passes
-  naturally; no `dying_final_round` special case).
-- Round-order / passive-target filters → `can_act` / `is_alive` as appropriate.
-- Encounter loss condition → all PCs `not can_act` (down or dead).
-- Dying→dead consumption → driven by bleed-out condition progression (above).
+PR A keeps the *existing* damage logic but retargets its output: knockout →
+apply Unconscious condition; death-threshold → apply Bleeding-Out condition
+(instead of `vitals.status` writes). Combat still produces incapacitation/death
+immediately, now condition-driven and capability-gated. PR B (#560/#561) later
+swaps the binary/ad-hoc internals for the consequence-pool pipeline.
 
 ## Anti-reinvention ledger
 
 | Surface | Verdict |
 |---|---|
-| `ConditionTemplate` / `ConditionInstance` / `ConditionStage` (stages, resist, cure) | REUSE |
-| `get_active_conditions`, condition apply/cure services | REUSE |
-| `ConditionCapabilityEffect` (granular impairment) | REUSE — untouched |
-| graduated capability query / facade / trait-derivation | DEFER — not built here |
-| `ConditionTemplate.incapacitates` boolean | NEW (small flag) |
-| `CharacterVitals.life_state` (ALIVE/DEAD) replacing 4-state `status` | NEW (slim) |
-| `is_incapacitated` / `can_act` / `is_dead` service fns | NEW (thin) |
-| Unconscious + Bleeding-Out condition definitions | NEW (mechanism; content authored) |
-
-## Migration
-
-`CharacterVitals` data migration: `ALIVE → ALIVE`; `UNCONSCIOUS → ALIVE` +
-apply Unconscious condition; `DYING → ALIVE` + apply Bleeding-Out condition;
-`DEAD → DEAD`. Drop `dying_final_round`, `unconscious_at`. Preserve the dev DB
-(migrate, don't reset). Watch the SQLite/PG two-tier behavior for the enum
-change.
+| capability→action pipeline, CHALLENGE backend | REUSE (untouched) |
+| `ConditionCapabilityEffect`, `get_capability_value`, condition apply/cure, `ConditionStage` resist | REUSE |
+| `CapabilityType`, `TechniqueCapabilityGrant` (pattern) | REUSE |
+| `TechniqueCapabilityRequirement` (technique → capability + min_value) | NEW |
+| `get_effective_capability_value` (baseline + conditions) | NEW |
+| foundational capability baselines (innate defaults) | NEW |
+| `technique_performable` + combat eligibility refactor | NEW |
+| `CharacterVitals.life_state` (ALIVE/DEAD) replacing `status` | NEW (slim) |
+| Unconscious / Bleeding-Out conditions + foundational capabilities | NEW (mechanism; content authored) |
 
 ## Testing
 
-- `can_act` / `is_incapacitated` / `is_dead` unit tests (conscious, unconscious,
-  dying-conscious, dying-unconscious, dead).
-- Bleed-out progression: staged resist advances to death on repeated failure;
-  stabilization (cure) halts; dying+conscious can still act mid-progression.
-- Combat gating: a dying-but-conscious participant can declare an action; an
-  unconscious one cannot; loss condition fires when all PCs are down.
-- `process_damage_consequences` now applies conditions (not status writes).
+- `get_effective_capability_value` (baseline, condition-impaired, floored).
+- `technique_performable` matrix: conscious/unconscious/immobilized vs
+  awareness-only / movement / limb_use techniques; dead → nothing.
+- Combat eligibility: dying+conscious can declare; unconscious cannot; loss
+  condition fires when all PCs unperformable-or-dead.
+- Bleed-out: staged resist advances to death; stabilization (cure) halts;
+  dying+conscious still acts mid-progression.
+- Damage path now applies conditions (not `vitals.status` writes).
 - Migration test: existing rows map correctly.
 - Two-tier (SQLite inner loop; `@tag("postgres")` only where forced); full
-  no-keepdb regression before push. Suites: `world.vitals`, `world.combat`,
-  `world.conditions`, plus any reading `CharacterStatus`.
+  no-keepdb regression. Suites: `world.vitals`, `world.combat`,
+  `world.conditions`, `world.magic`, `world.mechanics`, `actions`.
 
 ## Deferred follow-ups (file at PR time)
 
-- PR B (#560/#561): consequence-pool reconciliation of the rolls that produce
-  these states.
+- PR B (#560/#561): consequence-pool reconciliation of the rolls.
+- Style-level technique requirements (inherited by techniques).
+- Trait/technique/equipment contributions to foundational capability baselines;
+  unified effective-value across all sources.
 - Non-combat / time-based bleed-out progression (#523).
-- Stage-level `incapacitates` override (severity-gated stun).
-- Read-model updates for the new state (#521 status panel, #522 `{status}`
-  slot, #553 conditions on CombatantsList).
-- The broader capability facade / trait-derivation wiring / Application-Situation
-  models (`docs/architecture/property-capability-action.md`).
+- `Situation`/`ChallengeInstance` instantiation service (live challenge
+  content) — separate from this PR.
+- Read-model updates (#521 status panel, #522 `{status}` slot, #553 conditions
+  on CombatantsList).
