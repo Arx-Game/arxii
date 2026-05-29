@@ -16,7 +16,7 @@ def technique_performable(character: ObjectDB, technique: Technique) -> bool:
     """True if the character is not dead and meets every capability requirement
     of the technique (effective value >= minimum_value). Per-technique agency.
     """
-    from world.vitals.services import is_dead  # noqa: PLC0415
+    from world.vitals.services import is_dead  # noqa: PLC0415 — vitals↔magic cycle
 
     if is_dead(character):
         return False

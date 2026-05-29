@@ -488,7 +488,7 @@ class TechniqueCapabilityRequirement(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.technique} requires {self.capability} >= {self.minimum_value}"
+        return f"{self.technique.name} requires {self.capability.name} >= {self.minimum_value}"
 
 
 class CharacterTechnique(SharedMemoryModel):
