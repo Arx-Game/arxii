@@ -24,6 +24,26 @@ from world.missions.models import (
 )
 
 
+def _validate_name_unique_on_update(
+    instance: object,
+    queryset: object,
+    value: str,
+    label: str,
+) -> str:
+    """On UPDATE: reject names already taken by another row of the same model.
+
+    On CREATE (instance is None): no-op. The serializer's create() override
+    auto-suffixes collisions via next_available_name, so the CREATE path
+    must let the value through unchanged.
+    """
+    if instance is None:
+        return value
+    if queryset.exclude(pk=instance.pk).filter(name=value).exists():  # type: ignore[union-attr]
+        msg = f"A {label} with this name already exists."
+        raise serializers.ValidationError(msg)
+    return value
+
+
 class MissionTemplateSerializer(serializers.ModelSerializer):
     """List + detail serializer for MissionTemplate browse.
 
@@ -81,26 +101,18 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         are intentionally strict — deliberate user choices deserve explicit
         feedback when they conflict.
         """
-        if self.instance is None:
-            return value
-        if MissionTemplate.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
-            msg = "A mission with this name already exists."
-            raise serializers.ValidationError(msg)
-        return value
+        return _validate_name_unique_on_update(
+            self.instance, MissionTemplate.objects.all(), value, "mission"
+        )
 
     def validate(self, attrs: dict) -> dict:
-        """Run ``MissionTemplate.clean()`` so its invariants surface as DRF 400.
+        """Run ``MissionTemplate._validate_invariants()`` so cross-field rules surface as DRF 400.
 
-        DRF doesn't call ``Model.clean()`` automatically. We re-construct
-        a candidate instance from incoming attrs (merging in ``self.instance``
-        field values for partial PATCH), call ``clean()``, and translate
-        its ``DjangoValidationError`` into the DRF shape so callers get
-        field-keyed 400s instead of an unhandled 500 at ``save()`` time.
-
-        Currently MissionTemplate.clean() checks level_band_min/max and
-        percent_replace. If a new cross-field invariant is added there,
-        add the field to the candidate construction below or it will
-        bypass this proxy and surface as a 500.
+        DRF doesn't call ``Model.clean()`` automatically. Both this method and
+        ``MissionTemplate.clean()`` delegate to ``_validate_invariants``, which
+        is the single source of truth — adding a new invariant there covers both
+        paths automatically (the explicit kwargs list makes a missing field a
+        NameError at the call site rather than a silent bypass).
         """
         attrs = super().validate(attrs)
 
@@ -111,13 +123,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
                 return getattr(self.instance, name, default)
             return default
 
-        candidate = MissionTemplate(
-            level_band_min=field("level_band_min", 0),
-            level_band_max=field("level_band_max", 0),
-            percent_replace=field("percent_replace", 0),
-        )
         try:
-            candidate.clean()
+            MissionTemplate.validate_invariants(
+                level_band_min=int(field("level_band_min", 0)),
+                level_band_max=int(field("level_band_max", 0)),
+                percent_replace=int(field("percent_replace", 0)),
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
@@ -441,12 +452,9 @@ class MissionGiverSerializer(serializers.ModelSerializer):
         so this validator is a no-op. PATCH renames are intentionally
         strict — see MissionTemplateSerializer.validate_name.
         """
-        if self.instance is None:
-            return value
-        if MissionGiver.objects.exclude(pk=self.instance.pk).filter(name=value).exists():
-            msg = "A giver with this name already exists."
-            raise serializers.ValidationError(msg)
-        return value
+        return _validate_name_unique_on_update(
+            self.instance, MissionGiver.objects.all(), value, "giver"
+        )
 
     def validate(self, attrs: dict) -> dict:
         # Build the candidate instance and run clean() so typeclass
@@ -462,8 +470,11 @@ class MissionGiverSerializer(serializers.ModelSerializer):
             candidate = MissionGiver(giver_kind=merged_kind, target=merged_target)
             try:
                 candidate.clean()
-            except Exception as exc:
-                raise serializers.ValidationError({self._TARGET_FIELD: str(exc)}) from exc
+            except DjangoValidationError as exc:
+                # MissionGiver.clean() raises with a field-keyed message_dict;
+                # surface those keys directly rather than stringifying the
+                # exception (which would leak typeclass paths and similar).
+                raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
 
     def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]

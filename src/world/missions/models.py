@@ -170,20 +170,39 @@ class MissionTemplate(SharedMemoryModel):
         ),
     )
 
-    def clean(self) -> None:
-        # When adding a new cross-field invariant here, also extend
-        # MissionTemplateSerializer.validate() (in serializers.py) so the
-        # invariant surfaces as a 400 instead of a 500 at save() time.
-        # The proxy currently mirrors: level_band_min, level_band_max,
-        # percent_replace.
-        super().clean()
+    @staticmethod
+    def validate_invariants(
+        *,
+        level_band_min: int,
+        level_band_max: int,
+        percent_replace: int,
+    ) -> None:
+        """Pure validator for MissionTemplate's cross-field invariants.
+
+        Called from both ``clean()`` and ``MissionTemplateSerializer.validate()``
+        so the rules cannot drift between the model save path and the API
+        400-response path. To add a new invariant: extend this function AND
+        the kwargs list — both callers will then statically fail to pass the
+        new value, so neither path can bypass the new rule.
+        """
         errors: dict[str, str] = {}
-        if self.level_band_min > self.level_band_max:
+        if level_band_min > level_band_max:
             errors["level_band_min"] = "level_band_min cannot exceed level_band_max."
-        if self.percent_replace > MAX_PERCENT_REPLACE:
+        if percent_replace > MAX_PERCENT_REPLACE:
             errors["percent_replace"] = f"percent_replace cannot exceed {MAX_PERCENT_REPLACE}."
         if errors:
             raise ValidationError(errors)
+
+    def clean(self) -> None:
+        # validate_invariants is the single source of truth for cross-field
+        # invariants. MissionTemplateSerializer.validate() calls it too, so
+        # adding a new rule here automatically covers the API 400-response path.
+        super().clean()
+        self.validate_invariants(
+            level_band_min=self.level_band_min,
+            level_band_max=self.level_band_max,
+            percent_replace=self.percent_replace,
+        )
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()

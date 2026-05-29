@@ -229,10 +229,20 @@ def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> Mi
         final_name = next_available_name(base, MissionTemplate.objects.all())
         new_template = MissionTemplate.objects.create(name=final_name, **fields)
     new_template.categories.set(source.categories.all())
+    # Prefetch the full graph in one shot so the two-pass iteration below
+    # fires a constant number of queries regardless of template size.
+    # Bare-string prefetch is acceptable here — source-side bulk read,
+    # not exposed in any serializer.
+    source_nodes = list(
+        source.nodes.all().prefetch_related(
+            "options__routes__candidates",  # noqa: PREFETCH_STRING
+            "options__routes__reward_templates",  # noqa: PREFETCH_STRING
+        )
+    )
     # First pass — clone every node so the node_map is complete before
     # we wire routes.
     node_map: dict[int, MissionNode] = {}
-    for source_node in source.nodes.all():
+    for source_node in source_nodes:
         new_node = _copy_node_into(new_template, source_node, source_node.key)
         # Preserve is_entry from source for whole-template copy — every
         # template needs exactly one entry node, and the source's was
@@ -243,7 +253,7 @@ def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> Mi
         node_map[source_node.pk] = new_node
     # Second pass — wire options/routes/candidates/rewards now that we
     # can re-point internal target_node FKs.
-    for source_node in source.nodes.all():
+    for source_node in source_nodes:
         new_node = node_map[source_node.pk]
         _copy_options_routes_rewards(source_node, new_node, node_map)
     return new_template
