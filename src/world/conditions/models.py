@@ -140,6 +140,24 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     )
     icon = models.CharField(max_length=100, blank=True)
 
+    # Consequence pools — nullable so a fallback config default can apply
+    wound_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wound_pool_damage_types",
+        help_text="Permanent-wound pool for this damage type. Null = use config default.",
+    )
+    death_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="death_pool_damage_types",
+        help_text="Tiered death consequences for this damage type. Null → config default.",
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
