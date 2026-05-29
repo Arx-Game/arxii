@@ -28,17 +28,22 @@ CREATE SEQUENCE scenes_interaction_id_seq;
 -- This SQL rewrites the table from scratch — anything not listed here is
 -- dropped during partition setup. Adding a model column requires adding
 -- it here AND an index below if db_index=True.
+--
+-- Drift is enforced by tools/check_partition_sql_drift.py (pre-commit hook).
+-- If you add/rename a column on Interaction and forget to update this SQL,
+-- the hook fails before the diff lands.
 CREATE TABLE scenes_interaction (
-    id          bigint NOT NULL DEFAULT nextval('scenes_interaction_id_seq'),
-    content     text NOT NULL,
-    mode        varchar(20) NOT NULL,
-    visibility  varchar(20) NOT NULL,
-    pose_kind   varchar(16) NOT NULL DEFAULT 'standard',
-    vote_count  integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
-    "timestamp" timestamptz NOT NULL,
-    persona_id  bigint NOT NULL,
-    scene_id    bigint,
-    place_id    bigint,
+    id               bigint NOT NULL DEFAULT nextval('scenes_interaction_id_seq'),
+    content          text NOT NULL,
+    mode             varchar(20) NOT NULL,
+    visibility       varchar(20) NOT NULL,
+    pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
+    vote_count       integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
+    strain_committed integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
+    "timestamp"      timestamptz NOT NULL,
+    persona_id       bigint NOT NULL,
+    scene_id         bigint,
+    place_id         bigint,
     PRIMARY KEY (id, "timestamp")
 ) PARTITION BY RANGE ("timestamp");
 
@@ -110,9 +115,12 @@ CREATE TABLE scenes_interaction_203012 PARTITION OF scenes_interaction FOR VALUE
 CREATE TABLE scenes_interaction_default PARTITION OF scenes_interaction DEFAULT;
 
 -- 4. Copy data from old table (preserves any existing interaction data)
+-- Column list must include every NOT NULL column that lacks a default value in
+-- the CREATE TABLE above (Postgres won't auto-fill). Drift between this list
+-- and the CREATE TABLE above is also checked by tools/check_partition_sql_drift.py.
 INSERT INTO scenes_interaction
-    (id, content, mode, visibility, vote_count, "timestamp", persona_id, scene_id, place_id)
-    SELECT id, content, mode, visibility, vote_count, "timestamp", persona_id, scene_id, place_id
+    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id)
+    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id
     FROM scenes_interaction_old;
 
 -- Advance the sequence past any existing IDs
