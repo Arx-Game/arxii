@@ -32,7 +32,7 @@ interface MissionDetailPanelProps {
 }
 
 export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
-  const { data: template, isLoading, error } = useMissionTemplate(id);
+  const { data: template, isLoading, isError } = useMissionTemplate(id);
   const [editOpen, setEditOpen] = useState(false);
 
   if (!id) {
@@ -57,7 +57,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
     );
   }
 
-  if (error || !template) {
+  if (isError || !template) {
     return (
       <Card>
         <CardContent className="p-6 text-destructive">Failed to load mission #{id}.</CardContent>
