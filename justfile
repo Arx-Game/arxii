@@ -41,6 +41,51 @@ test-fast *args:
 test-parity *args:
     echo "yes" | uv run arx test --parallel {{args}}
 
+# Change-impact-aware regression: tests only the apps your branch
+# actually touches PLUS apps that import from them (catches the
+# "I changed missions, but a stories test uses MissionTemplateFactory"
+# case). Falls back to the full suite if any change lands outside
+# src/world/<app>/ scope (settings, server config, etc.).
+#
+# Diffs against origin/main via merge-base. Run `git fetch origin`
+# first if you suspect your tracking branch is stale.
+#
+#   just test-affected
+#   just test-affected --keepdb         # extra args passed to arx test
+test-affected *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)
+    CHANGED=$(git diff --name-only "$BASE" HEAD -- 'src/**/*.py')
+    if [ -z "$CHANGED" ]; then
+        echo "test-affected: no .py changes vs origin/main."
+        echo "Use 'just regression' for the full suite, or 'just test-fast <app>' for one."
+        exit 0
+    fi
+    OUTSIDE=$(echo "$CHANGED" | grep -vE '^src/world/[^/]+/' || true)
+    if [ -n "$OUTSIDE" ]; then
+        echo "test-affected: changes outside src/world/<app>/ — running full regression:"
+        echo "$OUTSIDE" | sed 's/^/  /'
+        echo "yes" | uv run arx test --parallel {{args}}
+        exit 0
+    fi
+    CHANGED_APPS=$(echo "$CHANGED" | sed -E 's|^src/world/([^/]+)/.*|\1|' | sort -u)
+    ALL_APPS="$CHANGED_APPS"
+    for app in $CHANGED_APPS; do
+        DEPS=$(grep -rlE "from world\.${app}([.]| import)" src/world/ --include='*.py' 2>/dev/null \
+               | sed -E 's|^src/world/([^/]+)/.*|\1|' | sort -u || true)
+        ALL_APPS="${ALL_APPS}"$'\n'"${DEPS}"
+    done
+    APPS=$(echo "$ALL_APPS" | sort -u | grep -v '^$')
+    DOTTED=$(echo "$APPS" | sed 's|^|world.|' | tr '\n' ' ')
+    COUNT=$(echo "$APPS" | wc -l)
+    echo "test-affected: $COUNT app(s) — $(echo $APPS | tr '\n' ' ')"
+    if [ "$COUNT" -gt 1 ]; then
+        echo "yes" | uv run arx test --parallel $DOTTED {{args}}
+    else
+        echo "yes" | uv run arx test $DOTTED {{args}}
+    fi
+
 # Run the full regression suite (no --keepdb, matches CI).
 # Auto-confirms the destroy-test-DB prompt.
 #   just regression
