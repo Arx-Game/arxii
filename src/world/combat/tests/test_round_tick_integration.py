@@ -21,7 +21,6 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -42,12 +41,7 @@ def _make_active_round_encounter():
         encounter=encounter,
         character_sheet=sheet,
     )
-    CharacterVitals.objects.create(
-        character_sheet=sheet,
-        health=100,
-        max_health=100,
-        status=CharacterStatus.ALIVE,
-    )
+    CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
     # Passives-only action — no focused_action, no focused_opponent_target.
     # This keeps the participant ACTIVE (not FLED) while making the round
     # resolve cleanly.
@@ -109,7 +103,6 @@ class RoundTickIntegrationTests(EvenniaTestCase):
             character_sheet=sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         # Need at least one active opponent for begin_declaration_phase to
         # proceed.

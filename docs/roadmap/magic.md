@@ -69,10 +69,12 @@ Some abilities cross categories (poison touch = attack + subtle assassination to
   **ThreadPullEffect**, **ThreadWeavingUnlock**, **CharacterThreadWeavingUnlock**,
   **ThreadWeavingTeachingOffer**, **Ritual**, **RitualComponentRequirement**,
   **ImbuingProseTemplate**, Tradition, CharacterTradition,
-  CharacterAffinityTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**.
+  CharacterAffinityTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**,
+  **TechniqueCapabilityRequirement**.
   CombatPull / CombatPullResolvedEffect live in `world/combat` but are
   part of the Spec A surface.
-- **Capability integration:** TechniqueCapabilityGrant links Techniques to CapabilityTypes (from conditions app) with `base_value + (intensity_multiplier * intensity)` formula. This feeds into the mechanics app's action generation pipeline — when a character has a Technique that grants a Capability, the system can match it against Properties on Challenges to surface available approaches
+- **Capability grant integration:** TechniqueCapabilityGrant links Techniques to CapabilityTypes (from conditions app) with `base_value + (intensity_multiplier * intensity)` formula. This feeds into the mechanics app's action generation pipeline — when a character has a Technique that grants a Capability, the system can match it against Properties on Challenges to surface available approaches
+- **Capability requirement gate (#595):** `TechniqueCapabilityRequirement` (Technique FK + CapabilityType FK + `minimum_value`) authors per-technique prerequisites. `technique_performable(character, technique)` returns False when any requirement is unmet. `declare_action` and the performable-technique filter gate on this, so a character who loses a required capability (e.g., awareness zeroed by Unconscious) can no longer use techniques that need it
 - **Cantrip-technique alignment** — cantrip templates produce real Techniques with intensity/control at CG finalization
 - **APIs:** Full viewsets and serializers
 - **Frontend:** CantripSelector for CG magic stage

@@ -9,7 +9,6 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.conditions.factories import DamageTypeFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -25,11 +24,10 @@ class DamagePayloadTypeTests(TestCase):
     def setUp(self) -> None:
         self.vitals, _ = CharacterVitals.objects.get_or_create(
             character_sheet=self.participant.character_sheet,
-            defaults={"health": 100, "max_health": 100, "status": CharacterStatus.ALIVE},
+            defaults={"health": 100, "max_health": 100},
         )
         self.vitals.health = 100
         self.vitals.max_health = 100
-        self.vitals.status = CharacterStatus.ALIVE
         self.vitals.save()
 
         # Move character into encounter room so DAMAGE_PRE_APPLY fires

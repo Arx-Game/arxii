@@ -649,7 +649,6 @@ class TestDispatchPlayerActionCombatDeferred(django.test.TestCase):
     def setUpTestData(cls) -> None:
         from actions.factories import ActionTemplateFactory
         from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
-        from world.vitals.constants import CharacterStatus
         from world.vitals.models import CharacterVitals
 
         cls.encounter = CombatEncounterFactory(
@@ -667,7 +666,6 @@ class TestDispatchPlayerActionCombatDeferred(django.test.TestCase):
             character_sheet=cls.sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
         cls.check_type = CheckTypeFactory()
@@ -728,7 +726,6 @@ class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.vitals.constants import CharacterStatus
         from world.vitals.models import CharacterVitals
 
         cls.encounter = CombatEncounterFactory(
@@ -746,7 +743,6 @@ class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
             character_sheet=cls.sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
         # Put the character in the room with the challenge

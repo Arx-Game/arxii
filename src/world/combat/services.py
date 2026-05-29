@@ -99,7 +99,6 @@ from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
     PERMANENT_WOUND_THRESHOLD,
-    CharacterStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -562,7 +561,7 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
 
     Phase 4 will add flee checks and covering actions.
     """
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
 
@@ -574,12 +573,10 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
         )
         raise ValueError(msg)
 
-    # Vitality check — dead characters cannot flee
-    vitals = CharacterVitals.objects.get(
-        character_sheet=participant.character_sheet,
-    )
-    if vitals.status not in (CharacterStatus.ALIVE, CharacterStatus.UNCONSCIOUS):
-        msg = f"Cannot flee: character status is '{vitals.get_status_display()}'."
+    # Vitality check — dead characters cannot flee. Unconscious / dying
+    # characters may still be dragged out (flee is passives-only).
+    if is_dead(participant.character_sheet.character):
+        msg = "Cannot flee: character is dead."
         raise ValueError(msg)
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
@@ -780,7 +777,8 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
     """Declare a PC's action for the current round.
 
     Validations:
-    - Participant must be ALIVE (or DYING with dying_final_round=True).
+    - Participant must be able to act (not dead and not incapacitated) — see can_act.
+      A dying-but-conscious character keeps awareness and passes naturally.
     - Encounter must be in DECLARING status.
     - Round number must match encounter's current round.
     - The passive slot matching the focused_category must be None.
@@ -791,16 +789,14 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
     Raises ValueError with clear messages for validation failures.
     """
 
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     encounter = participant.encounter
 
-    # Status check
-    vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
-    is_alive = vitals.status == CharacterStatus.ALIVE
-    is_dying_final = vitals.status == CharacterStatus.DYING and vitals.dying_final_round
-    if not (is_alive or is_dying_final):
-        msg = f"Cannot declare action: character status is '{vitals.get_status_display()}'."
+    # Agency check — not dead and not incapacitated. A dying-but-conscious
+    # character keeps awareness and passes naturally (no dying_final_round concept).
+    if not can_act(participant.character_sheet.character):
+        msg = "Cannot declare action: character is dead or incapacitated."
         raise ValueError(msg)
 
     # Encounter status check
@@ -1048,24 +1044,21 @@ def select_npc_actions(
         encounter.round_number,
     )
 
-    # Design: only ALIVE PCs are targetable. DYING PCs (on their final round)
-    # get one free offensive action without being targeted — "going out swinging."
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    # Design: NPCs target PCs who can still act (not dead, not incapacitated).
+    # Unconscious PCs (awareness 0) are "down" and not picked as targets; a
+    # dying-but-conscious PC remains in the fight and is targetable. can_act is
+    # the same coarse agency gate used for declaration eligibility.
+    from world.vitals.services import can_act  # noqa: PLC0415
 
-    alive_sheet_ids = set(
-        CharacterVitals.objects.filter(
-            status=CharacterStatus.ALIVE,
-            character_sheet__combat_participations__encounter=encounter,
-            character_sheet__combat_participations__status=ParticipantStatus.ACTIVE,
-        ).values_list("character_sheet_id", flat=True)
-    )
-    active_participants = list(
+    candidate_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
-            character_sheet_id__in=alive_sheet_ids,
             status=ParticipantStatus.ACTIVE,
-        )
+        ).select_related("character_sheet__character")
     )
+    active_participants = [
+        p for p in candidate_participants if can_act(p.character_sheet.character)
+    ]
 
     actions: list[CombatOpponentAction] = []
 
@@ -1231,13 +1224,12 @@ def apply_damage_to_participant(  # noqa: PLR0913 — public API; kwargs are par
     death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
     permanent_wound_eligible = effective_damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
 
-    update_fields = ["health"]
-    if force_death:
-        vitals.status = CharacterStatus.DYING
-        vitals.dying_final_round = True
-        update_fields.extend(["status", "dying_final_round"])
-
-    vitals.save(update_fields=update_fields)
+    # Incapacitation / dying state is no longer written here. It is applied by
+    # process_damage_consequences (Bleeding-Out / Unconscious conditions) which
+    # the caller invokes after damage. force_death still drives the
+    # CHARACTER_KILLED event below; the dying condition itself comes from the
+    # consequence pipeline — no stray vitals.status write.
+    vitals.save(update_fields=["health"])
 
     # Achievement counters: see world.combat.achievement_counters. Wired in
     # a follow-up phase — keeping the source_sheet kwarg in place so the
@@ -1298,46 +1290,30 @@ def get_resolution_order(
     is "pc" or "npc". Sorted by speed rank ascending (lower = faster).
 
     Includes:
-    - ALIVE PCs (speed from covenant_role or NO_ROLE_SPEED_RANK)
-    - DYING PCs with dying_final_round=True (their last action)
+    - PCs who can_act (not dead, not incapacitated; dying-but-conscious included)
+      (speed from covenant_role or NO_ROLE_SPEED_RANK)
     - ACTIVE NPCs (all at NPC_SPEED_RANK)
 
     Excludes:
-    - UNCONSCIOUS PCs
+    - UNCONSCIOUS PCs (awareness 0 → cannot act)
     - DEAD PCs
-    - DYING PCs without dying_final_round
     - DEFEATED/FLED NPCs
     """
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
             status=ParticipantStatus.ACTIVE,
-        ).select_related("covenant_role", "character_sheet")
+        ).select_related("covenant_role", "character_sheet__character")
     )
-
-    sheet_ids = [p.character_sheet_id for p in participants]
-    vitals_map: dict[int, CharacterVitals] = {
-        v.character_sheet_id: v
-        for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
-    }
 
     ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = []
     for p in participants:
-        vitals = vitals_map.get(p.character_sheet_id)
-        if vitals is None:
-            logger.warning(
-                "Participant %s has no CharacterVitals record — excluded from resolution",
-                p.character_sheet,
-            )
+        if not can_act(p.character_sheet.character):
             continue
-        status = vitals.status
-        if status == CharacterStatus.ALIVE or (
-            status == CharacterStatus.DYING and vitals.dying_final_round
-        ):
-            speed = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
-            ranked.append((speed, ENTITY_TYPE_PC, p))
+        speed = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
+        ranked.append((speed, ENTITY_TYPE_PC, p))
 
     opponents = list(
         CombatOpponent.objects.filter(
@@ -1959,20 +1935,15 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
-
-    # Batch-fetch vitals for all targets
-    sheet_ids = [t.character_sheet_id for t in targets]
-    vitals_by_sheet: dict[int, CharacterVitals] = {
-        v.character_sheet_id: v
-        for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
-    }
+    from world.vitals.services import is_dead  # noqa: PLC0415
 
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
     for target_participant in targets:
-        vitals_obj = vitals_by_sheet.get(target_participant.character_sheet_id)
-        if vitals_obj is None or vitals_obj.status != CharacterStatus.ALIVE:
+        # Damage recipients: any not-dead target is valid. Unconscious / dying
+        # PCs still take damage (incapacitation/dying are conditions, not a gate
+        # on damage application). Only the dead are excluded.
+        if is_dead(target_participant.character_sheet.character):
             continue
 
         if defense_check_type is not None:
@@ -2101,23 +2072,25 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
 
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
-    """Return True if the encounter should be marked complete."""
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    """Return True if the encounter should be marked complete.
+
+    Complete when either side is wiped: all opponents defeated, OR every active
+    PC is "down" (cannot act — dead or incapacitated). A dying-but-conscious PC
+    can still act, so the encounter is not lost while any PC can_act.
+    """
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     all_opponents_down = not CombatOpponent.objects.filter(
         encounter=encounter,
         status=OpponentStatus.ACTIVE,
     ).exists()
 
-    participant_sheet_ids = CombatParticipant.objects.filter(
+    active_participants = CombatParticipant.objects.filter(
         encounter=encounter,
         status=ParticipantStatus.ACTIVE,
-    ).values_list("character_sheet_id", flat=True)
+    ).select_related("character_sheet__character")
 
-    all_pcs_down = not CharacterVitals.objects.filter(
-        character_sheet_id__in=participant_sheet_ids,
-        status=CharacterStatus.ALIVE,
-    ).exists()
+    all_pcs_down = not any(can_act(p.character_sheet.character) for p in active_participants)
 
     return all_opponents_down or all_pcs_down
 
@@ -2393,7 +2366,8 @@ def resolve_round(
        build PreparedClashContribution objects, and call run_clash_round for
        each. Clean up all declarations for the round. Clash round outcomes
        populate ``clash_outcomes`` on the return value.
-    5. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
+    5. Advance bleed-out: each participant with an active Bleeding-Out condition
+       rolls its stage resist check; terminal-stage failure marks life_state=DEAD.
     6. After all actions: check boss phase transitions for boss-tier opponents.
     7. Check encounter completion (all opponents defeated or all PCs down).
     8. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
@@ -2491,22 +2465,29 @@ def resolve_round(
         resolution_order,
     )
 
-    # --- Dying final round consumption ---
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
-
-    participant_sheet_ids = CombatParticipant.objects.filter(
-        encounter=encounter,
-    ).values_list("character_sheet_id", flat=True)
-
-    dying_vitals = CharacterVitals.objects.filter(
-        character_sheet_id__in=participant_sheet_ids,
-        status=CharacterStatus.DYING,
-        dying_final_round=True,
+    # --- Bleed-out progression ---
+    # Each round, advance every participant's active Bleeding-Out condition.
+    # advance_bleed_out rolls the stage resist check, advances on failure, and
+    # marks life_state=DEAD at the terminal stage (closing the old divergence
+    # where combat wrote status=DEAD but not life_state).
+    from world.conditions.constants import (  # noqa: PLC0415 — combat→conditions cross-domain deferred import
+        BLEED_OUT_CONDITION_NAME,
     )
-    for vitals in dying_vitals:
-        vitals.dying_final_round = False
-        vitals.status = CharacterStatus.DEAD
-        vitals.save(update_fields=["status", "dying_final_round"])
+    from world.vitals.services import advance_bleed_out  # noqa: PLC0415
+
+    # ConditionInstance.target → ObjectDB (related_name="condition_instances").
+    bleeding_participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            character_sheet__character__condition_instances__condition__name=(
+                BLEED_OUT_CONDITION_NAME
+            ),
+        )
+        .select_related("character_sheet__character")
+        .distinct()
+    )
+    for p in bleeding_participants:
+        advance_bleed_out(p.character_sheet.character)
 
     # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events ---
     from world.conditions.services import process_round_end  # noqa: PLC0415

@@ -13,6 +13,8 @@ from flows.factories import (
     TriggerFactory,
 )
 from world.conditions.constants import (
+    BLEED_OUT_CONDITION_NAME,
+    UNCONSCIOUS_CONDITION_NAME,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -59,6 +61,7 @@ class CapabilityTypeFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Capability {n}")
     description = "Test capability"
+    innate_baseline = 0
 
 
 class DamageTypeFactory(DjangoModelFactory):
@@ -89,6 +92,30 @@ class ConditionTemplateFactory(DjangoModelFactory):
     max_stacks = 1
     has_progression = False
     can_be_dispelled = True
+
+
+class UnconsciousConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Unconscious' condition mechanism (Task 5 / #595).
+
+    Sets only the name constant; capability effects and stage wiring are
+    added by caller code or ``ConditionCapabilityEffectFactory``.
+    The factory does NOT auto-create stages — tests build them explicitly
+    via ``ConditionStageFactory``.
+    """
+
+    name = UNCONSCIOUS_CONDITION_NAME
+
+
+class BleedingOutConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Bleeding Out' condition mechanism (Task 5 / #595).
+
+    Sets only the name constant and marks the template as progressive so
+    ``apply_condition`` correctly initialises ``current_stage``.
+    Tests build the concrete stages via ``ConditionStageFactory``.
+    """
+
+    name = BLEED_OUT_CONDITION_NAME
+    has_progression = True
 
 
 class ConditionStageFactory(DjangoModelFactory):

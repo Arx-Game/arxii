@@ -23,7 +23,6 @@ from world.combat.services import (
     _damage_multiplier_for_success,
     resolve_npc_attack,
 )
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -82,12 +81,7 @@ class ResolveNpcAttackTests(TestCase):
             encounter=self.encounter,
             character_sheet=self.sheet,
         )
-        CharacterVitals.objects.create(
-            character_sheet=self.sheet,
-            health=200,
-            max_health=200,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=200, max_health=200)
         self.npc_action = CombatOpponentAction.objects.create(
             opponent=self.opponent,
             round_number=1,

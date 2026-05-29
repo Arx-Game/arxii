@@ -457,6 +457,40 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
         return int(self.base_value + (self.intensity_multiplier * Decimal(intensity)))
 
 
+class TechniqueCapabilityRequirement(SharedMemoryModel):
+    """A capability a character must possess (at >= minimum_value) to perform
+    this Technique. Evaluated against get_effective_capability_value. Example:
+    a two-handed strike requires limb_use >= 2; nearly all techniques require
+    awareness >= 1.
+    """
+
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.CASCADE,
+        related_name="capability_requirements",
+    )
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        related_name="technique_requirements",
+    )
+    minimum_value = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum effective capability value required. 1 = presence.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "capability"],
+                name="technique_capability_requirement_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} requires {self.capability.name} >= {self.minimum_value}"
+
+
 class CharacterTechnique(SharedMemoryModel):
     """
     Links a character to a Technique they know.

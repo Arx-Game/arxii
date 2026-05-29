@@ -257,9 +257,19 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
         "technique__action_template__check_type",
     )
 
+    # Per-technique performability filter: skip techniques the character cannot
+    # currently perform (dead, or any unmet capability requirement). Combat
+    # techniques per character are bounded (a handful), so a clear per-technique
+    # loop is acceptable for v1 — no batching needed.
+    from world.magic.services.capability_requirements import (  # noqa: PLC0415 — actions→magic deferred import avoids top-level cycle
+        technique_performable,
+    )
+
     result: list[PlayerAction] = []
     for grant in grants:
         technique = grant.technique
+        if not technique_performable(character, technique):
+            continue
         template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
         check_type = template.check_type
         ref = ActionRef(

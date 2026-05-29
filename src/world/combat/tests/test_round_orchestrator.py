@@ -51,7 +51,6 @@ from world.mechanics.factories import (
 from world.mechanics.models import CharacterChallengeRecord
 from world.mechanics.types import AvailableAction, CapabilitySource
 from world.traits.factories import CheckOutcomeFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -96,12 +95,7 @@ class ResolveRoundBasicTests(TestCase):
             encounter=encounter,
             character_sheet=sheet,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
         room = ObjectDB.objects.create(
@@ -226,12 +220,7 @@ class ResolveRoundBasicTests(TestCase):
             encounter=encounter,
             character_sheet=sheet,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
         room = ObjectDB.objects.create(
@@ -300,12 +289,7 @@ class ResolveRoundComboTests(TestCase):
             character_sheet=sheet,
             covenant_role=CovenantRoleFactory(speed_rank=5),
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
@@ -372,12 +356,7 @@ class ResolveRoundDefenseCheckTests(TestCase):
             encounter=encounter,
             character_sheet=sheet,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=200,
-            max_health=200,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=200, max_health=200)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
         room = ObjectDB.objects.create(
@@ -476,12 +455,7 @@ class ResolveRoundBossPhaseTests(TestCase):
             character_sheet=sheet,
             covenant_role=CovenantRoleFactory(speed_rank=1),
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=500,
-            max_health=500,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=500, max_health=500)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
         room = ObjectDB.objects.create(
@@ -556,12 +530,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
             character_sheet=sheet,
             covenant_role=CovenantRoleFactory(speed_rank=1),
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
         room = ObjectDB.objects.create(
@@ -680,12 +649,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             character_sheet=sheet,
             status=ParticipantStatus.ACTIVE,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         return encounter, participant
 
     def test_challenge_declaration_resolves_and_bridge_row_deleted(self) -> None:
@@ -790,12 +754,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             character_sheet=sheet2,
             status=ParticipantStatus.ACTIVE,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet2,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet2, health=100, max_health=100)
 
         ci1 = ChallengeInstanceFactory()
         approach1 = ChallengeApproachFactory(challenge_template=ci1.template)
@@ -907,12 +866,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             character_sheet=sheet_combat,
             status=ParticipantStatus.ACTIVE,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet_combat,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet_combat, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet_combat.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet_combat.character)
         room = ObjectDB.objects.create(
@@ -1040,12 +994,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             character_sheet=sheet2,
             status=ParticipantStatus.ACTIVE,
         )
-        CharacterVitals.objects.create(
-            character_sheet=sheet2,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
-        )
+        CharacterVitals.objects.create(character_sheet=sheet2, health=100, max_health=100)
 
         ci_ineligible = ChallengeInstanceFactory()
         approach_ineligible = ChallengeApproachFactory(
