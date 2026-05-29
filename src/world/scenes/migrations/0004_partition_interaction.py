@@ -19,7 +19,7 @@ def _read_sql(filename: str) -> str:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0002_initial"),
+        ("scenes", "0003_initial"),
     ]
 
     operations = [

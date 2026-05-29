@@ -25,8 +25,8 @@ def _read_sql(filename: str) -> str:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0004_clashconfig_clash_min_intensity_and_more"),
-        ("scenes", "0003_partition_interaction"),
+        ("combat", "0002_initial"),
+        ("scenes", "0004_partition_interaction"),
     ]
 
     operations = [

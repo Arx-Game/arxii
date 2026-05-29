@@ -70,6 +70,12 @@ repos:
         entry: uv run python tools/check_migration_seed_data.py
         language: system
         pass_filenames: false
+      - id: check-partition-sql-drift
+        name: Detect drift between Interaction model and partition SQL
+        entry: uv run python tools/check_partition_sql_drift.py
+        language: system
+        pass_filenames: false
+        files: ^(src/world/scenes/(models\.py|sql/partition_interaction_.*\.sql))$
       - id: ty
         name: ty
         entry: uv run ty check --no-progress
