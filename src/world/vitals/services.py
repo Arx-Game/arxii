@@ -60,6 +60,34 @@ def is_alive(character: ObjectDB) -> bool:
     return not is_dead(character)
 
 
+def can_act(character: ObjectDB) -> bool:
+    """Coarse 'can engage at all' gate: not dead AND has awareness.
+
+    Per-technique requirements are checked separately by technique_performable;
+    this is the cheap round-participation precondition. Degrades gracefully if
+    the awareness capability is not seeded (returns True rather than blocking).
+
+    A dying-but-conscious character keeps awareness → can_act True. An
+    Unconscious character has awareness 0 → can_act False.
+    """
+    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        FoundationalCapability,
+    )
+    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        CapabilityType,
+    )
+    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        get_effective_capability_value,
+    )
+
+    if is_dead(character):
+        return False
+    awareness = CapabilityType.objects.filter(name=FoundationalCapability.AWARENESS).first()
+    if awareness is None:
+        return True
+    return get_effective_capability_value(character, awareness) > 0
+
+
 def calculate_knockout_difficulty(*, health_pct: float) -> int:
     """Scale knockout check difficulty by how far below 20% health.
 

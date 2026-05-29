@@ -151,11 +151,23 @@ class ApplyDamageToParticipantTest(TestCase):
         result = apply_damage_to_participant(self.participant, 10)
         assert result.permanent_wound_eligible is False
 
-    def test_force_death_sets_dying(self) -> None:
-        apply_damage_to_participant(self.participant, 10, force_death=True)
+    def test_force_death_does_not_write_status(self) -> None:
+        """force_death no longer mutates vitals.status / dying_final_round.
+
+        Incapacitation/dying are now conditions applied by
+        process_damage_consequences. apply_damage_to_participant only applies
+        the health change and reports eligibility; force_death drives the
+        CHARACTER_KILLED event but writes no life-state to vitals.
+        """
+        result = apply_damage_to_participant(self.participant, 10, force_death=True)
         self.vitals.refresh_from_db()
-        assert self.vitals.status == CharacterStatus.DYING
-        assert self.vitals.dying_final_round is True
+        # Health change applied; no DYING/DEAD life-state write here.
+        assert self.vitals.health == 90
+        # death_eligible is health-derived (not force_death-derived); 90hp → False.
+        assert result.death_eligible is False
+        from world.vitals.constants import CharacterLifeState
+
+        assert self.vitals.life_state == CharacterLifeState.ALIVE
 
 
 class KnockoutDeathProcessingTest(TestCase):
@@ -254,9 +266,22 @@ class KnockoutDeathProcessingTest(TestCase):
         npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
         self.assertTrue(any(o.damage_consequences for o in npc_outcomes))
 
-    def test_dying_consumed_after_round(self) -> None:
-        """DYING participant with dying_final_round becomes DEAD after resolve."""
+    def test_bleed_out_advances_to_death_after_round(self) -> None:
+        """A participant with an active Bleeding-Out condition at its terminal
+        stage dies (life_state=DEAD) when the round-end resist check fails.
+
+        Replaces the old DYING + dying_final_round → DEAD consumption: dying is
+        now a Bleeding-Out condition, and resolve_round drives advance_bleed_out
+        once per round (resist check + stage advance + terminal death).
+        """
+        from world.conditions.factories import (
+            BleedingOutConditionFactory,
+            ConditionInstanceFactory,
+            ConditionStageFactory,
+        )
         from world.covenants.factories import CovenantRoleFactory
+        from world.traits.factories import CheckOutcomeFactory
+        from world.vitals.constants import CharacterLifeState
 
         encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
@@ -269,7 +294,7 @@ class KnockoutDeathProcessingTest(TestCase):
             threat_pool=pool,
         )
         sheet = CharacterSheetFactory()
-        dying_pc = CombatParticipantFactory(
+        bleeding_pc = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
             covenant_role=CovenantRoleFactory(speed_rank=1),
@@ -278,8 +303,7 @@ class KnockoutDeathProcessingTest(TestCase):
             character_sheet=sheet,
             health=50,
             max_health=100,
-            status=CharacterStatus.DYING,
-            dying_final_round=True,
+            life_state=CharacterLifeState.ALIVE,
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
@@ -289,24 +313,44 @@ class KnockoutDeathProcessingTest(TestCase):
         )
         sheet.character.location = room
         sheet.character.save()
-        technique = TechniqueFactory(
-            gift=self.gift,
-            effect_type=self.effect_attack,
-            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+
+        # Bleeding-Out at a single terminal stage with a resist check that we
+        # force to fail → advance_bleed_out marks the character DEAD.
+        resist_check = CheckTypeFactory()
+        bleed_out = BleedingOutConditionFactory()
+        terminal_stage = ConditionStageFactory(
+            condition=bleed_out,
+            stage_order=1,
+            name="Dying",
+            resist_check_type=resist_check,
+            resist_difficulty=20,
+            rounds_to_next=None,
         )
-        CombatRoundAction.objects.create(
-            participant=dying_pc,
-            round_number=1,
-            focused_category=ActionCategory.PHYSICAL,
-            focused_action=technique,
-            focused_opponent_target=encounter.opponents.first(),
+        ConditionInstanceFactory(
+            target=sheet.character,
+            condition=bleed_out,
+            current_stage=terminal_stage,
         )
 
-        resolve_round(encounter)
+        # Passives-only action (no focused_action) so no offense check fires
+        # this round — that lets the single-shot force_check_outcome land on the
+        # round-end bleed-out resist check (which is what we're exercising).
+        CombatRoundAction.objects.create(
+            participant=bleeding_pc,
+            round_number=1,
+            focused_action=None,
+            focused_category=None,
+        )
+
+        from world.checks.test_helpers import force_check_outcome
+
+        failure_outcome = CheckOutcomeFactory(name="Failure", success_level=-1)
+        with force_check_outcome(failure_outcome):
+            resolve_round(encounter)
 
         vitals = CharacterVitals.objects.get(character_sheet=sheet)
-        self.assertEqual(vitals.status, CharacterStatus.DEAD)
-        self.assertFalse(vitals.dying_final_round)
+        self.assertEqual(vitals.life_state, CharacterLifeState.DEAD)
+        self.assertIsNotNone(vitals.died_at)
 
 
 class ApplyDamageToOpponentResistanceTests(EvenniaTestCase):

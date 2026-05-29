@@ -23,7 +23,6 @@ from rest_framework.views import APIView
 
 from world.combat.constants import OpponentStatus
 from world.combat.models import ClashContribution, CombatRoundAction
-from world.vitals.constants import CharacterStatus
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
@@ -170,16 +169,20 @@ class _RoundActionEffects:
             )
         target_ally = self.action.focused_ally_target
         if target_ally is not None:
-            try:
-                vitals_status = target_ally.character_sheet.vitals.status
-            except (AttributeError, ValueError):
-                vitals_status = None
-            if vitals_status in (CharacterStatus.UNCONSCIOUS, CharacterStatus.DEAD):
-                label = f"{target_ally.character_sheet.character.db_key} {vitals_status.lower()}"
+            from world.vitals.services import can_act, is_dead  # noqa: PLC0415
+
+            ally_character = target_ally.character_sheet.character
+            status_word: str | None = None
+            if is_dead(ally_character):
+                status_word = "dead"
+            elif not can_act(ally_character):
+                # Not dead but cannot act → incapacitated (Unconscious condition).
+                status_word = "incapacitated"
+            if status_word is not None:
                 result.append(
                     EffectRow(
                         kind="status",
-                        label=label,
+                        label=f"{ally_character.db_key} {status_word}",
                         deep_link=DeepLinkRef(modal="participant", id=target_ally.pk),
                     )
                 )
