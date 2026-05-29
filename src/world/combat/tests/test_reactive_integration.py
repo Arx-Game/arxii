@@ -43,7 +43,6 @@ from world.combat.factories import (
 from world.combat.models import CombatOpponentAction
 from world.combat.services import apply_damage_to_participant, resolve_npc_attack
 from world.conditions.factories import ReactiveConditionFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 # ---------------------------------------------------------------------------
@@ -98,7 +97,6 @@ def _participant_with_vitals(health: int = 100, max_health: int = 100, room=None
     )
     vitals.health = health
     vitals.max_health = max_health
-    vitals.status = CharacterStatus.ALIVE
     vitals.save()
     return participant, vitals
 

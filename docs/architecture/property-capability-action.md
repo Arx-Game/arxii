@@ -1,5 +1,17 @@
 # Properties, Capabilities, Applications, and Actions
 
+> ⚠️ **Build-status verified 2026-05-29 — the "How This Maps to Current Code"
+> section below was significantly STALE and has been corrected.** The model
+> design (Four Layers, Capabilities, Applications, etc.) remains accurate, but
+> much of what older revisions listed as "Not Built" is in fact **built and
+> wired** (Property model, Application, ChallengeApproach, Situation/Challenge
+> instances, TraitCapabilityDerivation, TechniqueCapabilityGrant, and the
+> capability→available-action pipeline feeding the CHALLENGE action backend).
+> The obstacle/bypass system described in older revisions **no longer exists**
+> (folded into the generalized Property/Challenge/Situation system). See the
+> corrected status block in "How This Maps to Current Code". When in doubt,
+> trust the code, not this doc.
+
 > The foundational interaction model for Arx II. This document describes how
 > characters interact with the game world through four layers: what things
 > ARE (Properties), what characters CAN DO (Capabilities), WHERE those
@@ -691,71 +703,72 @@ building toward breakthrough moments.
 
 ## How This Maps to Current Code
 
-### What's Built
+### What's Built — VERIFIED 2026-05-29
 
-**The obstacle/bypass system** is the first implementation of this pattern:
+> This block was rewritten after a code-verified audit. Prior revisions were
+> badly stale (claimed core models "not built" that exist and are wired; cited
+> an obstacle/bypass system that no longer exists). Labels: **[WIRED]** = has
+> live callers; **[BUILT, NOT WIRED]** = model exists, no live consumer;
+> **[ABSENT]** = genuinely not built.
 
-```
-ObstacleTemplate (has Properties via M2M)
-  -> ObstacleProperty (e.g., "tall", "solid", "ice")
-       -> BypassOption (e.g., "Fly Over", "Climb", "Melt")
-             +-- BypassCapabilityRequirement (Capability + minimum_value)
-             +-- BypassCheckRequirement (check type + base difficulty)
-```
+**Property / Application / Challenge / Situation models** — `[BUILT]`, in
+`src/world/mechanics/models.py`:
+- `Property`, `PropertyCategory`, `ChallengeTemplateProperty`, `ObjectProperty`
+  — the **generalized** Property model (the old obstacle-isolated
+  `ObstacleProperty`/`BypassOption`/`ObstacleTemplate` are **gone** — folded in).
+- `Application` (capability + target_property + required_effect_property).
+- `ChallengeTemplate`, `ChallengeApproach` (application + check_type +
+  `is_default` + `auto_succeeds`), `ApproachConsequence`.
+- `SituationTemplate`, `SituationChallengeLink`, `SituationInstance`,
+  `ChallengeInstance`, `CharacterChallengeRecord`.
 
-Mapping to architecture concepts:
-- ObstacleProperty = Property (isolated to obstacles; needs generalization)
-- BypassCapabilityRequirement = Capability gate on an Application
-- BypassOption = an Application composed with obstacle-specific resolution
-- ObstacleTemplate = a reusable Situation definition
-- ObstacleInstance = a Situation placed in the world
+**Capability sources + value** — `[BUILT]`:
+- `conditions/services.py: get_capability_value / get_capability_status /
+  get_all_capability_values` — aggregate **condition** effects (floor 0).
+- `mechanics.TraitCapabilityDerivation` and `magic.TechniqueCapabilityGrant`
+  models exist (`calculate_value`), surfaced via `mechanics/services.py`
+  `_get_trait_sources` / `_get_technique_sources`.
+- `mechanics/services.py: get_capability_sources_for_character` returns a flat
+  per-source `CapabilitySource` list (sources are **siloed**, not summed into a
+  single effective value).
 
-Note: The obstacle system bundles Application + resolution together in
-BypassOption. The generalized architecture separates these — Applications
-are independent, and resolution comes from the Situation + mechanism.
+**Capability → available-action pipeline** — `[WIRED]`:
+- `get_available_actions` → `_match_approaches` filters approaches by property
+  match, capability-source presence, effect-property, `Prerequisite`, and
+  difficulty (`mechanics/services.py:453-738`).
+- Surfaced to players via the **CHALLENGE action backend**
+  (`actions/player_interface.py: _challenge_actions` → `get_player_actions` →
+  `dispatch_player_action` → `resolve_challenge`). Conditions impairing a
+  capability to ≤0 correctly drop its actions.
 
-**Capability resolution** (`src/world/conditions/services.py`):
-- `get_capability_value(target, capability_type)` — single lookup
-- `get_all_capability_values(target)` — bulk lookup, dict[str, int]
-- Currently aggregates ONLY from Conditions. Future sources are additive.
+**Action Enhancement system** — `[WIRED]` (`actions/` — `ActionEnhancement` +
+effect configs).
 
-**The Action Enhancement system** provides the mechanism for sources to
-modify Actions:
-- `ActionEnhancement` links sources (Technique, Distinction, Condition) to
-  base Actions
-- Effect configs define what enhancements do mechanically
-- The handler dispatch system is extensible
+**Condition↔damage interaction** (`ConditionDamageInteraction`,
+`process_damage_interactions`) — `[BUILT, NOT WIRED]` (no damage caller).
 
-**The Condition interaction system** has combo rules between Conditions and
-damage types, fully implemented but with no callers:
-- `ConditionDamageInteraction` — combo rules (Condition + damage -> effect)
-- `process_damage_interactions()` — resolution function, tested, never called
-- Needs a damage-dealing pipeline to call it
+**The Attempt system** (`src/world/attempts/`) was removed; its weighted-tier /
+character-loss patterns live in the Challenge consequence system.
 
-**The Attempt system** (`src/world/attempts/`) was speculative infrastructure
-for check resolution with weighted narrative consequences. It had no callers
-outside its own app and has been removed. Its useful patterns (weighted
-consequence selection per tier, character loss protection) were absorbed into
-the Challenge consequence system.
+### What's genuinely NOT built / NOT wired (verified)
 
-### What's Not Built
-
-- **Technique Capability grants** — no model for Techniques declaring what
-  Capabilities they provide, with what constraints (see "Technique
-  Capability Grants" in Implementation Decisions below)
-- **Shared Property model** — ObstacleProperty exists but is isolated to
-  obstacles; needs generalization into `mechanics.Property` (see
-  "Property Model" in Implementation Decisions below)
-- **Application model** — no model for globally-defined Applications
-  connecting Capabilities to Properties (see "Application Model" in
-  Implementation Decisions below)
-- **Situation model** — no generalized model for presenting challenges with
-  Properties and generating Actions from Capabilities (see "Situation
-  Model" in Implementation Decisions below)
-- **Trait-derived Capabilities** — no calculation pipeline from trait values
-  to Capability values
-- **Damage-dealing pipeline** — no service to deal typed damage and call
-  the existing interaction/resistance systems
+- **Situation/Challenge instantiation in live content** — `[BUILT, NOT WIRED]`.
+  The models are queried by `get_available_actions`, but there is **no
+  `instantiate_situation` service**; only test factories create instances.
+- **Per-actor capability VALUE thresholds** — `[ABSENT]`. Capabilities gate by
+  **presence (>0) only**; no `min_value` requirement on `Application`,
+  `ChallengeApproach`, or `Technique`. (#595 adds a per-technique requirement
+  model.)
+- **Unified effective capability value** — `[ABSENT]`. No single function sums
+  condition + trait + technique sources; the general `CharacterModifier`→
+  `ModifierTarget.target_capability` link does **not** feed capability values.
+- **Combat using the capability pipeline** — `[ABSENT]`. Combat eligibility is
+  hardcoded on `CharacterVitals.status`; combat techniques bypass capability
+  gating. (#595 addresses this.)
+- **Trait-derived baselines for foundational capabilities** — `[ABSENT]`
+  (open question #2). (#595 introduces foundational baselines.)
+- **Damage-dealing pipeline calling interaction/resistance** — `[PARTIAL]`
+  (see vitals `process_damage_consequences`; reconciliation is #560/#561).
 
 ---
 

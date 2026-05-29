@@ -16,7 +16,6 @@ from world.magic.factories import (
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -25,10 +24,7 @@ def _make_encounter_and_participant() -> tuple:
     encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
     participant = CombatParticipantFactory(encounter=encounter)
     CharacterVitals.objects.create(
-        character_sheet=participant.character_sheet,
-        health=100,
-        max_health=100,
-        status=CharacterStatus.ALIVE,
+        character_sheet=participant.character_sheet, health=100, max_health=100
     )
     opponent = CombatOpponentFactory(encounter=encounter)
     return encounter, participant, opponent
@@ -50,10 +46,7 @@ class DeclareActionTargetValidationTests(TestCase):
         encounter = self.participant.encounter
         self.ally_participant = CombatParticipantFactory(encounter=encounter)
         CharacterVitals.objects.create(
-            character_sheet=self.ally_participant.character_sheet,
-            health=100,
-            max_health=100,
-            status=CharacterStatus.ALIVE,
+            character_sheet=self.ally_participant.character_sheet, health=100, max_health=100
         )
 
     def test_xor_targets(self) -> None:

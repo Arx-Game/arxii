@@ -162,7 +162,7 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 ## What Exists
 - **Combat models:** CombatEncounter (scene + risk/stakes), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant (lightweight join table: encounter + character_sheet + covenant_role), BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning
 - **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage writing directly to CharacterVitals, resolution order by covenant role speed_rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
-- **Vitals system (world.vitals):** CharacterVitals is the single source of truth for character health (health, max_health), life state (CharacterStatus: ALIVE/UNCONSCIOUS/DYING/DEAD), and dying_final_round. Health thresholds, wound descriptions, health_percentage, and wound_description properties all live here. Combat reads/writes vitals directly — no syncing or denormalization
+- **Vitals system (world.vitals):** CharacterVitals is the single source of truth for character health (health, max_health) and the binary mortality marker `life_state` (ALIVE/DEAD). `CharacterStatus` (ALIVE/UNCONSCIOUS/DYING/DEAD) and `dying_final_round` / `unconscious_at` are removed — incapacitation and dying are now conditions (see below). `is_dead` / `is_alive` / `can_act` service functions replace the old field reads. `derive_character_status` recomputes a coarse read-only label at wire time
 - **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order — speed is never denormalized onto participants
 - **Bulk condition application:** `bulk_apply_conditions` batches DB queries (~5 total regardless of target/condition count) for efficient multi-target condition application from NPC attacks. Combat uses this instead of per-target loops
 - **Supporting systems:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the Challenge/Situation system and action generation pipeline. Checks app has the roll resolution engine (perform_check)
@@ -208,7 +208,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Defensive check integration (resolve_npc_attack using perform_check with success-level damage multipliers)
 - Boss phase transitions on health percentage triggers (check_and_advance_boss_phase)
 - Speed-rank-based resolution order (PCs by covenant role speed_rank, NPCs at rank 15, no-role at rank 20)
-- Vitals extraction: CharacterStatus enum and health thresholds moved to world.vitals
+- Vitals extraction: CharacterStatus enum and health thresholds moved to world.vitals (CharacterStatus later removed in Phase 8)
 - BaseEvenniaTest replaced with TestCase in all combat tests
 - Denormalization cleanup: CombatParticipant stripped to join table (health/status/speed removed), CombatEncounter dropped story/episode FKs (derivable from scene), CombatOpponent gained optional Persona FK for story NPCs
 - CharacterVitals is the health authority: combat reads/writes health directly, no sync step
@@ -328,6 +328,23 @@ Two deliverables in one branch:
   whether to enable the dispatch button, leaving the targeted-action UI path effectively
   unreachable. A future descriptor field (e.g. `is_targeted`) is needed to route the
   frontend correctly to the consent/target-picker flow. Design follow-up.
+
+**Phase 8 (complete):** Decouple incapacitation and dying from vitals (#595)
+
+The old model stored incapacitation and dying as enum values in `CharacterVitals.status` / `dying_final_round`. Phase 8 replaces this with the capability/agency model and condition-based survivability:
+
+- **`CharacterVitals` reduced to life/death** — `CharacterStatus` enum removed along with `status`, `dying_final_round`, and `unconscious_at` fields. Only `life_state` (ALIVE/DEAD) remains as the binary mortality marker. Two migrations: `0003_migrate_status_to_life_state` (data migration from old enum) and `0004_remove_charactervitals_*` (field removal).
+- **`can_act` service** — coarse round-participation gate: `not dead AND awareness > 0`. An Unconscious PC has awareness zeroed → can_act False. A dying-but-conscious PC keeps awareness → can_act True. Degrades gracefully if awareness capability is not seeded.
+- **Unconscious condition** — non-progressive `ConditionTemplate` (name=`"Unconscious"`) with a `ConditionCapabilityEffect` that zeroes the `AWARENESS` foundational capability. Applied by `process_damage_consequences` on a failed knockout check. SQLite-compatible (no DISTINCT ON).
+- **Bleeding-Out condition** — progressive `ConditionTemplate` (name=`"Bleeding Out"`, `has_progression=True`) applied by `process_damage_consequences` on a failed death check. Does NOT impair awareness — dying characters remain conscious and can act.
+- **`advance_bleed_out`** — called once per round from `resolve_round` for every participant with an active Bleeding-Out condition. Each round the character rolls a stage resist check; failure advances the stage. Failure at the terminal stage calls `_mark_dead`, writing `life_state=DEAD`.
+- **`FoundationalCapability` constants and `CapabilityType.innate_baseline`** — `conditions.constants` defines `FoundationalCapability.AWARENESS` (and stubs for MOBILITY / COGNITION). `CapabilityType.innate_baseline` is the per-type default value when no explicit derivation row exists. `get_effective_capability_value` sums innate_baseline + derivation rows + active condition effects.
+- **`TechniqueCapabilityRequirement` + `technique_performable`** — per-technique capability requirements (`Technique` FK + `CapabilityType` FK + `minimum_value`). `technique_performable(character, technique)` returns False when any requirement is unmet. `declare_action` and `_get_performable_techniques` gate on this.
+- **Combat eligibility rewired** — `declare_action` raises if `can_act` is False. `_get_combat_participants_who_can_act` filters to participants where can_act is True. `_check_encounter_completion` uses can_act (not status) to determine whether all PCs are down.
+
+**Known follow-ups:**
+- **Consequence-pool reconciliation** — the `consequence_pool` FK on `CombatOpponent` / the C-tier pool plumbing for encounter outcomes is tracked in #560/#561.
+- **Frontend status surface** — the `derive_character_status` wire label is a placeholder. The richer condition-aware status surface (showing Unconscious / Bleeding-Out / other conditions to the player) is tracked in #521/#522.
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
@@ -553,7 +570,7 @@ integration test suite.
 - **Relationship modifier integration** — romance bonuses, rivalry intensity, party bond effects
 - **Audere Majora trigger conditions** — health thresholds feeding into Audere system
 - **Combo content authoring** — staff tools for creating/testing combo definitions
-- **Knockout/death roll services** — actual rolls using eligibility flags from damage resolution
+- **Knockout/death roll services** — DONE in Phase 8: `process_damage_consequences` applies Unconscious/Bleeding-Out conditions via `perform_check` on threshold failures. Permanent wound routing remains stubbed pending content authoring
 - **Permanent wound application** — connect permanent_wound_eligible to ConditionTemplate instances
 - **Combat UI carry-forward** — see Unified Combat UI section above for the known remaining items
 

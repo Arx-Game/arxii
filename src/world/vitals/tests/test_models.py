@@ -5,7 +5,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import (
     WOUND_DESCRIPTIONS,
-    CharacterStatus,
+    CharacterLifeState,
 )
 from world.vitals.models import CharacterVitals
 
@@ -13,25 +13,24 @@ from world.vitals.models import CharacterVitals
 class CharacterVitalsTests(TestCase):
     """Tests for CharacterVitals model."""
 
-    def test_create_vitals_default_status(self) -> None:
+    def test_create_vitals_default_life_state(self) -> None:
         sheet = CharacterSheetFactory()
         vitals = CharacterVitals.objects.create(character_sheet=sheet)
-        self.assertEqual(vitals.status, CharacterStatus.ALIVE)
+        self.assertEqual(vitals.life_state, CharacterLifeState.ALIVE)
         self.assertIsNone(vitals.died_at)
-        self.assertIsNone(vitals.unconscious_at)
 
-    def test_str_includes_sheet_and_status(self) -> None:
+    def test_str_includes_sheet_and_life_state(self) -> None:
         sheet = CharacterSheetFactory()
         vitals = CharacterVitals.objects.create(character_sheet=sheet)
         result = str(vitals)
         self.assertIn(str(sheet), result)
         self.assertIn("Alive", result)
 
-    def test_str_with_dead_status(self) -> None:
+    def test_str_with_dead_life_state(self) -> None:
         sheet = CharacterSheetFactory()
         vitals = CharacterVitals.objects.create(
             character_sheet=sheet,
-            status=CharacterStatus.DEAD,
+            life_state=CharacterLifeState.DEAD,
         )
         self.assertIn("Dead", str(vitals))
 
@@ -80,10 +79,6 @@ class CharacterVitalsHealthTests(TestCase):
         vitals = CharacterVitals.objects.create(character_sheet=self.sheet)
         assert vitals.health == 0
         assert vitals.max_health == 0
-
-    def test_dying_final_round_default(self) -> None:
-        vitals = CharacterVitals.objects.create(character_sheet=self.sheet)
-        assert vitals.dying_final_round is False
 
     def test_health_percentage_normal(self) -> None:
         vitals = CharacterVitals(health=75, max_health=100)

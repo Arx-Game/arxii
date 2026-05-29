@@ -33,7 +33,6 @@ from world.combat.services import (
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -157,7 +156,6 @@ class SelectNpcActionsTest(TestCase):
             character_sheet=self.participant.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
     def test_selects_action_for_each_opponent(self) -> None:
@@ -212,7 +210,6 @@ class SelectNpcActionsTest(TestCase):
             character_sheet=cooldown_participant.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
         CombatOpponentAction.objects.create(
@@ -242,7 +239,6 @@ class DeclareActionTest(TestCase):
             character_sheet=self.participant.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         self.technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type)
         self.opponent = CombatOpponentFactory(encounter=self.encounter)
@@ -274,11 +270,25 @@ class DeclareActionTest(TestCase):
             )
 
     def test_declare_action_unconscious_participant(self) -> None:
-        """Raises ValueError if participant is UNCONSCIOUS."""
-        vitals = CharacterVitals.objects.get(character_sheet=self.participant.character_sheet)
-        vitals.status = CharacterStatus.UNCONSCIOUS
-        vitals.save(update_fields=["status"])
-        with self.assertRaises(ValueError, msg="character status"):
+        """Raises ValueError if the participant cannot act (Unconscious → awareness 0).
+
+        Eligibility now gates on can_act (awareness capability), not the removed
+        vitals.status field. Applying an Unconscious condition that zeroes the
+        AWARENESS capability is the canonical incapacitation path.
+        """
+        from world.conditions.constants import FoundationalCapability
+        from world.conditions.factories import (
+            CapabilityTypeFactory,
+            ConditionCapabilityEffectFactory,
+            UnconsciousConditionFactory,
+        )
+        from world.conditions.services import apply_condition
+
+        awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
+        condition = UnconsciousConditionFactory()
+        ConditionCapabilityEffectFactory(condition=condition, capability=awareness, value=-100)
+        apply_condition(target=self.participant.character_sheet.character, condition=condition)
+        with self.assertRaisesRegex(ValueError, "dead or incapacitated"):
             declare_action(
                 self.participant,
                 focused_action=self.technique,

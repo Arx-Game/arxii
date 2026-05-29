@@ -53,6 +53,7 @@ from world.magic.models import (
     Technique,
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
+    TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
     TechniqueOutcomeModifier,
     TechniqueStyle,
@@ -273,6 +274,17 @@ class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     base_value = 5
     intensity_multiplier = Decimal("1.0")
+
+
+class TechniqueCapabilityRequirementFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueCapabilityRequirement."""
+
+    class Meta:
+        model = TechniqueCapabilityRequirement
+
+    technique = factory.SubFactory(TechniqueFactory)
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    minimum_value = 1
 
 
 class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
