@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select';
 
 import {
+  useMissionGivers,
   usePredicateLeaves,
   type PredicateLeaf,
   type PredicateLeafParam,
@@ -413,6 +414,21 @@ function LeafView({
             // each with their own requirements_override).
             const inputId = `${builderId}-leaf-${value.leaf}-${p.name}`;
             const raw = value.params[p.name];
+            // Special-case params that reference a giver by PK — render a
+            // name-bearing picker instead of a bare number input so authors
+            // see who they're referencing (issue #577).
+            if (p.name === 'giver_id') {
+              return (
+                <GiverIdParamPicker
+                  key={p.name}
+                  id={inputId}
+                  paramName={p.name}
+                  paramType={p.type}
+                  value={raw}
+                  onChange={(next) => setParam(p.name, next)}
+                />
+              );
+            }
             const display = raw === undefined || raw === null ? '' : String(raw);
             return (
               <div key={p.name}>
@@ -430,6 +446,50 @@ function LeafView({
           })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function GiverIdParamPicker({
+  id,
+  paramName,
+  paramType,
+  value,
+  onChange,
+}: {
+  id: string;
+  paramName: string;
+  paramType: PredicateParamType;
+  value: unknown;
+  onChange: (next: string) => void;
+}) {
+  // useMissionGivers returns the cached first page. If the dataset ever
+  // grows past one page we can swap to a search-as-you-type input; not
+  // worth the complexity today.
+  const { data, isLoading, isError } = useMissionGivers();
+  const givers = data?.results ?? [];
+  const current = value === undefined || value === null ? '' : String(value);
+  return (
+    <div>
+      <Label className="text-xs" htmlFor={id}>
+        {paramName} <span className="text-muted-foreground">({paramType})</span>
+      </Label>
+      <Select value={current} onValueChange={(v) => onChange(v)}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder={isLoading ? 'Loading givers…' : 'Pick a giver…'} />
+        </SelectTrigger>
+        <SelectContent>
+          {isError ? (
+            <div className="px-2 py-1 text-xs text-destructive">Failed to load givers.</div>
+          ) : (
+            givers.map((g) => (
+              <SelectItem key={g.id} value={String(g.id)}>
+                {g.name} <span className="text-muted-foreground">(#{g.id})</span>
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
