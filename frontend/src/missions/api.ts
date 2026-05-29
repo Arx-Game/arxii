@@ -28,13 +28,37 @@ import type {
 const BASE_URL = '/api/missions';
 
 export class ApiValidationError extends Error {
-  readonly fieldErrors: Record<string, string[]>;
+  readonly fieldErrors: Record<string, unknown>;
   constructor(detail: unknown) {
     super('Validation error');
     this.name = 'ApiValidationError';
     this.fieldErrors =
-      typeof detail === 'object' && detail !== null ? (detail as Record<string, string[]>) : {};
+      typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>) : {};
   }
+}
+
+/**
+ * Recursively flatten a DRF error shape into a single readable string.
+ *
+ * DRF can return deeply nested error bodies (e.g. nested serializer errors,
+ * list-of-object errors). This collapses them into a human-readable sentence.
+ * Used by CreateMissionPage and StaffActionsCard to surface API errors inline.
+ */
+export function flattenErrorMessage(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const flat = value.map(flattenErrorMessage).filter(Boolean);
+    return flat.length > 0 ? flat[0] : '';
+  }
+  if (value !== null && typeof value === 'object') {
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(value)) {
+      const sub = flattenErrorMessage(v);
+      if (sub) parts.push(`${k}: ${sub}`);
+    }
+    return parts.join('; ');
+  }
+  return String(value);
 }
 
 function buildQueryString(params: object): string {
@@ -76,11 +100,7 @@ export async function patchMissionTemplate(
   });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof detail === 'object' && detail !== null
-        ? JSON.stringify(detail)
-        : 'Failed to update template'
-    );
+    throw new ApiValidationError(detail);
   }
   return res.json();
 }

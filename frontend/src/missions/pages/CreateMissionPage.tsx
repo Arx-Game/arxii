@@ -30,7 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { CategoryMultiSelect } from '../components/CategoryMultiSelect';
 import { useCreateMissionTemplate } from '../queries';
-import { ApiValidationError } from '../api';
+import { ApiValidationError, flattenErrorMessage } from '../api';
 import type { ArcScope, AccessTier } from '../types';
 import type { components } from '@/generated/api';
 
@@ -54,23 +54,6 @@ const ACCESS_TIERS: { value: AccessTier; label: string }[] = [
   { value: 'staff_only', label: 'Staff only (draft)' },
   { value: 'open', label: 'Open' },
 ];
-
-function flattenErrorMessage(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    const flat = value.map(flattenErrorMessage).filter(Boolean);
-    return flat.length > 0 ? flat[0] : '';
-  }
-  if (value !== null && typeof value === 'object') {
-    const parts: string[] = [];
-    for (const [k, v] of Object.entries(value)) {
-      const sub = flattenErrorMessage(v);
-      if (sub) parts.push(`${k}: ${sub}`);
-    }
-    return parts.join('; ');
-  }
-  return String(value);
-}
 
 function cooldownToISO(amount: number, unit: CooldownUnit): string {
   if (unit === 'hours') return `PT${amount}H`;
@@ -121,6 +104,10 @@ export function CreateMissionPage() {
       }
     }
 
+    if (!name.trim() || !summary.trim()) {
+      setLocalError('Name and summary are required.');
+      return;
+    }
     if (levelMin > levelMax) {
       setLocalError('Level band min cannot exceed max.');
       return;
@@ -213,6 +200,7 @@ export function CreateMissionPage() {
             <Input
               id="field-level-band-min"
               type="number"
+              min={1}
               value={levelMin}
               onChange={(e) => setLevelMin(Number(e.target.value))}
             />
@@ -221,6 +209,7 @@ export function CreateMissionPage() {
             <Input
               id="field-level-band-max"
               type="number"
+              min={1}
               value={levelMax}
               onChange={(e) => setLevelMax(Number(e.target.value))}
             />
@@ -229,6 +218,7 @@ export function CreateMissionPage() {
             <Input
               id="field-risk-tier"
               type="number"
+              min={1}
               value={riskTier}
               onChange={(e) => setRiskTier(Number(e.target.value))}
             />
@@ -237,6 +227,7 @@ export function CreateMissionPage() {
             <Input
               id="field-base-weight"
               type="number"
+              min={1}
               value={baseWeight}
               onChange={(e) => setBaseWeight(Number(e.target.value))}
             />
@@ -259,6 +250,8 @@ export function CreateMissionPage() {
             <Input
               id="field-percent-replace"
               type="number"
+              min={0}
+              max={100}
               value={percentReplace}
               onChange={(e) => setPercentReplace(Number(e.target.value))}
             />
@@ -267,6 +260,7 @@ export function CreateMissionPage() {
             <Input
               id="field-cooldown-amount"
               type="number"
+              min={1}
               value={cooldownAmount}
               onChange={(e) => setCooldownAmount(Number(e.target.value))}
             />
