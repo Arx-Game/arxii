@@ -104,6 +104,10 @@ export function CreateMissionPage() {
       }
     }
 
+    if (!name.trim() || !summary.trim()) {
+      setLocalError('Name and summary are required.');
+      return;
+    }
     if (levelMin > levelMax) {
       setLocalError('Level band min cannot exceed max.');
       return;
@@ -196,6 +200,7 @@ export function CreateMissionPage() {
             <Input
               id="field-level-band-min"
               type="number"
+              min={1}
               value={levelMin}
               onChange={(e) => setLevelMin(Number(e.target.value))}
             />
@@ -204,6 +209,7 @@ export function CreateMissionPage() {
             <Input
               id="field-level-band-max"
               type="number"
+              min={1}
               value={levelMax}
               onChange={(e) => setLevelMax(Number(e.target.value))}
             />
@@ -212,6 +218,7 @@ export function CreateMissionPage() {
             <Input
               id="field-risk-tier"
               type="number"
+              min={1}
               value={riskTier}
               onChange={(e) => setRiskTier(Number(e.target.value))}
             />
@@ -220,6 +227,7 @@ export function CreateMissionPage() {
             <Input
               id="field-base-weight"
               type="number"
+              min={1}
               value={baseWeight}
               onChange={(e) => setBaseWeight(Number(e.target.value))}
             />
@@ -242,6 +250,8 @@ export function CreateMissionPage() {
             <Input
               id="field-percent-replace"
               type="number"
+              min={0}
+              max={100}
               value={percentReplace}
               onChange={(e) => setPercentReplace(Number(e.target.value))}
             />
@@ -250,6 +260,7 @@ export function CreateMissionPage() {
             <Input
               id="field-cooldown-amount"
               type="number"
+              min={1}
               value={cooldownAmount}
               onChange={(e) => setCooldownAmount(Number(e.target.value))}
             />
