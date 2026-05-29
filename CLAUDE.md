@@ -81,6 +81,20 @@ All `arx` commands below require the venv to be activated, or must be prefixed w
 - `pnpm typecheck` - Run TypeScript type checking
 - `just gen-api-types` - Regenerate OpenAPI schema (`src/schema.json`) and frontend TypeScript API types (`frontend/src/generated/api.d.ts`)
 
+**Important: `pnpm build` must always chain `collectstatic`.** `pnpm build`
+writes hashed assets to `src/web/static/dist/`. Django serves static files
+from `src/server/.static/`, populated by `arx manage collectstatic`. Without
+that step, the freshly-built HTML points at hashes the server 404s on —
+symptom is a blank page with console 404s for `index-*.js` / `index-*.css`.
+
+`frontend/package.json` has a `postbuild` script that auto-chains
+`collectstatic --noinput` after every `pnpm build` (covers `just fe-build`,
+CI, etc.). If you ever see blank-page-with-404 symptoms, check whether the
+postbuild ran (the `pnpm build` output should end with a
+`static files copied to .../src/server/.static` line). If someone disabled
+the postbuild or runs `tsc -b && vite build` directly bypassing pnpm
+scripts, reinstate the chain.
+
 ### Integration Testing
 - `arx integration-test` - Automated integration test environment (highly automated!)
   - Requires `ALLOW_INTEGRATION_TESTS=true` in `src/.env` (safety check)
@@ -376,6 +390,34 @@ Key Django requirements:
 - All ViewSets must have filters, pagination, and permission classes
 - Use FactoryBoy for all test data with `setUpTestData` for performance
 - Focus tests on application logic, not Django built-in functionality
+
+**FactoryBoy gotcha: `django_get_or_create` silently drops non-lookup
+kwargs.** When a `DjangoModelFactory` declares
+`Meta.django_get_or_create = ("lookup_field",)` AND the row already
+exists at create time, factory_boy returns the existing row and
+**never applies any non-lookup kwargs you passed**. Example: if
+something upstream (Evennia signal, `at_object_creation` hook,
+fixture) already created the row, `FooFactory(name="X", color="red")`
+returns the existing row with the existing color, not `red`. The bug
+is invisible unless a test asserts on the dropped field.
+
+When the underlying row may pre-exist via signals/hooks, override
+`_create` to apply non-lookup kwargs after the lookup:
+
+```python
+@classmethod
+def _create(cls, model_class, *args, **kwargs):
+    lookup_field = "objectdb"  # or whichever lookup field the factory uses
+    lookup_value = kwargs.pop(lookup_field)
+    instance, created = model_class.objects.get_or_create(
+        **{lookup_field: lookup_value}, defaults=kwargs,
+    )
+    if not created and kwargs:
+        for field, value in kwargs.items():
+            setattr(instance, field, value)
+        instance.save()
+    return instance
+```
 
 ### ViewSet & API Design
 - **Separate ViewSet for related model CRUD**: Custom actions on a ViewSet should operate on that ViewSet's own model (e.g., lifecycle transitions). If an action does create/read/update/delete on a *different* model, extract it into its own ViewSet with proper serializers and filters. Example: invitation CRUD belongs in an `EventInvitationViewSet`, not as custom actions on `EventViewSet`

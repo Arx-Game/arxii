@@ -60,6 +60,10 @@ broken regardless of technical correctness.
   and responsive layouts. Don't design around text-command-and-response patterns. Let telnet
   support follow where it can.
 
+For the day-to-day rules that flow from these pillars — player respect
+hard rules, cooperative-RP constraints, risk visibility, GM authority
+limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
+
 ## System Domains
 
 | Domain | Status | Summary |
