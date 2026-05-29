@@ -37,7 +37,7 @@ CharacterSheet.DoesNotExist loudly rather than silently gate.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from evennia.objects.models import ObjectDB
 
@@ -45,6 +45,14 @@ from world.missions.types import LeafRegistry, LeafResolver, PredicateContext, R
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
+
+
+# Semantic type aliases for predicate-leaf params. The catalog endpoint
+# reads the Annotated metadata to give the frontend builder enough info
+# to render a domain-aware widget (e.g. a giver picker) instead of a
+# bare number input. Keep these wrapping plain primitives so the resolver
+# bodies stay typed in terms of the runtime type.
+GiverId = Annotated[int, "giver_id"]
 
 # Rule-tree schema keys (the sanctioned dynamic-JSON case — these name the
 # structural keys of the AND/OR/NOT tree, not free-form identifiers).
@@ -224,32 +232,34 @@ def _resolve_has_skill(ctx: ResolverContext, *, skill: str) -> bool:
     return ctv is not None and ctv.value > 0
 
 
-def _resolve_min_giver_standing(ctx: ResolverContext, *, giver: str, min_affection: int) -> bool:
-    """True if the character's standing with the named giver is >= ``min_affection``.
+def _resolve_min_giver_standing(ctx: ResolverContext, *, giver_id: int, min_affection: int) -> bool:
+    """True if the character's standing with the giver (by PK) is >= ``min_affection``.
 
-    ``giver`` is the ``MissionGiver.name``. Standing is the giver's
-    affection toward the character. No standing row means affection is
-    implicitly 0. An unknown giver name fails closed (returns False).
+    ``giver_id`` is the ``MissionGiver`` primary key. Standing is the
+    giver's affection toward the character. No standing row means
+    affection is implicitly 0. An unknown giver id fails closed
+    (returns False). PK-keyed so giver renames don't silently break
+    authored predicate rules.
     """
     from world.missions.models import MissionGiverStanding  # noqa: PLC0415
 
     standing = (
-        MissionGiverStanding.objects.filter(giver__name=giver, character=ctx.character)
+        MissionGiverStanding.objects.filter(giver_id=giver_id, character=ctx.character)
         .values_list("affection", flat=True)
         .first()
     )
     if standing is None:
-        if not _giver_exists(giver):
+        if not _giver_exists(giver_id):
             return False
         return min_affection <= 0
     return standing >= min_affection
 
 
-def _giver_exists(name: str) -> bool:
-    """Internal helper: True if a MissionGiver with this name exists."""
+def _giver_exists(giver_id: int) -> bool:
+    """Internal helper: True if a MissionGiver with this PK exists."""
     from world.missions.models import MissionGiver  # noqa: PLC0415
 
-    return MissionGiver.objects.filter(name=name).exists()
+    return MissionGiver.objects.filter(pk=giver_id).exists()
 
 
 def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:
