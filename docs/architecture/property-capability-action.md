@@ -1079,7 +1079,7 @@ separate instances in each room.
 **The `world/attempts` app** (`AttemptTemplate`, `AttemptConsequence`,
 `resolve_attempt()`) was speculative infrastructure with no callers
 outside its own app. Its patterns (weighted consequence selection,
-character loss protection) have been absorbed into Challenge resolution.
+character-loss outcome filtering) have been absorbed into Challenge resolution.
 The app has been removed.
 
 **The `world/obstacles` app** is a working but specialized implementation

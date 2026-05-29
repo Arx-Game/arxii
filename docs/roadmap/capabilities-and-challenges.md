@@ -438,7 +438,7 @@ Built capability and challenge content layer exercising the full pipeline end-to
 
 These need resolution before or during implementation of later phases:
 
-1. ~~**Consequence randomization**~~ — RESOLVED. Yes, weighted randomization. The generic consequence pipeline uses `select_weighted()` with per-consequence weights within each outcome tier. Character loss filtering provides safety. Roulette display data is built by callers via `build_outcome_display()`.
+1. ~~**Consequence randomization**~~ — RESOLVED. Yes, weighted randomization. The generic consequence pipeline uses `select_weighted()` with per-consequence weights within each outcome tier; outcome-display data is built by callers via `build_outcome_display()` from the full resolved pool.
 2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
 3. ~~**Difficulty tuning**~~ — RESOLVED. Rank-based calculation via `preview_check_difficulty()`. Uses the same CheckRank pipeline as actual checks. IMPOSSIBLE filtering hides actions where the ResultChart has no success outcomes.
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
