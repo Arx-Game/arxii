@@ -15,7 +15,10 @@ and ``checks.Consequence``; this app introduces no new check or consequence
 models.
 """
 
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -116,7 +119,10 @@ class MissionTemplate(SharedMemoryModel):
         default=0,
         help_text="Percent chance this template replaces an existing offer (0-100).",
     )
-    cooldown = models.DurationField(help_text="Per-giver re-offer cooldown.")
+    cooldown = models.DurationField(
+        validators=[MinValueValidator(timedelta(0))],
+        help_text="Per-giver re-offer cooldown. Must be non-negative.",
+    )
     reward_group_rule = models.CharField(
         max_length=16,
         choices=RewardGroupRule.choices,

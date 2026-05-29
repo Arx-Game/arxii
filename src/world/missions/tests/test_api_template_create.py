@@ -111,6 +111,26 @@ class MissionTemplateCreateTests(TestCase):
         res = self.client.post(URL, self._valid_body(percent_replace=100), format="json")
         self.assertEqual(res.status_code, 201, res.content)
 
+    def test_rejects_negative_cooldown(self) -> None:
+        """ISO 8601 accepts a leading sign — guard at the validator layer."""
+        res = self.client.post(URL, self._valid_body(cooldown="-P1D"), format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertIn("cooldown", res.json())
+
+    def test_accepts_zero_cooldown(self) -> None:
+        """Zero-duration cooldown is the boundary — must be accepted."""
+        res = self.client.post(
+            URL, self._valid_body(name="zero-cooldown", cooldown="P0D"), format="json"
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+
+    def test_accepts_positive_cooldown(self) -> None:
+        """Regression — normal positive cooldowns still accepted after the validator."""
+        res = self.client.post(
+            URL, self._valid_body(name="positive-cooldown", cooldown="P7D"), format="json"
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+
 
 class MissionTemplatePatchRenameTests(TestCase):
     """PATCH /api/missions/templates/<pk>/ rename collision behavior.
