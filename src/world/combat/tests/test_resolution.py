@@ -1,6 +1,6 @@
 """Tests for the resolution order service."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.combat.constants import (
     ENTITY_TYPE_NPC,
@@ -13,8 +13,17 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.services import get_resolution_order
+from world.conditions.constants import FoundationalCapability
+from world.conditions.factories import (
+    BleedingOutConditionFactory,
+    CapabilityTypeFactory,
+    ConditionCapabilityEffectFactory,
+    ConditionStageFactory,
+    UnconsciousConditionFactory,
+)
+from world.conditions.services import apply_condition
 from world.covenants.factories import CovenantRoleFactory
-from world.vitals.constants import CharacterStatus
+from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
 
 
@@ -35,7 +44,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=pc.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -55,7 +63,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=pc.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
         order = get_resolution_order(self.encounter)
@@ -65,7 +72,7 @@ class GetResolutionOrderTest(TestCase):
         self.assertEqual(order[1], (ENTITY_TYPE_PC, pc))
 
     def test_unconscious_pcs_excluded(self) -> None:
-        """Unconscious PC not in resolution order."""
+        """Unconscious PC (awareness 0 → cannot act) not in resolution order."""
         pc = CombatParticipantFactory(
             encounter=self.encounter,
         )
@@ -73,8 +80,12 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=pc.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.UNCONSCIOUS,
         )
+        # Unconscious zeroes the foundational AWARENESS capability → can_act False.
+        awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
+        unconscious = UnconsciousConditionFactory()
+        ConditionCapabilityEffectFactory(condition=unconscious, capability=awareness, value=-100)
+        apply_condition(target=pc.character_sheet.character, condition=unconscious)
         npc = CombatOpponentFactory(encounter=self.encounter)
 
         order = get_resolution_order(self.encounter)
@@ -83,7 +94,7 @@ class GetResolutionOrderTest(TestCase):
         self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
 
     def test_dead_pcs_excluded(self) -> None:
-        """Dead PC not in resolution order."""
+        """Dead PC (life_state=DEAD) not in resolution order."""
         pc = CombatParticipantFactory(
             encounter=self.encounter,
         )
@@ -91,7 +102,7 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=pc.character_sheet,
             health=0,
             max_health=100,
-            status=CharacterStatus.DEAD,
+            life_state=CharacterLifeState.DEAD,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -100,8 +111,15 @@ class GetResolutionOrderTest(TestCase):
         self.assertEqual(len(order), 1)
         self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
 
-    def test_dying_pc_with_final_round_included(self) -> None:
-        """Dying PC with dying_final_round=True IS included."""
+    @tag("postgres")
+    def test_dying_conscious_pc_included(self) -> None:
+        """A dying-but-conscious PC (Bleeding-Out, awareness intact) IS included.
+
+        Bleeding-Out does not impair awareness, so can_act is True and the PC
+        keeps acting — replacing the old DYING + dying_final_round gate.
+        Bleeding-Out is progressive → apply_condition uses PG DISTINCT ON.
+        """
+        CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
         dying_pc = CombatParticipantFactory(
             encounter=self.encounter,
             covenant_role=CovenantRoleFactory(speed_rank=1),
@@ -110,31 +128,18 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=dying_pc.character_sheet,
             health=10,
             max_health=100,
-            status=CharacterStatus.DYING,
-            dying_final_round=True,
+            life_state=CharacterLifeState.ALIVE,
         )
+        bleed_out = BleedingOutConditionFactory()
+        ConditionStageFactory(
+            condition=bleed_out, stage_order=1, name="Bleeding", rounds_to_next=None
+        )
+        apply_condition(target=dying_pc.character_sheet.character, condition=bleed_out)
 
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 1)
         self.assertEqual(order[0], (ENTITY_TYPE_PC, dying_pc))
-
-    def test_dying_pc_without_final_round_excluded(self) -> None:
-        """Dying PC with dying_final_round=False NOT included."""
-        pc = CombatParticipantFactory(
-            encounter=self.encounter,
-        )
-        CharacterVitals.objects.create(
-            character_sheet=pc.character_sheet,
-            health=10,
-            max_health=100,
-            status=CharacterStatus.DYING,
-            dying_final_round=False,
-        )
-
-        order = get_resolution_order(self.encounter)
-
-        self.assertEqual(len(order), 0)
 
     def test_defeated_opponents_excluded(self) -> None:
         """Defeated opponent not in resolution order."""
@@ -150,7 +155,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=pc.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
         order = get_resolution_order(self.encounter)
@@ -168,7 +172,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=slowest.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         fastest = CombatParticipantFactory(
             encounter=self.encounter,
@@ -178,7 +181,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=fastest.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
         middle = CombatParticipantFactory(
             encounter=self.encounter,
@@ -188,7 +190,6 @@ class GetResolutionOrderTest(TestCase):
             character_sheet=middle.character_sheet,
             health=100,
             max_health=100,
-            status=CharacterStatus.ALIVE,
         )
 
         order = get_resolution_order(self.encounter)

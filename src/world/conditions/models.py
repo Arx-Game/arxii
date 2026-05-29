@@ -85,6 +85,14 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    innate_baseline = models.IntegerField(
+        default=0,
+        help_text=(
+            "Default value every character has for this capability before "
+            "modifiers/conditions. Foundational capacities (awareness, movement, "
+            "limb_use) set this >= 1; granted/specialty capabilities leave it 0."
+        ),
+    )
     prerequisite = models.ForeignKey(
         "mechanics.Prerequisite",
         on_delete=models.SET_NULL,

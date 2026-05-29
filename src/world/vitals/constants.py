@@ -11,13 +11,24 @@ from django.db import models
 # ---------------------------------------------------------------------------
 
 
-class CharacterStatus(models.TextChoices):
-    """Current life state of a character."""
+class CharacterLifeState(models.TextChoices):
+    """Mortality axis only. Consciousness/dying live in the conditions system."""
 
     ALIVE = "alive", "Alive"
-    UNCONSCIOUS = "unconscious", "Unconscious"
-    DYING = "dying", "Dying"
     DEAD = "dead", "Dead"
+
+
+# ---------------------------------------------------------------------------
+# Derived wire-status strings
+# ---------------------------------------------------------------------------
+# Coarse, read-only status surface exposed by the combat API. Derived at read
+# time from life_state + active conditions + agency — NOT a persisted field.
+# The richer frontend status surface is tracked by #521/#522.
+
+DERIVED_STATUS_DEAD: str = "dead"
+DERIVED_STATUS_DYING: str = "dying"
+DERIVED_STATUS_INCAPACITATED: str = "incapacitated"
+DERIVED_STATUS_ALIVE: str = "alive"
 
 
 # ---------------------------------------------------------------------------

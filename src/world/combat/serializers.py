@@ -145,13 +145,25 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
 
     def get_character_status(self, obj: CombatParticipant) -> str | None:
-        """Return life status — only if viewer has permission."""
+        """Return a coarse, read-only life status — only if viewer has permission.
+
+        Derived at read time from life_state + active conditions + agency (there
+        is no persisted status field anymore). The richer frontend status surface
+        is tracked by #521/#522.
+        """
         if not self._can_view_vitals(obj):
             return None
+        from world.vitals.services import (  # noqa: PLC0415 — combat→vitals deferred import
+            derive_character_status,
+        )
+
         try:
-            return obj.character_sheet.vitals.status
+            character = obj.character_sheet.character
         except AttributeError:
             return None
+        if character is None:
+            return None
+        return derive_character_status(character)
 
     def get_available_strain(self, obj: CombatParticipant) -> int | None:
         """Return strain budget (anima pool) — only if viewer owns the PC.

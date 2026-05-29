@@ -3,15 +3,16 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterStatus
+from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterLifeState
 
 
 class CharacterVitals(SharedMemoryModel):
-    """Persistent character life state and health tracking.
+    """Persistent character mortality and health tracking.
 
-    Tracks the character's current life status (alive, unconscious, dying, dead)
-    independently of any specific combat encounter. Combat reads and writes
-    health directly on this model.
+    Tracks the character's mortality marker (life_state: alive/dead) and health
+    independently of any specific combat encounter. Consciousness and dying are
+    modeled as conditions (Unconscious, Bleeding Out), not vitals fields. Combat
+    reads and writes health directly on this model.
     """
 
     character_sheet = models.OneToOneField(
@@ -19,20 +20,10 @@ class CharacterVitals(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="vitals",
     )
-    status = models.CharField(
-        max_length=20,
-        choices=CharacterStatus.choices,
-        default=CharacterStatus.ALIVE,
-    )
     died_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text="When the character died (permanent death).",
-    )
-    unconscious_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the character became unconscious.",
     )
     health = models.IntegerField(
         default=0,
@@ -53,13 +44,15 @@ class CharacterVitals(SharedMemoryModel):
             "derives max_health = base_max_health + thread_addend."
         ),
     )
-    dying_final_round = models.BooleanField(
-        default=False,
-        help_text="Whether the character gets one final action before death.",
+    life_state = models.CharField(
+        max_length=10,
+        choices=CharacterLifeState.choices,
+        default=CharacterLifeState.ALIVE,
+        help_text="Mortality axis. Consciousness/dying are conditions, not vitals.",
     )
 
     def __str__(self) -> str:
-        return f"{self.character_sheet} ({self.get_status_display()})"
+        return f"{self.character_sheet} ({self.get_life_state_display()})"
 
     @property
     def health_percentage(self) -> float:

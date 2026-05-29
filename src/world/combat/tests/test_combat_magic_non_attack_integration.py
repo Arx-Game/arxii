@@ -34,7 +34,6 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -59,7 +58,6 @@ def _setup_participant_with_technique(
         character_sheet=sheet,
         health=100,
         max_health=100,
-        status=CharacterStatus.ALIVE,
     )
     anima = CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
     CharacterEngagementFactory(character=sheet.character)
