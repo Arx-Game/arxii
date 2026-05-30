@@ -101,6 +101,13 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
         if os.environ.get("ARX_TEST_TIMING"):
             self._setup_timing()
 
+        # Always-on: align test cache semantics with production. Flushes
+        # SharedMemoryModel's identity map + project-registered caches between
+        # tests so Python-side caches (legitimately persistent in prod) don't
+        # hold stale objects across test-transaction rollbacks. See
+        # ``core.testing`` module docstring for the full rationale.
+        self._setup_cache_flush()
+
     def _setup_timing(self):
         """Set up minimal timing tracking by patching unittest.TestCase."""
         # Store original methods
@@ -132,6 +139,30 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
         # Apply the patch
         unittest.TestCase.run = timed_run
 
+    def _setup_cache_flush(self):
+        """Monkey-patch SimpleTestCase._post_teardown to flush in-memory caches.
+
+        Patches at the SimpleTestCase level so both TestCase and
+        TransactionTestCase inherit the behavior. Idempotent — re-running the
+        patch is a no-op (we stash the original on the class once).
+        """
+        from django.test import SimpleTestCase
+
+        if hasattr(SimpleTestCase, "_arx_original_post_teardown"):
+            return  # already patched
+        SimpleTestCase._arx_original_post_teardown = SimpleTestCase._post_teardown
+
+        def patched_post_teardown(test_self):
+            # User-defined post-teardown runs first so it operates on intact
+            # cache state (any references it grabs are still valid).
+            SimpleTestCase._arx_original_post_teardown(test_self)
+            # Then flush the identity map + registered caches.
+            from core.testing import flush_test_caches
+
+            flush_test_caches()
+
+        SimpleTestCase._post_teardown = patched_post_teardown
+
     def teardown_test_environment(self, **kwargs):
         """Clean up test environment and restore original methods."""
         # Print slowest tests summary if timing was enabled
@@ -142,6 +173,13 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
         if hasattr(unittest.TestCase, "_original_run"):
             unittest.TestCase.run = unittest.TestCase._original_run
             delattr(unittest.TestCase, "_original_run")
+
+        # Restore SimpleTestCase._post_teardown
+        from django.test import SimpleTestCase
+
+        if hasattr(SimpleTestCase, "_arx_original_post_teardown"):
+            SimpleTestCase._post_teardown = SimpleTestCase._arx_original_post_teardown
+            delattr(SimpleTestCase, "_arx_original_post_teardown")
 
         super().teardown_test_environment(**kwargs)
 

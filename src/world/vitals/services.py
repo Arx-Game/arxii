@@ -463,8 +463,9 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
     # than filtering ConditionInstance directly — keeps bleed-out advancement
     # consistent with the rest of the conditions layer when bleed-out suppression
     # becomes an authored mechanic. Issue #601.
-    bleed_out = ConditionTemplate.objects.filter(name=BLEED_OUT_CONDITION_NAME).first()
-    if bleed_out is None:
+    try:
+        bleed_out = ConditionTemplate.get_by_name(BLEED_OUT_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
         return False
     instances = list(
         get_active_conditions(character, condition=bleed_out).select_related(

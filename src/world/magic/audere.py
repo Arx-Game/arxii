@@ -178,7 +178,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     if threshold is None:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
 
-    audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
+    audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
 
     with transaction.atomic():
         # Apply Audere condition
