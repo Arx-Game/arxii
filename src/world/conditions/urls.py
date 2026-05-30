@@ -12,6 +12,7 @@ from world.conditions.views import (
     CapabilityTypeViewSet,
     CharacterConditionsViewSet,
     ConditionCategoryViewSet,
+    ConditionInstanceViewSet,
     ConditionTemplateViewSet,
     DamageTypeViewSet,
 )
@@ -28,6 +29,9 @@ router.register("templates", ConditionTemplateViewSet, basename="condition-templ
 
 # Character conditions (active instances)
 router.register("character", CharacterConditionsViewSet, basename="character-conditions")
+
+# Single condition instance retrieve (deep link target, #551)
+router.register("instances", ConditionInstanceViewSet, basename="condition-instance")
 
 urlpatterns = [
     path("", include(router.urls)),
