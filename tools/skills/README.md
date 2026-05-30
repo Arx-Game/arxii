@@ -55,6 +55,15 @@ Regenerates `docs/systems/MODEL_MAP.md` — an auto-generated map of all
 Django model relationships and service function signatures. Prevents
 expensive codebase searches when working across multiple apps.
 
+### grounding-before-action `[TEMP — HARNESS-BUNDLING-WORKAROUND]`
+
+**Temporary workaround for a Claude Code 2.1.158 regression** where a tool
+result co-emitted in the same assistant message as the call it depends on is
+invisible at compose time, causing the model to confabulate the result and act
+on it. Enforces un-bundling `AskUserQuestion`/result-claims from their tool
+calls and verifying issue number↔title before mutations. **Delete this skill
+when the harness is fixed** — removal manifest + test in GH #647.
+
 ## Updating skills
 
 In the devcontainer or Linux/macOS bare-metal: just edit the files

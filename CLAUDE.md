@@ -10,6 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ambiguous "?" sentences force the user to guess whether they're being asked to respond. When in doubt, no `?` in user-facing text outside of `AskUserQuestion`.
 
+<!-- TEMP HARNESS-BUNDLING-WORKAROUND — remove when GH #647 is resolved -->
+**[TEMP] Ground before you act — load the `grounding-before-action` skill at session start.** Claude Code 2.1.158 has a regression: a tool result emitted in the **same message** as the call it depends on is invisible at compose time, so the model confabulates what it returned and acts on the fiction (caused real erroneous GitHub edits; see `tools/skills/grounding-before-action/`). Until it's patched: never co-emit `AskUserQuestion` (or any sentence stating what a tool returned) with the tool calls it depends on — emit calls, end the turn, observe, then act. Verify issue number↔title before any mutation. This is a **temporary** workaround tracked in **#647** (grep `HARNESS-BUNDLING-WORKAROUND`); delete it when the harness is fixed.
+
 ## Git Workflow
 
 > For end-to-end issue → merged-PR work, see the `issue-to-merged-pr` skill at `tools/skills/issue-to-merged-pr/`. It handles branch creation, PR opening, CI watching, and post-merge cleanup. The conventions below still apply; the skill is built on top of them.
