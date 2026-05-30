@@ -147,10 +147,22 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
 
     @classmethod
     def _build_name_cache(cls) -> None:
-        """Build the name-to-trait mapping cache."""
+        """Build the name-to-trait mapping cache from the database.
+
+        Queries every row once on first use; subsequent ``get_by_name`` calls
+        return from the cache without further queries. The query also primes
+        SharedMemoryModel's identity map as a side effect, so ``objects.get(pk=X)``
+        calls in the same process hit the cache too.
+
+        Previously iterated ``get_all_cached_instances()`` which depends on the
+        identity map being pre-populated — a fragile assumption that fails in
+        tests where the runner flushes the identity map between methods (the
+        cache would rebuild empty, and ``get_by_name`` would return None for
+        every lookup). Querying the DB directly makes this independent of
+        identity-map state.
+        """
         cls._name_to_trait_map = {}
-        # Use SharedMemoryModel's caching to get all traits
-        for trait in cls.get_all_cached_instances():
+        for trait in cls.objects.all():
             cls._name_to_trait_map[trait.name.lower()] = trait
         cls._name_cache_built = True
 

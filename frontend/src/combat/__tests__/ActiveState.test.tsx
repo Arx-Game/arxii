@@ -57,6 +57,8 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
         soak_value: null,
         probing_threshold: null,
         active_conditions: [],
+        thumbnail_url: '',
+        thumbnail_media_url: null,
       },
     ],
     current_round_actions: [],

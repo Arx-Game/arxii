@@ -1025,6 +1025,11 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
     unlock_target_kind = serializers.CharField(source="unlock.target_kind", read_only=True)
     unlock_display_name = serializers.CharField(source="unlock.display_name", read_only=True)
     unlock_xp_cost = serializers.IntegerField(source="unlock.xp_cost", read_only=True)
+    # Anonymity-respecting display from RosterTenure.display_name — e.g. "2nd
+    # player of Ariel". Replaces the raw teacher PK in the UI (#540). Path:
+    # teacher (RosterTenure) → roster_entry → character_sheet → character.
+    # ViewSet's select_related extends through this chain to avoid N+1.
+    teacher_display_name = serializers.CharField(source="teacher.display_name", read_only=True)
     effective_xp_cost_for_viewer = serializers.SerializerMethodField()
 
     class Meta:
@@ -1032,6 +1037,7 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "teacher",
+            "teacher_display_name",
             "unlock",
             "unlock_target_kind",
             "unlock_display_name",

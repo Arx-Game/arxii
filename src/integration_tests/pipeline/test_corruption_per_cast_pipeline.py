@@ -210,14 +210,14 @@ class TestCorruptionPerCastPipeline(TestCase):
         result_base = use_technique(
             character=sheet_base.character,
             technique=technique_base,
-            resolve_fn=lambda: None,
+            resolve_fn=lambda *, power: None,  # noqa: ARG005
         )
 
         # Audere cast
         result_audere = use_technique(
             character=sheet_audere.character,
             technique=technique_audere,
-            resolve_fn=lambda: None,
+            resolve_fn=lambda *, power: None,  # noqa: ARG005
         )
 
         # Both should have accrual results
@@ -282,7 +282,7 @@ class TestCorruptionPerCastPipeline(TestCase):
         result = use_technique(
             character=sheet.character,
             technique=technique,
-            resolve_fn=lambda: None,
+            resolve_fn=lambda *, power: None,  # noqa: ARG005
         )
 
         self.assertIsNotNone(result.corruption_summary)
@@ -361,7 +361,7 @@ class TestCorruptionPerCastPipeline(TestCase):
         result = use_technique(
             character=sheet.character,
             technique=technique,
-            resolve_fn=lambda: None,
+            resolve_fn=lambda *, power: None,  # noqa: ARG005
         )
 
         self.assertIsNotNone(result.corruption_summary)
@@ -426,7 +426,7 @@ class TestCorruptionPerCastPipeline(TestCase):
             use_technique(
                 character=sheet.character,
                 technique=technique,
-                resolve_fn=lambda: None,
+                resolve_fn=lambda *, power: None,  # noqa: ARG005
             )
 
         self.assertIn(

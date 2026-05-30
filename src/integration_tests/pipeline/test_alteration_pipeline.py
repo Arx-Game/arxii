@@ -486,7 +486,7 @@ class AlterationFullPipelineTests(TestCase):
             return use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda: "resolved",
+                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
                 confirm_soulfray_risk=True,
             )
 

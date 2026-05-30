@@ -86,6 +86,8 @@ class OpponentSerializer(serializers.ModelSerializer):
     soak_value = serializers.SerializerMethodField()
     probing_threshold = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    thumbnail_media_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatOpponent
@@ -102,6 +104,8 @@ class OpponentSerializer(serializers.ModelSerializer):
             "current_phase",
             "status",
             "active_conditions",
+            "thumbnail_url",
+            "thumbnail_media_url",
         ]
 
     def _is_gm_or_staff(self) -> bool:
@@ -136,6 +140,28 @@ class OpponentSerializer(serializers.ModelSerializer):
             can_view_hidden=self._is_gm_or_staff(),
             context=self.context,
         )
+
+    def get_thumbnail_url(self, obj: CombatOpponent) -> str | None:
+        """Direct portrait URL, resolved through the opponent's persona.
+
+        Mirrors ``PersonaSerializer.thumbnail_url`` (the persona's
+        ``thumbnail_url`` URLField — ``""`` when unset). Persona-less
+        opponents (``persona=None``) return ``None``.
+        """
+        if obj.persona_id is None:
+            return None
+        return obj.persona.thumbnail_url
+
+    def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
+        """PlayerMedia portrait URL, resolved through the opponent's persona.
+
+        Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
+        linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
+        has no thumbnail (or the opponent has no persona).
+        """
+        if obj.persona_id is None or obj.persona.thumbnail_id is None:
+            return None
+        return obj.persona.thumbnail.cloudinary_url
 
 
 class ParticipantSerializer(serializers.ModelSerializer):

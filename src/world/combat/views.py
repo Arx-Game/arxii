@@ -149,7 +149,9 @@ class CombatEncounterViewSet(ModelViewSet):
             ),
             Prefetch(
                 "opponents",
-                queryset=CombatOpponent.objects.prefetch_related(
+                queryset=CombatOpponent.objects.select_related(
+                    "persona__thumbnail",
+                ).prefetch_related(
                     self._active_conditions_prefetch("objectdb"),
                 ),
                 to_attr="opponents_cached",

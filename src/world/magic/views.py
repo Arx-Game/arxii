@@ -857,6 +857,9 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = ThreadWeavingTeachingOffer.objects.select_related(
         "teacher",
+        # FK chain consumed by ThreadWeavingTeachingOfferSerializer.teacher_display_name
+        # (RosterTenure.display_name walks roster_entry → character_sheet → character).
+        "teacher__roster_entry__character_sheet__character",
         "unlock",
         "unlock__unlock_trait",
         "unlock__unlock_gift",

@@ -173,7 +173,25 @@ class CombatTechniqueResolver:
             fatigue_penalty=penalty,
         )
 
-    def _apply_damage(self, check_result: CheckResult) -> list[OpponentDamageResult]:
+    def _sum_intensity_bump_pulls(self) -> int:
+        """Sum INTENSITY_BUMP scaled_values from active CombatPulls.
+
+        Isolated from compute_effective_intensity so __call__ can combine
+        the injected power (already includes identity modifiers) with the
+        pull-specific bump without double-counting the base technique intensity.
+        """
+        encounter = self.participant.encounter
+        character = self.participant.character_sheet.character
+        pull_bonus = 0
+        for pull in character.combat_pulls.active_for_encounter(encounter):
+            for eff in pull.resolved_effects_cached:
+                if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
+                    pull_bonus += eff.scaled_value
+        return pull_bonus
+
+    def _apply_damage(
+        self, check_result: CheckResult, *, eff_intensity: int
+    ) -> list[OpponentDamageResult]:
         """Iterate technique.damage_profiles. For each profile:
         - skip if SL < minimum_success_level
         - compute formula budget via compute_damage_budget
@@ -203,8 +221,6 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
-        eff_intensity = compute_effective_intensity(self.participant, self.action)
-
         results: list[OpponentDamageResult] = []
         for profile in profiles:
             if sl < profile.minimum_success_level:
@@ -231,6 +247,8 @@ class CombatTechniqueResolver:
     def _apply_conditions(
         self,
         check_result: CheckResult,
+        *,
+        eff_intensity: int,
     ) -> list[AppliedConditionResult]:
         """Apply technique-authored conditions to appropriate targets.
 
@@ -238,6 +256,9 @@ class CombatTechniqueResolver:
         whose minimum_success_level exceeds the check result, resolves each row's
         target_kind to a concrete ObjectDB, computes severity/duration via the row's
         formula methods, and delegates to bulk_apply_conditions for the whole batch.
+
+        ``eff_intensity`` is the combined effective intensity (injected power + pull bumps)
+        computed by ``__call__`` and forwarded here.
         """
         from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
         from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
@@ -248,7 +269,6 @@ class CombatTechniqueResolver:
         if not rows:
             return []
 
-        eff_intensity = compute_effective_intensity(self.participant, self.action)
         caster_od = self.participant.character_sheet.character
 
         bulk_applications: list[BulkConditionApplication] = []
@@ -297,10 +317,20 @@ class CombatTechniqueResolver:
             )
         return out
 
-    def __call__(self) -> CombatTechniqueResolution:
+    def __call__(self, *, power: int) -> CombatTechniqueResolution:
+        """Resolve the combat technique inner step.
+
+        ``power`` is injected by ``use_technique`` after the PRE_CAST envelope
+        (it equals stats.intensity including identity modifiers, and may have
+        been further modified by a pre-cast MODIFY_PAYLOAD hook).  INTENSITY_BUMP
+        pull bonuses from the current round are added on top inside this method
+        so the final effective intensity = power + pull intensity bumps.
+        """
+        pull_intensity = self._sum_intensity_bump_pulls()
+        eff_intensity = power + pull_intensity
         check_result = self._roll_check()
-        damage_results = self._apply_damage(check_result)
-        applied_conditions = self._apply_conditions(check_result)
+        damage_results = self._apply_damage(check_result, eff_intensity=eff_intensity)
+        applied_conditions = self._apply_conditions(check_result, eff_intensity=eff_intensity)
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,

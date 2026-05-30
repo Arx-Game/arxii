@@ -482,6 +482,17 @@ examine-decoration `sections` on the mutable `ExaminePrePayload` + render-back i
 (scar presence-escalation), and wiring `TriggerHandler.reset_scene_counts` to a
 scene-boundary event.
 
+**Power vs Intensity (epic #633, Issue 0 = #524):** introduced a derived, never-stored
+`power` value distinct from channeled `intensity`. A pre-cast `TECHNIQUE_PRE_CAST`
+`MODIFY_PAYLOAD` on `power` now reaches resolution (the discarded-edit gap is closed);
+combat scales damage/conditions on the injected power (folding in the caster's full
+intensity envelope + pull bumps — front edge of Direction C). Intensity still solely
+drives anima cost, mishap, resonance attribution, and Soulfray (a ward never reduces it).
+Power is recomputed each cast via `_derive_power` (`world/magic/services/techniques.py`);
+later issues #634-#639 add modifier/level/thread/aura/Audere terms, the persistent-buff
+surface, Direction-C consolidation, and the Direction-B pipeline. Research +
+candidate-directions report: `docs/superpowers/specs/2026-05-30-power-intensity-research-report.md`.
+
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
 half a feature, and every later system that wants reactive behavior is blocked

@@ -1,18 +1,206 @@
 """Tests for use_technique orchestrator."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
+from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.checks.factories import CheckTypeFactory
+from world.conditions.factories import ReactiveConditionFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
     TechniqueFactory,
 )
 from world.magic.services import use_technique
+from world.magic.services.techniques import get_runtime_technique_stats
 from world.magic.types import TechniqueUseResult
 from world.mechanics.factories import CharacterEngagementFactory
 from world.traits.factories import CheckOutcomeFactory
+
+
+class DerivePowerTests(TestCase):
+    """Test the _derive_power helper."""
+
+    def test_derive_power_equals_channeled_intensity_in_pr1(self) -> None:
+        from world.magic.services.techniques import _derive_power
+
+        self.assertEqual(_derive_power(channeled_intensity=7, technique=None, character=None), 7)
+
+
+# ---------------------------------------------------------------------------
+# Pre-cast MODIFY_PAYLOAD power read-back
+# ---------------------------------------------------------------------------
+
+SELF_FILTER = {"path": "caster", "op": "==", "value": "self"}
+
+
+def _create_room(key: str = "PowerTestRoom") -> ObjectDB:
+    return ObjectDB.objects.create(
+        db_key=key,
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+
+
+def _make_multiply_power_flow(factor: float) -> object:
+    """Return a FlowDefinition with a MODIFY_PAYLOAD step that multiplies power."""
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        parent_id=None,
+        action=FlowActionChoices.MODIFY_PAYLOAD,
+        parameters={"field": "power", "op": "multiply", "value": factor},
+    )
+    return flow
+
+
+class PreCastPowerReadBackTests(TestCase):
+    """A pre-cast MODIFY_PAYLOAD on power is read back into resolve_fn and CAST/AFFECTED."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # intensity=10 so 10 * 0.5 = 5.0 — avoids fractional truncation ambiguity
+        cls.technique = TechniqueFactory(intensity=10, control=15, anima_cost=3)
+
+    def setUp(self) -> None:
+        self.room = _create_room("PreCastPowerRoom")
+        self.anima = CharacterAnimaFactory(current=20, maximum=20)
+        self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
+        self.character.location = self.room
+
+    def test_resolve_fn_receives_halved_power(self) -> None:
+        """Pre-cast trigger multiplies power by 0.5; resolver receives halved value."""
+        half_flow = _make_multiply_power_flow(0.5)
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=SELF_FILTER,
+            flow_definition=half_flow,
+            target=self.character,
+        )
+        self.character.trigger_handler._populated = False
+
+        expected_runtime_intensity = get_runtime_technique_stats(
+            self.technique, self.character
+        ).intensity
+        # MODIFY_PAYLOAD multiply does not truncate to int; use numeric equality
+        expected_power = expected_runtime_intensity * 0.5
+
+        captured: dict[str, object] = {}
+
+        def spy(*, power: int) -> SimpleNamespace:
+            captured["power"] = power
+            return SimpleNamespace(check_result=None)
+
+        use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=spy,
+        )
+
+        self.assertIn("power", captured)
+        self.assertEqual(captured["power"], expected_power)
+
+    def test_resolve_fn_receives_power_kwarg(self) -> None:
+        """resolve_fn must be called with power as a keyword argument."""
+        captured: dict[str, object] = {}
+
+        def spy(*, power: int) -> SimpleNamespace:
+            captured["power"] = power
+            return SimpleNamespace(check_result=None)
+
+        use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=spy,
+        )
+
+        self.assertIn("power", captured)
+
+
+class PreCastModifyPowerInvariantTests(TestCase):
+    """A pre-cast MODIFY_PAYLOAD on power must NOT affect caster-side outputs.
+
+    power is a downstream scaling hint for the resolve_fn; the cost/mishap/soulfray
+    path runs on channeled_intensity, which is fixed before the PRE_CAST hook fires.
+    These tests prove the invariant by running use_technique with and without a
+    ward that halves power and asserting that caster-side outputs are identical.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(
+            intensity=5,
+            control=10,
+            anima_cost=3,
+        )
+
+    def _run_with_ward(self, *, with_ward: bool) -> "tuple[int, object, object]":
+        """Return (anima_delta, was_mishap, soulfray_result) for one use_technique call."""
+        room = _create_room(f"InvariantRoom{'Ward' if with_ward else 'Control'}")
+        anima = CharacterAnimaFactory(current=20, maximum=20)
+        character = anima.character
+        CharacterEngagementFactory(character=character)
+        character.location = room
+
+        if with_ward:
+            half_flow = _make_multiply_power_flow(0.5)
+            ReactiveConditionFactory(
+                event_name=EventName.TECHNIQUE_PRE_CAST,
+                filter_condition=SELF_FILTER,
+                flow_definition=half_flow,
+                target=character,
+            )
+            character.trigger_handler._populated = False
+
+        def spy(*, power: int) -> SimpleNamespace:
+            return SimpleNamespace(check_result=None)
+
+        result = use_technique(
+            character=character,
+            technique=self.technique,
+            resolve_fn=spy,
+        )
+
+        anima.refresh_from_db()
+        anima_delta = 20 - anima.current
+        soulfray_severity = (
+            result.soulfray_result.severity_added if result.soulfray_result is not None else None
+        )
+        return anima_delta, result.was_mishap, soulfray_severity
+
+    def test_power_ward_does_not_change_anima_cost(self) -> None:
+        """Pre-cast power *= 0.5 must not change the anima deducted."""
+        delta_control, _, _ = self._run_with_ward(with_ward=False)
+        delta_ward, _, _ = self._run_with_ward(with_ward=True)
+        self.assertEqual(
+            delta_control,
+            delta_ward,
+            "Anima delta must be identical with and without a pre-cast power modifier.",
+        )
+
+    def test_power_ward_does_not_change_mishap_flag(self) -> None:
+        """Pre-cast power *= 0.5 must not change was_mishap."""
+        _, mishap_control, _ = self._run_with_ward(with_ward=False)
+        _, mishap_ward, _ = self._run_with_ward(with_ward=True)
+        self.assertEqual(
+            mishap_control,
+            mishap_ward,
+            "was_mishap must be identical with and without a pre-cast power modifier.",
+        )
+
+    def test_power_ward_does_not_change_soulfray_severity(self) -> None:
+        """Pre-cast power *= 0.5 must not change soulfray severity (both None here)."""
+        _, _, soulfray_control = self._run_with_ward(with_ward=False)
+        _, _, soulfray_ward = self._run_with_ward(with_ward=True)
+        self.assertEqual(
+            soulfray_control,
+            soulfray_ward,
+            "Soulfray severity must be identical with and without a pre-cast power modifier.",
+        )
 
 
 class UseTechniqueBasicTests(TestCase):
@@ -241,7 +429,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda: mock_resolution,
+            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005 — power is future seam
             confirm_soulfray_risk=True,
         )
 
@@ -292,7 +480,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda: mock_resolution,
+            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005 — power is future seam
             confirm_soulfray_risk=True,
         )
 
