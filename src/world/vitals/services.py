@@ -38,8 +38,6 @@ from world.vitals.types import DamageConsequenceResult
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from evennia.objects.models import ObjectDB
-
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
@@ -48,28 +46,31 @@ if TYPE_CHECKING:
     from world.vitals.models import VitalsConsequenceConfig
 
 
-def is_dead(character: ObjectDB) -> bool:
+def is_dead(character_sheet: CharacterSheet | None) -> bool:
     """Return True if the character's mortality marker is DEAD.
 
-    Returns False when the character has no vitals row (e.g., NPCs not yet
-    set up with health tracking).
+    Accepts the Optional sheet so callers can pass `character.sheet_data`
+    directly without a None guard — a missing sheet (e.g., NPCs not yet set up
+    with health tracking) is treated as not-dead.
     """
+    if character_sheet is None:
+        return False
     try:
-        return character.sheet_data.vitals.life_state == CharacterLifeState.DEAD
+        return character_sheet.vitals.life_state == CharacterLifeState.DEAD
     except (AttributeError, ObjectDoesNotExist):
         return False
 
 
-def is_alive(character: ObjectDB) -> bool:
+def is_alive(character_sheet: CharacterSheet | None) -> bool:
     """Return True if the character is not dead.
 
     Convenience inverse of is_dead. A character with no vitals row is
     considered alive (same defensive assumption as is_dead returning False).
     """
-    return not is_dead(character)
+    return not is_dead(character_sheet)
 
 
-def can_act(character: ObjectDB) -> bool:
+def can_act(character_sheet: CharacterSheet | None) -> bool:
     """Coarse 'can engage at all' gate: not dead AND has awareness.
 
     Per-technique requirements are checked separately by technique_performable;
@@ -89,15 +90,17 @@ def can_act(character: ObjectDB) -> bool:
         get_effective_capability_value,
     )
 
-    if is_dead(character):
+    if is_dead(character_sheet):
         return False
+    if character_sheet is None:
+        return True
     awareness = CapabilityType.objects.filter(name=FoundationalCapability.AWARENESS).first()
     if awareness is None:
         return True
-    return get_effective_capability_value(character, awareness) > 0
+    return get_effective_capability_value(character_sheet, awareness) > 0
 
 
-def derive_character_status(character: ObjectDB) -> str:
+def derive_character_status(character_sheet: CharacterSheet | None) -> str:
     """Derive a coarse, read-only life-status string for the wire/API.
 
     This replaces the removed persisted CharacterVitals.status field. It is
@@ -115,15 +118,17 @@ def derive_character_status(character: ObjectDB) -> str:
         ConditionInstance,
     )
 
-    if is_dead(character):
+    if is_dead(character_sheet):
         return DERIVED_STATUS_DEAD
+    if character_sheet is None:
+        return DERIVED_STATUS_ALIVE
     dying = ConditionInstance.objects.filter(
-        target=character,
+        target=character_sheet.character,
         condition__name=BLEED_OUT_CONDITION_NAME,
     ).exists()
     if dying:
         return DERIVED_STATUS_DYING
-    if not can_act(character):
+    if not can_act(character_sheet):
         return DERIVED_STATUS_INCAPACITATED
     return DERIVED_STATUS_ALIVE
 
@@ -288,7 +293,7 @@ def _wounds_from(pending: PendingResolution) -> list[ConditionTemplate]:
 
 
 def process_damage_consequences(
-    character: ObjectDB,
+    character_sheet: CharacterSheet | None,
     damage_dealt: int,
     damage_type: DamageType | None,
     *,
@@ -313,19 +318,22 @@ def process_damage_consequences(
     Call AFTER writing the health change to CharacterVitals.
 
     Args:
-        character: The damaged character (ObjectDB).
+        character_sheet: The damaged character's CharacterSheet (or None if
+            the ObjectDB has no sheet — NPCs without vitals tracking).
         damage_dealt: How much damage was dealt this hit.
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
     """
+    if character_sheet is None:
+        return DamageConsequenceResult(message="No vitals found")
     try:
-        vitals = character.sheet_data.vitals
+        vitals = character_sheet.vitals
     except (AttributeError, ObjectDoesNotExist):
         return DamageConsequenceResult(message="No vitals found")
 
     # Dead characters are exempt from further consequences.
     # Unconscious/dying characters (now conditions) CAN still take damage.
-    if is_dead(character):
+    if is_dead(character_sheet):
         return DamageConsequenceResult(message="Character is dead")
 
     result = DamageConsequenceResult()
@@ -343,7 +351,7 @@ def process_damage_consequences(
     wound_pool = _wound_pool(damage_type)
     if wound_difficulty > 0 and wound_pool is not None:
         pending = resolve_vitals_consequence(
-            character,
+            character_sheet,
             _ensure_endurance_check_type(),
             wound_difficulty,
             wound_pool,
@@ -356,7 +364,7 @@ def process_damage_consequences(
     death_pool = _death_pool(damage_type)
     if death_difficulty > 0 and death_pool is not None:
         pending = resolve_vitals_consequence(
-            character,
+            character_sheet,
             _ensure_death_check_type(),
             death_difficulty,
             death_pool,
@@ -374,7 +382,7 @@ def process_damage_consequences(
     knockout_pool = _knockout_pool()
     if knockout_difficulty > 0 and knockout_pool is not None:
         pending = resolve_vitals_consequence(
-            character,
+            character_sheet,
             _ensure_endurance_check_type(),
             knockout_difficulty,
             knockout_pool,
@@ -404,14 +412,14 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
     ).exists()
 
 
-def _mark_dead(character: ObjectDB) -> None:
+def _mark_dead(character_sheet: CharacterSheet) -> None:
     """Stamp life_state=DEAD and died_at on the character's vitals row.
 
     No-op when the character has no vitals row (defensive; callers should
     gate on vitals existing before calling advance_bleed_out).
     """
     try:
-        vitals = character.sheet_data.vitals
+        vitals = character_sheet.vitals
     except (AttributeError, ObjectDoesNotExist):
         return
     vitals.life_state = CharacterLifeState.DEAD
@@ -419,7 +427,7 @@ def _mark_dead(character: ObjectDB) -> None:
     vitals.save(update_fields=["life_state", "died_at"])
 
 
-def advance_bleed_out(character: ObjectDB) -> bool:
+def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
     """Advance staged bleed-out conditions toward death.
 
     For each active ConditionInstance whose condition.name == BLEED_OUT_CONDITION_NAME:
@@ -427,7 +435,7 @@ def advance_bleed_out(character: ObjectDB) -> bool:
     - Perform the resist check at the stage's resist_difficulty.
     - On failure (success_level < 0):
         - If this is the terminal stage (no higher stage_order exists), call
-          _mark_dead(character) and return True.
+          _mark_dead(character_sheet) and return True.
         - Otherwise advance current_stage to the next higher stage_order and save.
     - On success / non-failure: hold (no change).
 
@@ -440,6 +448,14 @@ def advance_bleed_out(character: ObjectDB) -> bool:
         ConditionInstance,
         ConditionStage,
     )
+
+    if character_sheet is None:
+        return False
+
+    # ConditionInstance.target is an ObjectDB FK, and perform_check operates on
+    # ObjectDB; walk back to ObjectDB at the boundary. Refactoring those signatures
+    # is queued for Phase 2 of the OBJECTDB_PARAM rollout.
+    character = character_sheet.character
 
     instances = list(
         ConditionInstance.objects.filter(
@@ -462,7 +478,7 @@ def advance_bleed_out(character: ObjectDB) -> bool:
         if int(result.success_level) < 0:
             # Failed resist: advance or die
             if _is_terminal_stage(instance):
-                _mark_dead(character)
+                _mark_dead(character_sheet)
                 return True
             # Advance to the next stage
             next_stage = (
@@ -538,7 +554,7 @@ def get_vitals_consequence_config() -> VitalsConsequenceConfig:
 
 
 def resolve_vitals_consequence(
-    character: ObjectDB,
+    character_sheet: CharacterSheet,
     check_type: CheckTypeHint,
     target_difficulty: int,
     pool: ConsequencePool,
@@ -558,6 +574,10 @@ def resolve_vitals_consequence(
         select_consequence,
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415 — avoid cycle
+
+    # select_consequence + apply_resolution still operate on ObjectDB; walk
+    # back at the boundary. Refactoring the checks layer is Phase 2 follow-up.
+    character = character_sheet.character
 
     consequences = resolve_pool_consequences(pool)
     pending = select_consequence(

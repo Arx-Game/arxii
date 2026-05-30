@@ -128,7 +128,7 @@ class UnconsciousAgencyTests(TestCase):
         condition = _unconscious_condition()
         apply_condition(target=character, condition=condition)
 
-        self.assertFalse(can_act(character))
+        self.assertFalse(can_act(character.sheet_data))
 
     def test_unconscious_cannot_declare(self) -> None:
         """An Unconscious participant is blocked from declaring an action."""
@@ -204,7 +204,7 @@ class DyingAgencyTests(TestCase):
         self._apply_bleed_out(character)
 
         self.assertTrue(
-            can_act(character),
+            can_act(character.sheet_data),
             "Dying character with awareness must still be able to act",
         )
 
@@ -269,7 +269,7 @@ class BleedOutProgressionTests(TestCase):
         self.assertTrue(apply_result.success)
 
         with force_check_outcome(self.fail_outcome):
-            died = advance_bleed_out(character)
+            died = advance_bleed_out(character.sheet_data)
 
         self.assertTrue(died, "advance_bleed_out must return True when terminal stage fails")
         vitals.refresh_from_db()
@@ -290,9 +290,9 @@ class BleedOutProgressionTests(TestCase):
         apply_condition(target=character, condition=bleed_out)
 
         with force_check_outcome(self.fail_outcome):
-            advance_bleed_out(character)
+            advance_bleed_out(character.sheet_data)
 
-        self.assertFalse(can_act(character))
+        self.assertFalse(can_act(character.sheet_data))
 
     def test_terminal_stage_success_keeps_alive(self) -> None:
         """Passing the resist at a terminal stage does NOT kill the character."""
@@ -304,7 +304,7 @@ class BleedOutProgressionTests(TestCase):
         apply_condition(target=character, condition=bleed_out)
 
         with force_check_outcome(self.pass_outcome):
-            died = advance_bleed_out(character)
+            died = advance_bleed_out(character.sheet_data)
 
         self.assertFalse(died)
         vitals.refresh_from_db()
@@ -340,7 +340,7 @@ class BleedOutProgressionTests(TestCase):
         self.assertEqual(instance.current_stage, stage1)
 
         with force_check_outcome(self.fail_outcome):
-            died = advance_bleed_out(character)
+            died = advance_bleed_out(character.sheet_data)
 
         self.assertFalse(died, "Non-terminal failure must not kill")
         instance.refresh_from_db()
@@ -390,7 +390,7 @@ class EncounterLossWhenAllPCsDownTests(TestCase):
         condition = _unconscious_condition()
         apply_condition(target=character, condition=condition)
 
-        self.assertFalse(can_act(character), "Pre-condition: PC must be incapacitated")
+        self.assertFalse(can_act(character.sheet_data), "Pre-condition: PC must be incapacitated")
         self.assertTrue(
             _check_encounter_completion(encounter),
             "Encounter must be marked complete when all PCs cannot act",
@@ -418,7 +418,9 @@ class EncounterLossWhenAllPCsDownTests(TestCase):
             severity=1,
         )
 
-        self.assertTrue(can_act(character), "Dying-but-conscious PC must still be able to act")
+        self.assertTrue(
+            can_act(character.sheet_data), "Dying-but-conscious PC must still be able to act"
+        )
         self.assertFalse(
             _check_encounter_completion(encounter),
             "Encounter must not complete while dying PC can still act",

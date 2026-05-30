@@ -52,7 +52,7 @@ class GetEffectiveCapabilityValueTests(TestCase):
     def test_baseline_only_no_conditions_no_modifiers(self) -> None:
         """Awareness innate_baseline=1, no conditions/modifiers → effective 1."""
         cap = CapabilityTypeFactory(name="awareness_eff", innate_baseline=1)
-        result = get_effective_capability_value(self.character, cap)
+        result = get_effective_capability_value(self.character.sheet_data, cap)
         self.assertEqual(result, 1)
 
     def test_condition_impairment_floors_at_zero(self) -> None:
@@ -62,7 +62,7 @@ class GetEffectiveCapabilityValueTests(TestCase):
         ConditionCapabilityEffectFactory(condition=condition, capability=cap, value=-100)
         apply_condition(target=self.character, condition=condition)
 
-        result = get_effective_capability_value(self.character, cap)
+        result = get_effective_capability_value(self.character.sheet_data, cap)
         self.assertEqual(result, 0)
 
     def test_character_modifier_enhances(self) -> None:
@@ -70,7 +70,7 @@ class GetEffectiveCapabilityValueTests(TestCase):
         cap = CapabilityTypeFactory(name="movement_enh", innate_baseline=1)
         self._make_character_modifier(cap, value=3)
 
-        result = get_effective_capability_value(self.character, cap)
+        result = get_effective_capability_value(self.character.sheet_data, cap)
         self.assertEqual(result, 4)
 
     def test_negative_modifier_reduces_to_floor(self) -> None:
@@ -78,5 +78,5 @@ class GetEffectiveCapabilityValueTests(TestCase):
         cap = CapabilityTypeFactory(name="movement_neg", innate_baseline=1)
         self._make_character_modifier(cap, value=-1)
 
-        result = get_effective_capability_value(self.character, cap)
+        result = get_effective_capability_value(self.character.sheet_data, cap)
         self.assertEqual(result, 0)

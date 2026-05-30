@@ -36,18 +36,18 @@ class TechniquePerformableTests(TestCase):
         TechniqueCapabilityRequirementFactory(technique=cls.charge, capability=cls.movement)
 
     def test_unimpaired_can_perform(self) -> None:
-        self.assertTrue(technique_performable(self.character, self.spell))
-        self.assertTrue(technique_performable(self.character, self.charge))
+        self.assertTrue(technique_performable(self.character.sheet_data, self.spell))
+        self.assertTrue(technique_performable(self.character.sheet_data, self.charge))
 
     def test_immobilized_keeps_consciousness_technique(self) -> None:
         immob = ConditionTemplateFactory(name="Immobilized")
         ConditionCapabilityEffectFactory(condition=immob, capability=self.movement, value=-100)
         apply_condition(self.character, immob)
-        self.assertTrue(technique_performable(self.character, self.spell))
-        self.assertFalse(technique_performable(self.character, self.charge))
+        self.assertTrue(technique_performable(self.character.sheet_data, self.spell))
+        self.assertFalse(technique_performable(self.character.sheet_data, self.charge))
 
     def test_unconscious_blocks_awareness_technique(self) -> None:
         ko = ConditionTemplateFactory(name="Unconscious")
         ConditionCapabilityEffectFactory(condition=ko, capability=self.awareness, value=-100)
         apply_condition(self.character, ko)
-        self.assertFalse(technique_performable(self.character, self.spell))
+        self.assertFalse(technique_performable(self.character.sheet_data, self.spell))

@@ -87,7 +87,9 @@ class ResolveVitalsConsequenceTests(TestCase):
 
         # Force perform_check to return failure_outcome, then call the wrapper.
         with force_check_outcome(failure_outcome):
-            resolve_vitals_consequence(character, check_type, target_difficulty=20, pool=pool)
+            resolve_vitals_consequence(
+                character.sheet_data, check_type, target_difficulty=20, pool=pool
+            )
 
         # The condition should now be active on the character.
         active = get_active_conditions(character, condition=condition_template)
@@ -131,7 +133,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
 
         with force_check_outcome(failure_outcome):
             result = process_damage_consequences(
-                character=character,
+                character_sheet=character.sheet_data,
                 damage_dealt=5,
                 damage_type=None,
             )
@@ -174,7 +176,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
 
         with force_check_outcome(failure_outcome):
             result = process_damage_consequences(
-                character=character,
+                character_sheet=character.sheet_data,
                 damage_dealt=10,
                 damage_type=damage_type,
             )
@@ -243,7 +245,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
 
         with force_check_outcome(failure_outcome):
             process_damage_consequences(
-                character=character,
+                character_sheet=character.sheet_data,
                 damage_dealt=10,
                 damage_type=damage_type,
             )

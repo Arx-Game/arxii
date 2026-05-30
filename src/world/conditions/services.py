@@ -1069,7 +1069,9 @@ def get_capability_value(
     return get_capability_status(target, capability).value
 
 
-def get_effective_capability_value(target: "ObjectDB", capability: CapabilityType) -> int:
+def get_effective_capability_value(
+    character_sheet: "CharacterSheet", capability: CapabilityType
+) -> int:
     """Effective capability value = innate baseline + CharacterModifier contributions
     (distinctions/species/equipment via ModifierTarget.target_capability) + raw
     condition contributions, floored at 0.
@@ -1078,7 +1080,7 @@ def get_effective_capability_value(target: "ObjectDB", capability: CapabilityTyp
     value — intrinsic capacity (identity) impaired by transient state.
 
     Args:
-        target: The ObjectDB instance (character)
+        character_sheet: The character's CharacterSheet.
         capability: CapabilityType instance
 
     Returns:
@@ -1088,10 +1090,12 @@ def get_effective_capability_value(target: "ObjectDB", capability: CapabilityTyp
     modifier_total = sum(
         m.value
         for m in CharacterModifier.objects.filter(
-            character=target.sheet_data, target__target_capability=capability
+            character=character_sheet, target__target_capability=capability
         )
     )
-    status = get_capability_status(target, capability)
+    # get_capability_status still operates on ObjectDB; walk back at the
+    # boundary. Refactoring its signature is Phase 2 follow-up.
+    status = get_capability_status(character_sheet.character, capability)
     condition_total = sum(modifier for _instance, modifier in status.condition_contributions)
     return max(0, baseline + modifier_total + condition_total)
 

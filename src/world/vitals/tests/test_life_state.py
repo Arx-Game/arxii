@@ -16,16 +16,21 @@ class LifeStateTests(TestCase):
     def test_defaults_alive(self) -> None:
         v = self.alive_vitals
         self.assertEqual(v.life_state, CharacterLifeState.ALIVE)
-        self.assertTrue(is_alive(v.character_sheet.character))
-        self.assertFalse(is_dead(v.character_sheet.character))
+        self.assertTrue(is_alive(v.character_sheet.character.sheet_data))
+        self.assertFalse(is_dead(v.character_sheet.character.sheet_data))
 
     def test_dead(self) -> None:
         v = CharacterVitalsFactory(life_state=CharacterLifeState.DEAD)
-        self.assertTrue(is_dead(v.character_sheet.character))
-        self.assertFalse(is_alive(v.character_sheet.character))
+        self.assertTrue(is_dead(v.character_sheet.character.sheet_data))
+        self.assertFalse(is_alive(v.character_sheet.character.sheet_data))
 
     def test_no_vitals_is_alive(self) -> None:
-        """Character with no CharacterVitals row is considered alive by default."""
-        character = CharacterFactory(db_key="no_vitals_life_state")
-        self.assertTrue(is_alive(character))
-        self.assertFalse(is_dead(character))
+        """Character with no CharacterSheet at all is considered alive by default.
+
+        The post-OBJECTDB_PARAM refactor takes CharacterSheet | None; passing
+        None covers the "ObjectDB has no sheet" path (NPCs without vitals
+        tracking, fresh test fixtures, etc.).
+        """
+        CharacterFactory(db_key="no_vitals_life_state")
+        self.assertTrue(is_alive(None))
+        self.assertFalse(is_dead(None))

@@ -126,7 +126,7 @@ class ProcessDamageConsequencesTest(TestCase):
 
         with force_check_outcome(self.success_outcome):
             result = process_damage_consequences(
-                character=self.character,
+                character_sheet=self.character.sheet_data,
                 damage_dealt=10,
                 damage_type=None,
             )
@@ -143,7 +143,7 @@ class ProcessDamageConsequencesTest(TestCase):
         combat. With no knockout/death/wound pool configured, no condition applies.
         """
         result = process_damage_consequences(
-            character=self.character,
+            character_sheet=self.character.sheet_data,
             damage_dealt=5,
             damage_type=None,
         )
@@ -160,7 +160,7 @@ class ProcessDamageConsequencesTest(TestCase):
         self.vitals.save(update_fields=["life_state"])
 
         result = process_damage_consequences(
-            character=self.character,
+            character_sheet=self.character.sheet_data,
             damage_dealt=50,
             damage_type=None,
         )
@@ -169,10 +169,14 @@ class ProcessDamageConsequencesTest(TestCase):
         assert result.dying is False
 
     def test_no_vitals_returns_default(self) -> None:
-        """Character with no vitals gets a default result."""
-        no_vitals_char = CharacterFactory(db_key="no_vitals")
+        """Character with no CharacterSheet gets a default result.
+
+        Post-OBJECTDB_PARAM refactor takes CharacterSheet | None; None covers
+        the "no sheet at all" branch (the function's first guard).
+        """
+        CharacterFactory(db_key="no_vitals")
         result = process_damage_consequences(
-            character=no_vitals_char,
+            character_sheet=None,
             damage_dealt=5,
             damage_type=None,
         )

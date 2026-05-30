@@ -158,12 +158,12 @@ class ParticipantSerializer(serializers.ModelSerializer):
         )
 
         try:
-            character = obj.character_sheet.character
+            character_sheet = obj.character_sheet
         except AttributeError:
             return None
-        if character is None:
+        if character_sheet is None:
             return None
-        return derive_character_status(character)
+        return derive_character_status(character_sheet)
 
     def get_available_strain(self, obj: CombatParticipant) -> int | None:
         """Return strain budget (anima pool) — only if viewer owns the PC.

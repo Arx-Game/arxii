@@ -174,18 +174,18 @@ class _RoundActionEffects:
                 is_dead,
             )
 
-            ally_character = target_ally.character_sheet.character
+            ally_character_sheet = target_ally.character_sheet
             status_word: str | None = None
-            if is_dead(ally_character):
+            if is_dead(ally_character_sheet):
                 status_word = "dead"
-            elif not can_act(ally_character):
+            elif not can_act(ally_character_sheet):
                 # Not dead but cannot act → incapacitated (Unconscious condition).
                 status_word = "incapacitated"
             if status_word is not None:
                 result.append(
                     EffectRow(
                         kind="status",
-                        label=f"{ally_character.db_key} {status_word}",
+                        label=f"{ally_character_sheet.character.db_key} {status_word}",
                         deep_link=DeepLinkRef(modal="participant", id=target_ally.pk),
                     )
                 )

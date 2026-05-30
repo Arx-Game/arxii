@@ -2,8 +2,10 @@
 
 Combat eligibility no longer keys on CharacterVitals.status / dying_final_round.
 It now keys on:
-- can_act(character): not dead AND has awareness > 0 (the coarse round-participation gate).
-- technique_performable(character, technique): per-technique capability requirements.
+- can_act(character.sheet_data): not dead AND has awareness > 0
+  (the coarse round-participation gate).
+- technique_performable(character.sheet_data, technique): per-technique
+  capability requirements.
 
 Tiering:
 - Unconscious is a non-progressive condition → apply_condition avoids the PG-only
@@ -95,24 +97,24 @@ class CanActTests(TestCase):
     def test_alive_and_aware_can_act(self) -> None:
         """ALIVE + awareness baseline 1, no impairment → can_act True."""
         _awareness_capability()
-        self.assertTrue(can_act(self.character))
+        self.assertTrue(can_act(self.character.sheet_data))
 
     def test_awareness_unseeded_can_act(self) -> None:
         """No AWARENESS capability seeded at all → graceful True (no blocking)."""
-        self.assertTrue(can_act(self.character))
+        self.assertTrue(can_act(self.character.sheet_data))
 
     def test_dead_cannot_act(self) -> None:
         """life_state=DEAD → can_act False regardless of awareness."""
         _awareness_capability()
         self.vitals.life_state = CharacterLifeState.DEAD
         self.vitals.save(update_fields=["life_state"])
-        self.assertFalse(can_act(self.character))
+        self.assertFalse(can_act(self.character.sheet_data))
 
     def test_awareness_zeroed_cannot_act(self) -> None:
         """Unconscious zeroes awareness → can_act False even though not dead."""
         condition = _make_unconscious_condition()
         apply_condition(target=self.character, condition=condition)
-        self.assertFalse(can_act(self.character))
+        self.assertFalse(can_act(self.character.sheet_data))
 
 
 class DeclareActionCapabilityGatingTests(TestCase):

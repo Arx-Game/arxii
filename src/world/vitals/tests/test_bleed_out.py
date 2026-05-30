@@ -96,7 +96,7 @@ class AdvanceBleedOutTests(TestCase):
 
         # First call: fails resist at stage 1 → advance to stage 2 (not yet dead)
         with force_check_outcome(self.failure_outcome):
-            died = advance_bleed_out(self.character)
+            died = advance_bleed_out(self.character.sheet_data)
         self.assertFalse(died, "Should not die on first failed resist (stage 1→2)")
 
         self.vitals.refresh_from_db()
@@ -108,7 +108,7 @@ class AdvanceBleedOutTests(TestCase):
 
         # Second call: fails resist at stage 2 (terminal) → character dies
         with force_check_outcome(self.failure_outcome):
-            died = advance_bleed_out(self.character)
+            died = advance_bleed_out(self.character.sheet_data)
         self.assertTrue(died, "Should die on failed resist at terminal stage")
 
         self.vitals.refresh_from_db()
@@ -120,7 +120,7 @@ class AdvanceBleedOutTests(TestCase):
         self._make_instance_at_stage1()
 
         with force_check_outcome(self.success_outcome):
-            died = advance_bleed_out(self.character)
+            died = advance_bleed_out(self.character.sheet_data)
 
         self.assertFalse(died)
         self.vitals.refresh_from_db()
@@ -129,7 +129,7 @@ class AdvanceBleedOutTests(TestCase):
 
     def test_no_bleed_out_condition_noop(self) -> None:
         """Character has no Bleeding Out condition → returns False, stays alive."""
-        died = advance_bleed_out(self.character)
+        died = advance_bleed_out(self.character.sheet_data)
         self.assertFalse(died)
         self.vitals.refresh_from_db()
         self.assertEqual(self.vitals.life_state, CharacterLifeState.ALIVE)
@@ -142,7 +142,7 @@ class AdvanceBleedOutTests(TestCase):
         self.stage1.save(update_fields=["resist_check_type"])
 
         try:
-            died = advance_bleed_out(self.character)
+            died = advance_bleed_out(self.character.sheet_data)
             self.assertFalse(died)
             self.vitals.refresh_from_db()
             self.assertEqual(self.vitals.life_state, CharacterLifeState.ALIVE)
