@@ -308,8 +308,8 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         check_modifiers = _aggregate_check_modifiers(lookups)
         resistance_modifiers = _aggregate_resistance_modifiers(lookups)
 
-        turn_order_mod = get_turn_order_modifier(character)
-        aggro = get_aggro_priority(character)
+        turn_order_mod = get_turn_order_modifier(character.sheet_data)
+        aggro = get_aggro_priority(character.sheet_data)
 
         return Response(
             {

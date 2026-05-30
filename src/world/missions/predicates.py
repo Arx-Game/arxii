@@ -177,7 +177,7 @@ def _resolve_has_capability(ctx: ResolverContext, *, name: str) -> bool:
     capability = CapabilityType.objects.filter(name=name).first()
     if capability is None:
         return False
-    return get_capability_value(ctx.character, capability) > 0
+    return get_capability_value(ctx.character.sheet_data, capability) > 0
 
 
 def _resolve_has_thread(ctx: ResolverContext) -> bool:
