@@ -445,23 +445,31 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
         BLEED_OUT_CONDITION_NAME,
     )
     from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
-        ConditionInstance,
         ConditionStage,
+        ConditionTemplate,
+    )
+    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+        get_active_conditions,
     )
 
     if character_sheet is None:
         return False
 
-    # ConditionInstance.target is an ObjectDB FK, and perform_check operates on
-    # ObjectDB; walk back to ObjectDB at the boundary. Refactoring those signatures
-    # is queued for Phase 2 of the OBJECTDB_PARAM rollout.
+    # perform_check still operates on ObjectDB; walk back at the boundary.
+    # Refactoring that layer is queued for Phase 3 of the OBJECTDB_PARAM rollout.
     character = character_sheet.character
 
+    # Route through get_active_conditions (honors suppression by default) rather
+    # than filtering ConditionInstance directly — keeps bleed-out advancement
+    # consistent with the rest of the conditions layer when bleed-out suppression
+    # becomes an authored mechanic. Issue #601.
+    bleed_out = ConditionTemplate.objects.filter(name=BLEED_OUT_CONDITION_NAME).first()
+    if bleed_out is None:
+        return False
     instances = list(
-        ConditionInstance.objects.filter(
-            target=character,
-            condition__name=BLEED_OUT_CONDITION_NAME,
-        ).select_related("condition", "current_stage", "current_stage__resist_check_type")
+        get_active_conditions(character, condition=bleed_out).select_related(
+            "current_stage__resist_check_type"
+        )
     )
 
     for instance in instances:
