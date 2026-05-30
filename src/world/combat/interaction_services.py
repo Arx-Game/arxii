@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         CombatParticipant,
         CombatRoundAction,
     )
+    from world.combat.types import ActionOutcome
 
 
 def create_action_interaction(
@@ -113,3 +114,55 @@ def render_clash_contribution_label(contribution: ClashContribution) -> str:
     flavor = clash.get_flavor_display()
     opponent_name = clash.npc_opponent.name if clash.npc_opponent_id else "?"
     return f"{technique.name} → {flavor} vs {opponent_name}"
+
+
+def render_action_outcome_narration(
+    *,
+    actor_label: str,
+    technique_name: str,
+    target_label: str | None,
+    outcome: ActionOutcome,
+) -> str:
+    """Render a one-line, deterministic outcome narration from resolved data.
+
+    Pure function — no DB access, no randomness. Composes clauses from the
+    ActionOutcome’s damage results and consequences. Absent data → omitted
+    clause. Used as the content of an OUTCOME-mode Interaction authored by the
+    Narrator persona.
+
+    Examples:
+        "Kira’s Frost Bolt strikes the Pyromancer for 24 damage."
+        "Kira’s Frost Bolt strikes the Pyromancer for 40 damage, defeating them."
+        "Kira’s Frost Bolt misses the Pyromancer."
+        "Garruk uses Guard Stance."
+    """
+    total_damage = sum(dr.damage_dealt for dr in outcome.damage_results)
+    defeated = any(getattr(dr, "defeated", False) for dr in outcome.damage_results)  # noqa: GETATTR_LITERAL
+    knocked_out = any(c.knocked_out for c in outcome.damage_consequences)
+    dying = any(c.dying for c in outcome.damage_consequences)
+    wounds = [ct.name for c in outcome.damage_consequences for ct in c.wounds_applied]
+
+    # No target → self/utility action.
+    if target_label is None:
+        if outcome.combo_used is not None:
+            return f"{actor_label} unleashes {outcome.combo_used.name}."
+        return f"{actor_label} uses {technique_name}."
+
+    # Targeted action with no damage and no wounds → miss.
+    if total_damage <= 0 and not wounds:
+        return f"{actor_label}’s {technique_name} misses {target_label}."
+
+    head = f"{actor_label}’s {technique_name} strikes {target_label} for {total_damage} damage"
+    tail_clauses: list[str] = []
+    if wounds:
+        tail_clauses.append("leaving them " + ", ".join(wounds))
+    if defeated:
+        tail_clauses.append("defeating them")
+    elif dying:
+        tail_clauses.append("leaving them dying")
+    elif knocked_out:
+        tail_clauses.append("knocking them out")
+
+    if tail_clauses:
+        return head + ", " + ", ".join(tail_clauses) + "."
+    return head + "."

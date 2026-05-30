@@ -190,3 +190,40 @@ describe('PoseUnit', () => {
     expect(onAddTarget).toHaveBeenCalledWith('Alice');
   });
 });
+
+describe('PoseUnit outcome mode', () => {
+  it('renders outcome narration as a combat-log line', () => {
+    const interaction = makeInteraction({
+      mode: 'outcome',
+      persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+      content: "Kira's Frost Bolt strikes the Pyromancer for 24 damage.",
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('pose-unit-outcome')).toBeInTheDocument();
+    expect(screen.getByText(/Frost Bolt strikes the Pyromancer for 24/)).toBeInTheDocument();
+  });
+
+  it('renders no avatar, context menu, or target affordance for outcomes', () => {
+    const interaction = makeInteraction({
+      mode: 'outcome',
+      persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+      content: 'The dust settles.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTitle('Double-click to add as target')).toBeNull();
+    expect(screen.queryByTestId('pose-unit')).toBeNull();
+    expect(screen.queryByTestId('pose-unit-action-standalone')).toBeNull();
+  });
+});

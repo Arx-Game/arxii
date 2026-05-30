@@ -139,6 +139,21 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
   }
 
   // -------------------------------------------------------------------------
+  // OUTCOME: combat result narration — authored by the Narrator, not a
+  // targetable character, so no avatar / context menu / target affordance.
+  // -------------------------------------------------------------------------
+  if (interaction.mode === 'outcome') {
+    return (
+      <div
+        className="border-b py-1.5 pl-2 text-sm italic text-muted-foreground"
+        data-testid="pose-unit-outcome"
+      >
+        <FormattedContent content={interaction.content} />
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // State 1 + 2: POSE (with or without linked actions)
   // -------------------------------------------------------------------------
   return (
