@@ -192,6 +192,7 @@ class TechniquePreCastPayload:
     technique: Technique
     targets: list[Character | ObjectDB]
     intensity: int
+    power: int
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,7 @@ class TechniqueCastPayload:
     technique: Technique
     targets: list[Character | ObjectDB]
     intensity: int
+    power: int
     # `result` is the return of a caller-provided ``resolve_fn: Callable[..., Any]``;
     # its shape is defined by the caller, not this layer. Intentionally opaque.
     result: object
@@ -209,6 +211,7 @@ class TechniqueCastPayload:
 class TechniqueAffectedPayload:
     caster: Character
     technique: Technique
+    power: int
     target: Character | ObjectDB
     effect: object
 
