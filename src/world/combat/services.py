@@ -575,7 +575,7 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
 
     # Vitality check — dead characters cannot flee. Unconscious / dying
     # characters may still be dragged out (flee is passives-only).
-    if is_dead(participant.character_sheet.character):
+    if is_dead(participant.character_sheet):
         msg = "Cannot flee: character is dead."
         raise ValueError(msg)
     action, _ = CombatRoundAction.objects.update_or_create(
@@ -795,7 +795,7 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
 
     # Agency check — not dead and not incapacitated. A dying-but-conscious
     # character keeps awareness and passes naturally (no dying_final_round concept).
-    if not can_act(participant.character_sheet.character):
+    if not can_act(participant.character_sheet):
         msg = "Cannot declare action: character is dead or incapacitated."
         raise ValueError(msg)
 
@@ -1056,9 +1056,7 @@ def select_npc_actions(
             status=ParticipantStatus.ACTIVE,
         ).select_related("character_sheet__character")
     )
-    active_participants = [
-        p for p in candidate_participants if can_act(p.character_sheet.character)
-    ]
+    active_participants = [p for p in candidate_participants if can_act(p.character_sheet)]
 
     actions: list[CombatOpponentAction] = []
 
@@ -1310,7 +1308,7 @@ def get_resolution_order(
 
     ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = []
     for p in participants:
-        if not can_act(p.character_sheet.character):
+        if not can_act(p.character_sheet):
             continue
         speed = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
         ranked.append((speed, ENTITY_TYPE_PC, p))
@@ -1943,7 +1941,7 @@ def _resolve_npc_action(
         # Damage recipients: any not-dead target is valid. Unconscious / dying
         # PCs still take damage (incapacitation/dying are conditions, not a gate
         # on damage application). Only the dead are excluded.
-        if is_dead(target_participant.character_sheet.character):
+        if is_dead(target_participant.character_sheet):
             continue
 
         if defense_check_type is not None:
@@ -1967,7 +1965,7 @@ def _resolve_npc_action(
         from world.vitals.services import process_damage_consequences  # noqa: PLC0415
 
         consequence = process_damage_consequences(
-            character=target_participant.character_sheet.character,
+            character_sheet=target_participant.character_sheet,
             damage_dealt=dmg_result.damage_dealt,
             damage_type=npc_action.threat_entry.damage_type,
         )
@@ -2090,7 +2088,7 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
         status=ParticipantStatus.ACTIVE,
     ).select_related("character_sheet__character")
 
-    all_pcs_down = not any(can_act(p.character_sheet.character) for p in active_participants)
+    all_pcs_down = not any(can_act(p.character_sheet) for p in active_participants)
 
     return all_opponents_down or all_pcs_down
 
@@ -2487,7 +2485,7 @@ def resolve_round(
         .distinct()
     )
     for p in bleeding_participants:
-        advance_bleed_out(p.character_sheet.character)
+        advance_bleed_out(p.character_sheet)
 
     # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events ---
     from world.conditions.services import process_round_end  # noqa: PLC0415

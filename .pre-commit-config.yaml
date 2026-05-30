@@ -55,6 +55,22 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: objectdb-param
+        name: Reject ObjectDB-typed args in service-layer functions
+        entry: uv run python tools/lint_objectdb_param.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        # Phase 1 scope: vitals + magic capability_requirements. Future PRs
+        # expand this regex one app at a time as their service modules are
+        # triaged. (Conditions/services.py has 37 pre-existing violations and
+        # gets its own Phase 2 PR.) See CLAUDE.md "Avoid direct FKs to ObjectDB"
+        # for the OBJECTDB_PARAM noqa token and rollout policy.
+        files: |
+          (?x)^src/world/(
+            vitals/services\.py
+            |magic/services/capability_requirements\.py
+          )$
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
