@@ -249,7 +249,7 @@ def accept_soul_tether(  # noqa: PLR0913
 
         # 11. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
         #     Multiple tethers reuse the single ConditionInstance (no duplicate).
-        active_template = ConditionTemplate.objects.get(name="Soul Tether Active")
+        active_template = ConditionTemplate.get_by_name("Soul Tether Active")
         active_condition = ConditionInstance.objects.filter(
             target=sinner_sheet.character,
             condition=active_template,
@@ -1542,7 +1542,7 @@ def _get_or_create_tether_strain_instance(
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
 
-    strain_template = ConditionTemplate.objects.get(name="Tether Strain")
+    strain_template = ConditionTemplate.get_by_name("Tether Strain")
     sineater_objectdb = sineater_sheet.character
 
     existing = ConditionInstance.objects.filter(

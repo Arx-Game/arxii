@@ -158,8 +158,9 @@ def _resolve_has_condition(ctx: ResolverContext, *, key: str) -> bool:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import has_condition  # noqa: PLC0415
 
-    template = ConditionTemplate.objects.filter(name=key).first()
-    if template is None:
+    try:
+        template = ConditionTemplate.get_by_name(key)
+    except ConditionTemplate.DoesNotExist:
         return False
     return has_condition(ctx.character, template)
 

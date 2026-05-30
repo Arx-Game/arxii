@@ -143,7 +143,7 @@ def apply_anima_ritual_outcome(
 
     anima = CharacterAnima.objects.select_for_update().get(character=character)
 
-    soulfray_template = ConditionTemplate.objects.get(name=SOULFRAY_CONDITION_NAME)
+    soulfray_template = ConditionTemplate.get_by_name(SOULFRAY_CONDITION_NAME)
     soulfray_inst = (
         ConditionInstance.objects.select_for_update()
         .filter(target=character, condition=soulfray_template, resolved_at__isnull=True)

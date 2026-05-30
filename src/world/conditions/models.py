@@ -361,6 +361,13 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
+    # Name → PK cache for get_by_name (below). Class-level so service hot
+    # paths (round ticks, condition advancement) reuse the cached PK
+    # across calls. Flushed between tests via core.testing's registered
+    # cache hook so test rollback can't leave stale PKs (see
+    # core.testing module docstring for the rationale).
+    _name_pk_cache: dict[str, int] = {}
+
     class NaturalKeyConfig:
         fields = ["name"]
 
@@ -369,6 +376,36 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @classmethod
+    def get_by_name(cls, name: str) -> ConditionTemplate:
+        """Return the template with this name, leveraging the identity map.
+
+        Service hot paths repeatedly look up known-must-exist templates by name
+        (Soulfray, Audere, Bleeding-Out, etc.). Plain ``objects.get(name=NAME)``
+        issues a fresh query every call because the identity map is keyed by PK,
+        not name. This method maintains a class-level name→PK index so the
+        second-and-after calls hit SharedMemoryModel's identity map directly
+        (zero queries) instead of re-querying by name.
+
+        Cache invalidation: the project test runner flushes ``_name_pk_cache``
+        and ``SharedMemoryModel``'s identity map between tests (see
+        ``core.testing``). In production the cache is stable because rows
+        aren't deleted out from under it.
+
+        Raises ConditionTemplate.DoesNotExist if no row matches.
+        """
+        cached_pk = cls._name_pk_cache.get(name)
+        if cached_pk is not None:
+            try:
+                return cls.objects.get(pk=cached_pk)
+            except cls.DoesNotExist:
+                # Cache poisoned (e.g. somebody deleted the row in production);
+                # drop and refetch.
+                cls._name_pk_cache.pop(name, None)
+        obj = cls.objects.get(name=name)  # raises DoesNotExist
+        cls._name_pk_cache[name] = obj.pk
+        return obj
 
     @cached_property
     def cached_stages(self) -> list[ConditionStage]:
