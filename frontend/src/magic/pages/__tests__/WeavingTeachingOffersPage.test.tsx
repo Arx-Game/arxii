@@ -39,6 +39,7 @@ const makeOffer = (
 ): ThreadWeavingTeachingOffer => ({
   id: 1,
   teacher: 42,
+  teacher_display_name: '2nd player of Ariel',
   unlock: 10,
   unlock_target_kind: 'TRAIT',
   unlock_display_name: 'Persuasion',
@@ -128,7 +129,7 @@ describe('WeavingTeachingOffersPage', () => {
 
     expect(screen.getByTestId('teaching-offers-list')).toBeInTheDocument();
     expect(screen.getByTestId('teaching-offer-card-1')).toBeInTheDocument();
-    expect(screen.getByTestId('teaching-offer-teacher')).toHaveTextContent('Teacher #42');
+    expect(screen.getByTestId('teaching-offer-teacher')).toHaveTextContent('2nd player of Ariel');
     expect(screen.getByTestId('teaching-offer-unlock')).toHaveTextContent('TRAIT');
     expect(screen.getByTestId('teaching-offer-unlock')).toHaveTextContent('Persuasion');
     expect(screen.getByTestId('teaching-offer-xp-cost')).toHaveTextContent('8 XP');
