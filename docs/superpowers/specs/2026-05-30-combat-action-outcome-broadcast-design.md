@@ -91,9 +91,12 @@ All changes hang off `resolve_round` (`combat/services.py`), inside its existing
 `@transaction.atomic`. The loop already builds an `ActionOutcome` per action and already creates
 the ACTION Interaction for PC actions in `_resolve_pc_action` (`combat/services.py:1899-1907`).
 
-1. **ACTION broadcast.** In `_resolve_pc_action`, after the existing `create_action_interaction`
-   block, call `push_interaction(interaction)` when `interaction is not None`. Clash
-   contributions follow the same pattern at their creation site.
+1. **ACTION broadcast.** Two sites create ACTION interactions today and neither pushes:
+   `_resolve_pc_action` (`combat/services.py:1899`) and the clash-contribution loop
+   (`combat/clash.py:289`). At each, after the `create_action_interaction(...)` call, push the
+   returned interaction with `push_interaction(interaction)` when it is not None. (OUTCOME
+   narration, below, covers PC + NPC *action* outcomes only; clash *outcomes* are a separate
+   resolution path and stay deferred.)
 2. **OUTCOME narration.** `render_action_outcome_narration(*, actor_label, technique, outcome,
    target_label) -> str` — a pure, deterministic function beside `render_action_declaration_label`
    in `combat/interaction_services.py`. Composes clauses from data available today: technique
@@ -148,7 +151,7 @@ yet).
 
 ## Scope / follow-ups
 
-**In:** ACTION broadcast (PC + clash contributions); `InteractionMode.OUTCOME`; Narrator
+**In:** ACTION broadcast (PC actions + clash contributions); `InteractionMode.OUTCOME`; Narrator
 singleton persona; deterministic narrator; per-action OUTCOME persist + room broadcast for PC +
 persona-bearing NPC + persona-less mook (all Narrator-authored); frontend outcome branch; tests;
 type regen.
