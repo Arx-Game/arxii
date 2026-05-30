@@ -470,9 +470,17 @@ Key new modules: `flows/trigger_handler.py`, `flows/emit.py`,
 `flows/events/`, `flows/filters/`, `flows/execution/prompts.py`,
 `world/combat/damage_source.py`. 29 integration tests cover damage-source
 discrimination, cross-character filters, AE topology, stage cascades,
-cancellation tiers, and async prompt resolution; 10 are authored-but-skipped
-pending follow-up infrastructure (covenant relationships, Property M2M on
-Technique, trigger usage-cap fields, mutable `ExaminedPayload`).
+cancellation tiers, and async prompt resolution. The 10 previously
+authored-but-skipped tests are now ALL ACTIVE and passing (#527/#528), closed via:
+examine-decoration `sections` on the mutable `ExaminePrePayload` + render-back in
+`return_appearance`; `Persona.properties` and `Technique.properties` M2Ms to
+`mechanics.Property` with `has_property()` accessors; a `shares_covenant` filter op
+(covenant membership via the existing `CharacterCovenantRoleHandler`);
+`MODIFY_PAYLOAD` `min`/`max` ops; and an opt-in per-scene usage cap in dispatch
+(`TriggerHandler` fire counter + `_dispatch_usage_limit`). Remaining follow-ups:
+#524 (pre-cast *modify*-payload — cancel already works), #525 (defilement), #526
+(scar presence-escalation), and wiring `TriggerHandler.reset_scene_counts` to a
+scene-boundary event.
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
