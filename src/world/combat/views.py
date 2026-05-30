@@ -108,6 +108,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 queryset=CombatParticipant.objects.select_related(
                     "character_sheet__character",
                     "character_sheet__vitals",
+                    "character_sheet__fatigue",
                     "covenant_role",
                 ).filter(status=ParticipantStatus.ACTIVE),
                 to_attr="participants_cached",

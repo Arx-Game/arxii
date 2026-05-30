@@ -17,7 +17,8 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
 )
-from world.fatigue.constants import EffortLevel
+from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     max_health = serializers.SerializerMethodField()
     character_status = serializers.SerializerMethodField()
     available_strain = serializers.SerializerMethodField()
+    fatigue = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -95,6 +97,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "max_health",
             "character_status",
             "available_strain",
+            "fatigue",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -174,6 +177,44 @@ class ParticipantSerializer(serializers.ModelSerializer):
         if not self._can_view_vitals(obj):
             return None
         return obj.available_strain
+
+    def get_fatigue(self, obj: CombatParticipant) -> dict[str, dict[str, int]] | None:
+        """Return the three fatigue pools (physical/social/mental).
+
+        Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
+        persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
+        is derived from the character's endurance stats via
+        ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+        health/strain — outsiders get ``None``.
+
+        The frontend's VitalPools component reads this to render fatigue bars
+        (replacing the ``0/10`` placeholder). See #552.
+        """
+        if not self._can_view_vitals(obj):
+            return None
+        try:
+            character_sheet = obj.character_sheet
+        except AttributeError:
+            return None
+        if character_sheet is None:
+            return None
+
+        # Read the prefetched OneToOne (select_related on the viewset queryset)
+        # exactly once — no per-category re-query. None when no row exists yet.
+        fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor may be unset
+        well_rested = fatigue_pool.well_rested if fatigue_pool else False
+        pools: dict[str, dict[str, int]] = {}
+        for category in FatigueCategory:
+            current = fatigue_pool.get_current(category.value) if fatigue_pool else 0
+            pools[category.value] = {
+                "current": current,
+                "capacity": get_fatigue_capacity(
+                    character_sheet,
+                    category.value,
+                    well_rested=well_rested,
+                ),
+            }
+        return pools
 
 
 class RoundActionSerializer(serializers.ModelSerializer):
