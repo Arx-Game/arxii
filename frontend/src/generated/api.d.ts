@@ -14651,6 +14651,17 @@ export interface components {
       readonly probing_threshold: number | null;
       current_phase?: number;
       status?: components['schemas']['OpponentStatusEnum'];
+      /**
+       * @description Active conditions on this opponent's in-world ObjectDB.
+       *
+       *     Public conditions (``is_visible_to_others=True``) are shown to
+       *     everyone; hidden conditions only to GM/staff. Ordered by
+       *     ``display_priority`` (highest first). Opponents with no backing
+       *     ObjectDB (or none applied) serialize to ``[]``.
+       */
+      readonly active_conditions: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read serializer for combat opponents.
@@ -16048,6 +16059,18 @@ export interface components {
           [key: string]: number;
         };
       } | null;
+      /**
+       * @description Active conditions on this participant's character ObjectDB.
+       *
+       *     Public conditions (``is_visible_to_others=True``) are shown to
+       *     everyone; hidden conditions only to the character's owner, GMs, or
+       *     staff — reusing the same ownership gate as vitals
+       *     (``_can_view_vitals``). Ordered by ``display_priority`` (highest
+       *     first). No conditions → ``[]``.
+       */
+      readonly active_conditions: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read serializer for combat participants.

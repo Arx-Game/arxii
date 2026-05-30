@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from http import HTTPMethod
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -34,6 +35,7 @@ from world.combat.permissions import (
     IsInEncounterRoom,
 )
 from world.combat.serializers import (
+    ACTIVE_CONDITIONS_CACHE_ATTR,
     AddOpponentSerializer,
     AddParticipantSerializer,
     DeclareActionSerializer,
@@ -56,6 +58,7 @@ from world.combat.services import (
     run_combo_detection,
     upgrade_action_to_combo,
 )
+from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.magic.models import Technique
 from world.stories.pagination import StandardResultsSetPagination
@@ -101,6 +104,33 @@ class CombatEncounterViewSet(ModelViewSet):
             return EncounterListSerializer
         return EncounterDetailSerializer
 
+    def _active_conditions_prefetch(self, lookup: str) -> Prefetch:
+        """Prefetch active ConditionInstances onto a target ObjectDB.
+
+        ``lookup`` is the relation path to the ObjectDB whose conditions we
+        want (``character_sheet__character`` for participants,
+        ``objectdb`` for opponents). The queryset mirrors
+        ``get_active_conditions`` — same suppression filter and
+        select_related — and lands on
+        ``ACTIVE_CONDITIONS_CACHE_ATTR`` so the serializer reads it
+        without an N+1. Visibility filtering + display-priority ordering
+        run in Python in the serializer.
+        """
+        not_suppressed = Q(is_suppressed=False) | Q(
+            suppressed_until__isnull=False,
+            suppressed_until__lt=timezone.now(),
+        )
+        condition_qs = ConditionInstance.objects.filter(not_suppressed).select_related(
+            "condition",
+            "condition__category",
+            "current_stage",
+        )
+        return Prefetch(
+            f"{lookup}__condition_instances",
+            queryset=condition_qs,
+            to_attr=ACTIVE_CONDITIONS_CACHE_ATTR,
+        )
+
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
         return CombatEncounter.objects.select_related("scene").prefetch_related(
             Prefetch(
@@ -110,12 +140,18 @@ class CombatEncounterViewSet(ModelViewSet):
                     "character_sheet__vitals",
                     "character_sheet__fatigue",
                     "covenant_role",
-                ).filter(status=ParticipantStatus.ACTIVE),
+                )
+                .filter(status=ParticipantStatus.ACTIVE)
+                .prefetch_related(
+                    self._active_conditions_prefetch("character_sheet__character"),
+                ),
                 to_attr="participants_cached",
             ),
             Prefetch(
                 "opponents",
-                queryset=CombatOpponent.objects.all(),
+                queryset=CombatOpponent.objects.prefetch_related(
+                    self._active_conditions_prefetch("objectdb"),
+                ),
                 to_attr="opponents_cached",
             ),
             Prefetch(
