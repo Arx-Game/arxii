@@ -341,7 +341,7 @@ class ActionOutcomeDetailsView(APIView):
 
     Effects derived from existing model state — combo upgrade, ConditionInstance
     correlation by source_technique + applied_at window, target status from
-    CombatOpponent.status / CharacterVitals.status. No new audit tables.
+    CombatOpponent.status / CharacterVitals.life_state. No new audit tables.
     """
 
     permission_classes = [IsAuthenticated]
