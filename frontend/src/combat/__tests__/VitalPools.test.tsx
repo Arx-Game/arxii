@@ -50,6 +50,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
       social: { current: 1, capacity: 9 },
       mental: { current: 4, capacity: 11 },
     },
+    active_conditions: [],
     ...overrides,
   };
 }

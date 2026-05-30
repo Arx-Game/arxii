@@ -69,6 +69,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     max_health: 10,
     character_status: 'healthy',
     available_strain: null,
+    fatigue: null,
+    active_conditions: [],
     ...overrides,
   };
 }
@@ -82,6 +84,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     max_health: 10,
     soak_value: null,
     probing_threshold: null,
+    active_conditions: [],
     ...overrides,
   };
 }

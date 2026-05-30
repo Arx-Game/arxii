@@ -56,6 +56,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
         max_health: 10,
         soak_value: null,
         probing_threshold: null,
+        active_conditions: [],
       },
     ],
     current_round_actions: [],
