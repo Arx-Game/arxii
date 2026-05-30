@@ -52,7 +52,7 @@ def flow_apply_condition(
     from world.conditions.services import apply_condition  # noqa: PLC0415
 
     raw_target = _unwrap_objectdb(target)
-    condition = ConditionTemplate.objects.get(name=condition_name)
+    condition = ConditionTemplate.get_by_name(condition_name)
     apply_condition(target=raw_target, condition=condition)
 
 
