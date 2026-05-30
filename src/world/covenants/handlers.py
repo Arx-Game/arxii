@@ -66,6 +66,14 @@ class CharacterCovenantRoleHandler:
         """All active memberships (left_at IS NULL) for this character."""
         return [m for m in self._rows if m.left_at is None]
 
+    def active_covenant_ids(self) -> frozenset[int]:
+        """Return the frozenset of covenant PKs where this character is currently active.
+
+        Used by ``Character.shares_covenant_with`` for the reactive-filter
+        ``shares_covenant`` op.
+        """
+        return frozenset(m.covenant_id for m in self.active_memberships)
+
     def active_memberships_for_type(
         self,
         covenant_type: str,

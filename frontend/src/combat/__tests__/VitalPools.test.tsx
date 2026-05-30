@@ -45,6 +45,12 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     max_health: 10,
     character_status: 'healthy',
     available_strain: null,
+    fatigue: {
+      physical: { current: 3, capacity: 12 },
+      social: { current: 1, capacity: 9 },
+      mental: { current: 4, capacity: 11 },
+    },
+    active_conditions: [],
     ...overrides,
   };
 }
@@ -128,19 +134,79 @@ describe('VitalPools', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
-  it('renders three fatigue placeholder bars', () => {
+  it('renders three fatigue bars with real values', () => {
+    const encounter = makeEncounter([
+      makeParticipant({
+        fatigue: {
+          physical: { current: 3, capacity: 12 },
+          social: { current: 1, capacity: 8 },
+          mental: { current: 5, capacity: 10 },
+        },
+      }),
+    ]);
+
+    render(<VitalPools encounter={encounter} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    const physical = screen.getByTestId('vital-fatigue-physical-bar');
+    const social = screen.getByTestId('vital-fatigue-social-bar');
+    const mental = screen.getByTestId('vital-fatigue-mental-bar');
+    expect(physical).toBeInTheDocument();
+    expect(social).toBeInTheDocument();
+    expect(mental).toBeInTheDocument();
+
+    // Real values, not the 0/10 placeholder.
+    expect(physical).toHaveTextContent('3');
+    expect(physical).toHaveTextContent('/ 12');
+    expect(social).toHaveTextContent('/ 8');
+    expect(mental).toHaveTextContent('/ 10');
+  });
+
+  it('no longer renders the placeholder affordances', () => {
     const encounter = makeEncounter([makeParticipant()]);
 
     render(<VitalPools encounter={encounter} characterId={10} />, {
       wrapper: createWrapper(),
     });
 
-    expect(screen.getByTestId('vital-fatigue-physical-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('vital-fatigue-social-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('vital-fatigue-mental-bar')).toBeInTheDocument();
-    // Placeholder text
-    const placeholders = screen.getAllByText('(placeholder)');
-    expect(placeholders).toHaveLength(3);
+    expect(screen.queryByText('(placeholder)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Fatigue tracking not yet implemented')).not.toBeInTheDocument();
+  });
+
+  it('clamps the fatigue fill width to [0, 100%]', () => {
+    const encounter = makeEncounter([
+      makeParticipant({
+        fatigue: {
+          physical: { current: 20, capacity: 10 }, // over capacity
+          social: { current: 0, capacity: 0 }, // divide-by-zero guard
+          mental: { current: 5, capacity: 10 },
+        },
+      }),
+    ]);
+
+    render(<VitalPools encounter={encounter} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    const physicalFill = screen.getByTestId('vital-fatigue-physical-bar-fill');
+    expect(physicalFill).toHaveStyle({ width: '100%' });
+    const socialFill = screen.getByTestId('vital-fatigue-social-bar-fill');
+    expect(socialFill).toHaveStyle({ width: '0%' });
+  });
+
+  it('hides fatigue bars when fatigue is null (no vitals permission)', () => {
+    const encounter = makeEncounter([makeParticipant({ fatigue: null })]);
+
+    render(<VitalPools encounter={encounter} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('vital-fatigue-physical-bar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('vital-fatigue-social-bar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('vital-fatigue-mental-bar')).not.toBeInTheDocument();
+    // No fake numbers.
+    expect(screen.queryByText('0 / 10')).not.toBeInTheDocument();
   });
 
   it('shows dash when no participant health is available', () => {

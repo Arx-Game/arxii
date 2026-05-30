@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.mechanics.types import PrerequisiteEvaluation
+    from world.traits.models import Trait
 from world.mechanics.constants import (
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
@@ -160,6 +161,15 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
     objects = ModifierTargetManager()
 
+    # Class-level cache mapping target_trait_id -> ModifierTarget, mirroring
+    # Trait._name_to_trait_map. The stat-modifier hot path (TraitHandler.
+    # _get_stat_modifier) resolves a ModifierTarget by its target_trait FK
+    # per stat read; that lookup is keyed by a non-PK field, so it misses the
+    # SharedMemoryModel identity map and re-queries each call. This cache
+    # serves it from memory after the first build (#552).
+    _trait_cache_built = False
+    _trait_to_target_map: dict[int, "ModifierTarget"] = {}
+
     class Meta:
         unique_together = ["category", "name"]
         ordering = ["category__display_order", "display_order", "name"]
@@ -170,6 +180,42 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"
+
+    @classmethod
+    def get_for_trait(cls, trait: "Trait") -> "ModifierTarget | None":
+        """Return the ModifierTarget whose ``target_trait`` is ``trait`` (cached).
+
+        Keyed by ``target_trait_id`` so repeated stat-modifier lookups don't
+        re-query. Returns ``None`` when no target points at the trait.
+        """
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return cls._trait_to_target_map.get(trait.pk)
+
+    @classmethod
+    def _build_trait_cache(cls) -> None:
+        """Build the target_trait_id -> ModifierTarget mapping."""
+        cls._trait_to_target_map = {
+            target.target_trait_id: target
+            for target in cls.objects.filter(target_trait__isnull=False)
+        }
+        cls._trait_cache_built = True
+
+    @classmethod
+    def clear_trait_cache(cls) -> None:
+        """Clear the target_trait cache (call when targets are modified)."""
+        cls._trait_cache_built = False
+        cls._trait_to_target_map = {}
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Invalidate the target_trait cache on any ModifierTarget mutation."""
+        super().save(*args, **kwargs)
+        type(self).clear_trait_cache()
+
+    def delete(self, *args: object, **kwargs: object) -> object:
+        """Invalidate the target_trait cache when a target is removed."""
+        type(self).clear_trait_cache()
+        return super().delete(*args, **kwargs)
 
 
 class ModifierSource(SharedMemoryModel):

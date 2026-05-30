@@ -344,6 +344,13 @@ class Technique(SharedMemoryModel):
         blank=True,
         help_text="Conditions this technique can apply, with formula-based scaling.",
     )
+    properties = models.ManyToManyField(
+        "mechanics.Property",
+        related_name="techniques",
+        blank=True,
+        help_text="Neutral descriptive tags on this technique (e.g. cursed), used by "
+        "reactive trigger filters via the has_property op.",
+    )
 
     class Meta:
         verbose_name = "Technique"
@@ -353,6 +360,10 @@ class Technique(SharedMemoryModel):
     def cached_restrictions(self) -> list:
         """Restrictions for this technique. Supports Prefetch(to_attr=)."""
         return list(self.restrictions.all())
+
+    def has_property(self, name: str) -> bool:
+        """Return True if this technique carries the named Property tag."""
+        return self.properties.filter(name=name).exists()
 
     def __str__(self) -> str:
         return f"{self.name} ({self.gift})"

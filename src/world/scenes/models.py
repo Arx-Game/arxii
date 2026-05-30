@@ -210,6 +210,13 @@ class Persona(SharedMemoryModel):
         default=False,
         help_text="True when this persona obscures the character's identity",
     )
+    properties = models.ManyToManyField(
+        "mechanics.Property",
+        related_name="personas",
+        blank=True,
+        help_text="Neutral descriptive tags on this persona (e.g. masked-identity, "
+        "abyssal), used by reactive examine-filters via has_property.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

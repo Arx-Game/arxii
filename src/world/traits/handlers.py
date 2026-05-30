@@ -185,33 +185,37 @@ class TraitHandler:
         # Check if this is a stat that might have modifiers
         trait = Trait.get_by_name(trait_name)
         if trait and trait.trait_type == TraitType.STAT:
-            modifier = self._get_stat_modifier(trait_name.lower())
+            modifier = self._get_stat_modifier(trait)
             return base_value + modifier
 
         return base_value
 
-    def _get_stat_modifier(self, stat_name: str) -> int:
+    def _get_stat_modifier(self, trait: "Trait") -> int:
         """
         Get the total modifier for a stat from character's distinctions etc.
 
         Uses the ModifierTarget.target_trait FK for type-safe lookup
-        instead of string matching.
+        instead of string matching. Takes the already-resolved ``Trait``
+        instance (from ``get_trait_value``'s cached ``get_by_name``) so no
+        redundant ``Trait.objects.get(name__iexact=...)`` query fires, and
+        resolves the ModifierTarget through ``ModifierTarget.get_for_trait``
+        — a class-level cache keyed by ``target_trait_id`` — so neither the
+        trait nor the target lookup re-queries per call. This kept fatigue
+        capacity (which resolves 6 stat values per participant) from firing
+        a per-stat N+1 on the combat detail hot path (#552).
         """
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
         from world.mechanics.services import get_modifier_total  # noqa: PLC0415
-        from world.traits.models import Trait  # noqa: PLC0415
 
         try:
             sheet = self.character.sheet_data
         except Exception:  # noqa: BLE001
             return 0
 
-        try:
-            trait = Trait.objects.get(name__iexact=stat_name)
-            target = ModifierTarget.objects.get(target_trait=trait)
-            return get_modifier_total(sheet, target)
-        except (Trait.DoesNotExist, ModifierTarget.DoesNotExist):
+        target = ModifierTarget.get_for_trait(trait)
+        if target is None:
             return 0
+        return get_modifier_total(sheet, target)
 
     def get_trait_display_value(self, trait_name: str) -> float:
         """

@@ -177,6 +177,9 @@ clean-pyc:
 gen-api-types:
     uv run arx manage spectacular --file schema.json --validate
     pnpm --prefix frontend generate:types
+    # openapi-typescript output isn't prettier-formatted; normalize so the diff is
+    # just the real schema change, not a whole-file quote/indent reflow.
+    pnpm --prefix frontend exec prettier --write src/generated/api.d.ts
     @echo "gen-api-types: schema regenerated and frontend types updated."
 
 # --- Devcontainer (host-side; run these OUTSIDE the container) ---------------

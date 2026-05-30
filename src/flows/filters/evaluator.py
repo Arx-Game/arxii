@@ -32,6 +32,7 @@ OP_GE = ">="
 OP_IN = "in"
 OP_CONTAINS = "contains"
 OP_HAS_PROPERTY = "has_property"
+OP_SHARES_COVENANT = "shares_covenant"
 
 # Filter DSL self-reference token and dotted prefix
 SELF_TOKEN = "self"  # noqa: S105 — DSL token, not a credential
@@ -89,6 +90,11 @@ def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
             msg = f"Value at '{path}' has no has_property method"
             raise FilterPathError(msg)
         return bool(resolved.has_property(value))
+    if op == OP_SHARES_COVENANT:
+        if not hasattr(resolved, "shares_covenant_with"):
+            msg = f"Value at '{path}' has no shares_covenant_with method"
+            raise FilterPathError(msg)
+        return bool(resolved.shares_covenant_with(value))
     msg = f"Unknown operator: {op}"
     raise FilterPathError(msg)
 

@@ -55,7 +55,12 @@ def _get_display_stat_value(character_sheet: CharacterSheet, stat_name: str) -> 
     return raw_value
 
 
-def get_fatigue_capacity(character_sheet: CharacterSheet, category: str) -> int:
+def get_fatigue_capacity(
+    character_sheet: CharacterSheet,
+    category: str,
+    *,
+    well_rested: bool | None = None,
+) -> int:
     """Calculate max fatigue capacity for a category.
 
     Formula: endurance_stat * CAPACITY_STAT_MULTIPLIER + willpower * CAPACITY_WILLPOWER_MULTIPLIER
@@ -64,6 +69,10 @@ def get_fatigue_capacity(character_sheet: CharacterSheet, category: str) -> int:
     Args:
         character_sheet: The character's sheet.
         category: FatigueCategory value (physical/social/mental).
+        well_rested: Optional pre-resolved well_rested flag. Pass it when the
+            caller already has the FatiguePool loaded (e.g. via a prefetch) to
+            avoid an extra ``get_or_create_fatigue_pool`` query. When ``None``
+            (default) the pool is fetched/created and its flag is read.
 
     Returns:
         Integer fatigue capacity.
@@ -76,8 +85,9 @@ def get_fatigue_capacity(character_sheet: CharacterSheet, category: str) -> int:
         endurance_value * CAPACITY_STAT_MULTIPLIER + willpower_value * CAPACITY_WILLPOWER_MULTIPLIER
     )
 
-    pool = get_or_create_fatigue_pool(character_sheet)
-    if pool.well_rested:
+    if well_rested is None:
+        well_rested = get_or_create_fatigue_pool(character_sheet).well_rested
+    if well_rested:
         return int(base_capacity * WELL_RESTED_MULTIPLIER)
 
     return base_capacity

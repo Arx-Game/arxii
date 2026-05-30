@@ -95,10 +95,19 @@ class ObjectParent:
         Emits EXAMINE_PRE (mutable — lets listeners veto/modify), then
         EXAMINED (frozen — post-event). Returns False if a reactive trigger
         cancelled the examine; callers should honour the return value.
+
+        After a successful (non-cancelled) call the mutable ``sections`` list
+        from the ``ExaminePrePayload`` is stashed on ``self._examine_sections``
+        so that ``return_appearance`` can append them to the base description.
+        The attribute is always reset on entry so stale data never bleeds
+        across calls.
         """
         from flows.constants import EventName
         from flows.emit import emit_event
         from flows.events.payloads import ExaminedPayload, ExaminePrePayload
+
+        # Reset any sections left over from a previous call.
+        self._examine_sections: list[str] = []  # type: ignore[attr-defined]
 
         # For rooms, self is its own location; for characters/objects, use
         # the containing room.
@@ -111,6 +120,9 @@ class ObjectParent:
         )
         if stack.was_cancelled():
             return False
+
+        # Carry the decorated sections forward for return_appearance.
+        self._examine_sections = pre.sections  # type: ignore[attr-defined]
 
         post = ExaminedPayload(observer=observer, target=self)
         emit_event(
@@ -125,7 +137,13 @@ class ObjectParent:
 
         If a reactive trigger cancels the examine, returns an empty string
         so that the calling command shows nothing (or its own fallback).
+        Reactive flows that appended to ``ExaminePrePayload.sections`` have
+        their text concatenated after the base appearance.
         """
         if looker is not None and not self.at_examined(looker):
             return ""
-        return super().return_appearance(looker, **kwargs)  # type: ignore[misc]
+        base = super().return_appearance(looker, **kwargs)  # type: ignore[misc]
+        sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL — set by at_examined on same object
+        if sections:
+            return base + "\n" + "\n".join(sections)
+        return base

@@ -11,9 +11,10 @@
  * Anima: sourced from useCharacterAnima(characterId).
  *   - characterId is the ObjectDB PK (same as what CharacterAnimaFilter uses).
  *
- * Fatigue (Physical / Social / Mental): not yet modeled in the backend.
- *   Rendered as placeholder bars at 0/10.
- *   TODO(fatigue): wire real values when the fatigue model ships.
+ * Fatigue (Physical / Social / Mental): sourced from the viewer's participant
+ *   row's `fatigue` field (the same row that supplies health). Each pool is
+ *   `{ current, capacity }`. When `fatigue` is null (viewer lacks vitals
+ *   permission) the fatigue bars are hidden entirely — no fake numbers. (#552)
  *
  * Phase 8, Task 8.2 — unified-combat-ui plan.
  */
@@ -109,6 +110,15 @@ export function VitalPools({
   const animaCurrent = animaData?.current ?? null;
   const animaMaximum = animaData?.maximum ?? null;
 
+  // Fatigue pools come from the same viewer participant row. Null when the
+  // viewer lacks vitals permission — in that case we render no fatigue bars.
+  const fatigue = viewerParticipant?.fatigue ?? null;
+  const fatiguePools: { key: string; label: string }[] = [
+    { key: 'physical', label: 'Physical' },
+    { key: 'social', label: 'Social' },
+    { key: 'mental', label: 'Mental' },
+  ];
+
   return (
     <div className="rounded-md border border-border bg-card" data-testid="vital-pools-section">
       {/* Section header */}
@@ -174,30 +184,35 @@ export function VitalPools({
             </div>
           )}
 
-          {/* Fatigue (Physical / Social / Mental)
-           * TODO(fatigue): wire real values when the fatigue model ships.
-           * Fatigue is not modeled in the backend as of Phase 8. These are
-           * placeholder bars at 0/10.
-           */}
-          {(['Physical', 'Social', 'Mental'] as const).map((label) => (
-            <div
-              key={label}
-              className="space-y-1 opacity-50"
-              data-testid={`vital-fatigue-${label.toLowerCase()}-bar`}
-              title="Fatigue tracking not yet implemented"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground">{label} Fatigue</span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  0 / 10
-                  <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">
-                    (placeholder)
-                  </span>
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" />
-            </div>
-          ))}
+          {/* Fatigue (Physical / Social / Mental) — real values from the
+           * viewer's participant row. Hidden entirely when fatigue is null
+           * (viewer lacks vitals permission). */}
+          {fatigue !== null &&
+            fatiguePools.map(({ key, label }) => {
+              const pool = fatigue[key];
+              const current = pool?.current ?? 0;
+              const capacity = pool?.capacity ?? 0;
+              const pct = capacity > 0 ? Math.min(100, Math.max(0, (current / capacity) * 100)) : 0;
+              const testId = `vital-fatigue-${key}-bar`;
+              return (
+                <div key={key} className="space-y-1" data-testid={testId}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-foreground">{label} Fatigue</span>
+                    <span className="font-mono text-xs text-foreground">
+                      {current}
+                      <span className="text-muted-foreground"> / {capacity}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-orange-500 transition-all"
+                      style={{ width: `${pct}%` }}
+                      data-testid={`${testId}-fill`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

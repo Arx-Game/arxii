@@ -11,15 +11,49 @@
  *
  * NPCs are visually distinct from PCs via a destructive-tinted border + background.
  *
- * Condition icon row: placeholder until conditions are surfaced in the encounter
- *   payload. TODO(conditions): wire real condition data when available.
+ * Condition badges: each row renders its `active_conditions` as ConditionBadge
+ *   chips that deep-link to the shared condition-detail modal on click.
  *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
+import { ConditionBadge } from '../components/ConditionBadge';
 import type { EncounterDetail, Participant, Opponent } from '../types';
+import type { components } from '@/generated/api';
+
+type ConditionInstance = components['schemas']['ConditionInstance'];
+
+// ---------------------------------------------------------------------------
+// ConditionRow — flex row of condition badges for a combatant
+// ---------------------------------------------------------------------------
+
+interface ConditionRowProps {
+  /**
+   * active_conditions is typed loosely as `{[key: string]: unknown}[]` on the
+   * generated Participant/Opponent schemas (it's a SerializerMethodField); each
+   * entry is really a ConditionInstance. Cast at the boundary.
+   */
+  conditions?: { [key: string]: unknown }[];
+}
+
+function ConditionRow({ conditions }: ConditionRowProps) {
+  if (!conditions || conditions.length === 0) {
+    return null;
+  }
+  // Backend already orders by display_priority desc; be defensive and re-sort.
+  const sorted = [...(conditions as ConditionInstance[])].sort(
+    (a, b) => b.display_priority - a.display_priority
+  );
+  return (
+    <div className="mt-1 flex flex-wrap gap-1" data-testid="condition-row">
+      {sorted.map((condition) => (
+        <ConditionBadge key={condition.id} condition={condition} />
+      ))}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -87,9 +121,8 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
         <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>
         {/* HP mini-bar */}
         <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
-        {/* Condition icon row — placeholder until conditions in encounter payload.
-         * TODO(conditions): render condition icons when encounter detail exposes them.
-         */}
+        {/* Condition badges — deep-link to the condition-detail modal on click. */}
+        <ConditionRow conditions={participant.active_conditions} />
       </div>
     </div>
   );
@@ -121,6 +154,8 @@ function OpponentRow({ opponent }: OpponentRowProps) {
         <p className="truncate text-xs font-medium text-foreground">{opponent.name}</p>
         {/* HP mini-bar */}
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
+        {/* Condition badges — deep-link to the condition-detail modal on click. */}
+        <ConditionRow conditions={opponent.active_conditions} />
       </div>
     </div>
   );
