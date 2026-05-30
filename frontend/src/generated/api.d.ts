@@ -13544,8 +13544,9 @@ export interface components {
        *     * `whisper` - Whisper
        *     * `shout` - Shout
        *     * `action` - Action
+       *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['Mode3e5Enum'];
+      mode?: components['schemas']['ModeFb0Enum'];
       /** Format: date-time */
       readonly timestamp: string;
     };
@@ -13562,8 +13563,9 @@ export interface components {
        *     * `whisper` - Whisper
        *     * `shout` - Shout
        *     * `action` - Action
+       *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['Mode3e5Enum'];
+      mode?: components['schemas']['ModeFb0Enum'];
     };
     /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
     InteractionActionLink: {
@@ -13600,8 +13602,9 @@ export interface components {
        *     * `whisper` - Whisper
        *     * `shout` - Shout
        *     * `action` - Action
+       *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['Mode3e5Enum'];
+      mode?: components['schemas']['ModeFb0Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -13658,8 +13661,9 @@ export interface components {
        *     * `whisper` - Whisper
        *     * `shout` - Shout
        *     * `action` - Action
+       *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['Mode3e5Enum'];
+      mode?: components['schemas']['ModeFb0Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -13697,8 +13701,9 @@ export interface components {
        *     * `whisper` - Whisper
        *     * `shout` - Shout
        *     * `action` - Action
+       *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['Mode3e5Enum'];
+      mode?: components['schemas']['ModeFb0Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -14517,9 +14522,10 @@ export interface components {
      *     * `whisper` - Whisper
      *     * `shout` - Shout
      *     * `action` - Action
+     *     * `outcome` - Outcome
      * @enum {string}
      */
-    Mode3e5Enum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action';
+    ModeFb0Enum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action' | 'outcome';
     ModifierCategory: {
       readonly id: number;
       /** @description Category name (e.g., 'stat', 'magic', 'affinity') */

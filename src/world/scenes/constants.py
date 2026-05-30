@@ -26,6 +26,7 @@ class InteractionMode(models.TextChoices):
     WHISPER = "whisper", "Whisper"
     SHOUT = "shout", "Shout"
     ACTION = "action", "Action"
+    OUTCOME = "outcome", "Outcome"
 
 
 class InteractionVisibility(models.TextChoices):

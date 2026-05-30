@@ -1919,12 +1919,14 @@ def _resolve_pc_action(
         action.effort_level,
     )
 
-    # Create the ACTION-mode Interaction and link it back to this action.
-    # This is the pose ↔ action linkage the outcome panel reads.
+    # Create the ACTION-mode Interaction, link it, and broadcast it live.
     from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
         create_action_interaction,
         render_action_declaration_label,
+        render_action_outcome_narration,
     )
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
     interaction = create_action_interaction(
         participant=participant,
@@ -1935,6 +1937,17 @@ def _resolve_pc_action(
         action.interaction = interaction
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
+        push_interaction(interaction)
+
+    # Broadcast a durable, Narrator-authored OUTCOME line for this action.
+    target_label = target.name if target is not None else None
+    narration = render_action_outcome_narration(
+        actor_label=str(participant),
+        technique_name=technique.name,
+        target_label=target_label,
+        outcome=outcome,
+    )
+    broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
     return outcome
 
@@ -2014,6 +2027,21 @@ def _resolve_npc_action(
         bulk_apply_conditions(
             [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications]
         )
+
+    # Broadcast a durable, Narrator-authored OUTCOME line for the NPC action.
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        render_action_outcome_narration,
+    )
+
+    npc_target_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_narration = render_action_outcome_narration(
+        actor_label=str(opponent),
+        technique_name=npc_action.threat_entry.name,
+        target_label=npc_target_label,
+        outcome=outcome,
+    )
+    broadcast_action_outcome(encounter=opponent.encounter, narration=npc_narration)
 
     return outcome
 

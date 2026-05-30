@@ -286,12 +286,18 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
         character_sheet=character_sheet,
     ).first()
     if participant is not None:
-        create_action_interaction(
+        clash_interaction = create_action_interaction(
             participant=participant,
             round_number=clash.started_round,
             summary_label=f"{technique.name} → clash contribution",
             strain_committed=strain_commitment,
         )
+        if clash_interaction is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                push_interaction,
+            )
+
+            push_interaction(clash_interaction)
 
     return ClashContributionResult(
         character=character_sheet,
