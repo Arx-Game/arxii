@@ -404,14 +404,14 @@ the React frontend.
 - `CombatRoundAction → Interaction` join FK needed for effect enumeration in `outcome-details` endpoint (v1 returns empty effects)
 - Deep-link routing for outcome-detail effects — **#551 DONE**: outcome-effect deep links open a Redux-driven `DeepLinkModalHost` routing 5 kinds (combo/opponent/participant/condition/clash); added read-only `GET /api/conditions/instances/<pk>/`.
 - Auto-expand pose units on critical events (KO, death) — pending player-preference toggle
-- Fatigue model not yet exposed; VitalPools shows `0/10` placeholders
+- Fatigue pools — **#552 DONE**: `ParticipantSerializer` exposes physical/social/mental fatigue (current + capacity); `VitalPools` renders real values. Strain stays anima (ratified); the anima→fatigue "pushing" cost is tracked in #624.
 - `CombatOpponent` portrait FK — NPC avatars are initial-letter-only
 - ActiveState Commit/Lend buttons — **#555 DONE**: ActiveState is read-only; the clash-commit path lives in YourTurn's `ClashContributionRow` (no parallel surface).
 - Focused-category technique taxonomy (was **#558**) — **reframed/descoped to #614**: needs a physical/social/mental technique taxonomy that does not exist yet.
 - `ClashStateSerializer` does not expose `contributors` or `side_favored`
-- Conditions data not surfaced on CombatantsList rows
+- Conditions on combatant rows — **#553 DONE**: Participant + Opponent serializers expose `active_conditions` (visibility-filtered); `CombatantsList` rows render condition badges that deep-link to the condition detail modal (reuses #551's `DeepLinkModalHost`).
 - `submit_pose` REST endpoint does not broadcast via WebSocket
-- Strain budget hardcoded `max=10`; needs `CombatParticipant.available_strain` exposed
+- Strain budget — `CombatParticipant.available_strain` (anima) is exposed + drives the slider max; the hardcoded `10` is now only a missing-data fallback. Per-category fatigue binding deferred (#614 taxonomy, #624 fatigue cost).
 - Focused-category resolution stubbed to `passive-physical`
 - `lend-to-clash` not wired; no `CLASH_SUPPORT` `PlayerAction` descriptor exists
 - Scene-side adoption of `<ActionDeclarationCard>` (no `ScenePull` envelope) — out of this spec's scope
