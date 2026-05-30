@@ -3,9 +3,9 @@
 # C extensions
 *.so
 
-# AI workflow specs (keep design specs, ignore transient plans/files)
-docs/superpowers/*
-!docs/superpowers/specs/
+# AI workflow specs/plans now live on the GitHub issue (see #653), not in-repo.
+# Kept fully ignored so vendored brainstorming/writing-plans output never re-commits.
+docs/superpowers/
 
 # Packages
 *.egg
