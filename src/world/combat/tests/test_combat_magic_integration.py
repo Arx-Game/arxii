@@ -425,3 +425,105 @@ class FullHappyPathTest(TestCase):
         self.assertIn(EventName.TECHNIQUE_CAST, captured_events)
 
         self.assertTrue(result.technique_use_result.confirmed)
+
+
+class IdentityIntensityModifierRaisesCombatDamageTest(TestCase):
+    """Identity intensity CharacterModifier raises combat damage via injected power.
+
+    get_runtime_technique_stats sums CharacterModifier rows on the intensity
+    ModifierTarget into stats.intensity.  use_technique derives power from that
+    value and injects it into the resolver.  CombatTechniqueResolver.__call__
+    uses injected power (not technique.intensity) as its effective intensity seed,
+    so a caster with a +N identity intensity modifier must deal strictly more
+    opponent damage than an identical caster without that modifier.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
+    def _resolve_with_identity_modifier(self, *, identity_intensity_bonus: int) -> int:
+        """Run one resolve_combat_technique with or without an identity intensity modifier.
+
+        Returns the total damage dealt to the opponent.
+        """
+        from decimal import Decimal
+
+        from world.distinctions.factories import (
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.magic.factories import TechniqueDamageProfileFactory
+        from world.mechanics.constants import TECHNIQUE_STAT_CATEGORY_NAME, TECHNIQUE_STAT_INTENSITY
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+        from world.mechanics.models import CharacterModifier, ModifierSource
+
+        # Base setup: intensity=5 so damage profile scaling is non-zero.
+        participant, action, _opponent, _anima, technique, _room = _setup_pc_attacking_mook(
+            technique_intensity=5,
+            technique_control=10,
+            technique_anima_cost=2,
+            base_power=0,  # No EffectType base_power — damage comes entirely from profile.
+            opponent_health=999,
+        )
+        # Replace the auto-seeded profile with one that has damage_intensity_multiplier=2.
+        # budget = base_damage(0) + eff_intensity × 2.0
+        # With identity_bonus=0: eff_intensity=5 → budget=10 → damage=10 (at SL=2, mult=1.0).
+        # With identity_bonus=10: eff_intensity=15 → budget=30 → damage=30.
+        technique.damage_profiles.all().delete()
+        TechniqueDamageProfileFactory(
+            technique=technique,
+            base_damage=0,
+            damage_intensity_multiplier=Decimal("2.0"),
+            minimum_success_level=1,
+        )
+
+        if identity_intensity_bonus > 0:
+            # Create a ModifierTarget for technique_stat intensity.
+            category = ModifierCategoryFactory(name=TECHNIQUE_STAT_CATEGORY_NAME)
+            target = ModifierTargetFactory(name=TECHNIQUE_STAT_INTENSITY, category=category)
+
+            # Create a DistinctionEffect pointing at that target (required by
+            # get_modifier_breakdown's source.distinction_effect access).
+            distinction = DistinctionFactory()
+            effect = DistinctionEffectFactory(
+                distinction=distinction,
+                target=target,
+                value_per_rank=identity_intensity_bonus,
+            )
+            source = ModifierSource.objects.create(distinction_effect=effect)
+            CharacterModifier.objects.create(
+                character=participant.character_sheet,
+                target=target,
+                value=identity_intensity_bonus,
+                source=source,
+            )
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=FatigueCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+        return sum(r.damage_dealt for r in result.damage_results)
+
+    def test_identity_intensity_modifier_raises_damage(self) -> None:
+        """A caster WITH a +10 identity intensity modifier deals strictly more damage."""
+        damage_base = self._resolve_with_identity_modifier(identity_intensity_bonus=0)
+        damage_boosted = self._resolve_with_identity_modifier(identity_intensity_bonus=10)
+        self.assertGreater(
+            damage_boosted,
+            damage_base,
+            f"Expected boosted damage ({damage_boosted}) > base damage ({damage_base}).",
+        )

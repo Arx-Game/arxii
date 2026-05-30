@@ -93,7 +93,7 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
     def test_apply_damage_returns_damage_results_when_target_alive(self) -> None:
         resolver = _build_resolver()
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
 
@@ -103,13 +103,13 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
         target.status = OpponentStatus.DEFEATED
         target.save(update_fields=["status"])
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_apply_damage_returns_empty_on_miss(self) -> None:
         resolver = _build_resolver()
         check = MagicMock(success_level=0)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_apply_damage_returns_empty_when_no_target(self) -> None:
@@ -117,13 +117,13 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
         # Remove the opponent target from the action
         resolver.action.focused_opponent_target = None
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_apply_damage_half_on_partial_success(self) -> None:
         resolver = _build_resolver(base_power=20)
         check = MagicMock(success_level=1)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         # half of 20 = 10, but actual damage_dealt may differ due to soak
         self.assertGreater(results[0].damage_dealt, 0)
@@ -133,7 +133,7 @@ class CombatTechniqueResolverApplyConditionsTests(TestCase):
     def test_apply_conditions_stub_returns_empty_list(self) -> None:
         resolver = _build_resolver()
         check = MagicMock(success_level=2)
-        results = resolver._apply_conditions(check)
+        results = resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
 
@@ -170,7 +170,7 @@ class ApplyConditionsTests(TestCase):
     def test_returns_empty_when_no_rows(self) -> None:
         """Technique with no condition_applications rows returns []."""
         check = MagicMock(success_level=2)
-        results = self.resolver._apply_conditions(check)
+        results = self.resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
     def test_skips_condition_below_minimum_sl(self) -> None:
@@ -192,7 +192,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         # Only one row passed the SL gate → bulk called with one application
         self.assertEqual(len(results), 1)
@@ -215,7 +215,7 @@ class ApplyConditionsTests(TestCase):
         with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         result = results[0]
@@ -238,7 +238,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         call_args = mock_bulk.call_args[0][0]
@@ -271,7 +271,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         call_args = mock_bulk.call_args[0][0]
@@ -290,7 +290,7 @@ class ApplyConditionsTests(TestCase):
 
         with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])
@@ -312,9 +312,8 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            with patch("world.combat.services.compute_effective_intensity", return_value=5):
-                check = MagicMock(success_level=1)
-                results = self.resolver._apply_conditions(check)
+            check = MagicMock(success_level=1)
+            results = self.resolver._apply_conditions(check, eff_intensity=5)
 
         # base_severity=2, effective_intensity=5 * multiplier=1.0 = 5, total = 7
         call_args = mock_bulk.call_args[0][0]
@@ -337,7 +336,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         call_args = mock_bulk.call_args[0][0]
         # cond_a.default_duration_value=2
@@ -357,7 +356,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=False)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         self.assertFalse(results[0].success)
@@ -374,7 +373,7 @@ class ApplyConditionsTests(TestCase):
 
         with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check)
+            results = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])
@@ -395,7 +394,7 @@ class CombatTechniqueResolverCallTests(TestCase):
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
-            result = resolver()
+            result = resolver(power=5)
 
         self.assertGreater(result.scaled_damage, 0)
         self.assertEqual(result.pull_flat_bonus, 2)
@@ -462,6 +461,78 @@ class SumActiveFlatBonusesTests(TestCase):
             _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
             0,
         )
+
+
+class ResolverConsumesPowerTests(TestCase):
+    """CombatTechniqueResolver.__call__(power=N) uses injected power for scaling.
+
+    These tests establish the RED gate: higher power → larger damage budget;
+    lower power (or 0) → smaller/zero budget. The resolver's __call__ must
+    accept a `power` keyword argument and route it through _apply_damage and
+    _apply_conditions as the base intensity, augmented by INTENSITY_BUMP pulls.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
+    def _build_resolver_with_intensity_profile(self) -> CombatTechniqueResolver:
+        """Build a resolver whose technique has a damage profile that scales with intensity."""
+        from decimal import Decimal
+
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=0)
+        # Remove any auto-seeded profile (base_power=0 may seed an empty one).
+        resolver.action.focused_action.damage_profiles.all().delete()
+        # Profile where budget = base_damage + intensity × multiplier.
+        # base_damage=10 so even power=0 produces a nonzero baseline.
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=10,
+            damage_intensity_multiplier=Decimal("1.0"),
+            minimum_success_level=1,
+        )
+        return resolver
+
+    def test_higher_power_yields_larger_scaled_damage(self) -> None:
+        """resolver(power=20) must produce more scaled_damage than resolver(power=0)."""
+        resolver = self._build_resolver_with_intensity_profile()
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            low_result = resolver(power=0)
+
+        # Rebuild to get a fresh opponent with full health.
+        resolver_hi = self._build_resolver_with_intensity_profile()
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            high_result = resolver_hi(power=20)
+
+        self.assertGreater(
+            high_result.scaled_damage,
+            low_result.scaled_damage,
+            "Higher injected power must produce larger scaled_damage.",
+        )
+
+    def test_zero_power_with_no_pulls_uses_base_damage_only(self) -> None:
+        """resolver(power=0) with no INTENSITY_BUMP pulls still returns damage from base_damage."""
+        resolver = self._build_resolver_with_intensity_profile()
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolver(power=0)
+
+        # base_damage=10, intensity part=0×1.0=0 → budget=10 → damage > 0 after soak.
+        self.assertGreater(result.scaled_damage, 0)
 
 
 class BuildCombatResultTests(TestCase):
@@ -607,7 +678,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         # Sanity: no profiles remain.
         self.assertEqual(resolver.action.focused_action.damage_profiles.count(), 0)
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_single_component_full_success(self) -> None:
@@ -617,7 +688,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         # The auto-seeded profile has base_damage=10, damage_intensity_multiplier=0.
         # SL=2 → multiplier=1.0 → budget=10 → scaled=10 → apply_damage_to_opponent.
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
 
@@ -625,7 +696,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         """1 profile base_damage=20; SL=1 → multiplier=0.5 → 10 budget → >0 damage after soak."""
         resolver = _build_resolver(base_power=20)
         check = MagicMock(success_level=1)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
 
@@ -642,17 +713,13 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             minimum_success_level=2,
         )
         check = MagicMock(success_level=1)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_intensity_scales_damage(self) -> None:
-        """A profile with damage_intensity_multiplier=1.0 produces more damage when
-        an INTENSITY_BUMP pull raises effective_intensity above the technique baseline."""
-        from world.combat.factories import (
-            CombatPullFactory,
-            CombatPullResolvedEffectFactory,
-        )
-        from world.magic.constants import EffectKind
+        """A profile with damage_intensity_multiplier=1.0 produces more damage with
+        higher eff_intensity.  Passing eff_intensity=5 directly (simulating a pull bump)
+        must produce damage > 0."""
         from world.magic.factories import TechniqueDamageProfileFactory
 
         resolver = _build_resolver(base_power=0)
@@ -666,24 +733,11 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             damage_intensity_multiplier=Decimal("1.0"),
             minimum_success_level=1,
         )
-        # Add an INTENSITY_BUMP pull to raise effective_intensity by 5.
-        encounter = resolver.participant.encounter
-        pull = CombatPullFactory(
-            participant=resolver.participant,
-            encounter=encounter,
-            round_number=encounter.round_number,
-        )
-        CombatPullResolvedEffectFactory(
-            pull=pull,
-            kind=EffectKind.INTENSITY_BUMP,
-            scaled_value=5,
-        )
-        resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
-        # technique.intensity defaults to some value; after bump effective_intensity > 0.
+        # Pass eff_intensity=5 directly (simulating power=0 + pull_bump=5).
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
-        # budget = intensity × 1.0; must produce at least 1 result with damage > 0.
+        results = resolver._apply_damage(check, eff_intensity=5)
+        # budget = 5 × 1.0 = 5 → damage > 0.
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
 
@@ -702,7 +756,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             minimum_success_level=1,
         )
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 2)
         self.assertGreater(results[0].damage_dealt, 0)
         self.assertGreater(results[1].damage_dealt, 0)
@@ -727,7 +781,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             minimum_success_level=1,
         )
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         # Only 1 result: the second profile was skipped because target was defeated.
         self.assertEqual(len(results), 1)
 
@@ -738,5 +792,5 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         target.status = OpponentStatus.DEFEATED
         target.save(update_fields=["status"])
         check = MagicMock(success_level=2)
-        results = resolver._apply_damage(check)
+        results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
