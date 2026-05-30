@@ -10,6 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ambiguous "?" sentences force the user to guess whether they're being asked to respond. When in doubt, no `?` in user-facing text outside of `AskUserQuestion`.
 
+## Tool & Subagent Sequencing
+
+**Mutating operations run strictly sequentially — one per message — with verification between.** This is the single most expensive failure mode observed in practice: running repo-mutating work concurrently corrupts the git index and triggers cascade-cancellations (when one call in a parallel batch fails, the harness cancels every sibling).
+
+- **Repo-mutating subagents must NOT run in parallel.** Dispatch one implementer subagent, wait for it, verify its commit landed, then dispatch the next. Parallel implementers fight over the same working tree and `.git/index`. (The `subagent-driven-development` skill already mandates this — honor it.) Parallelism is ONLY for read-only work: greps, reads, `Explore`/research agents.
+- **Don't batch mutating Bash/Edit/Write calls in one message.** `git`, `rm`, file writes, commits — issue them one at a time and check each result before the next. Read-only fan-out (multiple greps/reads) is fine to batch.
+- **Approval-gated or destructive git commands go alone.** `git reset --hard`, force-push, etc. — their own message, no dependent calls batched after them (a denial/prompt cancels the whole batch).
+- **Never reference an issue/PR number you haven't read back from the creating command's stdout.** Create → capture the emitted number → then use it, in separate steps. Don't predict sequential numbers.
+
 ## Git Workflow
 
 > For end-to-end issue → merged-PR work, see the `issue-to-merged-pr` skill at `tools/skills/issue-to-merged-pr/`. It handles branch creation, PR opening, CI watching, and post-merge cleanup. The conventions below still apply; the skill is built on top of them.
