@@ -20,7 +20,7 @@ for the gather phase.
 
 from types import SimpleNamespace
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
@@ -505,19 +505,70 @@ class CrossCharacterScarSpecificityTest(TestCase):
         self.assertTrue(stack.was_cancelled())
 
 
+@tag("postgres")
 class CovenantAllegianceFilterTest(TestCase):
     """Test 9: Covenant-allegiance filter — fires on outsider attackers only.
 
-    Skipped: covenant relationship model does not yet exist. Retaliation filter
-    ``attacker.covenant != self.covenant`` requires a covenant attribute on
-    Character, not yet wired. Update when covenant system ships.
+    A retaliation scar on the defender cancels incoming damage when the attacker
+    is NOT in the defender's covenant (i.e. filter ``not shares_covenant``).
+    Ally attackers (same covenant) do NOT trigger the scar.
     """
 
-    def test_covenant_filter_skipped(self):
-        self.skipTest(
-            "Covenant model not yet built; attacker.covenant path unresolvable. "
-            "Implement when covenant system is added."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
         )
+
+        self.room = _create_room("CovenantRoom9")
+        self.defender = CharacterFactory()
+        self.ally = CharacterFactory()
+        self.outsider = CharacterFactory()
+        for c in (self.defender, self.ally, self.outsider):
+            c.location = self.room
+
+        # Each character needs a CharacterSheet so covenant_roles handler works.
+        defender_sheet = CharacterSheetFactory(character=self.defender)
+        ally_sheet = CharacterSheetFactory(character=self.ally)
+        CharacterSheetFactory(character=self.outsider)  # no covenant membership
+
+        covenant = CovenantFactory()
+        role = CovenantRoleFactory(covenant_type=covenant.covenant_type)
+        CharacterCovenantRoleFactory(
+            character_sheet=defender_sheet, covenant=covenant, covenant_role=role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=ally_sheet, covenant=covenant, covenant_role=role
+        )
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "not": {"path": "source.ref", "op": "shares_covenant", "value": "self"}
+            },
+            flow_definition=cancel_flow,
+            target=self.defender,
+        )
+        self.defender.trigger_handler._populated = False
+
+    def test_outsider_attacker_triggers_retaliation(self) -> None:
+        """Attacker not in defender's covenant -> scar fires -> damage cancelled."""
+        payload = _damage_payload(
+            self.defender,
+            source=DamageSource(type="character", ref=self.outsider),
+        )
+        self.assertTrue(_emit_damage(self.defender, payload).was_cancelled())
+
+    def test_ally_attacker_does_not_trigger_retaliation(self) -> None:
+        """Attacker in defender's covenant -> scar does not fire -> damage not cancelled."""
+        payload = _damage_payload(
+            self.defender,
+            source=DamageSource(type="character", ref=self.ally),
+        )
+        self.assertFalse(_emit_damage(self.defender, payload).was_cancelled())
 
 
 # ---------------------------------------------------------------------------
