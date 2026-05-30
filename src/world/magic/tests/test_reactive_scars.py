@@ -23,6 +23,8 @@ from flows.emit import emit_event
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
+from world.magic.factories import TechniqueFactory
+from world.mechanics.factories import PropertyFactory
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -241,25 +243,49 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
 class PropertyTaggedTechniqueTest(TestCase):
     """Property-tagged technique — scar fires when technique carries a Property.
 
-    Skipped: Technique model has no ``properties`` M2M field. The ``has_property``
-    filter path ``source.ref.properties`` is unresolvable until a Technique → Property
-    M2M is added to ``world/magic/models.py``.
-
-    Intent: a scar with filter ``{path: 'source.ref', op: 'has_property', value: 'cursed'}``
-    should fire on techniques that carry the ``cursed`` Property tag, and NOT fire on
-    techniques without it. Implement when Technique gains a ``properties`` M2M.
+    A scar with filter ``{path: 'source.ref', op: 'has_property', value: 'cursed'}``
+    fires on techniques that carry the ``cursed`` Property tag, and does NOT fire on
+    techniques without it.
     """
 
-    def test_technique_with_property_fires_scar(self):
-        self.skipTest(
-            "Technique model has no 'properties' M2M field. "
-            "Add Technique.properties M2M to world.mechanics.Property, then implement "
-            "this test using has_property filter op. See world/magic/models.py:Technique."
+    def setUp(self):
+        self.room = _create_room("PropertyRoom")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
+        self.cursed = PropertyFactory(name="cursed")
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.ref", "op": "has_property", "value": "cursed"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
         )
 
-    def test_near_miss_technique_without_property_does_not_fire(self):
-        self.skipTest(
-            "Technique model has no 'properties' M2M field. "
-            "Add Technique.properties M2M to world.mechanics.Property, then implement "
-            "this test using has_property filter op. See world/magic/models.py:Technique."
+    def _emit(self, technique):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=DamageSource(type="technique", ref=technique),
         )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_technique_with_property_fires_scar(self):
+        """A technique carrying the 'cursed' Property triggers the scar — dispatch cancelled."""
+        technique = TechniqueFactory(damage_profile=False)
+        technique.properties.add(self.cursed)
+        stack = self._emit(technique)
+        self.assertTrue(stack.was_cancelled())
+
+    def test_near_miss_technique_without_property_does_not_fire(self):
+        """A technique without any Property does not match has_property — passes through."""
+        technique = TechniqueFactory(damage_profile=False)
+        stack = self._emit(technique)
+        self.assertFalse(stack.was_cancelled())
