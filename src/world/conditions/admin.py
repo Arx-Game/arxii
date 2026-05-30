@@ -35,9 +35,10 @@ class CapabilityTypeAdmin(admin.ModelAdmin):
 
 @admin.register(DamageType)
 class DamageTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "resonance", "color_hex"]
+    list_display = ["name", "resonance", "wound_pool", "death_pool", "color_hex"]
     list_filter = ["resonance"]
     search_fields = ["name"]
+    autocomplete_fields = ["wound_pool", "death_pool"]
 
 
 # =============================================================================
