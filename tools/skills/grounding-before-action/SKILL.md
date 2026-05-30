@@ -27,13 +27,21 @@ Concretely:
 
 Emit calls → **end the turn** → observe the real results → **then** compose whatever depends on them.
 
+## Keeping `AskUserQuestion` (the picker) safe — solo emission + echo-back
+
+The picker UI is worth keeping. It only breaks when `AskUserQuestion` is **co-emitted with other tool calls** — then the batch resolves together, the answer isn't visible at compose time, and the model confabulates an answer (or barrels past as if auto-answered). Emitted **alone**, the turn ends cleanly, the picker shows, and the real answer arrives in the next turn. So the trigger is *bundling*, not the tool. Two rules preserve the picker AND guard it:
+
+1. **Solo emission.** `AskUserQuestion` must be the **only** tool call in its message — never alongside any Bash/Read/Edit/Agent/other call. If you're tempted to "ask and also kick off some reads," split it: ask alone, end the turn, then act on the answer next turn. (If the picker is misbehaving in this session anyway, downgrade further: ask in **plain text with zero tool calls** and stop — a turn with no tool call cannot be auto-resolved.)
+
+2. **Echo-back before acting.** After an answer returns, **restate it in plain text before any irreversible action** — "You chose X, so I'll do Y." This converts a silent auto-answer/confabulation into a loud, catchable error at the cheapest moment: if the echo is wrong, the user stops you *before* the GitHub write or edit. One sentence; non-negotiable before mutations.
+
 ## Why (the bug, precisely)
 
 Tool results are **not** lost or garbled. They arrive intact. The failure is that when you bundle a dependent step into the same message as its tool call, you are composing that step **before the result exists in your view** — so you see a blank and fill it with a plausible story. The batch then resolves and the real output sits right next to your fabrication. The content of the lie is random (an "empty" file, a "corrupted" read, "41 passing tests", a fake issue #643); the cause is fixed: **dependent step co-emitted with its call.**
 
 ## The gates
 
-1. **Un-bundle.** `AskUserQuestion` and result-narrating sentences get their own message. If you're about to write "the output shows…" or a question reasoning about a result, in the same message as the call producing it — STOP, split it.
+1. **Un-bundle (solo `AskUserQuestion`).** `AskUserQuestion` must be the only tool call in its message; result-narrating sentences get their own message too. If you're about to write "the output shows…", or co-emit a question with reads/edits, or reason about a result in the same message as the call producing it — STOP, split it. Echo the answer back in plain text before acting on it (see "Keeping `AskUserQuestion` safe" above).
 2. **A read is only true for the instant it returned.** State drifts and turns are long; **re-read immediately before acting**, in a turn where the fresh result is visible before the write.
 3. **One sequential call for state-changing or state-reading git/gh work.** No large parallel batches. Independent *pure reads* may batch; never batch a read with the action it informs. (See [[feedback-sequential-mutations]].)
 4. **Verify number↔title before ANY issue mutation.** Before `gh issue comment/edit/--add-label/--add-assignee/close` (or PR equivalents), fetch and quote the target's number AND title — and confirm `gh issue create` returned the number you think it did (it is NOT the next sequential number). Never assume numbers are sequential or that a remembered title is current.
@@ -42,7 +50,8 @@ Tool results are **not** lost or garbled. They arrive intact. The failure is tha
 
 ## Red flags — STOP, you're about to confabulate
 
-- You're writing an `AskUserQuestion` in the same message as other tool calls.
+- You're writing an `AskUserQuestion` in the same message as other tool calls. (Emit it solo.)
+- You're about to act on a picker answer without echoing it back in plain text first.
 - A result looks empty/partial/corrupted and you're tempted to "proceed as if…" or to report a problem with the tooling. (The tooling is fine — you just haven't seen the result yet.)
 - You're about to `gh issue edit/comment/close` without a title quote in this turn, or trusting that `gh issue create` made issue #N+1.
 - You're describing what a subagent "found" but can't point to its returned text.
@@ -58,6 +67,9 @@ Tool results are **not** lost or garbled. They arrive intact. The failure is tha
 | "Bundling the read + the edit is faster" | Bundling IS the bug. One call, observe, then act. |
 | "Issue #N+1 follows #N" | Numbers aren't guessable. Quote the create URL / `gh issue view`. |
 | "Saying it stalled is harmless" | Groundless status claims are confabulation too — and burn user trust. |
+| "I'll ask and start the reads in one go" | That co-emission is what breaks the picker. Ask solo, end the turn. |
+| "The picker answer is obviously right, just act" | Auto-answers look identical to real ones. Echo it back first; let the user catch it. |
+| "Dropping the picker is the only safe option" | Solo emission keeps the picker working; echo-back catches the rare miss. |
 
 ## Real-world impact
 
