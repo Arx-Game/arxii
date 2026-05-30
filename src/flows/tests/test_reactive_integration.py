@@ -601,11 +601,40 @@ class ConditionalIntensityCapTest(TestCase):
         )
 
     def test_hit_evocation_filter_matches(self):
-        self.skipTest(
-            "MODIFY_PAYLOAD lacks a 'min' op needed for intensity capping. "
-            "Add 'min'/'max' ops to _execute_modify_payload, then implement "
-            "cap as: {field: 'amount', op: 'min', value: 50}."
+        # Use a separate room so the cancel-ward on self.character (from setUp)
+        # is not gathered — emit_event walks location.contents, so isolation
+        # requires a different room.
+        isolated_room = _create_room("CapRoom11b")
+        capped_char = CharacterFactory()
+        capped_char.location = isolated_room
+
+        cap_flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=cap_flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "min", "value": 50},
         )
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "path": "source.ref.school",
+                "op": "==",
+                "value": "evocation",
+            },
+            flow_definition=cap_flow,
+            target=capped_char,
+        )
+        capped_char.trigger_handler._populated = False
+
+        payload = _damage_payload(
+            capped_char,
+            amount=100,
+            damage_type="arcane",
+            source=DamageSource(type="technique", ref=SimpleNamespace(school="evocation")),
+        )
+        _emit_damage(capped_char, payload)
+        self.assertEqual(payload.amount, 50)
 
     def test_near_miss_enchantment_uncapped(self):
         payload = _damage_payload(

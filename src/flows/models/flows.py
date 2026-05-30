@@ -527,9 +527,9 @@ class FlowStepDefinition(SharedMemoryModel):
         """Mutate a field on the current payload dataclass.
 
         Reads ``field``, ``op``, and ``value`` from step parameters. Ops are
-        ``set`` (replace), ``multiply``, and ``add``. POST events use frozen
-        dataclasses — ``setattr`` raises ``FrozenInstanceError``, which is the
-        desired behavior.
+        ``set`` (replace), ``multiply``, ``add``, ``min`` (cap from above),
+        and ``max`` (floor from below). POST events use frozen dataclasses —
+        ``setattr`` raises ``FrozenInstanceError``, which is the desired behavior.
         """
         params = self._parameters_mapping()
         payload = flow_execution.get_variable("payload")
@@ -544,6 +544,10 @@ class FlowStepDefinition(SharedMemoryModel):
             new_value = current * value
         elif op == "add":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
             new_value = current + value
+        elif op == "min":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = min(current, value)
+        elif op == "max":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = max(current, value)
         else:
             msg = f"Unknown modify_payload op: {op}"
             raise ValueError(msg)
