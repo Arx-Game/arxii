@@ -16031,6 +16031,23 @@ export interface components {
        *     The frontend's YourTurn strain slider reads this as its max value.
        */
       readonly available_strain: number | null;
+      /**
+       * @description Return the three fatigue pools (physical/social/mental).
+       *
+       *     Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
+       *     persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
+       *     is derived from the character's endurance stats via
+       *     ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+       *     health/strain — outsiders get ``None``.
+       *
+       *     The frontend's VitalPools component reads this to render fatigue bars
+       *     (replacing the ``0/10`` placeholder). See #552.
+       */
+      readonly fatigue: {
+        [key: string]: {
+          [key: string]: number;
+        };
+      } | null;
     };
     /**
      * @description Read serializer for combat participants.
