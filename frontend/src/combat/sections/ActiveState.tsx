@@ -55,13 +55,13 @@ const FLAVOR_COLOR: Record<ClashState['flavor'], string> = {
 // ClashCard — renders one active Clash
 // ---------------------------------------------------------------------------
 
-interface ClashCardProps {
+export interface ClashCardProps {
   clash: ClashState;
   /** Name of the NPC this clash is against — derived from encounter.opponents. */
   opponentName?: string;
 }
 
-function ClashCard({ clash, opponentName }: ClashCardProps) {
+export function ClashCard({ clash, opponentName }: ClashCardProps) {
   // Meter: progress toward pc_win_threshold.
   // progress can be negative (NPC side winning) — clamp for display.
   const isClash = clash.flavor === 'CLASH';
