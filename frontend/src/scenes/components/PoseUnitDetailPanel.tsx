@@ -10,6 +10,8 @@
 
 import { useOutcomeDetails } from '@/combat/queries';
 import { cn } from '@/lib/utils';
+import { useAppDispatch } from '@/store/hooks';
+import { openDeepLink, type DeepLinkKind } from '@/store/deepLinkModalSlice';
 
 interface EffectRow {
   kind: string;
@@ -22,6 +24,7 @@ interface PoseUnitDetailPanelProps {
 }
 
 export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPanelProps) {
+  const dispatch = useAppDispatch();
   const { data, isLoading, isError } = useOutcomeDetails(actionInteractionIds);
 
   if (isLoading) {
@@ -66,12 +69,34 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
           {actionOutcome.effects.length === 0 ? (
             <p className="text-xs text-muted-foreground">No recorded effects.</p>
           ) : (
-            actionOutcome.effects.map((effect: EffectRow, idx: number) => (
-              <div key={idx} className={cn('flex items-start gap-1.5 text-xs')}>
-                <EffectKindBadge kind={effect.kind} />
-                <span>{effect.label}</span>
-              </div>
-            ))
+            actionOutcome.effects.map((effect: EffectRow, idx: number) =>
+              effect.deep_link != null ? (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() =>
+                    dispatch(
+                      openDeepLink({
+                        modal: effect.deep_link!.modal as DeepLinkKind,
+                        id: effect.deep_link!.id,
+                      })
+                    )
+                  }
+                  className={cn(
+                    'flex w-full items-start gap-1.5 text-left text-xs',
+                    'cursor-pointer rounded hover:bg-muted/60'
+                  )}
+                >
+                  <EffectKindBadge kind={effect.kind} />
+                  <span>{effect.label}</span>
+                </button>
+              ) : (
+                <div key={idx} className={cn('flex items-start gap-1.5 text-xs')}>
+                  <EffectKindBadge kind={effect.kind} />
+                  <span>{effect.label}</span>
+                </div>
+              )
+            )
           )}
         </div>
       ))}
