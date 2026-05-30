@@ -137,41 +137,73 @@ class MageSightScarTest(TestCase):
 
 
 class SoulSightScarTest(TestCase):
-    """ "Soul Sight" scar reveals true identity only when target has
-    the specific persona-type property.
+    """ "Soul Sight" scar appends a revealing line to return_appearance output
+    ONLY for targets whose primary persona carries the 'masked-identity' Property tag.
 
-    Skipped: Same design gap as MageSightScarTest. ExaminedPayload is frozen=True,
-    preventing scar mutation of the result. Additionally, the persona-type property
-    system (linking Properties from world/mechanics to characters) is not yet wired
-    into the examine pipeline's payload construction.
-
-    Design follow-up: Two preconditions required before implementing:
-      1. ExaminedPayload must be mutable (or a pre-examine hook must exist).
-      2. The examine pipeline must include persona/property data in the payload
-         so the filter DSL can walk target.persona_type.property.
-
-    Intent:
-        observer has Soul Sight scar (trigger on EXAMINED, filter: target has
-        "masked-identity" property on their primary persona).
-        examine(observer, masked_target) → result contains true identity disclosure.
-        examine(observer, unmasked_target) → result unchanged.
+    The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
+    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
+    returns, ``return_appearance`` concatenates those sections onto the base
+    appearance string.
     """
 
-    def test_soul_sight_reveals_masked_identity(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Additionally, persona-type property filtering in the examine payload is "
-            "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("SoulSightRoom")
+
+        # Create three characters, each with a sheet + primary persona.
+        observer_sheet = CharacterSheetFactory()
+        masked_sheet = CharacterSheetFactory()
+        plain_sheet = CharacterSheetFactory()
+
+        self.observer = observer_sheet.character
+        self.masked_target = masked_sheet.character
+        self.plain_target = plain_sheet.character
+
+        for c in (self.observer, self.masked_target, self.plain_target):
+            c.location = self.room
+
+        # Tag masked_target's primary persona with the 'masked-identity' Property.
+        masked_prop = PropertyFactory(name="masked-identity")
+        masked_sheet.primary_persona.properties.add(masked_prop)
+
+        # Build the scar flow: MODIFY_PAYLOAD appends a section to sections list.
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={
+                "field": "sections",
+                "op": "add",
+                "value": ["Soul sight pierces the mask."],
+            },
         )
 
-    def test_near_miss_unmasked_target_unchanged(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Additionally, persona-type property filtering in the examine payload is "
-            "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py."
+        # Wire the scar onto the observer: fires on EXAMINE_PRE when the target
+        # has the 'masked-identity' Property (via Character.has_property).
+        ReactiveConditionFactory(
+            event_name=EventName.EXAMINE_PRE,
+            filter_condition={
+                "path": "target",
+                "op": "has_property",
+                "value": "masked-identity",
+            },
+            flow_definition=flow,
+            target=self.observer,
         )
+        # Invalidate the trigger cache so the new reactive condition is picked up.
+        self.observer.trigger_handler._populated = False
+
+    def test_soul_sight_reveals_masked_identity(self) -> None:
+        """Examining a masked-identity target appends the scar section to the output."""
+        result = self.masked_target.return_appearance(self.observer)
+        self.assertIn("Soul sight pierces", result)
+
+    def test_near_miss_unmasked_target_unchanged(self) -> None:
+        """Examining an unmasked target does not trigger the scar — output unchanged."""
+        result = self.plain_target.return_appearance(self.observer)
+        self.assertNotIn("Soul sight pierces", result)
 
 
 # ---------------------------------------------------------------------------
