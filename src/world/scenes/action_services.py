@@ -328,7 +328,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params 
     technique_result = use_technique(
         character=character,
         technique=technique,
-        resolve_fn=lambda: start_action_resolution(
+        resolve_fn=lambda *, power: start_action_resolution(  # noqa: ARG005 — scenes check is difficulty-driven, not power-scaled
             character=character,
             template=action_template,
             target_difficulty=difficulty,

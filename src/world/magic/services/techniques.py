@@ -153,6 +153,21 @@ def _build_resonance_involvements(
     )
 
 
+def _derive_power(
+    *,
+    channeled_intensity: int,
+    technique: Technique | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
+    character: ObjectDB | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
+) -> int:
+    """Derive effective power. NEVER stored — recomputed each cast.
+
+    PR1: power == channeled intensity. Later issues (#634-#637) add level,
+    threads, aura/resonance, and power-scoped modifier terms here. The
+    ``technique``/``character`` params are the future inputs; unused in PR1.
+    """
+    return channeled_intensity
+
+
 def get_runtime_technique_stats(
     technique: Technique,
     character: ObjectDB | None,
@@ -289,11 +304,15 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
     effective_targets = targets or []
     caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    seed_power = _derive_power(
+        channeled_intensity=stats.intensity, technique=technique, character=character
+    )
     pre_payload = TechniquePreCastPayload(
         caster=character,
         technique=technique,
         targets=effective_targets,
         intensity=stats.intensity,
+        power=seed_power,
     )
     if caster_room is not None:
         stack = emit_event(
@@ -308,11 +327,16 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
                 technique=technique,
             )
 
+    # Read back power after any pre-cast MODIFY_PAYLOAD hooks (mutable payload).
+    # pre_payload.power holds seed_power when no room exists (no emit path),
+    # and the post-hook value when the emit path ran.
+    effective_power = pre_payload.power
+
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)
 
     # Steps 5 + 6: Resolution
-    resolution_result = resolve_fn()
+    resolution_result = resolve_fn(power=effective_power)
 
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
@@ -405,6 +429,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
                 technique=technique,
                 targets=effective_targets,
                 intensity=stats.intensity,
+                power=effective_power,
                 result=resolution_result,
             ),
             location=caster_room,
@@ -420,6 +445,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
                     caster=character,
                     technique=technique,
                     target=affected_target,
+                    power=effective_power,
                     effect=resolution_result,
                 ),
                 location=target_room,
