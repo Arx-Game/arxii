@@ -63,7 +63,7 @@ def challenge_options_for_character(
         # directly rather than re-looking-up by name.
         qualifies = (
             approach.is_default
-            or get_capability_value(character, approach.application.capability) > 0
+            or get_capability_value(character.sheet_data, approach.application.capability) > 0
         )
         if not qualifies:
             continue

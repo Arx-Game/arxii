@@ -89,7 +89,7 @@ if TYPE_CHECKING:
 SECONDS_PER_ROUND = 6
 
 
-def _invalidate_condition_handler(target: "ObjectDB") -> None:
+def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     """Invalidate the target's cached conditions handler.
 
     ``conditions`` is installed as a ``cached_property`` on ``ObjectParent``
@@ -112,7 +112,7 @@ def _invalidate_condition_handler(target: "ObjectDB") -> None:
 
 
 def get_active_conditions(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     *,
     category: "ConditionCategory | None" = None,
     condition: ConditionTemplate | None = None,
@@ -153,7 +153,7 @@ def get_active_conditions(
 
 
 def has_condition(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
@@ -175,7 +175,7 @@ def has_condition(
 
 
 def get_condition_instance(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
@@ -200,7 +200,7 @@ def get_condition_instance(
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
 
-    target: "ObjectDB"
+    target: "ObjectDB"  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     severity: int = 1
     duration_rounds: int | None = None
     stack_count: int = 1
@@ -239,7 +239,7 @@ class _BulkConditionContext:
 
 
 def _build_bulk_context(
-    targets: list["ObjectDB"],
+    targets: list["ObjectDB"],  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     templates: list[ConditionTemplate],
 ) -> _BulkConditionContext:
     """Batch-fetch all data needed for applying conditions to multiple targets.
@@ -450,7 +450,7 @@ def _create_instance_from_context(
 
 
 def _apply_single(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     template: ConditionTemplate,
     params: _ApplyConditionParams,
     ctx: _BulkConditionContext,
@@ -564,12 +564,12 @@ def _handle_refresh(
 
 @transaction.atomic
 def apply_condition(  # noqa: PLR0913
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     *,
     severity: int = 1,
     duration_rounds: int | None = None,
-    source_character: "ObjectDB | None" = None,
+    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM — source_character covers NPC + PC ObjectDB cases; narrowing is broader Phase 3 work
     source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> ApplyConditionResult:
@@ -640,7 +640,7 @@ def apply_condition(  # noqa: PLR0913
 def bulk_apply_conditions(
     applications: list[BulkConditionApplication],
     *,
-    source_character: "ObjectDB | None" = None,
+    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM — source_character covers NPC + PC ObjectDB cases; narrowing is broader Phase 3 work
     source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> list[ApplyConditionResult]:
@@ -728,7 +728,7 @@ def bulk_apply_conditions(
 
 
 def _install_reactive_side_effects(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     instance: ConditionInstance,
 ) -> None:
@@ -777,7 +777,7 @@ def _install_reactive_side_effects(
 
 
 def _notify_stories_condition_applied(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     instance: ConditionInstance,
 ) -> None:
     """Route condition-applied events to the stories reactivity module.
@@ -797,7 +797,7 @@ def _notify_stories_condition_applied(
 
 
 def _notify_stories_condition_expired(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
 ) -> None:
     """Route condition-removed events to the stories reactivity module.
@@ -818,7 +818,7 @@ def _notify_stories_condition_expired(
 
 @transaction.atomic
 def remove_condition(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     *,
     remove_all_stacks: bool = True,
@@ -883,7 +883,7 @@ def remove_condition(
 
 @transaction.atomic
 def remove_conditions_by_category(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     category: "ConditionCategory",
 ) -> list[ConditionTemplate]:
     """
@@ -938,7 +938,7 @@ def _should_remove_existing(
 
 @transaction.atomic
 def process_damage_interactions(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     damage_type: DamageType,
 ) -> DamageInteractionResult:
     """
@@ -1010,7 +1010,7 @@ def process_damage_interactions(
 
 
 def get_capability_status(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     capability: CapabilityType,
 ) -> CapabilityStatus:
     """
@@ -1026,6 +1026,7 @@ def get_capability_status(
     Returns:
         CapabilityStatus with total value and per-condition breakdown
     """
+    target = character_sheet.character
     result = CapabilityStatus()
 
     active_instances = get_active_conditions(target)
@@ -1050,7 +1051,7 @@ def get_capability_status(
 
 
 def get_capability_value(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     capability: CapabilityType,
 ) -> int:
     """
@@ -1066,7 +1067,7 @@ def get_capability_value(
     Returns:
         Integer capability value (0 = effectively blocked / not possessed)
     """
-    return get_capability_status(target, capability).value
+    return get_capability_status(character_sheet, capability).value
 
 
 def get_effective_capability_value(
@@ -1095,12 +1096,12 @@ def get_effective_capability_value(
     )
     # get_capability_status still operates on ObjectDB; walk back at the
     # boundary. Refactoring its signature is Phase 2 follow-up.
-    status = get_capability_status(character_sheet.character, capability)
+    status = get_capability_status(character_sheet, capability)
     condition_total = sum(modifier for _instance, modifier in status.condition_contributions)
     return max(0, baseline + modifier_total + condition_total)
 
 
-def get_all_capability_values(target: "ObjectDB") -> dict[int, int]:
+def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
     """
     Get all capability values for a character.
 
@@ -1114,6 +1115,7 @@ def get_all_capability_values(target: "ObjectDB") -> dict[int, int]:
     Returns:
         Dict mapping capability PK to total values (floor 0)
     """
+    target = character_sheet.character
     active_instances = list(get_active_conditions(target))
     if not active_instances:
         return {}
@@ -1156,7 +1158,7 @@ def get_all_capability_values(target: "ObjectDB") -> dict[int, int]:
 
 
 def get_check_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     check_type: CheckType,
 ) -> CheckModifierResult:
     """
@@ -1169,6 +1171,7 @@ def get_check_modifier(
     Returns:
         CheckModifierResult with total and breakdown
     """
+    target = character_sheet.character
     ctype = check_type
 
     result = CheckModifierResult(total_modifier=0, breakdown=[])
@@ -1200,7 +1203,7 @@ def get_check_modifier(
 
 
 def get_resistance_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     damage_type: DamageType | None = None,
 ) -> ResistanceModifierResult:
     """
@@ -1213,6 +1216,7 @@ def get_resistance_modifier(
     Returns:
         ResistanceModifierResult with total and breakdown
     """
+    target = character_sheet.character
     dtype = damage_type
 
     result = ResistanceModifierResult(total_modifier=0, breakdown=[])
@@ -1250,7 +1254,7 @@ def get_resistance_modifier(
 
 
 @transaction.atomic
-def process_round_start(target: "ObjectDB") -> RoundTickResult:
+def process_round_start(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     """
     Process start-of-round effects for all conditions on a target.
 
@@ -1266,7 +1270,7 @@ def process_round_start(target: "ObjectDB") -> RoundTickResult:
 
 
 @transaction.atomic
-def process_round_end(target: "ObjectDB") -> RoundTickResult:
+def process_round_end(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     """
     Process end-of-round effects for all conditions on a target.
 
@@ -1289,7 +1293,7 @@ def process_round_end(target: "ObjectDB") -> RoundTickResult:
 
 
 @transaction.atomic
-def process_action_tick(target: "ObjectDB") -> RoundTickResult:
+def process_action_tick(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     """
     Process on-action damage for conditions (when target takes an action).
 
@@ -1305,7 +1309,7 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:
 
 
 def _process_round_tick(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     timing: DamageTickTiming,
 ) -> RoundTickResult:
     """
@@ -1349,7 +1353,7 @@ def _process_round_tick(
 
 
 def _process_duration_and_progression(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     result: RoundTickResult,
 ) -> None:
     """
@@ -1404,7 +1408,7 @@ def _get_next_stage(instance: ConditionInstance) -> ConditionStage | None:
 
 
 def suppress_condition(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
     *,
     duration_rounds: int | None = None,
@@ -1435,7 +1439,7 @@ def suppress_condition(
 
 
 def unsuppress_condition(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     condition: ConditionTemplate,
 ) -> bool:
     """
@@ -1460,7 +1464,7 @@ def unsuppress_condition(
 
 
 def clear_all_conditions(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
     *,
     only_negative: bool = False,
     only_category: "ConditionCategory | None" = None,
@@ -1497,7 +1501,7 @@ def clear_all_conditions(
     return count
 
 
-def get_turn_order_modifier(target: "ObjectDB") -> int:
+def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:
     """
     Get the total turn order modifier from all conditions.
 
@@ -1507,6 +1511,7 @@ def get_turn_order_modifier(target: "ObjectDB") -> int:
     Returns:
         Integer modifier to turn order (positive = act earlier)
     """
+    target = character_sheet.character
     result = (
         get_active_conditions(target)
         .filter(condition__affects_turn_order=True)
@@ -1515,7 +1520,7 @@ def get_turn_order_modifier(target: "ObjectDB") -> int:
     return result["total"]
 
 
-def get_aggro_priority(target: "ObjectDB") -> int:
+def get_aggro_priority(character_sheet: "CharacterSheet") -> int:
     """
     Get the total aggro priority from all conditions.
 
@@ -1525,6 +1530,7 @@ def get_aggro_priority(target: "ObjectDB") -> int:
     Returns:
         Integer priority (higher = more likely to be targeted)
     """
+    target = character_sheet.character
     result = (
         get_active_conditions(target)
         .filter(condition__draws_aggro=True)
@@ -1539,7 +1545,7 @@ def get_aggro_priority(target: "ObjectDB") -> int:
 
 
 def _get_condition_percent_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     category_name: str,
     condition_name: str,
 ) -> int:
@@ -1557,6 +1563,7 @@ def _get_condition_percent_modifier(
     Returns:
         Total percentage modifier (e.g., 100 means +100%)
     """
+    target = character_sheet.character
     try:
         sheet = target.sheet_data
     except AttributeError:
@@ -1572,7 +1579,7 @@ def _get_condition_percent_modifier(
 
 
 def get_condition_control_percent_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     condition_name: str,
 ) -> int:
     """
@@ -1588,11 +1595,13 @@ def get_condition_control_percent_modifier(
     Returns:
         Total percentage modifier (e.g., 100 for Wrathful)
     """
-    return _get_condition_percent_modifier(target, "condition_control_percent", condition_name)
+    return _get_condition_percent_modifier(
+        character_sheet, "condition_control_percent", condition_name
+    )
 
 
 def get_condition_intensity_percent_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     condition_name: str,
 ) -> int:
     """
@@ -1609,11 +1618,13 @@ def get_condition_intensity_percent_modifier(
     Returns:
         Total percentage modifier (e.g., 50 for Wrathful)
     """
-    return _get_condition_percent_modifier(target, "condition_intensity_percent", condition_name)
+    return _get_condition_percent_modifier(
+        character_sheet, "condition_intensity_percent", condition_name
+    )
 
 
 def get_condition_penalty_percent_modifier(
-    target: "ObjectDB",
+    character_sheet: "CharacterSheet",
     condition_name: str,
 ) -> int:
     """
@@ -1629,7 +1640,9 @@ def get_condition_penalty_percent_modifier(
     Returns:
         Total percentage modifier (e.g., 100 for Hubris)
     """
-    return _get_condition_percent_modifier(target, "condition_penalty_percent", condition_name)
+    return _get_condition_percent_modifier(
+        character_sheet, "condition_penalty_percent", condition_name
+    )
 
 
 # =============================================================================
@@ -1809,7 +1822,7 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
 
 
 def _resolve_character_sheet_for_target(
-    target: "ObjectDB",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — input IS ObjectDB by design; this helper resolves ObjectDB→CharacterSheet
 ) -> "CharacterSheet | None":
     """Walk an ObjectDB target back to its CharacterSheet, or None.
 
@@ -2018,7 +2031,7 @@ def _thread_anchors_to_character(thread: "Thread", target_sheet: "CharacterSheet
     return False
 
 
-def _scene_participant(scene: "Scene", character: "ObjectDB") -> bool:
+def _scene_participant(scene: "Scene", character_sheet: "CharacterSheet") -> bool:
     """Return True when *character* has a SceneParticipation row in *scene*.
 
     SceneParticipation links accounts, not characters directly. The character's
@@ -2030,7 +2043,7 @@ def _scene_participant(scene: "Scene", character: "ObjectDB") -> bool:
     from world.scenes.models import SceneParticipation  # noqa: PLC0415
 
     try:
-        entry = RosterEntry.objects.get(character_sheet_id=character.pk)
+        entry = RosterEntry.objects.get(character_sheet_id=character_sheet.pk)
         tenure = entry.tenures.filter(end_date__isnull=True).first()
         if tenure is None:
             return False

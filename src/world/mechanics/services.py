@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Prefetch
 
@@ -574,7 +575,14 @@ def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
 
 def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
     """Get Capability sources from active conditions."""
-    cap_values = get_all_capability_values(character)
+    try:
+        sheet = character.sheet_data
+    except ObjectDoesNotExist:
+        # No CharacterSheet → no capability mods from conditions can be derived;
+        # capabilities are character-specific and conditions on a sheet-less
+        # object don't materialize as CharacterModifier rows.
+        return []
+    cap_values = get_all_capability_values(sheet)
 
     sources: list[CapabilitySource] = []
     for cap_id, value in cap_values.items():

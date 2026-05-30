@@ -8,6 +8,7 @@ from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
@@ -65,6 +66,8 @@ class GetActiveConditionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.category1 = ConditionCategoryFactory(name="debuff", is_negative=True)
         cls.category2 = ConditionCategoryFactory(name="buff", is_negative=False)
 
@@ -120,6 +123,8 @@ class HasConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="frozen")
 
     def test_has_condition_false_when_absent(self):
@@ -146,6 +151,8 @@ class ApplyConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.source = ObjectDB.objects.create(db_key="SourceCharacter")
         cls.condition = ConditionTemplateFactory(
             name="burning",
@@ -272,6 +279,8 @@ class ApplyConditionProgressionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.progressive = ConditionTemplateFactory(
             name="poison",
             has_progression=True,
@@ -313,6 +322,8 @@ class ApplyConditionInteractionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.burning = ConditionTemplateFactory(name="burning")
         cls.wet = ConditionTemplateFactory(name="wet")
         cls.frozen = ConditionTemplateFactory(name="frozen")
@@ -364,6 +375,8 @@ class RemoveConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="frozen")
 
     def test_remove_condition_deletes_instance(self):
@@ -409,6 +422,8 @@ class RemoveConditionsByCategoryTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.debuff_category = ConditionCategoryFactory(name="debuff")
         cls.buff_category = ConditionCategoryFactory(name="buff")
 
@@ -436,6 +451,8 @@ class ProcessDamageInteractionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
         cls.cold = DamageTypeFactory(name="cold")
         cls.force = DamageTypeFactory(name="force")
@@ -518,6 +535,8 @@ class GetCapabilityStatusTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
         cls.speech = CapabilityTypeFactory(name="speech")
 
@@ -550,7 +569,7 @@ class GetCapabilityStatusTest(TestCase):
         """Large negative value floors to 0 (effectively blocked)."""
         ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         assert status.value == 0
         assert len(status.condition_contributions) == 1
@@ -559,7 +578,7 @@ class GetCapabilityStatusTest(TestCase):
         """Negative value reduces capability."""
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # -5 floors to 0 since there's no base value
         assert status.value == 0
@@ -571,7 +590,7 @@ class GetCapabilityStatusTest(TestCase):
         """Positive value enhances capability."""
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         assert status.value == 10
         assert len(status.condition_contributions) == 1
@@ -581,7 +600,7 @@ class GetCapabilityStatusTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # 10 + (-5) = 5
         assert status.value == 5
@@ -589,7 +608,7 @@ class GetCapabilityStatusTest(TestCase):
 
     def test_no_conditions_returns_zero(self):
         """No conditions means capability value is 0."""
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         assert status.value == 0
         assert len(status.condition_contributions) == 0
@@ -598,7 +617,7 @@ class GetCapabilityStatusTest(TestCase):
         """Conditions on movement don't affect speech."""
         ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
 
-        status = get_capability_status(self.target, self.speech)
+        status = get_capability_status(self.target.sheet_data, self.speech)
 
         assert status.value == 0
         assert len(status.condition_contributions) == 0
@@ -608,7 +627,7 @@ class GetCapabilityStatusTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # -100 + (-5) = -105, floored to 0
         assert status.value == 0
@@ -620,6 +639,8 @@ class GetCapabilityValueTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.flight = CapabilityTypeFactory(name="flight")
         cls.buffed = ConditionTemplateFactory(name="wings")
 
@@ -632,11 +653,11 @@ class GetCapabilityValueTest(TestCase):
     def test_returns_value(self):
         """get_capability_value returns just the integer."""
         ConditionInstanceFactory(target=self.target, condition=self.buffed)
-        assert get_capability_value(self.target, self.flight) == 15
+        assert get_capability_value(self.target.sheet_data, self.flight) == 15
 
     def test_no_conditions_returns_zero(self):
         """No conditions means 0."""
-        assert get_capability_value(self.target, self.flight) == 0
+        assert get_capability_value(self.target.sheet_data, self.flight) == 0
 
 
 class GetAllCapabilityValuesTest(TestCase):
@@ -645,6 +666,8 @@ class GetAllCapabilityValuesTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
         cls.flight = CapabilityTypeFactory(name="flight")
 
@@ -670,34 +693,34 @@ class GetAllCapabilityValuesTest(TestCase):
 
     def test_empty_when_no_conditions(self):
         """Returns empty dict when character has no conditions."""
-        result = get_all_capability_values(self.target)
+        result = get_all_capability_values(self.target.sheet_data)
         assert result == {}
 
     def test_single_capability(self):
         """Returns single capability from one condition."""
         ConditionInstanceFactory(target=self.target, condition=self.winged)
-        result = get_all_capability_values(self.target)
+        result = get_all_capability_values(self.target.sheet_data)
         assert result == {self.flight.id: 20}
 
     def test_multiple_capabilities(self):
         """Returns all affected capabilities."""
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
         ConditionInstanceFactory(target=self.target, condition=self.winged)
-        result = get_all_capability_values(self.target)
+        result = get_all_capability_values(self.target.sheet_data)
         assert result == {self.movement.id: 10, self.flight.id: 20}
 
     def test_stacking_same_capability(self):
         """Multiple conditions on same capability stack additively."""
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
-        result = get_all_capability_values(self.target)
+        result = get_all_capability_values(self.target.sheet_data)
         # 10 + (-3) = 7
         assert result == {self.movement.id: 7}
 
     def test_floor_at_zero(self):
         """Negative totals clamp to 0."""
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
-        result = get_all_capability_values(self.target)
+        result = get_all_capability_values(self.target.sheet_data)
         # -3 floored to 0
         assert result == {self.movement.id: 0}
 
@@ -708,6 +731,8 @@ class GetCheckModifierTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.combat_attack = CheckTypeFactory(name="combat-attack")
 
         cls.frightened = ConditionTemplateFactory(name="frightened")
@@ -731,7 +756,7 @@ class GetCheckModifierTest(TestCase):
         """Test check modifier from single condition."""
         ConditionInstanceFactory(target=self.target, condition=self.frightened)
 
-        result = get_check_modifier(self.target, self.combat_attack)
+        result = get_check_modifier(self.target.sheet_data, self.combat_attack)
 
         assert result.total_modifier == -20
         assert len(result.breakdown) == 1
@@ -741,7 +766,7 @@ class GetCheckModifierTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.frightened)
         ConditionInstanceFactory(target=self.target, condition=self.empowered)
 
-        result = get_check_modifier(self.target, self.combat_attack)
+        result = get_check_modifier(self.target.sheet_data, self.combat_attack)
 
         assert result.total_modifier == -5  # -20 + 15
         assert len(result.breakdown) == 2
@@ -758,7 +783,7 @@ class GetCheckModifierTest(TestCase):
 
         ConditionInstanceFactory(target=self.target, condition=scaling, severity=3)
 
-        result = get_check_modifier(self.target, self.combat_attack)
+        result = get_check_modifier(self.target.sheet_data, self.combat_attack)
 
         assert result.total_modifier == -15  # -5 * 3
 
@@ -769,6 +794,8 @@ class GetResistanceModifierTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
         cls.lightning = DamageTypeFactory(name="lightning")
 
@@ -790,7 +817,7 @@ class GetResistanceModifierTest(TestCase):
         """Test positive resistance modifier."""
         ConditionInstanceFactory(target=self.target, condition=self.wet)
 
-        result = get_resistance_modifier(self.target, self.fire)
+        result = get_resistance_modifier(self.target.sheet_data, self.fire)
 
         assert result.total_modifier == 50
 
@@ -798,7 +825,7 @@ class GetResistanceModifierTest(TestCase):
         """Test negative resistance modifier (vulnerability)."""
         ConditionInstanceFactory(target=self.target, condition=self.wet)
 
-        result = get_resistance_modifier(self.target, self.lightning)
+        result = get_resistance_modifier(self.target.sheet_data, self.lightning)
 
         assert result.total_modifier == -50
 
@@ -814,10 +841,10 @@ class GetResistanceModifierTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=warded)
 
         # Should apply to any damage type
-        result = get_resistance_modifier(self.target, self.fire)
+        result = get_resistance_modifier(self.target.sheet_data, self.fire)
         assert result.total_modifier == 25
 
-        result = get_resistance_modifier(self.target, self.lightning)
+        result = get_resistance_modifier(self.target.sheet_data, self.lightning)
         assert result.total_modifier == 25
 
 
@@ -827,6 +854,8 @@ class RoundProcessingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
 
         cls.burning = ConditionTemplateFactory(
@@ -914,6 +943,8 @@ class SuppressConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="poisoned")
 
     def test_suppress_condition(self):
@@ -951,6 +982,8 @@ class ClearAllConditionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.debuff_category = ConditionCategoryFactory(name="debuff", is_negative=True)
         cls.buff_category = ConditionCategoryFactory(name="buff", is_negative=False)
 
@@ -996,6 +1029,8 @@ class CombatModifiersTest(TestCase):
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
 
+        CharacterSheetFactory(character=cls.target)
+
         cls.hasted = ConditionTemplateFactory(
             name="hasted",
             affects_turn_order=True,
@@ -1017,7 +1052,7 @@ class CombatModifiersTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
 
-        modifier = get_turn_order_modifier(self.target)
+        modifier = get_turn_order_modifier(self.target.sheet_data)
 
         assert modifier == 2  # 5 - 3
 
@@ -1025,7 +1060,7 @@ class CombatModifiersTest(TestCase):
         """Test getting aggro priority."""
         ConditionInstanceFactory(target=self.target, condition=self.taunted)
 
-        priority = get_aggro_priority(self.target)
+        priority = get_aggro_priority(self.target.sheet_data)
 
         assert priority == 10
 
@@ -1036,6 +1071,8 @@ class StageSpecificEffectsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
+
+        CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
 
         cls.poison = ConditionTemplateFactory(name="paralytic-poison", has_progression=True)
@@ -1093,7 +1130,7 @@ class StageSpecificEffectsTest(TestCase):
             current_stage=self.stage1,
         )
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # -25 * 1.0 severity = -25, floored to 0
         assert status.value == 0
@@ -1107,7 +1144,7 @@ class StageSpecificEffectsTest(TestCase):
             current_stage=self.stage2,
         )
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # -50 * 1.5 severity = -75, floored to 0
         assert status.value == 0
@@ -1121,7 +1158,7 @@ class StageSpecificEffectsTest(TestCase):
             current_stage=self.stage3,
         )
 
-        status = get_capability_status(self.target, self.movement)
+        status = get_capability_status(self.target.sheet_data, self.movement)
 
         # -100 * 2.0 severity = -200, floored to 0
         assert status.value == 0
@@ -1244,9 +1281,9 @@ class ConditionPercentageModifiersTest(TestCase):
             get_condition_penalty_percent_modifier,
         )
 
-        control = get_condition_control_percent_modifier(self.target, "anger")
-        intensity = get_condition_intensity_percent_modifier(self.target, "anger")
-        penalty = get_condition_penalty_percent_modifier(self.target, "humbled")
+        control = get_condition_control_percent_modifier(self.target.sheet_data, "anger")
+        intensity = get_condition_intensity_percent_modifier(self.target.sheet_data, "anger")
+        penalty = get_condition_penalty_percent_modifier(self.target.sheet_data, "humbled")
 
         assert control == 0
         assert intensity == 0
@@ -1266,7 +1303,7 @@ class ConditionPercentageModifiersTest(TestCase):
         )
         create_distinction_modifiers(char_distinction)
 
-        modifier = get_condition_control_percent_modifier(self.target, "anger")
+        modifier = get_condition_control_percent_modifier(self.target.sheet_data, "anger")
 
         assert modifier == 100
 
@@ -1284,7 +1321,7 @@ class ConditionPercentageModifiersTest(TestCase):
         )
         create_distinction_modifiers(char_distinction)
 
-        modifier = get_condition_intensity_percent_modifier(self.target, "anger")
+        modifier = get_condition_intensity_percent_modifier(self.target.sheet_data, "anger")
 
         assert modifier == 50
 
@@ -1302,7 +1339,7 @@ class ConditionPercentageModifiersTest(TestCase):
         )
         create_distinction_modifiers(char_distinction)
 
-        modifier = get_condition_penalty_percent_modifier(self.target, "humbled")
+        modifier = get_condition_penalty_percent_modifier(self.target.sheet_data, "humbled")
 
         assert modifier == 100
 
@@ -1320,8 +1357,8 @@ class ConditionPercentageModifiersTest(TestCase):
         create_distinction_modifiers(char_distinction)
 
         # Should match regardless of case
-        assert get_condition_control_percent_modifier(self.target, "ANGER") == 100
-        assert get_condition_control_percent_modifier(self.target, "Anger") == 100
+        assert get_condition_control_percent_modifier(self.target.sheet_data, "ANGER") == 100
+        assert get_condition_control_percent_modifier(self.target.sheet_data, "Anger") == 100
 
     def test_modifiers_stack_from_multiple_sources(self):
         """Test that percentage modifiers from multiple sources stack."""
@@ -1367,7 +1404,7 @@ class ConditionPercentageModifiersTest(TestCase):
         )
         create_distinction_modifiers(other_cd)
 
-        modifier = get_condition_control_percent_modifier(self.target, "anger")
+        modifier = get_condition_control_percent_modifier(self.target.sheet_data, "anger")
 
         assert modifier == 125  # 100 + 25
 

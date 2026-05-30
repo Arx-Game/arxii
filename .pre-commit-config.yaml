@@ -61,15 +61,16 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
-        # Phase 1 scope: vitals + magic capability_requirements. Future PRs
-        # expand this regex one app at a time as their service modules are
-        # triaged. (Conditions/services.py has 37 pre-existing violations and
-        # gets its own Phase 2 PR.) See CLAUDE.md "Avoid direct FKs to ObjectDB"
-        # for the OBJECTDB_PARAM noqa token and rollout policy.
+        # Phase 1 + 2 scope: vitals + magic capability_requirements +
+        # conditions/services.py. Future PRs expand this regex one app at a
+        # time as their service modules are triaged. See CLAUDE.md "Avoid
+        # direct FKs to ObjectDB" for the OBJECTDB_PARAM noqa token and
+        # rollout policy.
         files: |
           (?x)^src/world/(
             vitals/services\.py
             |magic/services/capability_requirements\.py
+            |conditions/services\.py
           )$
       - id: check-migrations
         name: Check Django migrations
