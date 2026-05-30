@@ -36,6 +36,19 @@ class TriggerHandler:
         self.owner = owner
         self._by_event: dict[str, list[Trigger]] = defaultdict(list)
         self._populated = False
+        self._fire_counts: dict[int, int] = {}
+
+    def fire_count(self, trigger_pk: int) -> int:
+        """Return how many times *trigger_pk* has fired in the current scene."""
+        return self._fire_counts.get(trigger_pk, 0)
+
+    def note_fired(self, trigger_pk: int) -> None:
+        """Increment the fire counter for *trigger_pk*."""
+        self._fire_counts[trigger_pk] = self._fire_counts.get(trigger_pk, 0) + 1
+
+    def reset_scene_counts(self) -> None:
+        """Clear all per-scene fire counters (call at scene boundary)."""
+        self._fire_counts.clear()
 
     def _populate(self) -> None:
         # Ownerless handlers (e.g., a bare provider with no associated typeclass)

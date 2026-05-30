@@ -1244,25 +1244,75 @@ class RecursionCapRespectsFiltersTest(TestCase):
 class UsageCapPreFilterTest(TestCase):
     """Test 24: Usage cap is pre-filter.
 
-    Authored-but-skipped: Trigger has no ``max_uses_per_scene`` column.
-    ``_usage_cap_reached`` was a stub (now removed in Phase 4). Implementing
-    this requires either an ``uses_this_scene`` counter on Trigger or an
-    in-process dict on TriggerHandler. Neither exists yet.
+    An explicitly-authored ``usage_limit_<event>`` key on a trigger's TriggerData
+    caps how many times the dispatch loop will fire that trigger within a scene
+    (i.e. within a single TriggerHandler lifetime).  Absence of any usage_limit
+    key means unlimited — ``get_usage_limit``'s default-of-1 is NOT applied at
+    the dispatch layer.
+
+    The in-process counter lives on ``TriggerHandler._fire_counts``, keyed by
+    trigger pk.  ``_dispatch_usage_limit`` (in ``flows.emit``) returns ``None``
+    when no explicit key is authored, making the cap opt-in.
     """
 
+    def setUp(self):
+        self.room = _create_room("UsageCapRoom24")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
     def test_usage_cap_checked_before_filter(self):
-        self.skipTest(
-            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
-            "helper was removed with the dispatch rewrite. Re-author when "
-            "usage-counter infra lands."
+        """A trigger with usage_limit=1 fires on the first emit, skipped on the second."""
+        from flows.models.triggers import TriggerData
+
+        cancel_flow = _make_cancel_flow()
+        trigger = ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition=None,
+            flow_definition=cancel_flow,
+            target=self.character,
         )
+        # Author the cap BEFORE any dispatch so trigger_data_items is queried fresh.
+        TriggerData.objects.create(
+            trigger=trigger,
+            key=f"usage_limit_{EventName.DAMAGE_PRE_APPLY}",
+            value="1",
+        )
+        # Force handler re-population so the new TriggerData row is visible.
+        self.character.trigger_handler._populated = False
+
+        # First emit: trigger fires → event is cancelled.
+        stack1 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack1.was_cancelled(), "trigger should fire on the first emit")
+
+        # Second emit: cap reached → trigger is skipped → event is NOT cancelled.
+        stack2 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertFalse(stack2.was_cancelled(), "trigger should be suppressed on the second emit")
 
     def test_near_miss_unlimited_trigger_fires_multiple_times(self):
-        self.skipTest(
-            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
-            "helper was removed with the dispatch rewrite. Re-author when "
-            "usage-counter infra lands."
+        """A trigger with usage_limit=0 (unlimited) fires on every emit."""
+        from flows.models.triggers import TriggerData
+
+        cancel_flow = _make_cancel_flow()
+        trigger = ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition=None,
+            flow_definition=cancel_flow,
+            target=self.character,
         )
+        # value="0" → get_usage_limit returns None (unlimited).
+        TriggerData.objects.create(
+            trigger=trigger,
+            key=f"usage_limit_{EventName.DAMAGE_PRE_APPLY}",
+            value="0",
+        )
+        self.character.trigger_handler._populated = False
+
+        # Both emits should cancel the event because the cap is unlimited.
+        stack1 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack1.was_cancelled(), "unlimited trigger should fire on the first emit")
+
+        stack2 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack2.was_cancelled(), "unlimited trigger should fire on the second emit")
 
 
 # ---------------------------------------------------------------------------
