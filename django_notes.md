@@ -446,4 +446,82 @@ class StoryFilter(django_filters.FilterSet):
 - Focus on functionality over perfect form field types - usability matters more
 - Test filters through API endpoint tests, not isolated filter tests
 
+## Code Quality Standards
+
+These standards apply across all Django (and broader Python) work in this repo.
+
+- **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps
+- **ty Type Checking**: Strategic type checking via `ty` covers complex business logic apps (see `[tool.ty.src].include`). Skip Django CRUD boilerplate
+- **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
+- **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
+- **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
+- **Migrations**: When model changes require migrations, use `arx manage makemigrations <app>` to generate them. Always use the `arx manage` commands for migrations to ensure correct Django settings are loaded. After generating, apply with `arx manage migrate`
+- **No data migrations pre-production**: We have no production data and the dev DB is recreated periodically. Write **schema** migrations only; do NOT add `RunPython` **data** migrations to backfill/transform existing rows — there are no meaningful rows to migrate. (Revisit once shipped to production.)
+- **Line Length**: Respect 100-character line limit even with indentation - break long lines appropriately
+- **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
+- **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
+- **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`
+- **Don't add `Meta.ordering` to models unless necessary**: Default model ordering is not free — it adds an `ORDER BY` to every query against that model, including ones that don't need it. Only set `Meta.ordering` for sequential data with a meaningful natural order, like Chapters or Episodes. ViewSets that paginate querysets **must** add `.order_by(...)` to their queryset (otherwise pagination is unstable across requests and DRF emits `UnorderedObjectListWarning`) — that is the right place to put ordering, not on the model.
+- **Prefer Inheritance Over Protocols**: Use concrete base classes with abstract methods instead of Protocol classes for type safety. All objects in our codebase inherit from shared base classes (BaseState, BaseHandler, etc.). When mypy compliance requires type annotations, prefer adding abstract methods to base classes rather than creating Protocol classes. This maintains clear inheritance hierarchies and ensures methods are actually implemented. Use Protocol only for true duck typing scenarios with external libraries.
+- **Service Functions Use Model Instances**: Service functions should never accept slug strings for lookups. Always pass model instances or primary keys. Slugs are only for user-facing search APIs where users search by text and receive objects with IDs for subsequent operations. This applies to all internal service layer code.
+- **Avoid Denormalization**: Don't copy data from related models into a local field to save joins. If a value is derivable via a relationship (e.g., a scene's story is derivable from scene → episode → story), don't store it redundantly. Denormalized copies create data integrity risks — if the source changes, the copy is stale, and adding verification infrastructure to keep them in sync negates any join savings. Only denormalize when the value is genuinely different per-instance (e.g., a per-encounter risk level) rather than a cached copy of a related field.
+- **Avoid Denormalized Foreign Keys**: When a model has a FK to a parent and optionally a FK to a child of that parent (e.g., `condition` + `stage` where stage implies condition), either make one FK derivable from the other or add `clean()` validation to ensure consistency. Don't create situations where FKs can contradict each other. If the child FK is nullable (null = applies to all), keep the parent FK for direct queries but validate the relationship.
+- **TextChoices in constants.py**: Place Django TextChoices/IntegerChoices in a separate `constants.py` file rather than as nested classes inside models. This avoids circular import issues when serializers or other modules need to reference the choices, and makes it clearer these are shared constants.
+- **No Queries in Loops**: Never execute database queries inside loops, serializer methods that recurse, or while loops that traverse relationships. Use annotations, prefetch_related with bounded depth, or restructure to batch queries. Recursive serializers are acceptable only when paired with bounded prefetch_related in the view (e.g., `prefetch_related("children__children__children")` limits depth to 4 levels).
+- **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
+- **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
+- **Preserve the Dev Database**: The dev database contains fixture data and test state that is time-consuming to reconstruct. Do NOT drop, flush, or destroy the database except in dire circumstances. For migration work: use `arx manage migrate app_name zero` to fake-migrate down, then regenerate — this preserves the database while resetting an app's migration state. Never delete the database as a shortcut to fix migration issues.
+- **PostgreSQL Only (production)**: This project uses PostgreSQL exclusively in production. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Don't write database-agnostic workarounds in production code; use the Postgres feature directly.
+
+  **For tests, see the two-tier model in the `running-tests` skill.** The SQLite inner-loop tier is a developer convenience that exposes PG-specific features as `@tag("postgres")` skips; the Postgres parity tier (every CI run, `just test-parity` locally) always runs the full chain. New tests should pass on both tiers unless they exercise PG-specific code, in which case `@tag("postgres")` is the correct decoration.
+- **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`, `CACHED_PROPERTY_IMPORT`, `OBJECTDB_PARAM`
+- **SharedMemoryModel Default**: All concrete Django models should use `SharedMemoryModel`. Both lookup tables and per-instance data benefit from the identity-map cache. Only suppress with `# noqa: SHARED_MEMORY` and a justification
+- **Prefetch with to_attr**: Always use `Prefetch()` objects with `to_attr=` in `prefetch_related()`. Never use bare strings. The `to_attr` should point to a `cached_property` on the model for cache-safe access
+- **cached_property must come from Django**: Use `from django.utils.functional import cached_property` exclusively. `functools.cached_property` silently breaks `Prefetch(to_attr=...)` because Django's prefetch machinery checks `isinstance` against its own class. Enforced by `lint_cached_property_import.py`. See `src/evennia_extensions/CACHED_PROPERTY_STANDARD.md` for full rationale.
+- **Constants over String Literals**: Never return spaceless string literals or compare against them. Use `TextChoices`, `IntegerChoices`, or module-level constants. This prevents typo bugs and makes refactoring safe
+- **FilterSets in Views**: Always use `django-filter` FilterSet classes for query parameter handling in ViewSets and Views. Never access `request.query_params` or `request.GET` directly
+
+## FactoryBoy `django_get_or_create` Gotcha
+
+This expands the FactoryBoy guidance in "Use FactoryBoy for All Test Data" above with a sharp edge worth calling out explicitly.
+
+**FactoryBoy gotcha: `django_get_or_create` silently drops non-lookup
+kwargs.** When a `DjangoModelFactory` declares
+`Meta.django_get_or_create = ("lookup_field",)` AND the row already
+exists at create time, factory_boy returns the existing row and
+**never applies any non-lookup kwargs you passed**. Example: if
+something upstream (Evennia signal, `at_object_creation` hook,
+fixture) already created the row, `FooFactory(name="X", color="red")`
+returns the existing row with the existing color, not `red`. The bug
+is invisible unless a test asserts on the dropped field.
+
+When the underlying row may pre-exist via signals/hooks, override
+`_create` to apply non-lookup kwargs after the lookup:
+
+```python
+@classmethod
+def _create(cls, model_class, *args, **kwargs):
+    lookup_field = "objectdb"  # or whichever lookup field the factory uses
+    lookup_value = kwargs.pop(lookup_field)
+    instance, created = model_class.objects.get_or_create(
+        **{lookup_field: lookup_value}, defaults=kwargs,
+    )
+    if not created and kwargs:
+        for field, value in kwargs.items():
+            setattr(instance, field, value)
+        instance.save()
+    return instance
+```
+
+## ViewSet & API Design (Standards)
+
+These standards complement the "ViewSets and API Design" section above, which covers the required components (filters, pagination, permissions, serializers) and concrete patterns. The bullets below capture the higher-level design rules.
+
+- **Separate ViewSet for related model CRUD**: Custom actions on a ViewSet should operate on that ViewSet's own model (e.g., lifecycle transitions). If an action does create/read/update/delete on a *different* model, extract it into its own ViewSet with proper serializers and filters. Example: invitation CRUD belongs in an `EventInvitationViewSet`, not as custom actions on `EventViewSet`
+- **No implicit first-item selection**: Never silently select the first item from a queryset or list when the choice should be user-specified. If there are multiple valid options (e.g., which persona to act as), require explicit selection via request data. Picking `items[0]` hides a decision that should be the caller's
+- **Prefer Django/DRF helpers over manual boilerplate**: Use `get_object_or_404` over manual `try/except DoesNotExist`. Use FilterSets over `request.query_params` access. Use DRF's destroy/create mixins over manual `.delete()` and `.create()` with hand-rolled error handling
+- **Never use `str(exc)` in API responses**: Always use typed exception classes with a `user_message` property and an allowlist of safe messages (see `EventError`, `JournalError`, `ProgressionError` for the pattern). Raw `str(exc)` risks exposing internal details and triggers CodeQL warnings. Service functions should raise these typed exceptions, and views should use `exc.user_message`
+- **Validation belongs in serializers, not views or services**: Views should be thin — accept request, delegate to serializer, return response. Do NOT wrap service calls in `try/except ValidationError` inside views; that indicates validation that belongs in a serializer's `validate()` / `validate_<field>()` methods, which DRF surfaces as 400 responses natively. If a view has `try/except DjangoValidationError as exc: raise serializers.ValidationError(...)`, that's a code smell — move the check into the serializer. Services do not duplicate serializer validation. There is exactly one path to an operation: serializer validates, serializer calls service, service performs the atomic work. Services may raise `ValidationError` only for defensive assertions against programmer errors (e.g., passing the wrong type) — not for user-input validation that belongs in a serializer.
+- **Permissions belong in permission classes, not inline checks**: Inline `try/except GMProfile.DoesNotExist → raise PermissionDenied` (or similar) inside a view method is a code smell. Extract to a `BasePermission` subclass (e.g., `IsGM`, `IsGMOrStaff`). That way DRF's permission pipeline handles the 403 uniformly, auth logging/metrics work, and views can safely access `request.user.gm_profile` (or similar) without defensive checks.
+
 These guidelines ensure consistent, secure, and maintainable Django applications within the Arx II codebase.
