@@ -20,9 +20,20 @@ type ConditionInstance = components['schemas']['ConditionInstance'];
 // ---------------------------------------------------------------------------
 
 vi.mock('@/components/PersonaAvatar', () => ({
-  PersonaAvatar: ({ source }: { source: { name: string } }) => (
-    <span data-testid="persona-avatar">{source.name[0].toUpperCase()}</span>
-  ),
+  PersonaAvatar: ({
+    source,
+  }: {
+    source: { name: string; thumbnailUrl?: string | null; thumbnailMediaUrl?: string | null };
+  }) => {
+    const url = source.thumbnailMediaUrl ?? source.thumbnailUrl ?? null;
+    return url ? (
+      <span data-testid="persona-avatar">
+        <img src={url} alt={source.name} />
+      </span>
+    ) : (
+      <span data-testid="persona-avatar">{source.name[0].toUpperCase()}</span>
+    );
+  },
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
@@ -85,6 +96,8 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     soak_value: null,
     probing_threshold: null,
     active_conditions: [],
+    thumbnail_url: '',
+    thumbnail_media_url: null,
     ...overrides,
   };
 }
@@ -151,6 +164,44 @@ describe('CombatantsList', () => {
     expect(screen.getByTestId('opponent-row-11')).toBeInTheDocument();
     expect(screen.getByText('Mire Knight')).toBeInTheDocument();
     expect(screen.getByText('Shadow Archer')).toBeInTheDocument();
+  });
+
+  it('renders an opponent portrait when a thumbnail media URL is present', () => {
+    const encounter = makeEncounter(
+      [],
+      [
+        makeOpponent({
+          id: 21,
+          name: 'Ogre',
+          thumbnail_media_url: 'https://media.example/ogre.png',
+        }),
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-21');
+    const img = within(row).getByRole('img');
+    expect(img).toHaveAttribute('src', 'https://media.example/ogre.png');
+  });
+
+  it('renders an initial-letter avatar for an opponent without a thumbnail', () => {
+    const encounter = makeEncounter(
+      [],
+      [
+        makeOpponent({
+          id: 22,
+          name: 'Wraith',
+          thumbnail_media_url: null,
+        }),
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-22');
+    expect(within(row).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(row).getByText('W')).toBeInTheDocument();
   });
 
   it('NPC rows have destructive styling to distinguish from PCs', () => {

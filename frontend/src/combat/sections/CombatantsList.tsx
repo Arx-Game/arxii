@@ -5,9 +5,9 @@
  *   thumbnail would require a separate query per PC; deferred to a follow-up task).
  *   Source: EncounterDetail.participants.
  *
- * NPC rows: PersonaAvatar (initial-letter only — CombatOpponent has no Persona FK;
- *   v1 uses name-derived initial letter, a portrait FK addition is a future task).
- *   Source: EncounterDetail.opponents.
+ * NPC rows: PersonaAvatar resolving the opponent's persona thumbnail (serializer
+ *   `thumbnail_url` / `thumbnail_media_url`), falling back to a name-derived initial
+ *   letter when the opponent has no persona. Source: EncounterDetail.opponents.
  *
  * NPCs are visually distinct from PCs via a destructive-tinted border + background.
  *
@@ -145,10 +145,17 @@ function OpponentRow({ opponent }: OpponentRowProps) {
       )}
       data-testid={`opponent-row-${opponent.id}`}
     >
-      {/* Avatar — initial-letter only. CombatOpponent has no Persona FK in v1.
-       * TODO(avatars): add portrait FK to CombatOpponent and resolve here.
+      {/* Avatar — portrait resolves via the opponent's persona thumbnail; falls
+       * back to an initial-letter avatar when the opponent is persona-less.
        */}
-      <PersonaAvatar source={{ name: opponent.name }} size="sm" />
+      <PersonaAvatar
+        source={{
+          name: opponent.name,
+          thumbnailUrl: opponent.thumbnail_url,
+          thumbnailMediaUrl: opponent.thumbnail_media_url,
+        }}
+        size="sm"
+      />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-foreground">{opponent.name}</p>
