@@ -253,21 +253,6 @@ def calculate_effective_anima_cost(
     )
 
 
-def _derive_power(
-    *,
-    channeled_intensity: int,
-    technique: Technique | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
-    character: ObjectDB | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
-) -> int:
-    """Derive effective power. NEVER stored — recomputed each cast.
-
-    PR1: power == channeled intensity. Later issues (#634-#637) add level,
-    threads, aura/resonance, and power-scoped modifier terms here. The
-    ``technique``/``character`` params are the future inputs; unused in PR1.
-    """
-    return channeled_intensity
-
-
 def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are intentional; step 10 pushed statement count over threshold
     *,
     character: ObjectDB,

@@ -894,7 +894,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             result = use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda: "resolved",
+                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
             )
 
         # use_technique should complete successfully
@@ -931,7 +931,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda: "resolved",
+            resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
         )
 
         self.assertTrue(result.confirmed)

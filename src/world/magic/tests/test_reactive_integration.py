@@ -474,7 +474,7 @@ class TechniqueCheckResultExtractorTest(TestCase):
             use_technique(
                 character=self.char,
                 technique=self.technique,
-                resolve_fn=lambda: resolution,
+                resolve_fn=lambda *, power: resolution,  # noqa: ARG005
             )
 
         # The extractor must have found .check_result and passed it through.
