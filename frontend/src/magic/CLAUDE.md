@@ -229,8 +229,9 @@ Step 2: select anchor. Step 3: name + description + confirm. Calls `useWeaveThre
 ### `components/threads/TeachingOfferCard.tsx`
 
 Card for a single `ThreadWeavingTeachingOffer` in `WeavingTeachingOffersPage`. Shows offer
-details and opens `AcceptOfferDialog`. Teacher display name currently shows "Teacher #N"
-pending a name-lookup endpoint.
+details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respecting
+`RosterTenure.display_name` (e.g. "2nd player of Ariel") surfaced as
+`teacher_display_name` on the serializer.
 
 ### `components/threads/AcceptOfferDialog.tsx`
 

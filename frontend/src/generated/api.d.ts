@@ -19358,6 +19358,7 @@ export interface components {
       readonly id: number;
       /** @description Teaching tenure offering this unlock. */
       readonly teacher: number;
+      readonly teacher_display_name: string;
       /** @description Authored unlock being offered. */
       readonly unlock: number;
       readonly unlock_target_kind: string;

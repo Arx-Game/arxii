@@ -497,6 +497,7 @@ const mockThreadHubSummary = {
 const mockTeachingOffer = {
   id: 1,
   teacher: 5,
+  teacher_display_name: '1st player of Ember',
   unlock: 10,
   unlock_target_kind: 'TRAIT',
   unlock_display_name: 'Fire Shaping',

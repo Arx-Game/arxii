@@ -2,8 +2,8 @@
  * TeachingOfferCard — displays a single ThreadWeavingTeachingOffer.
  *
  * Shows:
- *  - Teacher (RosterTenure PK — displayed as "Teacher #N" for v1 since the
- *    serializer does not embed a display name field)
+ *  - Teacher display name (anonymity-respecting; e.g. "2nd player of Ariel"
+ *    from RosterTenure.display_name via serializer.teacher_display_name)
  *  - Unlock description (unlock_target_kind + unlock_display_name)
  *  - Pitch text
  *  - XP cost (effective_xp_cost_for_viewer, already Path-multiplied)
@@ -32,7 +32,7 @@ export function TeachingOfferCard({ offer, onAccept }: TeachingOfferCardProps) {
         <div className="min-w-0 flex-1 space-y-1">
           {/* Teacher */}
           <p className="text-sm font-medium text-foreground" data-testid="teaching-offer-teacher">
-            Teacher #{offer.teacher}
+            {offer.teacher_display_name}
           </p>
 
           {/* Unlock description */}
