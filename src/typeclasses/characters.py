@@ -201,6 +201,23 @@ class Character(ObjectParent, DefaultCharacter):
             return None
         return tenure.player_data.account
 
+    def has_property(self, name: str) -> bool:
+        """True if this character's primary persona carries the named Property tag.
+
+        Used by the reactive-filter ``has_property`` op when the examined
+        *target* is a Character (e.g. Mage Sight scars).
+        """
+        from world.scenes.models import Persona
+
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+        if sheet is None:
+            return False
+        try:
+            persona = sheet.primary_persona
+        except Persona.DoesNotExist:
+            return False
+        return persona.properties.filter(name=name).exists()
+
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)

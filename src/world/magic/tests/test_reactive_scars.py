@@ -71,37 +71,69 @@ def _source_technique_with_resonance(resonance_name: str):
 
 
 class MageSightScarTest(TestCase):
-    """ "Mage Sight" scar appends scar description to at_examined output
-    ONLY for targets with abyssal affinity.
+    """ "Mage Sight" scar appends scar description to return_appearance output
+    ONLY for targets whose primary persona carries the 'abyssal' Property tag.
 
-    Skipped: ExaminedPayload is @dataclass(frozen=True) in flows/events/payloads.py.
-    A reactive scar cannot mutate ExaminedPayload.result in-place. The scar needs
-    a mutable payload or a dedicated pre-examine decoration hook to append content.
-
-    Design follow-up: Either unfreeze ExaminedPayload (allowing post-hoc decoration)
-    or model Mage Sight as an EXAMINE_PRE handler that annotates the observer's
-    perception context before ExaminedPayload is constructed. Until then, the full
-    end-to-end test cannot be written.
-
-    Intent:
-        observer has Mage Sight scar (trigger on EXAMINED, filter: target has abyssal aura).
-        examine(observer, abyssal_target) → result.sections contains scar-appended text.
-        examine(observer, non_abyssal_target) → result.sections unchanged.
+    The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
+    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
+    returns, ``return_appearance`` concatenates those sections onto the base
+    appearance string.
     """
 
-    def test_mage_sight_appends_to_abyssal_target(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("MageSightRoom")
+
+        # Create three characters, each with a sheet + primary persona.
+        observer_sheet = CharacterSheetFactory()
+        abyssal_sheet = CharacterSheetFactory()
+        plain_sheet = CharacterSheetFactory()
+
+        self.observer = observer_sheet.character
+        self.abyssal_target = abyssal_sheet.character
+        self.plain_target = plain_sheet.character
+
+        for c in (self.observer, self.abyssal_target, self.plain_target):
+            c.location = self.room
+
+        # Tag abyssal_target's primary persona with the 'abyssal' Property.
+        abyssal_prop = PropertyFactory(name="abyssal")
+        abyssal_sheet.primary_persona.properties.add(abyssal_prop)
+
+        # Build the scar flow: MODIFY_PAYLOAD appends a section to sections list.
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={
+                "field": "sections",
+                "op": "add",
+                "value": ["Your mage sight burns: abyssal."],
+            },
         )
 
-    def test_near_miss_non_abyssal_target_unchanged(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py."
+        # Wire the scar onto the observer: fires on EXAMINE_PRE when the target
+        # has the 'abyssal' Property (via Character.has_property).
+        ReactiveConditionFactory(
+            event_name=EventName.EXAMINE_PRE,
+            filter_condition={"path": "target", "op": "has_property", "value": "abyssal"},
+            flow_definition=flow,
+            target=self.observer,
         )
+        # Invalidate the trigger cache so the new reactive condition is picked up.
+        self.observer.trigger_handler._populated = False
+
+    def test_mage_sight_appends_to_abyssal_target(self) -> None:
+        """Examining an abyssal-tagged target appends the scar section to the output."""
+        result = self.abyssal_target.return_appearance(self.observer)
+        self.assertIn("mage sight burns", result)
+
+    def test_near_miss_non_abyssal_target_unchanged(self) -> None:
+        """Examining a non-abyssal target does not trigger the scar — output unchanged."""
+        result = self.plain_target.return_appearance(self.observer)
+        self.assertNotIn("mage sight burns", result)
 
 
 class SoulSightScarTest(TestCase):
