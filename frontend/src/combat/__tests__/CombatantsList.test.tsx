@@ -2,10 +2,18 @@
  * Tests for CombatantsList rail section.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { configureStore } from '@reduxjs/toolkit';
+import { Provider } from 'react-redux';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
+
+import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
+import type { components } from '@/generated/api';
+
+type ConditionInstance = components['schemas']['ConditionInstance'];
 
 // ---------------------------------------------------------------------------
 // Module mocks — PersonaAvatar is used; stub it to simplify tests
@@ -24,13 +32,32 @@ import type { EncounterDetail, Participant, Opponent } from '../types';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createWrapper() {
+function makeStore() {
+  return configureStore({ reducer: { deepLinkModal: deepLinkModalSlice.reducer } });
+}
+
+function createWrapper(store: ReturnType<typeof makeStore> = makeStore()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </Provider>
+    );
   };
+}
+
+function makeCondition(overrides: Partial<ConditionInstance> = {}): ConditionInstance {
+  return {
+    id: 7,
+    name: 'Bleeding Out',
+    icon: '🩸',
+    color_hex: '#cc0000',
+    display_priority: 10,
+    ...overrides,
+  } as unknown as ConditionInstance;
 }
 
 function makeParticipant(overrides: Partial<Participant> = {}): Participant {
@@ -42,6 +69,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     max_health: 10,
     character_status: 'healthy',
     available_strain: null,
+    fatigue: null,
+    active_conditions: [],
     ...overrides,
   };
 }
@@ -55,6 +84,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     max_health: 10,
     soak_value: null,
     probing_threshold: null,
+    active_conditions: [],
     ...overrides,
   };
 }
@@ -163,6 +193,72 @@ describe('CombatantsList', () => {
     });
 
     expect(screen.queryByTestId('participant-row-1')).not.toBeInTheDocument();
+  });
+
+  it('renders condition badges for a participant with active_conditions', () => {
+    const encounter = makeEncounter(
+      [
+        makeParticipant({
+          id: 1,
+          active_conditions: [makeCondition({ id: 7, name: 'Bleeding Out' })],
+        }) as Participant,
+      ],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-1');
+    expect(within(row).getByRole('button', { name: /Bleeding Out/i })).toBeInTheDocument();
+  });
+
+  it('renders condition badges for an opponent with active_conditions', () => {
+    const encounter = makeEncounter(
+      [],
+      [
+        makeOpponent({
+          id: 10,
+          active_conditions: [makeCondition({ id: 9, name: 'Stunned' })],
+        }) as Opponent,
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-10');
+    expect(within(row).getByRole('button', { name: /Stunned/i })).toBeInTheDocument();
+  });
+
+  it('renders no condition badges when active_conditions is empty', () => {
+    const encounter = makeEncounter(
+      [makeParticipant({ id: 1, active_conditions: [] }) as Participant],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-1');
+    expect(within(row).queryByTestId('condition-row')).not.toBeInTheDocument();
+  });
+
+  it('clicking a condition badge dispatches openDeepLink with the condition id', async () => {
+    const store = makeStore();
+    const user = userEvent.setup();
+    const encounter = makeEncounter(
+      [
+        makeParticipant({
+          id: 1,
+          active_conditions: [makeCondition({ id: 7, name: 'Bleeding Out' })],
+        }) as Participant,
+      ],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper(store) });
+
+    await user.click(screen.getByRole('button', { name: /Bleeding Out/i }));
+
+    expect(store.getState().deepLinkModal.current).toEqual({ modal: 'condition', id: 7 });
   });
 
   it('renders PersonaAvatar for each combatant', () => {

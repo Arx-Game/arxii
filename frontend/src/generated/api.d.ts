@@ -14651,6 +14651,17 @@ export interface components {
       readonly probing_threshold: number | null;
       current_phase?: number;
       status?: components['schemas']['OpponentStatusEnum'];
+      /**
+       * @description Active conditions on this opponent's in-world ObjectDB.
+       *
+       *     Public conditions (``is_visible_to_others=True``) are shown to
+       *     everyone; hidden conditions only to GM/staff. Ordered by
+       *     ``display_priority`` (highest first). Opponents with no backing
+       *     ObjectDB (or none applied) serialize to ``[]``.
+       */
+      readonly active_conditions: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read serializer for combat opponents.
@@ -16031,6 +16042,35 @@ export interface components {
        *     The frontend's YourTurn strain slider reads this as its max value.
        */
       readonly available_strain: number | null;
+      /**
+       * @description Return the three fatigue pools (physical/social/mental).
+       *
+       *     Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
+       *     persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
+       *     is derived from the character's endurance stats via
+       *     ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+       *     health/strain — outsiders get ``None``.
+       *
+       *     The frontend's VitalPools component reads this to render fatigue bars
+       *     (replacing the ``0/10`` placeholder). See #552.
+       */
+      readonly fatigue: {
+        [key: string]: {
+          [key: string]: number;
+        };
+      } | null;
+      /**
+       * @description Active conditions on this participant's character ObjectDB.
+       *
+       *     Public conditions (``is_visible_to_others=True``) are shown to
+       *     everyone; hidden conditions only to the character's owner, GMs, or
+       *     staff — reusing the same ownership gate as vitals
+       *     (``_can_view_vitals``). Ordered by ``display_priority`` (highest
+       *     first). No conditions → ``[]``.
+       */
+      readonly active_conditions: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read serializer for combat participants.

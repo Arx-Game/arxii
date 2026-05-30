@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -17,8 +17,59 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
 )
-from world.fatigue.constants import EffortLevel
+from world.conditions.serializers import ConditionInstanceSerializer
+from world.conditions.services import get_active_conditions
+from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+# ---------------------------------------------------------------------------
+# Condition helpers
+# ---------------------------------------------------------------------------
+
+
+# Attribute name the viewset's Prefetch(to_attr=...) lands the active
+# ConditionInstances on (on the participant's character / opponent's
+# objectdb ObjectDB). Read here so the serializer avoids an N+1.
+ACTIVE_CONDITIONS_CACHE_ATTR = "active_condition_instances"
+
+
+def _serialize_active_conditions(
+    target: ObjectDB,
+    *,
+    can_view_hidden: bool,
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Serialize a target's active conditions, filtered by visibility.
+
+    Public conditions (``is_visible_to_others=True``) are always included;
+    hidden ones only when ``can_view_hidden`` is True (owner/GM/staff).
+    Results are ordered by the template's ``display_priority`` (highest
+    first). Reuses ``ConditionInstanceSerializer``.
+
+    Prefers the viewset's ``Prefetch(to_attr=ACTIVE_CONDITIONS_CACHE_ATTR)``
+    cache (built with the same select_related + suppression filter as
+    ``get_active_conditions``) — visibility filter + priority ordering run
+    in Python over the identity-mapped list, so no per-row query fires.
+    Falls back to ``get_active_conditions`` for callers that build the
+    serializer directly (e.g. unit tests).
+    """
+    cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=...) cache
+    if cached is not None:
+        instances = [
+            inst for inst in cached if can_view_hidden or inst.condition.is_visible_to_others
+        ]
+        instances.sort(key=lambda inst: inst.condition.display_priority, reverse=True)
+    else:
+        qs = get_active_conditions(target)
+        if not can_view_hidden:
+            qs = qs.filter(condition__is_visible_to_others=True)
+        instances = list(qs.order_by("-condition__display_priority"))
+    return ConditionInstanceSerializer(instances, many=True, context=context).data
+
 
 # ---------------------------------------------------------------------------
 # Nested read serializers
@@ -34,6 +85,7 @@ class OpponentSerializer(serializers.ModelSerializer):
 
     soak_value = serializers.SerializerMethodField()
     probing_threshold = serializers.SerializerMethodField()
+    active_conditions = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatOpponent
@@ -49,6 +101,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "probing_threshold",
             "current_phase",
             "status",
+            "active_conditions",
         ]
 
     def _is_gm_or_staff(self) -> bool:
@@ -67,6 +120,23 @@ class OpponentSerializer(serializers.ModelSerializer):
         """Probing threshold — GM/staff only."""
         return obj.probing_threshold if self._is_gm_or_staff() else None
 
+    def get_active_conditions(self, obj: CombatOpponent) -> list[dict[str, Any]]:
+        """Active conditions on this opponent's in-world ObjectDB.
+
+        Public conditions (``is_visible_to_others=True``) are shown to
+        everyone; hidden conditions only to GM/staff. Ordered by
+        ``display_priority`` (highest first). Opponents with no backing
+        ObjectDB (or none applied) serialize to ``[]``.
+        """
+        target = obj.objectdb
+        if target is None:
+            return []
+        return _serialize_active_conditions(
+            target,
+            can_view_hidden=self._is_gm_or_staff(),
+            context=self.context,
+        )
+
 
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
@@ -84,6 +154,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     max_health = serializers.SerializerMethodField()
     character_status = serializers.SerializerMethodField()
     available_strain = serializers.SerializerMethodField()
+    fatigue = serializers.SerializerMethodField()
+    active_conditions = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -95,6 +167,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "max_health",
             "character_status",
             "available_strain",
+            "fatigue",
+            "active_conditions",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -174,6 +248,65 @@ class ParticipantSerializer(serializers.ModelSerializer):
         if not self._can_view_vitals(obj):
             return None
         return obj.available_strain
+
+    def get_fatigue(self, obj: CombatParticipant) -> dict[str, dict[str, int]] | None:
+        """Return the three fatigue pools (physical/social/mental).
+
+        Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
+        persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
+        is derived from the character's endurance stats via
+        ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+        health/strain — outsiders get ``None``.
+
+        The frontend's VitalPools component reads this to render fatigue bars
+        (replacing the ``0/10`` placeholder). See #552.
+        """
+        if not self._can_view_vitals(obj):
+            return None
+        try:
+            character_sheet = obj.character_sheet
+        except AttributeError:
+            return None
+        if character_sheet is None:
+            return None
+
+        # Read the prefetched OneToOne (select_related on the viewset queryset)
+        # exactly once — no per-category re-query. None when no row exists yet.
+        fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor may be unset
+        well_rested = fatigue_pool.well_rested if fatigue_pool else False
+        pools: dict[str, dict[str, int]] = {}
+        for category in FatigueCategory:
+            current = fatigue_pool.get_current(category.value) if fatigue_pool else 0
+            pools[category.value] = {
+                "current": current,
+                "capacity": get_fatigue_capacity(
+                    character_sheet,
+                    category.value,
+                    well_rested=well_rested,
+                ),
+            }
+        return pools
+
+    def get_active_conditions(self, obj: CombatParticipant) -> list[dict[str, Any]]:
+        """Active conditions on this participant's character ObjectDB.
+
+        Public conditions (``is_visible_to_others=True``) are shown to
+        everyone; hidden conditions only to the character's owner, GMs, or
+        staff — reusing the same ownership gate as vitals
+        (``_can_view_vitals``). Ordered by ``display_priority`` (highest
+        first). No conditions → ``[]``.
+        """
+        try:
+            character_sheet = obj.character_sheet
+        except AttributeError:
+            return []
+        if character_sheet is None:
+            return []
+        return _serialize_active_conditions(
+            character_sheet.character,
+            can_view_hidden=self._can_view_vitals(obj),
+            context=self.context,
+        )
 
 
 class RoundActionSerializer(serializers.ModelSerializer):
