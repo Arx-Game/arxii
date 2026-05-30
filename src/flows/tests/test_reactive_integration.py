@@ -20,7 +20,7 @@ for the gather phase.
 
 from types import SimpleNamespace
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
@@ -505,19 +505,70 @@ class CrossCharacterScarSpecificityTest(TestCase):
         self.assertTrue(stack.was_cancelled())
 
 
+@tag("postgres")
 class CovenantAllegianceFilterTest(TestCase):
     """Test 9: Covenant-allegiance filter — fires on outsider attackers only.
 
-    Skipped: covenant relationship model does not yet exist. Retaliation filter
-    ``attacker.covenant != self.covenant`` requires a covenant attribute on
-    Character, not yet wired. Update when covenant system ships.
+    A retaliation scar on the defender cancels incoming damage when the attacker
+    is NOT in the defender's covenant (i.e. filter ``not shares_covenant``).
+    Ally attackers (same covenant) do NOT trigger the scar.
     """
 
-    def test_covenant_filter_skipped(self):
-        self.skipTest(
-            "Covenant model not yet built; attacker.covenant path unresolvable. "
-            "Implement when covenant system is added."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
         )
+
+        self.room = _create_room("CovenantRoom9")
+        self.defender = CharacterFactory()
+        self.ally = CharacterFactory()
+        self.outsider = CharacterFactory()
+        for c in (self.defender, self.ally, self.outsider):
+            c.location = self.room
+
+        # Each character needs a CharacterSheet so covenant_roles handler works.
+        defender_sheet = CharacterSheetFactory(character=self.defender)
+        ally_sheet = CharacterSheetFactory(character=self.ally)
+        CharacterSheetFactory(character=self.outsider)  # no covenant membership
+
+        covenant = CovenantFactory()
+        role = CovenantRoleFactory(covenant_type=covenant.covenant_type)
+        CharacterCovenantRoleFactory(
+            character_sheet=defender_sheet, covenant=covenant, covenant_role=role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=ally_sheet, covenant=covenant, covenant_role=role
+        )
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "not": {"path": "source.ref", "op": "shares_covenant", "value": "self"}
+            },
+            flow_definition=cancel_flow,
+            target=self.defender,
+        )
+        self.defender.trigger_handler._populated = False
+
+    def test_outsider_attacker_triggers_retaliation(self) -> None:
+        """Attacker not in defender's covenant -> scar fires -> damage cancelled."""
+        payload = _damage_payload(
+            self.defender,
+            source=DamageSource(type="character", ref=self.outsider),
+        )
+        self.assertTrue(_emit_damage(self.defender, payload).was_cancelled())
+
+    def test_ally_attacker_does_not_trigger_retaliation(self) -> None:
+        """Attacker in defender's covenant -> scar does not fire -> damage not cancelled."""
+        payload = _damage_payload(
+            self.defender,
+            source=DamageSource(type="character", ref=self.ally),
+        )
+        self.assertFalse(_emit_damage(self.defender, payload).was_cancelled())
 
 
 # ---------------------------------------------------------------------------
@@ -601,11 +652,40 @@ class ConditionalIntensityCapTest(TestCase):
         )
 
     def test_hit_evocation_filter_matches(self):
-        self.skipTest(
-            "MODIFY_PAYLOAD lacks a 'min' op needed for intensity capping. "
-            "Add 'min'/'max' ops to _execute_modify_payload, then implement "
-            "cap as: {field: 'amount', op: 'min', value: 50}."
+        # Use a separate room so the cancel-ward on self.character (from setUp)
+        # is not gathered — emit_event walks location.contents, so isolation
+        # requires a different room.
+        isolated_room = _create_room("CapRoom11b")
+        capped_char = CharacterFactory()
+        capped_char.location = isolated_room
+
+        cap_flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=cap_flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "min", "value": 50},
         )
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "path": "source.ref.school",
+                "op": "==",
+                "value": "evocation",
+            },
+            flow_definition=cap_flow,
+            target=capped_char,
+        )
+        capped_char.trigger_handler._populated = False
+
+        payload = _damage_payload(
+            capped_char,
+            amount=100,
+            damage_type="arcane",
+            source=DamageSource(type="technique", ref=SimpleNamespace(school="evocation")),
+        )
+        _emit_damage(capped_char, payload)
+        self.assertEqual(payload.amount, 50)
 
     def test_near_miss_enchantment_uncapped(self):
         payload = _damage_payload(
@@ -1215,25 +1295,75 @@ class RecursionCapRespectsFiltersTest(TestCase):
 class UsageCapPreFilterTest(TestCase):
     """Test 24: Usage cap is pre-filter.
 
-    Authored-but-skipped: Trigger has no ``max_uses_per_scene`` column.
-    ``_usage_cap_reached`` was a stub (now removed in Phase 4). Implementing
-    this requires either an ``uses_this_scene`` counter on Trigger or an
-    in-process dict on TriggerHandler. Neither exists yet.
+    An explicitly-authored ``usage_limit_<event>`` key on a trigger's TriggerData
+    caps how many times the dispatch loop will fire that trigger within a scene
+    (i.e. within a single TriggerHandler lifetime).  Absence of any usage_limit
+    key means unlimited — ``get_usage_limit``'s default-of-1 is NOT applied at
+    the dispatch layer.
+
+    The in-process counter lives on ``TriggerHandler._fire_counts``, keyed by
+    trigger pk.  ``_dispatch_usage_limit`` (in ``flows.emit``) returns ``None``
+    when no explicit key is authored, making the cap opt-in.
     """
 
+    def setUp(self):
+        self.room = _create_room("UsageCapRoom24")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
     def test_usage_cap_checked_before_filter(self):
-        self.skipTest(
-            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
-            "helper was removed with the dispatch rewrite. Re-author when "
-            "usage-counter infra lands."
+        """A trigger with usage_limit=1 fires on the first emit, skipped on the second."""
+        from flows.models.triggers import TriggerData
+
+        cancel_flow = _make_cancel_flow()
+        trigger = ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition=None,
+            flow_definition=cancel_flow,
+            target=self.character,
         )
+        # Author the cap BEFORE any dispatch so trigger_data_items is queried fresh.
+        TriggerData.objects.create(
+            trigger=trigger,
+            key=f"usage_limit_{EventName.DAMAGE_PRE_APPLY}",
+            value="1",
+        )
+        # Force handler re-population so the new TriggerData row is visible.
+        self.character.trigger_handler._populated = False
+
+        # First emit: trigger fires → event is cancelled.
+        stack1 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack1.was_cancelled(), "trigger should fire on the first emit")
+
+        # Second emit: cap reached → trigger is skipped → event is NOT cancelled.
+        stack2 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertFalse(stack2.was_cancelled(), "trigger should be suppressed on the second emit")
 
     def test_near_miss_unlimited_trigger_fires_multiple_times(self):
-        self.skipTest(
-            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
-            "helper was removed with the dispatch rewrite. Re-author when "
-            "usage-counter infra lands."
+        """A trigger with usage_limit=0 (unlimited) fires on every emit."""
+        from flows.models.triggers import TriggerData
+
+        cancel_flow = _make_cancel_flow()
+        trigger = ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition=None,
+            flow_definition=cancel_flow,
+            target=self.character,
         )
+        # value="0" → get_usage_limit returns None (unlimited).
+        TriggerData.objects.create(
+            trigger=trigger,
+            key=f"usage_limit_{EventName.DAMAGE_PRE_APPLY}",
+            value="0",
+        )
+        self.character.trigger_handler._populated = False
+
+        # Both emits should cancel the event because the cap is unlimited.
+        stack1 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack1.was_cancelled(), "unlimited trigger should fire on the first emit")
+
+        stack2 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack2.was_cancelled(), "unlimited trigger should fire on the second emit")
 
 
 # ---------------------------------------------------------------------------

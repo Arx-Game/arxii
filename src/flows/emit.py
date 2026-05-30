@@ -71,11 +71,41 @@ def emit_event(
             continue
         if not matched:
             continue
+        handler = getattr(trigger.obj, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        limit = _dispatch_usage_limit(trigger, event_name)
+        if handler is not None and limit is not None and handler.fire_count(trigger.pk) >= limit:
+            continue
         _execute_flow(trigger, payload, stack)
+        if handler is not None:
+            handler.note_fired(trigger.pk)
         if stack.was_cancelled():
             break
 
     return stack
+
+
+def _dispatch_usage_limit(trigger: Any, event_name: str) -> int | None:
+    """Cap for dispatch purposes. ``None`` = unlimited.
+
+    Only an EXPLICITLY-authored usage_limit key caps dispatch; absence means
+    unlimited.  ``get_usage_limit``'s default-of-1 is event-semantics, not a
+    cross-emit dispatch cap — we must NOT apply it here to avoid suppressing
+    triggers that lack any usage_limit key after the first emit.
+
+    Args:
+        trigger: A ``Trigger`` model instance.
+        event_name: The event name currently being dispatched.
+
+    Returns:
+        ``None`` if no explicit cap is authored; otherwise the positive integer
+        cap (values ``<= 0`` are already mapped to ``None`` by
+        ``get_usage_limit``).
+    """
+    data_map = trigger.data_map
+    # "usage_limit" is a TriggerData key name — a database identifier, not a code constant.
+    if f"usage_limit_{event_name}" not in data_map and "usage_limit" not in data_map:  # noqa: STRING_LITERAL
+        return None
+    return trigger.get_usage_limit(event_name)
 
 
 def _execute_flow(trigger: Any, payload: Any, stack: FlowStack) -> None:

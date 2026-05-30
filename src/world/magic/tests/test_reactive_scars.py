@@ -23,6 +23,8 @@ from flows.emit import emit_event
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
+from world.magic.factories import TechniqueFactory
+from world.mechanics.factories import PropertyFactory
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -69,75 +71,139 @@ def _source_technique_with_resonance(resonance_name: str):
 
 
 class MageSightScarTest(TestCase):
-    """ "Mage Sight" scar appends scar description to at_examined output
-    ONLY for targets with abyssal affinity.
+    """ "Mage Sight" scar appends scar description to return_appearance output
+    ONLY for targets whose primary persona carries the 'abyssal' Property tag.
 
-    Skipped: ExaminedPayload is @dataclass(frozen=True) in flows/events/payloads.py.
-    A reactive scar cannot mutate ExaminedPayload.result in-place. The scar needs
-    a mutable payload or a dedicated pre-examine decoration hook to append content.
-
-    Design follow-up: Either unfreeze ExaminedPayload (allowing post-hoc decoration)
-    or model Mage Sight as an EXAMINE_PRE handler that annotates the observer's
-    perception context before ExaminedPayload is constructed. Until then, the full
-    end-to-end test cannot be written.
-
-    Intent:
-        observer has Mage Sight scar (trigger on EXAMINED, filter: target has abyssal aura).
-        examine(observer, abyssal_target) → result.sections contains scar-appended text.
-        examine(observer, non_abyssal_target) → result.sections unchanged.
+    The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
+    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
+    returns, ``return_appearance`` concatenates those sections onto the base
+    appearance string.
     """
 
-    def test_mage_sight_appends_to_abyssal_target(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("MageSightRoom")
+
+        # Create three characters, each with a sheet + primary persona.
+        observer_sheet = CharacterSheetFactory()
+        abyssal_sheet = CharacterSheetFactory()
+        plain_sheet = CharacterSheetFactory()
+
+        self.observer = observer_sheet.character
+        self.abyssal_target = abyssal_sheet.character
+        self.plain_target = plain_sheet.character
+
+        for c in (self.observer, self.abyssal_target, self.plain_target):
+            c.location = self.room
+
+        # Tag abyssal_target's primary persona with the 'abyssal' Property.
+        abyssal_prop = PropertyFactory(name="abyssal")
+        abyssal_sheet.primary_persona.properties.add(abyssal_prop)
+
+        # Build the scar flow: MODIFY_PAYLOAD appends a section to sections list.
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={
+                "field": "sections",
+                "op": "add",
+                "value": ["Your mage sight burns: abyssal."],
+            },
         )
 
-    def test_near_miss_non_abyssal_target_unchanged(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py."
+        # Wire the scar onto the observer: fires on EXAMINE_PRE when the target
+        # has the 'abyssal' Property (via Character.has_property).
+        ReactiveConditionFactory(
+            event_name=EventName.EXAMINE_PRE,
+            filter_condition={"path": "target", "op": "has_property", "value": "abyssal"},
+            flow_definition=flow,
+            target=self.observer,
         )
+        # Invalidate the trigger cache so the new reactive condition is picked up.
+        self.observer.trigger_handler._populated = False
+
+    def test_mage_sight_appends_to_abyssal_target(self) -> None:
+        """Examining an abyssal-tagged target appends the scar section to the output."""
+        result = self.abyssal_target.return_appearance(self.observer)
+        self.assertIn("mage sight burns", result)
+
+    def test_near_miss_non_abyssal_target_unchanged(self) -> None:
+        """Examining a non-abyssal target does not trigger the scar — output unchanged."""
+        result = self.plain_target.return_appearance(self.observer)
+        self.assertNotIn("mage sight burns", result)
 
 
 class SoulSightScarTest(TestCase):
-    """ "Soul Sight" scar reveals true identity only when target has
-    the specific persona-type property.
+    """ "Soul Sight" scar appends a revealing line to return_appearance output
+    ONLY for targets whose primary persona carries the 'masked-identity' Property tag.
 
-    Skipped: Same design gap as MageSightScarTest. ExaminedPayload is frozen=True,
-    preventing scar mutation of the result. Additionally, the persona-type property
-    system (linking Properties from world/mechanics to characters) is not yet wired
-    into the examine pipeline's payload construction.
-
-    Design follow-up: Two preconditions required before implementing:
-      1. ExaminedPayload must be mutable (or a pre-examine hook must exist).
-      2. The examine pipeline must include persona/property data in the payload
-         so the filter DSL can walk target.persona_type.property.
-
-    Intent:
-        observer has Soul Sight scar (trigger on EXAMINED, filter: target has
-        "masked-identity" property on their primary persona).
-        examine(observer, masked_target) → result contains true identity disclosure.
-        examine(observer, unmasked_target) → result unchanged.
+    The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
+    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
+    returns, ``return_appearance`` concatenates those sections onto the base
+    appearance string.
     """
 
-    def test_soul_sight_reveals_masked_identity(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Additionally, persona-type property filtering in the examine payload is "
-            "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py."
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("SoulSightRoom")
+
+        # Create three characters, each with a sheet + primary persona.
+        observer_sheet = CharacterSheetFactory()
+        masked_sheet = CharacterSheetFactory()
+        plain_sheet = CharacterSheetFactory()
+
+        self.observer = observer_sheet.character
+        self.masked_target = masked_sheet.character
+        self.plain_target = plain_sheet.character
+
+        for c in (self.observer, self.masked_target, self.plain_target):
+            c.location = self.room
+
+        # Tag masked_target's primary persona with the 'masked-identity' Property.
+        masked_prop = PropertyFactory(name="masked-identity")
+        masked_sheet.primary_persona.properties.add(masked_prop)
+
+        # Build the scar flow: MODIFY_PAYLOAD appends a section to sections list.
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={
+                "field": "sections",
+                "op": "add",
+                "value": ["Soul sight pierces the mask."],
+            },
         )
 
-    def test_near_miss_unmasked_target_unchanged(self):
-        self.skipTest(
-            "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Additionally, persona-type property filtering in the examine payload is "
-            "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py."
+        # Wire the scar onto the observer: fires on EXAMINE_PRE when the target
+        # has the 'masked-identity' Property (via Character.has_property).
+        ReactiveConditionFactory(
+            event_name=EventName.EXAMINE_PRE,
+            filter_condition={
+                "path": "target",
+                "op": "has_property",
+                "value": "masked-identity",
+            },
+            flow_definition=flow,
+            target=self.observer,
         )
+        # Invalidate the trigger cache so the new reactive condition is picked up.
+        self.observer.trigger_handler._populated = False
+
+    def test_soul_sight_reveals_masked_identity(self) -> None:
+        """Examining a masked-identity target appends the scar section to the output."""
+        result = self.masked_target.return_appearance(self.observer)
+        self.assertIn("Soul sight pierces", result)
+
+    def test_near_miss_unmasked_target_unchanged(self) -> None:
+        """Examining an unmasked target does not trigger the scar — output unchanged."""
+        result = self.plain_target.return_appearance(self.observer)
+        self.assertNotIn("Soul sight pierces", result)
 
 
 # ---------------------------------------------------------------------------
@@ -241,25 +307,49 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
 class PropertyTaggedTechniqueTest(TestCase):
     """Property-tagged technique — scar fires when technique carries a Property.
 
-    Skipped: Technique model has no ``properties`` M2M field. The ``has_property``
-    filter path ``source.ref.properties`` is unresolvable until a Technique → Property
-    M2M is added to ``world/magic/models.py``.
-
-    Intent: a scar with filter ``{path: 'source.ref', op: 'has_property', value: 'cursed'}``
-    should fire on techniques that carry the ``cursed`` Property tag, and NOT fire on
-    techniques without it. Implement when Technique gains a ``properties`` M2M.
+    A scar with filter ``{path: 'source.ref', op: 'has_property', value: 'cursed'}``
+    fires on techniques that carry the ``cursed`` Property tag, and does NOT fire on
+    techniques without it.
     """
 
-    def test_technique_with_property_fires_scar(self):
-        self.skipTest(
-            "Technique model has no 'properties' M2M field. "
-            "Add Technique.properties M2M to world.mechanics.Property, then implement "
-            "this test using has_property filter op. See world/magic/models.py:Technique."
+    def setUp(self):
+        self.room = _create_room("PropertyRoom")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
+        self.cursed = PropertyFactory(name="cursed")
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.ref", "op": "has_property", "value": "cursed"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
         )
 
-    def test_near_miss_technique_without_property_does_not_fire(self):
-        self.skipTest(
-            "Technique model has no 'properties' M2M field. "
-            "Add Technique.properties M2M to world.mechanics.Property, then implement "
-            "this test using has_property filter op. See world/magic/models.py:Technique."
+    def _emit(self, technique):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=DamageSource(type="technique", ref=technique),
         )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_technique_with_property_fires_scar(self):
+        """A technique carrying the 'cursed' Property triggers the scar — dispatch cancelled."""
+        technique = TechniqueFactory(damage_profile=False)
+        technique.properties.add(self.cursed)
+        stack = self._emit(technique)
+        self.assertTrue(stack.was_cancelled())
+
+    def test_near_miss_technique_without_property_does_not_fire(self):
+        """A technique without any Property does not match has_property — passes through."""
+        technique = TechniqueFactory(damage_profile=False)
+        stack = self._emit(technique)
+        self.assertFalse(stack.was_cancelled())

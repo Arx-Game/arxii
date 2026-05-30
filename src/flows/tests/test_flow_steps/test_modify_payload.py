@@ -105,6 +105,84 @@ class ModifyPayloadStepTests(TestCase):
         emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
         self.assertEqual(payload.amount, 15)
 
+    def test_modify_payload_min_op_clamps_down(self) -> None:
+        """Op 'min' with cap below current value → clamps to cap."""
+        character = CharacterFactory()
+        room = _create_room()
+        character.location = room
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "min", "value": 50},
+        )
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            flow_definition=flow,
+            target=character,
+        )
+        payload = DamagePreApplyPayload(
+            target=character,
+            amount=80,
+            damage_type="fire",
+            source=DamageSource(type="character", ref=None),
+        )
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
+        self.assertEqual(payload.amount, 50)
+
+    def test_modify_payload_min_op_unchanged_when_below_cap(self) -> None:
+        """Op 'min' with cap above current value → unchanged."""
+        character = CharacterFactory()
+        room = _create_room()
+        character.location = room
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "min", "value": 50},
+        )
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            flow_definition=flow,
+            target=character,
+        )
+        payload = DamagePreApplyPayload(
+            target=character,
+            amount=30,
+            damage_type="fire",
+            source=DamageSource(type="character", ref=None),
+        )
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
+        self.assertEqual(payload.amount, 30)
+
+    def test_modify_payload_max_op_raises_floor(self) -> None:
+        """Op 'max' with floor above current value → raises to floor."""
+        character = CharacterFactory()
+        room = _create_room()
+        character.location = room
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "max", "value": 25},
+        )
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            flow_definition=flow,
+            target=character,
+        )
+        payload = DamagePreApplyPayload(
+            target=character,
+            amount=10,
+            damage_type="fire",
+            source=DamageSource(type="character", ref=None),
+        )
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
+        self.assertEqual(payload.amount, 25)
+
     def test_modify_payload_rejects_frozen_post_event(self) -> None:
         """POST events use frozen dataclasses; setattr raises FrozenInstanceError."""
         character = CharacterFactory()

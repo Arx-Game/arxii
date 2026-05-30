@@ -201,6 +201,43 @@ class Character(ObjectParent, DefaultCharacter):
             return None
         return tenure.player_data.account
 
+    def active_covenant_ids(self) -> frozenset[int]:
+        """Return the frozenset of covenant PKs where this character is currently active.
+
+        Delegates to the covenant-roles handler; returns empty frozenset if no sheet.
+        """
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+        if sheet is None:
+            return frozenset()
+        return self.covenant_roles.active_covenant_ids()
+
+    def shares_covenant_with(self, other: "Character") -> bool:
+        """True if self and other share at least one currently-active covenant.
+
+        Used by the reactive-filter ``shares_covenant`` op.
+        """
+        mine = self.active_covenant_ids()
+        if not mine:
+            return False
+        return bool(mine & other.active_covenant_ids())
+
+    def has_property(self, name: str) -> bool:
+        """True if this character's primary persona carries the named Property tag.
+
+        Used by the reactive-filter ``has_property`` op when the examined
+        *target* is a Character (e.g. Mage Sight scars).
+        """
+        from world.scenes.models import Persona
+
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+        if sheet is None:
+            return False
+        try:
+            persona = sheet.primary_persona
+        except Persona.DoesNotExist:
+            return False
+        return persona.properties.filter(name=name).exists()
+
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
