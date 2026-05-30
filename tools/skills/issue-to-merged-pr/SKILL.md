@@ -10,8 +10,7 @@ exits while CI runs and human review is async. The user re-invokes the skill
 in a new session; the agent reads PR state and picks up the right phase.
 **No persistent on-disk workflow state — GitHub holds the truth.**
 
-The full design is in
-`docs/superpowers/specs/2026-05-25-issue-to-merged-pr-design.md`. This file
+The full design is in `tools/skills/issue-to-merged-pr/design.md`. This file
 is the executable recipe.
 
 ## Required plugin
