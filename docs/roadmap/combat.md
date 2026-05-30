@@ -402,11 +402,12 @@ the React frontend.
 **Known carry-forward (not in this PR):**
 
 - `CombatRoundAction → Interaction` join FK needed for effect enumeration in `outcome-details` endpoint (v1 returns empty effects)
-- Deep-link routing for outcome-detail effects (`{modal, id}` skeleton exists, no navigation wired)
+- Deep-link routing for outcome-detail effects — **#551 DONE**: outcome-effect deep links open a Redux-driven `DeepLinkModalHost` routing 5 kinds (combo/opponent/participant/condition/clash); added read-only `GET /api/conditions/instances/<pk>/`.
 - Auto-expand pose units on critical events (KO, death) — pending player-preference toggle
 - Fatigue model not yet exposed; VitalPools shows `0/10` placeholders
 - `CombatOpponent` portrait FK — NPC avatars are initial-letter-only
-- ActiveState Commit/Lend buttons are UI stubs; dispatch wiring deferred
+- ActiveState Commit/Lend buttons — **#555 DONE**: ActiveState is read-only; the clash-commit path lives in YourTurn's `ClashContributionRow` (no parallel surface).
+- Focused-category technique taxonomy (was **#558**) — **reframed/descoped to #614**: needs a physical/social/mental technique taxonomy that does not exist yet.
 - `ClashStateSerializer` does not expose `contributors` or `side_favored`
 - Conditions data not surfaced on CombatantsList rows
 - `submit_pose` REST endpoint does not broadcast via WebSocket

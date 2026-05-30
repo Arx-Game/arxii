@@ -2547,6 +2547,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/conditions/instances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only retrieve of a single ConditionInstance by pk.
+     *
+     *     Used by the combat outcome-effect deep link (#551) to open a
+     *     condition-detail modal keyed by a ``ConditionInstance`` pk.
+     *
+     *     Scoping mirrors ``CharacterConditionsViewSet``: a requester may only
+     *     see condition instances whose target is one of the characters they
+     *     actively play (``request.user.get_available_characters()``). Instances
+     *     on characters the requester doesn't own are excluded from the queryset,
+     *     so retrieving them yields 404 (queryset-scoped, like the list view).
+     */
+    get: operations['conditions_instances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/conditions/templates/': {
     parameters: {
       query?: never;
@@ -11865,6 +11893,53 @@ export interface components {
       /** @description Are conditions in this category generally harmful? */
       readonly is_negative: boolean;
       readonly display_order: number;
+    };
+    /**
+     * @description Serializer for active condition instances.
+     *
+     *     Used for displaying conditions on a character's condition tab.
+     */
+    ConditionInstance: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly icon: string;
+      readonly color_hex: string;
+      readonly display_priority: number;
+      readonly is_visible_to_others: boolean;
+      readonly category_name: string;
+      readonly is_negative: boolean;
+      readonly stacks: number;
+      readonly max_stacks: number;
+      /** @description Intensity/potency affecting modifier scaling */
+      readonly severity: number;
+      readonly effective_severity: number;
+      readonly duration_type: string;
+      /** @description Rounds until expiration, if duration is rounds */
+      readonly rounds_remaining: number | null;
+      /** @description Rounds until progression to next stage */
+      readonly stage_rounds_remaining: number | null;
+      /** Format: date-time */
+      readonly applied_at: string;
+      /**
+       * Format: date-time
+       * @description Absolute expiration time, if applicable
+       */
+      readonly expires_at: string | null;
+      readonly stage_name: string | null;
+      readonly stage_order: number | null;
+      /** @description Get total number of stages for progressive conditions. */
+      readonly total_stages: number | null;
+      /** @description Temporarily suppressed (effects don't apply) */
+      readonly is_suppressed: boolean;
+      /** Format: date-time */
+      readonly suppressed_until: string | null;
+      /** @description Get the name of the source character. */
+      readonly source_character_name: string | null;
+      /** @description Get the name of the source technique. */
+      readonly source_technique_name: string | null;
+      /** @description Freeform description of source (e.g., 'poisoned wine') */
+      readonly source_description: string;
     };
     /** @description Serializer for condition stages. */
     ConditionStage: {
@@ -22874,6 +22949,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DamageType'];
+        };
+      };
+    };
+  };
+  conditions_instances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConditionInstance'];
         };
       };
     };

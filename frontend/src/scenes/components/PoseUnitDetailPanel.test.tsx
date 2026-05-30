@@ -3,11 +3,15 @@
  * Phase 9, Task 9.4.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { configureStore } from '@reduxjs/toolkit';
+import { Provider } from 'react-redux';
 import type { ReactNode } from 'react';
 import { PoseUnitDetailPanel } from './PoseUnitDetailPanel';
+import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -25,9 +29,23 @@ const mockUseOutcomeDetails = vi.mocked(useOutcomeDetails);
 // Wrapper
 // ---------------------------------------------------------------------------
 
-function Wrapper({ children }: { children: ReactNode }) {
+function makeStore() {
+  return configureStore({ reducer: { deepLinkModal: deepLinkModalSlice.reducer } });
+}
+
+function Wrapper({
+  children,
+  store = makeStore(),
+}: {
+  children: ReactNode;
+  store?: ReturnType<typeof makeStore>;
+}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  return (
+    <Provider store={store}>
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    </Provider>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -130,5 +148,65 @@ describe('PoseUnitDetailPanel', () => {
     );
 
     expect(mockUseOutcomeDetails).toHaveBeenCalledWith([10, 20, 30]);
+  });
+
+  it('dispatches openDeepLink with the target when a deep-link effect is clicked', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [
+            {
+              kind: 'condition',
+              label: 'Bleeding applied',
+              deep_link: { modal: 'condition', id: 7 },
+            },
+            { kind: 'status', label: 'Stunned', deep_link: null },
+          ],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    const store = makeStore();
+    const user = userEvent.setup();
+    render(
+      <Wrapper store={store}>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByRole('button', { name: /Bleeding applied/i }));
+
+    expect(store.getState().deepLinkModal.current).toEqual({ modal: 'condition', id: 7 });
+  });
+
+  it('renders a non-deep-linked effect as plain text, not a button', () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [
+            {
+              kind: 'condition',
+              label: 'Bleeding applied',
+              deep_link: { modal: 'condition', id: 7 },
+            },
+            { kind: 'status', label: 'Stunned', deep_link: null },
+          ],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    const plainRow = screen.getByText('Stunned').closest('div');
+    expect(plainRow).not.toBeNull();
+    expect(within(plainRow as HTMLElement).queryByRole('button')).toBeNull();
   });
 });

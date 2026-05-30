@@ -123,6 +123,12 @@ vi.mock('@/combat/CombatTurnPanel', () => ({
   ),
 }));
 
+// Stub DeepLinkModalHost — has its own dedicated test; here it would otherwise
+// pull in useAppDispatch/useAppSelector against the deepLinkModal slice.
+vi.mock('@/combat/modals/DeepLinkModalHost', () => ({
+  DeepLinkModalHost: () => <div data-testid="deep-link-modal-host-stub" />,
+}));
+
 // Stub usePendingUnlinkedActions
 vi.mock('@/scenes/hooks/usePendingUnlinkedActions', () => ({
   usePendingUnlinkedActions: vi.fn().mockReturnValue({ data: [] }),

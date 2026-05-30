@@ -8,8 +8,8 @@ Provides read-only endpoints for:
 - Condition summaries with aggregated effects
 """
 
-from django.db.models import Prefetch, Q
-from rest_framework import status, viewsets
+from django.db.models import Prefetch, Q, QuerySet
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -373,3 +373,37 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         )
 
         return Response(ConditionInstanceObserverSerializer(conditions, many=True).data)
+
+
+# =============================================================================
+# Condition Instance Retrieve ViewSet (single instance by pk)
+# =============================================================================
+
+
+class ConditionInstanceViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Read-only retrieve of a single ConditionInstance by pk.
+
+    Used by the combat outcome-effect deep link (#551) to open a
+    condition-detail modal keyed by a ``ConditionInstance`` pk.
+
+    Scoping mirrors ``CharacterConditionsViewSet``: a requester may only
+    see condition instances whose target is one of the characters they
+    actively play (``request.user.get_available_characters()``). Instances
+    on characters the requester doesn't own are excluded from the queryset,
+    so retrieving them yields 404 (queryset-scoped, like the list view).
+    """
+
+    serializer_class = ConditionInstanceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[ConditionInstance]:
+        """Scope to instances on characters the requester actively plays."""
+        owned_character_ids = [
+            character.id for character in self.request.user.get_available_characters()
+        ]
+        return ConditionInstance.objects.filter(target_id__in=owned_character_ids).select_related(
+            "condition",
+            "condition__category",
+            "current_stage",
+        )

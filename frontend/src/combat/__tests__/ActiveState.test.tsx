@@ -5,7 +5,6 @@
  */
 
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -114,26 +113,19 @@ describe('ActiveState', () => {
     expect(meter).toHaveStyle({ width: '70%' });
   });
 
-  it('renders Commit and Lend buttons per card', () => {
+  it('is read-only — renders no Commit or Lend buttons', () => {
     const clashes = [makeClash({ id: 1 })];
 
     render(<ActiveState encounter={makeEncounter(clashes)} />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('clash-commit-btn-1')).toBeInTheDocument();
-    expect(screen.getByTestId('clash-lend-btn-1')).toBeInTheDocument();
-  });
-
-  it('calls onCommitClick with clash id when Commit is clicked', async () => {
-    const user = userEvent.setup();
-    const onCommit = vi.fn();
-    const clashes = [makeClash({ id: 5 })];
-
-    render(<ActiveState encounter={makeEncounter(clashes)} onCommitClick={onCommit} />, {
-      wrapper: createWrapper(),
-    });
-
-    await user.click(screen.getByTestId('clash-commit-btn-5'));
-    expect(onCommit).toHaveBeenCalledWith(5);
+    // Card still renders...
+    expect(screen.getByTestId('clash-card-1')).toBeInTheDocument();
+    // ...but the action buttons are gone.
+    expect(screen.queryByTestId('clash-commit-btn-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('clash-lend-btn-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Commit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lend')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lend-to-clash-stub')).not.toBeInTheDocument();
   });
 
   it('shows opponent name on the card', () => {

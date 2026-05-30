@@ -1,21 +1,21 @@
 /**
- * ActiveState — rail section showing active Clash/Ward/Break/Lock cards.
+ * ActiveState — read-only rail section showing active Clash/Ward/Break/Lock
+ * cards.
+ *
+ * This is a purely read-only overview of the encounter's active state. The
+ * interactive "commit to a clash" UX lives in YourTurn (ClashContributionRow),
+ * which dispatches the real COMBAT ActionRef. ActiveState only displays status;
+ * it does not own any dispatch path.
  *
  * Data source: EncounterDetail.clashes — a SerializerMethodField returning
  * ClashStateSerializer rows (id, flavor, status, progress, pc_win_threshold,
- * npc_win_threshold, npc_opponent). Added in Phase 8, Task 8.4.
+ * npc_win_threshold, npc_opponent).
  *
  * Each card shows:
  * - Clash kind label (CLASH / LOCK / WARD / BREAK)
+ * - Side favored badge and opponent name
+ * - Contributors list
  * - Meter (progress toward pc_win_threshold)
- * - Commit / Lend buttons (stubbed — actual dispatch wired in Phase 11
- *   when the full combat layout composes; see TODO below)
- *
- * TODO(phase-11): wire onCommitClick and onLendClick to actual
- * useDispatchPlayerAction calls in CombatScenePage. For Phase 8 these
- * are stub callbacks so the UI renders without dispatch logic.
- *
- * Phase 8, Task 8.4 — unified-combat-ui plan.
  */
 
 import { cn } from '@/lib/utils';
@@ -28,10 +28,6 @@ import type { ClashState } from '../types';
 
 export interface ActiveStateProps {
   encounter: EncounterDetail;
-  /** Called when user clicks "Commit to clash" — dispatch wired in Phase 11. */
-  onCommitClick?: (clashId: number) => void;
-  /** Called when user clicks "Lend to clash" — dispatch wired in Phase 11. */
-  onLendClick?: (clashId: number) => void;
   /** Whether the section is collapsed. Controlled by parent (Task 8.6). */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -59,15 +55,13 @@ const FLAVOR_COLOR: Record<ClashState['flavor'], string> = {
 // ClashCard — renders one active Clash
 // ---------------------------------------------------------------------------
 
-interface ClashCardProps {
+export interface ClashCardProps {
   clash: ClashState;
-  onCommitClick?: (clashId: number) => void;
-  onLendClick?: (clashId: number) => void;
   /** Name of the NPC this clash is against — derived from encounter.opponents. */
   opponentName?: string;
 }
 
-function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCardProps) {
+export function ClashCard({ clash, opponentName }: ClashCardProps) {
   // Meter: progress toward pc_win_threshold.
   // progress can be negative (NPC side winning) — clamp for display.
   const isClash = clash.flavor === 'CLASH';
@@ -154,35 +148,6 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
           {clash.progress} / {clash.pc_win_threshold}
         </div>
       </div>
-
-      {/* Action buttons — stub dispatch, wired in Phase 11 */}
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => onCommitClick?.(clash.id)}
-          className={cn(
-            'flex-1 rounded border border-primary/40 bg-primary/5 px-2 py-1 text-xs font-medium',
-            'text-primary transition-colors hover:bg-primary/10'
-          )}
-          data-testid={`clash-commit-btn-${clash.id}`}
-          // TODO(phase-11): dispatch wiring — currently calls the stub callback.
-          // Phase 11 will wire this to useDispatchPlayerAction with the clash ref.
-        >
-          Commit
-        </button>
-        <button
-          type="button"
-          onClick={() => onLendClick?.(clash.id)}
-          className={cn(
-            'flex-1 rounded border border-border bg-background px-2 py-1 text-xs font-medium',
-            'text-muted-foreground transition-colors hover:bg-accent/30'
-          )}
-          data-testid={`clash-lend-btn-${clash.id}`}
-          // TODO(phase-11): dispatch wiring — currently calls the stub callback.
-        >
-          Lend
-        </button>
-      </div>
     </div>
   );
 }
@@ -191,13 +156,7 @@ function ClashCard({ clash, onCommitClick, onLendClick, opponentName }: ClashCar
 // ActiveState
 // ---------------------------------------------------------------------------
 
-export function ActiveState({
-  encounter,
-  onCommitClick,
-  onLendClick,
-  collapsed = false,
-  onToggleCollapse,
-}: ActiveStateProps) {
+export function ActiveState({ encounter, collapsed = false, onToggleCollapse }: ActiveStateProps) {
   // The generated schema types clashes as {[key: string]: unknown}[] —
   // we cast to our local ClashState[] since ClashStateSerializer produces
   // exactly that shape.
@@ -242,8 +201,6 @@ export function ActiveState({
             <ClashCard
               key={clash.id}
               clash={clash}
-              onCommitClick={onCommitClick}
-              onLendClick={onLendClick}
               opponentName={opponentById.get(clash.npc_opponent)}
             />
           ))}

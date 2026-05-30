@@ -430,22 +430,6 @@ export function YourTurn({
         </div>
       )}
 
-      {/* Lend-to-clash stub — deferred wiring, Phase 7 placeholder */}
-      <div className="rounded border border-dashed border-border/40 p-2">
-        <button
-          type="button"
-          disabled
-          title="lend-to-clash will dispatch a CLASH_SUPPORT action"
-          // TODO(phase-7-deferred): Wire CLASH_SUPPORT dispatch path when backend
-          // exposes it as a PlayerAction descriptor. Backend dispatch handler for
-          // CLASH_SUPPORT does not exist yet as of Phase 7.
-          className="w-full cursor-not-allowed rounded px-2 py-1 text-xs text-muted-foreground opacity-50"
-          data-testid="lend-to-clash-stub"
-        >
-          Lend to clash (not yet available)
-        </button>
-      </div>
-
       {/* Combo upgrade row — shown when combos are available */}
       {availableCombos !== undefined && availableCombos.length > 0 && (
         <div className="space-y-2" data-testid="combo-upgrade-section">
