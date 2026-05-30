@@ -20,6 +20,7 @@ from world.scenes.models import Interaction
 if TYPE_CHECKING:
     from world.combat.models import (
         ClashContribution,
+        CombatEncounter,
         CombatParticipant,
         CombatRoundAction,
     )
@@ -166,3 +167,52 @@ def render_action_outcome_narration(
     if tail_clauses:
         return head + ", " + ", ".join(tail_clauses) + "."
     return head + "."
+
+
+def broadcast_action_outcome(
+    *,
+    encounter: CombatEncounter,
+    narration: str,
+) -> Interaction | None:
+    """Persist a Narrator-authored OUTCOME interaction and broadcast it.
+
+    Returns the created Interaction, or None when there is no narration
+    text (empty string -> nothing to say). The OUTCOME is persisted in
+    the encounter's scene so it appears in the scene log on re-read;
+    broadcast goes to every object in the encounter room via the existing
+    interaction WebSocket payload. When the encounter has no room, the
+    interaction is still persisted (durable) but not broadcast.
+    """
+    if not narration:
+        return None
+
+    from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        create_interaction,
+    )
+
+    narrator = get_or_create_narrator_persona()
+    interaction = create_interaction(
+        persona=narrator,
+        content=narration,
+        mode=InteractionMode.OUTCOME,
+        scene=encounter.scene,
+    )
+
+    room = encounter.room
+    if room is None:
+        return interaction
+
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+    )
+    _broadcast_to_location(room, payload)
+    return interaction
