@@ -2341,7 +2341,7 @@ export interface paths {
      *
      *     Effects derived from existing model state — combo upgrade, ConditionInstance
      *     correlation by source_technique + applied_at window, target status from
-     *     CombatOpponent.status / CharacterVitals.status. No new audit tables.
+     *     CombatOpponent.status / CharacterVitals.life_state. No new audit tables.
      */
     get: operations['combat_action_outcome_details_retrieve'];
     put?: never;
@@ -14662,6 +14662,22 @@ export interface components {
       readonly active_conditions: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description Direct portrait URL, resolved through the opponent's persona.
+       *
+       *     Mirrors ``PersonaSerializer.thumbnail_url`` (the persona's
+       *     ``thumbnail_url`` URLField — ``""`` when unset). Persona-less
+       *     opponents (``persona=None``) return ``None``.
+       */
+      readonly thumbnail_url: string | null;
+      /**
+       * @description PlayerMedia portrait URL, resolved through the opponent's persona.
+       *
+       *     Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
+       *     linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
+       *     has no thumbnail (or the opponent has no persona).
+       */
+      readonly thumbnail_media_url: string | null;
     };
     /**
      * @description Read serializer for combat opponents.
