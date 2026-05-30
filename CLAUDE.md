@@ -213,26 +213,7 @@ This is auto-generated via `uv run python tools/introspect_models.py` and contai
 
 ## Critical Evennia Migration Quirks
 
-### Evennia makemigrations Solution
-**FIXED: Custom makemigrations command prevents phantom Evennia library migrations**
-
-We have a custom `makemigrations` command that prevents Django from creating problematic migrations in Evennia's library when our models have ForeignKeys to Evennia models.
-
-```bash
-# SAFE - our custom command prevents phantom Evennia migrations
-arx manage makemigrations
-
-# Still works - specify specific apps when needed  
-arx manage makemigrations traits
-```
-
-**Details**: See `core_management/CLAUDE.md` for full technical documentation of the solution.
-
-### Evennia Integration Strategy
-- **Use Evennia Models**: Keep using Evennia's Account, ObjectDB, etc. - don't reinvent the wheel
-- **Extend via evennia_extensions**: Use the evennia_extensions app pattern for data storage that extends Evennia models
-- **No Attributes**: Replace all Evennia attribute usage with proper Django models through evennia_extensions
-- **Item Data System**: Consider reusing ArxI's item_data descriptor system for routing data to different storage models
+**Use `arx manage makemigrations`** (a custom command that prevents phantom Evennia-library migrations). For the makemigrations solution, the Evennia integration strategy (use Evennia models, extend via `evennia_extensions`, no attributes, item-data routing), and the new-app migration strategy: see `docs/evennia-quirks.md`.
 
 ### Database Design Principles
 - **No JSON Fields**: Avoid JSONField - each setting/configuration should be a proper column with validation and indexing
@@ -242,87 +223,9 @@ arx manage makemigrations traits
 
 ### Running Tests
 
-**IMPORTANT: Always use `arx test` (or its `just` wrappers) to run tests.** Never use `uv run python -m`, `python manage.py test`, sourcing venvs to find binaries, or any other method.
+**Always use `arx test` or its `just` wrappers** — never `uv run python -m`, `python manage.py test`, or sourcing venvs. Tests run in two tiers: SQLite for the inner loop (`just test-fast <app>`), Postgres for parity (`just test-parity <app>` / `just regression` — what CI runs). Run the full suite without `--keepdb` before pushing. Prefer `just <recipe>` over raw `bash`/`python`.
 
-#### Two-tier model: SQLite for the inner loop, Postgres for parity
-
-Production runs Postgres exclusively. Tests run in TWO tiers:
-
-1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
-2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. Use before pushing, and for apps the SQLite tier can't cover. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
-
-#### Working app set for `--sqlite`
-
-| Tier | Apps |
-|---|---|
-| **SQLite-clean** | action_points, forms, achievements, game_clock, skills, relationships, flows, checks, events, missions, journals, mechanics, progression, conditions |
-| **SQLite with caveats** (5-15% broken, partial tagging) | combat, items, vitals, actions |
-| **PG only — `just test-parity` required** | roster, character_sheets, magic, scenes, codex, areas, societies |
-
-For the PG-only apps, `--sqlite` either fails immediately (carved out via `MIGRATION_MODULES = None` in settings) or the fixture chain hits PG-vs-SQLite FK timing differences.
-
-#### Recipes
-
-```bash
-# Inner-loop (SQLite tier — fast, excludes @tag("postgres")):
-just test-fast <app>                     # one app
-just test-fast <app>.tests.test_module   # one module
-
-# Parity tier (PG, parallel; what CI runs):
-just test-parity <app>                   # one app
-just test-parity                         # full suite, ~30+ min
-
-# Generic pass-through (PG, no parallel):
-just test <args>
-
-# Full-suite parity gate (matches CI exactly):
-just regression                          # echo "yes" | arx test
-```
-
-```bash
-# Direct arx test (when you need exact CLI control):
-arx test <app>                                 # PG, serial (default)
-arx test --sqlite <app>                        # SQLite inner loop
-arx test --parallel <app>                      # PG, parallel — use for large suites
-arx test --exclude-tag postgres --sqlite ...   # skip @tag("postgres") explicitly on SQLite
-```
-
-#### When tests fail on SQLite but pass on PG
-
-The two-tier model exposes a small set of patterns:
-
-- **Tag with `@tag("postgres")`** when the failure is genuinely PG-required: queries a materialized view, uses `DISTINCT ON`, uses raw `REFRESH MATERIALIZED VIEW`, or hits Evennia-internal `DbHolder` copy issues. The PG tier still runs them.
-- **Fix the test** when the failure is a test-design issue PG happened to mask: `assertEqual(queryset[0].field, expected)` without `order_by`, direct ID comparison (`[2, 3] != [1, 2]`), or SharedMemoryModel identity-map pollution from other tests in the class. Fix via `order_by("pk")`, set comparison, or `from evennia.utils.idmapper.models import SharedMemoryModel; SharedMemoryModel.flush_instance_cache()` in setUp.
-
-See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canonical `@tag("postgres")` pattern.
-
-**Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
-
-**Run without `--keepdb` before pushing.** `--keepdb` preserves the test DB across runs, which means objects created by Evennia's initial setup (Limbo room #2, default Account #1, etc.) and objects created by prior test runs persist into your current run. CI always starts from a fresh DB, so tests that implicitly depend on that preserved state will pass locally but fail in CI. Before pushing anything that touches migrations, factories, service functions that call `create_object`, typeclass initialization, or test settings, run the full suite WITHOUT `--keepdb`:
-
-```
-just regression                        # echo "yes" | arx test — fresh DB, matches CI
-```
-
-This catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
-
-**Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
-
-**Use `just` for task runners, not raw `bash`/`python`.** The repo has a `justfile` at the root with recipes for common dev tasks (test, lint, manage, etc.). `just` is pinned in `mise.toml` and covered by a single `Bash(just:*)` allowlist entry, so any recipe invocation auto-approves.
-
-```bash
-just                        # list recipes
-just test flows --keepdb    # arx test pass-through
-just test-fast world.foo    # SQLite inner loop
-just test-parity world.foo  # PG parity tier (parallel)
-just regression             # full no-keepdb regression run
-just lint                   # ruff check
-just manage migrate flows   # arx manage pass-through
-```
-
-Prefer `just <recipe>` over raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
-
-**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries.
+**For the full two-tier model, the per-app SQLite/PG tier table, all the recipes, `@tag("postgres")` decisions, the `--keepdb` pitfall, and the "never rely on Evennia defaults in service functions" rule: see the `running-tests` skill.**
 
 ### Proactive Quality Checks
 
@@ -349,39 +252,19 @@ When completing a task:
 When a feature branch or logical unit of work is finished:
 - **Update the roadmap** — mark completed phases/items in the relevant `docs/roadmap/*.md` file. Document what was built, not just that it's done.
 - **Run full regression tests** — all affected test suites, not just the new tests
-- **Run the suite once without `--keepdb`** before pushing — this matches CI's fresh-DB behavior and catches bugs that depend on preserved test DB state (especially Evennia setup objects like Limbo). See the "Run without --keepdb before pushing" note above for why this matters.
+- **Run the suite once without `--keepdb`** before pushing — this matches CI's fresh-DB behavior and catches bugs that depend on preserved test DB state (especially Evennia setup objects like Limbo). See the `running-tests` skill for why this matters.
 
 ### Code Quality Standards
-- **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps
-- **ty Type Checking**: Strategic type checking via `ty` covers complex business logic apps (see `[tool.ty.src].include`). Skip Django CRUD boilerplate
-- **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
-- **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
-- **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
-- **Migrations**: When model changes require migrations, use `arx manage makemigrations <app>` to generate them. Always use the `arx manage` commands for migrations to ensure correct Django settings are loaded. After generating, apply with `arx manage migrate`
-- **No data migrations pre-production**: We have no production data and the dev DB is recreated periodically. Write **schema** migrations only; do NOT add `RunPython` **data** migrations to backfill/transform existing rows — there are no meaningful rows to migrate. (Revisit once shipped to production.)
-- **Line Length**: Respect 100-character line limit even with indentation - break long lines appropriately
-- **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
-- **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
-- **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`
-- **Don't add `Meta.ordering` to models unless necessary**: Default model ordering is not free — it adds an `ORDER BY` to every query against that model, including ones that don't need it. Only set `Meta.ordering` for sequential data with a meaningful natural order, like Chapters or Episodes. ViewSets that paginate querysets **must** add `.order_by(...)` to their queryset (otherwise pagination is unstable across requests and DRF emits `UnorderedObjectListWarning`) — that is the right place to put ordering, not on the model.
-- **Prefer Inheritance Over Protocols**: Use concrete base classes with abstract methods instead of Protocol classes for type safety. All objects in our codebase inherit from shared base classes (BaseState, BaseHandler, etc.). When mypy compliance requires type annotations, prefer adding abstract methods to base classes rather than creating Protocol classes. This maintains clear inheritance hierarchies and ensures methods are actually implemented. Use Protocol only for true duck typing scenarios with external libraries.
-- **Service Functions Use Model Instances**: Service functions should never accept slug strings for lookups. Always pass model instances or primary keys. Slugs are only for user-facing search APIs where users search by text and receive objects with IDs for subsequent operations. This applies to all internal service layer code.
-- **Avoid Denormalization**: Don't copy data from related models into a local field to save joins. If a value is derivable via a relationship (e.g., a scene's story is derivable from scene → episode → story), don't store it redundantly. Denormalized copies create data integrity risks — if the source changes, the copy is stale, and adding verification infrastructure to keep them in sync negates any join savings. Only denormalize when the value is genuinely different per-instance (e.g., a per-encounter risk level) rather than a cached copy of a related field.
-- **Avoid Denormalized Foreign Keys**: When a model has a FK to a parent and optionally a FK to a child of that parent (e.g., `condition` + `stage` where stage implies condition), either make one FK derivable from the other or add `clean()` validation to ensure consistency. Don't create situations where FKs can contradict each other. If the child FK is nullable (null = applies to all), keep the parent FK for direct queries but validate the relationship.
-- **TextChoices in constants.py**: Place Django TextChoices/IntegerChoices in a separate `constants.py` file rather than as nested classes inside models. This avoids circular import issues when serializers or other modules need to reference the choices, and makes it clearer these are shared constants.
-- **No Queries in Loops**: Never execute database queries inside loops, serializer methods that recurse, or while loops that traverse relationships. Use annotations, prefetch_related with bounded depth, or restructure to batch queries. Recursive serializers are acceptable only when paired with bounded prefetch_related in the view (e.g., `prefetch_related("children__children__children")` limits depth to 4 levels).
-- **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
-- **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
-- **Preserve the Dev Database**: The dev database contains fixture data and test state that is time-consuming to reconstruct. Do NOT drop, flush, or destroy the database except in dire circumstances. For migration work: use `arx manage migrate app_name zero` to fake-migrate down, then regenerate — this preserves the database while resetting an app's migration state. Never delete the database as a shortcut to fix migration issues.
-- **PostgreSQL Only (production)**: This project uses PostgreSQL exclusively in production. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Don't write database-agnostic workarounds in production code; use the Postgres feature directly.
 
-  **For tests, see the two-tier model in "Running Tests" above.** The SQLite inner-loop tier is a developer convenience that exposes PG-specific features as `@tag("postgres")` skips; the Postgres parity tier (every CI run, `just test-parity` locally) always runs the full chain. New tests should pass on both tiers unless they exercise PG-specific code, in which case `@tag("postgres")` is the correct decoration.
-- **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`, `CACHED_PROPERTY_IMPORT`, `OBJECTDB_PARAM`
-- **SharedMemoryModel Default**: All concrete Django models should use `SharedMemoryModel`. Both lookup tables and per-instance data benefit from the identity-map cache. Only suppress with `# noqa: SHARED_MEMORY` and a justification
-- **Prefetch with to_attr**: Always use `Prefetch()` objects with `to_attr=` in `prefetch_related()`. Never use bare strings. The `to_attr` should point to a `cached_property` on the model for cache-safe access
-- **cached_property must come from Django**: Use `from django.utils.functional import cached_property` exclusively. `functools.cached_property` silently breaks `Prefetch(to_attr=...)` because Django's prefetch machinery checks `isinstance` against its own class. Enforced by `lint_cached_property_import.py`. See `src/evennia_extensions/CACHED_PROPERTY_STANDARD.md` for full rationale.
-- **Constants over String Literals**: Never return spaceless string literals or compare against them. Use `TextChoices`, `IntegerChoices`, or module-level constants. This prevents typo bugs and makes refactoring safe
-- **FilterSets in Views**: Always use `django-filter` FilterSet classes for query parameter handling in ViewSets and Views. Never access `request.query_params` or `request.GET` directly
+Core always-on rules (the full list lives in `django_notes.md`):
+- **No relative imports** — absolute only (`from world.roster.models import Roster`, not `from .models import ...`).
+- **No Django signals** — use explicit, testable service-function calls.
+- **No data migrations pre-production** — schema migrations only; no `RunPython` backfills (no meaningful rows yet).
+- **Preserve the dev database** — never drop/flush/destroy it except in dire circumstances.
+- **PostgreSQL only (production)** — use PG features directly (CTEs, materialized views, `DISTINCT ON`, JSONB); no DB-agnostic workarounds.
+- **100-char line limit.** Use `.env` for configurable settings.
+
+**For the full Code Quality Standards (type annotations + `ty`, model-instance preference, avoid dict returns, separate `types.py`, `Meta.ordering` policy, inheritance-over-protocols, service-functions-use-instances, denormalization rules, `TextChoices` in `constants.py`, no-queries-in-loops, no-management-commands, no-backwards-compat, the `# noqa` suppression policy + custom-linter tokens incl. `OBJECTDB_PARAM`, SharedMemoryModel/`Prefetch`/`cached_property`, constants-over-string-literals, FilterSets-in-views): see "## Code Quality Standards" in `django_notes.md`.**
 
 ### Django-Specific Guidelines
 **For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**
@@ -392,45 +275,14 @@ Key Django requirements:
 - Use FactoryBoy for all test data with `setUpTestData` for performance
 - Focus tests on application logic, not Django built-in functionality
 
-**FactoryBoy gotcha: `django_get_or_create` silently drops non-lookup
-kwargs.** When a `DjangoModelFactory` declares
-`Meta.django_get_or_create = ("lookup_field",)` AND the row already
-exists at create time, factory_boy returns the existing row and
-**never applies any non-lookup kwargs you passed**. Example: if
-something upstream (Evennia signal, `at_object_creation` hook,
-fixture) already created the row, `FooFactory(name="X", color="red")`
-returns the existing row with the existing color, not `red`. The bug
-is invisible unless a test asserts on the dropped field.
-
-When the underlying row may pre-exist via signals/hooks, override
-`_create` to apply non-lookup kwargs after the lookup:
-
-```python
-@classmethod
-def _create(cls, model_class, *args, **kwargs):
-    lookup_field = "objectdb"  # or whichever lookup field the factory uses
-    lookup_value = kwargs.pop(lookup_field)
-    instance, created = model_class.objects.get_or_create(
-        **{lookup_field: lookup_value}, defaults=kwargs,
-    )
-    if not created and kwargs:
-        for field, value in kwargs.items():
-            setattr(instance, field, value)
-        instance.save()
-    return instance
-```
+**FactoryBoy `django_get_or_create` gotcha** (it silently drops non-lookup kwargs when the row pre-exists) + the `_create` override that fixes it: see "## FactoryBoy `django_get_or_create` Gotcha" in `django_notes.md`.
 
 ### ViewSet & API Design
-- **Separate ViewSet for related model CRUD**: Custom actions on a ViewSet should operate on that ViewSet's own model (e.g., lifecycle transitions). If an action does create/read/update/delete on a *different* model, extract it into its own ViewSet with proper serializers and filters. Example: invitation CRUD belongs in an `EventInvitationViewSet`, not as custom actions on `EventViewSet`
-- **No implicit first-item selection**: Never silently select the first item from a queryset or list when the choice should be user-specified. If there are multiple valid options (e.g., which persona to act as), require explicit selection via request data. Picking `items[0]` hides a decision that should be the caller's
-- **Prefer Django/DRF helpers over manual boilerplate**: Use `get_object_or_404` over manual `try/except DoesNotExist`. Use FilterSets over `request.query_params` access. Use DRF's destroy/create mixins over manual `.delete()` and `.create()` with hand-rolled error handling
-- **Never use `str(exc)` in API responses**: Always use typed exception classes with a `user_message` property and an allowlist of safe messages (see `EventError`, `JournalError`, `ProgressionError` for the pattern). Raw `str(exc)` risks exposing internal details and triggers CodeQL warnings. Service functions should raise these typed exceptions, and views should use `exc.user_message`
-- **Validation belongs in serializers, not views or services**: Views should be thin — accept request, delegate to serializer, return response. Do NOT wrap service calls in `try/except ValidationError` inside views; that indicates validation that belongs in a serializer's `validate()` / `validate_<field>()` methods, which DRF surfaces as 400 responses natively. If a view has `try/except DjangoValidationError as exc: raise serializers.ValidationError(...)`, that's a code smell — move the check into the serializer. Services do not duplicate serializer validation. There is exactly one path to an operation: serializer validates, serializer calls service, service performs the atomic work. Services may raise `ValidationError` only for defensive assertions against programmer errors (e.g., passing the wrong type) — not for user-input validation that belongs in a serializer.
-- **Permissions belong in permission classes, not inline checks**: Inline `try/except GMProfile.DoesNotExist → raise PermissionDenied` (or similar) inside a view method is a code smell. Extract to a `BasePermission` subclass (e.g., `IsGM`, `IsGMOrStaff`). That way DRF's permission pipeline handles the 403 uniformly, auth logging/metrics work, and views can safely access `request.user.gm_profile` (or similar) without defensive checks.
+
+ViewSets must have filters, pagination, and permission classes. For the design rules (separate ViewSet per related-model CRUD, no implicit first-item selection, prefer Django/DRF helpers, never `str(exc)` in responses, validation-in-serializers, permissions-in-permission-classes): see "## ViewSet & API Design (Standards)" in `django_notes.md`.
 
 ### Migration Management for New Apps
-**IMPORTANT: When working on a new app, avoid multiple migrations during development**
-django_notes.md gives a more in-depth explanation of this strategy.
+**When working on a new app, avoid multiple migrations during development** — see `docs/evennia-quirks.md` (and `django_notes.md` for the in-depth strategy).
 
 ### Fixtures - NOT in Version Control
 **IMPORTANT: Fixture files (JSON seed data) must NOT be committed to version control.**
@@ -441,48 +293,8 @@ django_notes.md gives a more in-depth explanation of this strategy.
 - Never use `git add -f` to force-add fixture files
 - Do NOT create management commands to seed data - use Django's fixture system instead
 
-## SharedMemoryModel Usage
-- **Use SharedMemoryModel for All Models**: All concrete Django models must use SharedMemoryModel. A pre-commit linter enforces this
-- **Correct Import Path**: Always import from `evennia.utils.idmapper.models.SharedMemoryModel`
-- **NEVER** import from `evennia.utils.models` - this path contains utilities that trigger Django setup during import and will break the Django configuration with "settings are not configured" errors
-- **Example**:
-  ```python
-  # CORRECT - this works
-  from evennia.utils.idmapper.models import SharedMemoryModel
+## SharedMemoryModel
 
-  # WRONG - this breaks Django setup
-  from evennia.utils.models import SharedMemoryModel
-  ```
-- **When to Use**: SharedMemoryModel is required for all concrete models. It is especially beneficial for:
-  - Trait definitions and conversion tables
-  - Configuration data that changes rarely
-  - Lookup tables for game mechanics
-  - Any model that's read frequently but modified infrequently
+All concrete Django models must use `SharedMemoryModel` (imported from `evennia.utils.idmapper.models`, never `evennia.utils.models`). It is the repo's identity-map cache — trust it; don't reinvent caching, `resolve_*`/`batch_fetch_*` helpers, or cache-flushing around it.
 
-### Trust the Identity Map — Don't Reinvent Caching
-
-**SharedMemoryModel is a cache. Trust it. Do not reinvent caching infrastructure around it.**
-
-Once a model instance is loaded, it is a persistent Python object in the identity map. Every subsequent lookup of that pk returns the same object with all previously-fetched FKs already resolved. Walking `persona.character.roster_entry.current_tenure.player_data.account` fires one query per relation *on first access*, and zero queries on every subsequent access — across the entire request, and often across requests. The "N+1" you are worried about is usually a mirage if the objects were already loaded upstream.
-
-**When you think you see an N+1, the ONLY correct fix is:**
-1. Check whether the objects being walked are already identity-mapped from an upstream query. If yes, there is no N+1.
-2. If not, add `select_related` / `Prefetch(..., to_attr=...)` to the upstream queryset.
-3. Let the code walk the FKs normally.
-
-**Do NOT:**
-- Write `resolve_*` or `batch_fetch_*` helpers that re-query data the identity map already has
-- Flush the cache and re-fetch an object to "refresh" it after a mutation (`.save()` already updates the in-memory instance)
-- Pass raw field values through serializer context to avoid attribute traversal
-- Build parallel `{id: tuple}` lookups to "pre-resolve" related objects
-- Call `.values()` or `.values_list()` to avoid instantiating model objects you think are "too expensive"
-
-**Signs you are fighting SharedMemoryModel instead of using it:**
-- You wrote a function that fetches related data already reachable via FK walks
-- You are constructing tuples/dicts to carry pre-extracted field values through multiple layers
-- You are passing data "through context" that the serializer could read from `obj.related.field` for free
-- Your "optimization" is more code than the straightforward FK walk it replaces
-
-**The correct mental model:** SharedMemoryModel is not a Django model that loads from the database each time. It is a persistent Python object whose attributes sometimes hit the database on first access and never again. Use it like a Python object.
-
-**Why this matters for mutations:** `.save()` on a SharedMemoryModel updates the in-memory instance. Cached properties (`@cached_property`, `Prefetch(to_attr=...)`) can go stale — update them in-place when you mutate, don't flush the whole cache. See `src/world/combat/views.py` for examples of in-place list updates on `participants_cached` after adding/removing participants.
+**For the import-path rule, the when-to-use guidance, and the "Trust the Identity Map" N+1 procedure (the correct fix, the "Do NOT" list, and mutation/cached-property handling): see the `sharedmemory-model` skill.**
