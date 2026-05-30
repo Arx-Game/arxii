@@ -37,6 +37,7 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { useEncounterForScene } from '@/combat/queries';
 import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
+import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
 
 // ---------------------------------------------------------------------------
 // CombatScenePage
@@ -233,6 +234,11 @@ export function CombatScenePage() {
           )}
         </div>
       </div>
+
+      {/* Deep-link modal host — single Redux-driven modal for condition / clash /
+       * opponent / participant / combo deep links (#551). Mounted once; reads
+       * the open-modal target from the deepLinkModal slice. */}
+      <DeepLinkModalHost encounterId={encounterId} />
     </div>
   );
 }
