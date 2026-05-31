@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 class Covenant(SharedMemoryModel):
     """The foundational social/magical structure that binds members under a sworn oath.
 
+    Per-kind extension of Organization for kind=COVENANT. Each Covenant has a
+    backing Organization auto-created in save() if not provided. Covenant.pk
+    equals organization.pk.
+
     Slice A scope: identity, type, level (placeholder until Slice D), formed/dissolved
     timestamps, free-text sworn objective.
 
@@ -36,6 +40,12 @@ class Covenant(SharedMemoryModel):
     - dissolution_reason, dissolution_kind — Slice B
     """
 
+    organization = models.OneToOneField(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="covenant",
+    )
     name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
         max_length=20,
@@ -52,6 +62,19 @@ class Covenant(SharedMemoryModel):
     )
     formed_at = models.DateTimeField(auto_now_add=True)
     dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if self.organization_id is None:
+            # Lazy import to avoid circular dependency.
+            from world.covenants.constants import COVENANT_ORG_KIND  # noqa: PLC0415
+            from world.societies.models import Organization  # noqa: PLC0415
+
+            self.organization = Organization.objects.create(
+                name=self.name,
+                society=None,
+                kind=COVENANT_ORG_KIND,
+            )
+        super().save(*args, **kwargs)
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:

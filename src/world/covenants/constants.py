@@ -2,6 +2,11 @@
 
 from django.db import models
 
+from world.societies.constants import OrganizationKind
+
+# The OrganizationKind value Covenants register as.
+COVENANT_ORG_KIND = OrganizationKind.COVENANT
+
 
 class CovenantType(models.TextChoices):
     """The type of magically-empowered oath."""
