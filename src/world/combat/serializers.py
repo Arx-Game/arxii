@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
@@ -22,9 +23,12 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.constants import EffortLevel, FatigueCategory
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
+from world.scenes.constants import PersonaType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.scenes.models import Persona
 
 # ---------------------------------------------------------------------------
 # Condition helpers
@@ -182,6 +186,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     available_strain = serializers.SerializerMethodField()
     fatigue = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    thumbnail_media_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -195,6 +201,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "available_strain",
             "fatigue",
             "active_conditions",
+            "thumbnail_url",
+            "thumbnail_media_url",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -333,6 +341,45 @@ class ParticipantSerializer(serializers.ModelSerializer):
             can_view_hidden=self._can_view_vitals(obj),
             context=self.context,
         )
+
+    def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
+        """Resolve the participant's PRIMARY persona through the cached accessor.
+
+        Reads ``CharacterSheet.cached_payload_personas`` — a ``@cached_property``
+        the encounter queryset pre-fills (with ``select_related("thumbnail")``)
+        so serialization issues no per-row query; PRIMARY is found explicitly
+        rather than positionally. Portrait is public identity, so this is not
+        gated by ``_can_view_vitals`` (mirrors the opponent portrait, #554).
+        """
+        try:
+            character_sheet = obj.character_sheet
+        except ObjectDoesNotExist:
+            return None
+        if character_sheet is None:
+            return None
+        for persona in character_sheet.cached_payload_personas:
+            if persona.persona_type == PersonaType.PRIMARY:
+                return persona
+        return None
+
+    def get_thumbnail_url(self, obj: CombatParticipant) -> str | None:
+        """Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+
+        The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
+        when the character has no primary persona.
+        """
+        persona = self._primary_persona(obj)
+        return None if persona is None else persona.thumbnail_url
+
+    def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
+        """PlayerMedia portrait URL via the primary persona's thumbnail.
+
+        ``None`` when there is no primary persona or it has no thumbnail.
+        """
+        persona = self._primary_persona(obj)
+        if persona is None or persona.thumbnail_id is None:
+            return None
+        return persona.thumbnail.cloudinary_url
 
 
 class RoundActionSerializer(serializers.ModelSerializer):

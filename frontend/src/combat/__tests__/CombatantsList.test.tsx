@@ -82,6 +82,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     available_strain: null,
     fatigue: null,
     active_conditions: [],
+    thumbnail_url: '',
+    thumbnail_media_url: null,
     ...overrides,
   };
 }
@@ -183,6 +185,38 @@ describe('CombatantsList', () => {
     const row = screen.getByTestId('opponent-row-21');
     const img = within(row).getByRole('img');
     expect(img).toHaveAttribute('src', 'https://media.example/ogre.png');
+  });
+
+  it('renders a PC portrait when the primary persona has a thumbnail media URL', () => {
+    const encounter = makeEncounter(
+      [
+        makeParticipant({
+          id: 31,
+          character_name: 'Aerande',
+          thumbnail_media_url: 'https://media.example/aerande.png',
+        }),
+      ],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-31');
+    const img = within(row).getByRole('img');
+    expect(img).toHaveAttribute('src', 'https://media.example/aerande.png');
+  });
+
+  it('renders an initial-letter avatar for a PC without a thumbnail', () => {
+    const encounter = makeEncounter(
+      [makeParticipant({ id: 32, character_name: 'Lyris', thumbnail_media_url: null })],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-32');
+    expect(within(row).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(row).getByText('L')).toBeInTheDocument();
   });
 
   it('renders an initial-letter avatar for an opponent without a thumbnail', () => {

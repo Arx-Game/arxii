@@ -61,6 +61,8 @@ from world.combat.services import (
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.magic.models import Technique
+from world.scenes.constants import PersonaType
+from world.scenes.models import Persona
 from world.stories.pagination import StandardResultsSetPagination
 
 # Fixed error messages for API responses (never expose raw exception strings).
@@ -144,6 +146,20 @@ class CombatEncounterViewSet(ModelViewSet):
                 .filter(status=ParticipantStatus.ACTIVE)
                 .prefetch_related(
                     self._active_conditions_prefetch("character_sheet__character"),
+                    # Pre-fill CharacterSheet.cached_payload_personas (a
+                    # @cached_property doubling as this to_attr target) with the
+                    # thumbnail joined, so ParticipantSerializer resolves the PC
+                    # portrait with zero per-row queries (#630). Queryset shape
+                    # mirrors the property's documented fallback.
+                    Prefetch(
+                        "character_sheet__personas",
+                        queryset=Persona.objects.filter(
+                            persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
+                        )
+                        .order_by("-persona_type", "created_at", "id")
+                        .select_related("thumbnail"),
+                        to_attr="cached_payload_personas",
+                    ),
                 ),
                 to_attr="participants_cached",
             ),

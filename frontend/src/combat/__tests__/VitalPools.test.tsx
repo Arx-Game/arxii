@@ -51,6 +51,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
       mental: { current: 4, capacity: 11 },
     },
     active_conditions: [],
+    thumbnail_url: '',
+    thumbnail_media_url: null,
     ...overrides,
   };
 }
