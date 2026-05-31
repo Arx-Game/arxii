@@ -198,9 +198,14 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
     )
     society = models.ForeignKey(
         Society,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="organizations",
-        help_text="The society this organization belongs to",
+        help_text=(
+            "The society this organization belongs to. May be NULL for "
+            "standalone organizations (e.g., covenants) that exist independently."
+        ),
     )
     kind = models.CharField(
         max_length=20,
@@ -282,7 +287,8 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         fields = ["name"]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.society.name})"
+        society_label = self.society.name if self.society else "standalone"
+        return f"{self.name} ({society_label})"
 
     def get_effective_principle(self, principle_name: str) -> int:
         """
@@ -300,11 +306,18 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
         Raises:
             AttributeError: If principle_name is not a valid principle
+            ValueError: If society is None and no override is set for the principle
         """
         override_field = f"{principle_name}_override"
         override_value = getattr(self, override_field)
         if override_value is not None:
             return override_value
+        if self.society is None:
+            msg = (
+                f"Cannot resolve principle {principle_name!r} for standalone "
+                f"organization {self.name!r}: no society and no override set."
+            )
+            raise ValueError(msg)
         return getattr(self.society, principle_name)
 
     def get_rank_title(self, rank: int) -> str:
