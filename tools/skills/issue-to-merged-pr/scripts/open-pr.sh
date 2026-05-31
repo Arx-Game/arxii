@@ -4,12 +4,11 @@
 # Pushes the branch (--force-with-lease if it was rebased) and opens a PR
 # whose body is composed from templates/pr-body.md with substitutions:
 #   {{issue_number}}, {{summary}}, {{followup_list}},
-#   {{ran_or_skipped}}, {{spec_link}}, {{sync_summary}}
+#   {{ran_or_skipped}}, {{sync_summary}}
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
 #   PR_RAN_OR_SKIPPED - replaces {{ran_or_skipped}} (default: "ran")
-#   PR_SPEC_LINK      - replaces {{spec_link}}      (default: "")
 #   PR_SYNC_SUMMARY   - replaces {{sync_summary}}   (default: "(no rebase performed)")
 #   PR_TITLE          - PR title (default: derived from issue title)
 #
@@ -49,7 +48,6 @@ TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 
 SUMMARY="${PR_SUMMARY:-(no summary provided)}"
 RAN_OR_SKIPPED="${PR_RAN_OR_SKIPPED:-ran}"
-SPEC_LINK="${PR_SPEC_LINK:-}"
 SYNC_SUMMARY="${PR_SYNC_SUMMARY:-(no rebase performed)}"
 
 # Build the follow-up list (markdown bullets) or "(none)".
@@ -73,7 +71,6 @@ BODY=${BODY//\{\{issue_number\}\}/$ISSUE}
 BODY=${BODY//\{\{summary\}\}/$SUMMARY}
 BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
-BODY=${BODY//\{\{spec_link\}\}/$SPEC_LINK}
 BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
 
 # Derive a PR title if not explicitly given.
