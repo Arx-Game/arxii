@@ -1,4 +1,7 @@
-"""Applicable-pull computation for the unified combat UI thread-pull picker."""
+"""Applicable-pull computation for the unified combat UI thread-pull picker.
+
+See docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §5.
+"""
 
 from dataclasses import dataclass
 

@@ -1,4 +1,7 @@
-"""Type declarations for the Corruption foundation (Magic Scope #7)."""
+"""Type declarations for the Corruption foundation (Magic Scope #7).
+
+See docs/superpowers/specs/2026-04-25-magic-scope-7-corruption-design.md.
+"""
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

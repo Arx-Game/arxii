@@ -16,6 +16,7 @@
  * OneToOne to ObjectDB).
  *
  * Phase 11 of the unified-combat-ui plan.
+ * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §2
  */
 
 import { useState, useCallback, useMemo } from 'react';

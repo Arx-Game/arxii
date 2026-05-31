@@ -1,7 +1,8 @@
 /**
  * ActionDeclarationCard — shared core action-declaration UI.
  *
- * Used by both scenes and combat.
+ * Used by both scenes and combat. Contract per spec §4 of
+ * docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
  *
  * Props:
  * - characterId     — Evennia ObjectDB pk. NOT characterSheetId. Used with

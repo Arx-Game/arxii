@@ -1,6 +1,8 @@
 /**
  * ThreadPullPicker — contextual thread-pull selection widget.
  *
+ * Per spec §5 of docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
+ *
  * Layout:
  *   - Header: "Thread pulls — N applicable" + small counts
  *   - Toolbar: name-search input + "Show inapplicable" toggle

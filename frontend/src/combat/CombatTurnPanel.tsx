@@ -8,6 +8,7 @@
  * held locally in a useState Record to persist across renders within the session.
  *
  * Phase 7 (scaffold) + Phase 8 (rail sections) of the unified-combat-ui plan.
+ * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §2
  */
 
 import { useState } from 'react';

@@ -1,4 +1,7 @@
-"""Auto-linking of POSE Interactions to prior unlinked ACTION Interactions."""
+"""Auto-linking of POSE Interactions to prior unlinked ACTION Interactions.
+
+See docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §3.
+"""
 
 from django.db.models import Exists, OuterRef
 

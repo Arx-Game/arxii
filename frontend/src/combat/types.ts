@@ -2,6 +2,7 @@
  * Combat module types — re-exports from generated schema + local extensions.
  *
  * Phase 7 of the unified-combat-ui plan.
+ * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §6
  */
 
 import type { components } from '@/generated/api';

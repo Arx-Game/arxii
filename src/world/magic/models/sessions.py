@@ -1,4 +1,8 @@
-"""Multi-participant ritual session coordination models."""
+"""Multi-participant ritual session coordination models.
+
+See `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md` §4.2-§4.4
+for full design rationale.
+"""
 
 from __future__ import annotations
 

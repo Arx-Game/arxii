@@ -1,4 +1,7 @@
-"""Multi-participant ritual session lifecycle services."""
+"""Multi-participant ritual session lifecycle services.
+
+See `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md` §4.5.
+"""
 
 from __future__ import annotations
 
