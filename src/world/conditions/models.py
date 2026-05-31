@@ -669,6 +669,52 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
         return f"{self.condition.name}: {self.capability.name}"
 
 
+class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
+    """Defines how a condition sets a mechanics ModifierTarget value.
+
+    Additive integer model, mirroring ConditionCapabilityEffect. Lets a condition
+    feed the modifier system (e.g. a 'power' or 'power_multiplier' target) without
+    materializing CharacterModifier rows — read at evaluation time. For
+    'power_multiplier' the value is a percent-delta (35 = +35%); see _derive_power.
+    """
+
+    modifier_target = models.ForeignKey("mechanics.ModifierTarget", on_delete=models.CASCADE)
+    value = models.IntegerField(
+        default=0,
+        help_text="Additive contribution to the modifier target (or percent-delta).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "modifier_target"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.ConditionStage",
+            "mechanics.ModifierTarget",
+        ]
+
+    class Meta(ConditionOrStageEffect.Meta):
+        constraints = [
+            *ConditionOrStageEffect.Meta.constraints,
+            models.UniqueConstraint(
+                fields=["condition", "modifier_target"],
+                condition=Q(condition__isnull=False),
+                name="modifier_effect_unique_condition",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "modifier_target"],
+                condition=Q(stage__isnull=False),
+                name="modifier_effect_unique_stage",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        if self.stage:
+            return f"{self.stage.condition.name} ({self.stage.name}): {self.modifier_target.name}"
+        return f"{self.condition.name}: {self.modifier_target.name}"
+
+
 class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition modifies checks.
