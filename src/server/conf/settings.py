@@ -90,6 +90,7 @@ INSTALLED_APPS += [
     "world.gm.apps.GmConfig",
     "world.narrative.apps.NarrativeConfig",
     "world.missions.apps.MissionsConfig",
+    "world.projects.apps.ProjectsConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",
