@@ -8,6 +8,7 @@ from typing import Any, ClassVar
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.constants import ActionCategory
 from actions.definitions.item_helpers import resolve_item_instance
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
@@ -25,6 +26,7 @@ class EquipAction(Action):
     name: str = "Equip"
     icon: str = "shirt"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_equip"
@@ -72,6 +74,7 @@ class UnequipAction(Action):
     name: str = "Unequip"
     icon: str = "shirt-off"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_unequip"
@@ -119,6 +122,7 @@ class PutInAction(Action):
     name: str = "Put In"
     icon: str = "box"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_put_in"
@@ -175,6 +179,7 @@ class TakeOutAction(Action):
     name: str = "Take Out"
     icon: str = "box-open"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_take_out"

@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend, TargetKind
+from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.errors import ActionDispatchError
 from actions.registry import get_action
 from actions.round_context import get_active_round_context
@@ -676,6 +676,7 @@ def _enrich_player_actions(
         )
         action.enhancements = enhancements
         action.target_spec = _target_spec_for_action(action)
+        action.action_category = _action_category_for_action(action)
         if enhancements and strain_cap is not None:
             action.strain = StrainAvailability(cap=strain_cap)
 
@@ -804,6 +805,22 @@ def _target_spec_for_action(action: PlayerAction) -> TargetSpec | None:
             filters=TargetFilters(in_same_scene=True, exclude_self=True),
         )
 
+    return None
+
+
+def _action_category_for_action(action: PlayerAction) -> ActionCategory | None:
+    """Return the ActionCategory for *action*, preferring the already-set value.
+
+    For COMBAT actions the category is set from the technique at build time.
+    For registry actions backed by a code Action singleton, propagate from
+    that singleton's ``action_category`` field.
+    """
+    if action.action_category is not None:
+        return action.action_category
+    if action.ref.registry_key:
+        registry_action = get_action(action.ref.registry_key)
+        if registry_action is not None and registry_action.action_category is not None:
+            return registry_action.action_category
     return None
 
 
