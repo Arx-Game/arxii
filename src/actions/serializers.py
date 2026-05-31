@@ -27,7 +27,7 @@ from typing import Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from actions.constants import ActionBackend
+from actions.constants import ActionBackend, ActionCategory
 from actions.errors import ActionDispatchError
 from actions.result_extraction import extract_dispatch_message_data
 from actions.types import ActionRef, DispatchResult, PlayerAction
@@ -126,6 +126,9 @@ class PlayerActionSerializer(serializers.Serializer):
     target_spec = TargetSpecSerializer(read_only=True, allow_null=True)
     enhancements = AvailableEnhancementSerializer(many=True, read_only=True)
     strain = StrainAvailabilitySerializer(read_only=True, allow_null=True)
+    action_category = serializers.ChoiceField(
+        choices=ActionCategory.choices, read_only=True, allow_null=True
+    )
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""

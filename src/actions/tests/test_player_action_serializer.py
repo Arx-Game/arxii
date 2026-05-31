@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from actions.constants import ActionBackend, TargetKind
+from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.serializers import PlayerActionSerializer
 from actions.types import (
     ActionRef,
@@ -43,3 +43,22 @@ class PlayerActionSerializerTests(TestCase):
         data = PlayerActionSerializer(action).data
         self.assertIsNone(data["target_spec"])
         self.assertIsNone(data["strain"])
+
+    def test_action_category_serialized(self) -> None:
+        action = PlayerAction(
+            backend=ActionBackend.COMBAT,
+            display_name="Psychic Lance",
+            ref=ActionRef(backend=ActionBackend.COMBAT, technique_id=7),
+            action_category=ActionCategory.MENTAL,
+        )
+        data = PlayerActionSerializer(action).data
+        self.assertEqual(data["action_category"], "mental")
+
+    def test_action_category_null_when_unset(self) -> None:
+        action = PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name="Look",
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="look"),
+        )
+        data = PlayerActionSerializer(action).data
+        self.assertIsNone(data["action_category"])

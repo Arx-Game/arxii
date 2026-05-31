@@ -283,6 +283,7 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
                 display_name=technique.name,
                 ref=ref,
                 action_template=template,
+                action_category=technique.action_category,
             )
         )
 
