@@ -1138,7 +1138,7 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
     )
 
     # Pre-resolve clash config once for the intensity floor.
-    from world.combat.services import compute_effective_intensity, get_clash_config  # noqa: PLC0415
+    from world.combat.services import compute_intensity_for_clash, get_clash_config  # noqa: PLC0415
 
     clash_config = get_clash_config()
     intensity_floor = clash_config.clash_min_intensity
@@ -1175,12 +1175,10 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
         if pc_props and npc_props and not can_clash(pc_props, npc_props):
             continue
 
-        # Intensity floor — prevents trivial round-1 clashes. Reads through
-        # compute_effective_intensity so future combatant-intensity-ramp
-        # contributions automatically tighten the gate. When floor is 0
+        # Intensity floor — prevents trivial round-1 clashes. When floor is 0
         # (default — set to a real value by seed content), this is a no-op.
         if intensity_floor > 0:
-            eff_intensity = compute_effective_intensity(pc_action.participant, pc_action)
+            eff_intensity = compute_intensity_for_clash(pc_action.participant, pc_action)
             if eff_intensity < intensity_floor:
                 continue
 

@@ -16,8 +16,8 @@ class ComputeDamageBudgetTests(EvenniaTestCase):
             damage_per_extra_sl=0,
             minimum_success_level=1,
         )
-        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=1), 5)
-        self.assertEqual(p.compute_damage_budget(effective_intensity=10, success_level=3), 5)
+        self.assertEqual(p.compute_damage_budget(effective_power=0, success_level=1), 5)
+        self.assertEqual(p.compute_damage_budget(effective_power=10, success_level=3), 5)
 
     def test_intensity_scaling(self):
         from world.magic.factories import TechniqueDamageProfileFactory
@@ -29,7 +29,7 @@ class ComputeDamageBudgetTests(EvenniaTestCase):
             minimum_success_level=1,
         )
         # 2 + floor(1.5 * 4) = 2 + 6 = 8
-        self.assertEqual(p.compute_damage_budget(effective_intensity=4, success_level=1), 8)
+        self.assertEqual(p.compute_damage_budget(effective_power=4, success_level=1), 8)
 
     def test_sl_kicker(self):
         from world.magic.factories import TechniqueDamageProfileFactory
@@ -41,9 +41,9 @@ class ComputeDamageBudgetTests(EvenniaTestCase):
             minimum_success_level=1,
         )
         # SL=1: 2 + 0 = 2
-        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=1), 2)
+        self.assertEqual(p.compute_damage_budget(effective_power=0, success_level=1), 2)
         # SL=3: 2 + 2*2 = 6
-        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=3), 6)
+        self.assertEqual(p.compute_damage_budget(effective_power=0, success_level=3), 6)
 
 
 class UniqueConstraintTests(EvenniaTestCase):

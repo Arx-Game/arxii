@@ -295,8 +295,8 @@ class ApplyConditionsTests(TestCase):
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])
 
-    def test_severity_uses_effective_intensity(self) -> None:
-        """severity_intensity_multiplier scales with effective intensity."""
+    def test_severity_uses_effective_power(self) -> None:
+        """severity_intensity_multiplier scales with effective power."""
         from decimal import Decimal
 
         self._make_applied_condition_row(
@@ -315,7 +315,7 @@ class ApplyConditionsTests(TestCase):
             check = MagicMock(success_level=1)
             results = self.resolver._apply_conditions(check, eff_intensity=5)
 
-        # base_severity=2, effective_intensity=5 * multiplier=1.0 = 5, total = 7
+        # base_severity=2, effective_power=5 * multiplier=1.0 = 5, total = 7
         call_args = mock_bulk.call_args[0][0]
         self.assertEqual(call_args[0].severity, 7)
         self.assertEqual(len(results), 1)
