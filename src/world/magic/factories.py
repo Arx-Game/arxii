@@ -6,8 +6,14 @@ import factory
 from actions.constants import ActionCategory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.models import ConditionModifierEffect
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
+from world.magic.audere import (
+    AUDERE_CONDITION_NAME,
+    AUDERE_MAJORA_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
+    AudereThreshold,
+)
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -70,6 +76,7 @@ from world.magic.models import (
 from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
+from world.mechanics.factories import PowerMultiplierTargetFactory
 from world.roster.factories import RosterEntryFactory
 from world.traits.factories import TraitFactory
 
@@ -477,6 +484,32 @@ class AudereThresholdFactory(factory.django.DjangoModelFactory):
     intensity_bonus = 20
     anima_pool_bonus = 30
     warp_multiplier = 2
+
+
+def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int = 200):
+    """Seed the Audere / Audere Majora power-multiplier conditions (#636).
+
+    Idempotent — safe to call as both integration-test setUp and seed defaults
+    (per factories-as-seed-data). Ensures the ``power_multiplier`` ModifierTarget
+    exists, ensures both ConditionTemplates exist, and sets each condition's
+    power-multiplier percent-delta. Audere yields ``+audere_delta%`` and Audere
+    Majora ``+majora_delta%`` to derived power, applied multiplicatively to
+    channeled intensity (so anima/mishap/Soulfray are untouched). Audere Majora's
+    delta is the larger spike.
+
+    Returns:
+        (audere_condition, majora_condition) ConditionTemplate tuple.
+    """
+    target = PowerMultiplierTargetFactory()
+    audere = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+    majora = ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME)
+    for condition, delta in ((audere, audere_delta), (majora, majora_delta)):
+        ConditionModifierEffect.objects.update_or_create(
+            condition=condition,
+            modifier_target=target,
+            defaults={"value": delta},
+        )
+    return audere, majora
 
 
 # =============================================================================
