@@ -30,6 +30,7 @@ from world.conditions.models import (
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
+    ConditionModifierEffect,
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
@@ -146,6 +147,18 @@ class ConditionCapabilityEffectFactory(DjangoModelFactory):
     stage = None
     capability = factory.SubFactory(CapabilityTypeFactory)
     value = -25
+
+
+class ConditionModifierEffectFactory(DjangoModelFactory):
+    """Factory for ConditionModifierEffect."""
+
+    class Meta:
+        model = ConditionModifierEffect
+
+    condition = factory.SubFactory(ConditionTemplateFactory)
+    stage = None
+    modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
+    value = 0
 
 
 class ConditionCheckModifierFactory(DjangoModelFactory):

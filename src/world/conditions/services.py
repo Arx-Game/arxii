@@ -49,6 +49,7 @@ from world.conditions.models import (
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
+    ConditionModifierEffect,
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.conditions.models import ConditionCategory
     from world.magic.models import PendingAlteration, Technique, Thread
+    from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
 
 # Timing constants
@@ -1048,6 +1050,43 @@ def get_capability_status(
     result.value = max(0, result.value)
 
     return result
+
+
+def get_condition_modifier_total(
+    character_sheet: "CharacterSheet",
+    modifier_target: "ModifierTarget",
+) -> int:
+    """Sum active-condition contributions to a mechanics ModifierTarget (#636).
+
+    Walks every active condition on the character and sums the ``value`` of each
+    ConditionModifierEffect that points at ``modifier_target``. Staged conditions
+    scale by their current stage's severity_multiplier, mirroring
+    get_capability_status. No floor here — the consumer (e.g. _derive_power) owns
+    any clamping, since deltas may legitimately be negative.
+
+    Args:
+        character_sheet: The character whose conditions are read.
+        modifier_target: The mechanics.ModifierTarget to total contributions for.
+
+    Returns:
+        Integer sum of matching condition-effect contributions (0 when none).
+    """
+    target = character_sheet.character
+    total = 0
+
+    for instance in get_active_conditions(target):
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
+
+        for effect in effects:
+            value = effect.value
+            if instance.current_stage:
+                value = int(value * instance.current_stage.severity_multiplier)
+            total += value
+
+    return total
 
 
 def get_capability_value(
