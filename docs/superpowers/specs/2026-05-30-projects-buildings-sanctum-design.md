@@ -673,9 +673,16 @@ Ship the first `RoomFeatureKind` end-to-end: a magical home (Personal) or sacred
 **Model shape:**
 
 ```python
+class OrganizationKind(models.TextChoices):
+    NOBLE = "NOBLE", "Noble"            # houses, councils — landed/titled groups
+    TRADE = "TRADE", "Trade"            # merchants AND crafters (one kind)
+    CRIMINAL = "CRIMINAL", "Criminal"   # gangs, syndicates, cartels
+    COVENANT = "COVENANT", "Covenant"   # magical oath groups
+    DEVOTIONAL = "DEVOTIONAL", "Devotional"  # religious orders + militant holy orders (one kind)
+
 class Organization(SharedMemoryModel):
     name = ...
-    kind = TextChoices(NOBLE_HOUSE, TRADE_GUILD, CRIMINAL_GANG, COVENANT, OTHER, ...)
+    kind = CharField(max_length=20, choices=OrganizationKind.choices)
     founded_at, dissolved_at, description, ...
     # Common surface: membership (via OrganizationMembership), governance,
     # audit history, location ownership — all work for every kind
@@ -688,11 +695,15 @@ class Covenant(SharedMemoryModel):
     level = ...              # Slice D progression placeholder
     # ...etc per existing covenants/models.py Covenant fields
 
-# Future kinds (filed as separate work, not built today):
+# Future per-kind details models (filed as separate work, not built today):
 # class NobleHouse(SharedMemoryModel): organization OneToOne, heraldry, head_persona, ...
-# class TradeGuild(SharedMemoryModel): organization OneToOne, monopoly_resource, ...
+# class TradeGuild(SharedMemoryModel): organization OneToOne, monopoly_resource, dues, ...
 # class CriminalGang(SharedMemoryModel): organization OneToOne, territory, heat_level, ...
+# class DevotionalOrder(SharedMemoryModel): organization OneToOne, faith_focus,
+#     order_kind (RELIGIOUS / MILITANT), holy_relic_facet, ...
 ```
+
+The 5 kinds are intentionally exhaustive — the senior dev's call. Devotional is a catch-all covering both religious orders (monks, priests, disciples) and militant holy orders (templars, paladins) under one kind; Trade is a catch-all covering both merchants and crafters. No `OTHER` fallback — every org commits to one of the five.
 
 **What this gives:**
 
@@ -704,10 +715,10 @@ class Covenant(SharedMemoryModel):
 
 **Migration cost (small since Organization infrastructure is currently empty):**
 
-- Add `Organization.kind` TextChoices column with `OrganizationKind` enum (`NOBLE_HOUSE`, `TRADE_GUILD`, `CRIMINAL_GANG`, `COVENANT`, `OTHER`)
+- Add `Organization.kind` column with `OrganizationKind` TextChoices enum (`NOBLE`, `TRADE`, `CRIMINAL`, `COVENANT`, `DEVOTIONAL`)
 - Migrate existing `Covenant` model: add `organization = OneToOneField(Organization, primary_key=True, ...)` + auto-create backing Org in `Covenant.save()` (set `kind=COVENANT`)
 - Data migration: backfill existing Covenant rows with backing Organization rows
-- Other org-kind details models (`NobleHouse`, `TradeGuild`, `CriminalGang`) ship as their concrete consumers materialize — out of scope for the Sanctum slice, filed as future work
+- Other per-kind details models (`NobleHouse`, `TradeGuild`, `CriminalGang`, `DevotionalOrder`) ship as their concrete consumers materialize — out of scope for the Sanctum slice, filed as future work
 
 **Implementation path:** Explicit OneToOne composition (preferred over Django multi-table inheritance for SharedMemoryModel safety — verify MTI compatibility with idmapper if the implementer wants to use it, but lean toward OneToOne by default).
 
