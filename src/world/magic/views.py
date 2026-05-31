@@ -1355,6 +1355,7 @@ class ThreadHubSummaryView(APIView):
         # Reads from character handler caches — zero extra queries after first load.
         unlocks = list(
             CharacterThreadWeavingUnlock.objects.filter(character=sheet).select_related(
+                "unlock",
                 "unlock__unlock_trait",
                 "unlock__unlock_gift",
             )

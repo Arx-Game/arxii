@@ -312,9 +312,9 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
-        # Invalidate the technique handler cache so it re-reads for each test.
-        if "techniques" in self.character.__dict__:
-            del self.character.__dict__["techniques"]
+        # Invalidate handler caches so each test reads fresh state.
+        for handler_attr in ("techniques", "traits"):
+            self.character.__dict__.pop(handler_attr, None)
 
     def test_weavable_trait_with_value_appears(self) -> None:
         response = self.client.get(_URL)
