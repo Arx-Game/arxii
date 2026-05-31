@@ -8,7 +8,11 @@ import factory
 from factory.django import DjangoModelFactory
 
 from actions.factories import ConsequencePoolFactory
-from world.mechanics.constants import EngagementType, PropertyHolder
+from world.mechanics.constants import (
+    POWER_MULTIPLIER_TARGET_NAME,
+    EngagementType,
+    PropertyHolder,
+)
 from world.mechanics.models import (
     Application,
     ApproachConsequence,
@@ -73,6 +77,18 @@ class GlobalPowerTargetFactory(ModifierTargetFactory):
 
     category = factory.SubFactory(PowerCategoryFactory)
     name = "power"
+    target_resonance = None
+
+
+class PowerMultiplierTargetFactory(ModifierTargetFactory):
+    """The 'power_multiplier' ModifierTarget — holds percent-delta power buffs (#636).
+
+    Contributions are summed as percent deltas (35 = +35%); _derive_power applies
+    them multiplicatively to channeled intensity. Unscoped (applies to every cast).
+    """
+
+    category = factory.SubFactory(PowerCategoryFactory)
+    name = POWER_MULTIPLIER_TARGET_NAME
     target_resonance = None
 
 

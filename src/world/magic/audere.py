@@ -9,6 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 AUDERE_CONDITION_NAME = "Audere"
+AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
 SOULFRAY_CONDITION_NAME = "Soulfray"
 
 
