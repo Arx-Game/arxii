@@ -23,6 +23,10 @@ def get_or_create_narrator_persona() -> Persona:
     """
     existing = Persona.objects.filter(name=NARRATOR_PERSONA_NAME).first()
     if existing is not None:
+        # Heal rows that predate the is_system flag (#643).
+        if not existing.is_system:
+            existing.is_system = True
+            existing.save(update_fields=["is_system"])
         return existing
 
     from world.character_sheets.services import (  # noqa: PLC0415 — avoid import cycle
@@ -33,4 +37,6 @@ def get_or_create_narrator_persona() -> Persona:
         character_key=NARRATOR_PERSONA_NAME,
         primary_persona_name=NARRATOR_PERSONA_NAME,
     )
+    persona.is_system = True
+    persona.save(update_fields=["is_system"])
     return persona
