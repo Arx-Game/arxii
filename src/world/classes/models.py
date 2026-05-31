@@ -14,6 +14,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
@@ -50,6 +51,13 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
     )
     minimum_level = models.PositiveSmallIntegerField(
         help_text="Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical)",
+    )
+    action_category = models.CharField(
+        max_length=10,
+        choices=ActionCategory.choices,
+        null=True,
+        blank=True,
+        help_text="Action arena this path specializes in (drives CG technique category).",
     )
 
     # Evolution hierarchy - which lower-stage paths can evolve into this

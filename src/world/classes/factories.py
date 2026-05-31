@@ -4,6 +4,7 @@ Factory classes for classes models.
 
 import factory
 
+from actions.constants import ActionCategory
 from world.classes.models import (
     Aspect,
     CharacterClass,
@@ -51,6 +52,7 @@ class PathFactory(factory.django.DjangoModelFactory):
     minimum_level = 1
     is_active = True
     sort_order = 0
+    action_category = ActionCategory.PHYSICAL
 
 
 class AspectFactory(factory.django.DjangoModelFactory):
