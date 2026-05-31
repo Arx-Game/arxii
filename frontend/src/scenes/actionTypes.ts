@@ -68,6 +68,8 @@ export interface AvailableEnhancement {
   soulfray_warning: SoulfrayWarningData | null;
 }
 
+export type ActionCategory = 'physical' | 'social' | 'mental';
+
 export interface PlayerAction {
   backend: string;
   display_name: string;
@@ -81,6 +83,9 @@ export interface PlayerAction {
   target_spec: TargetSpec | null;
   enhancements: AvailableEnhancement[];
   strain: StrainAvailability | null;
+  /** Physical/social/mental arena (#614). Optional on this hand-written mirror;
+   *  the API always supplies it (possibly null) for technique actions. */
+  action_category?: ActionCategory | null;
 }
 
 export interface PlayerActionsResponse {

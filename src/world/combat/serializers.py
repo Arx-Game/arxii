@@ -20,7 +20,7 @@ from world.combat.models import (
 )
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
-from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.constants import EffortLevel
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
 from world.scenes.constants import PersonaType
@@ -309,7 +309,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor may be unset
         well_rested = fatigue_pool.well_rested if fatigue_pool else False
         pools: dict[str, dict[str, int]] = {}
-        for category in FatigueCategory:
+        for category in ActionCategory:
             current = fatigue_pool.get_current(category.value) if fatigue_pool else 0
             pools[category.value] = {
                 "current": current,

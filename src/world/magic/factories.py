@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import factory
 
+from actions.constants import ActionCategory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect
@@ -239,6 +240,7 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
     level = 1
     intensity = 1
     control = 1
+    action_category = ActionCategory.PHYSICAL
     anima_cost = 2
     description = factory.LazyAttribute(lambda o: f"The {o.name} technique.")
 

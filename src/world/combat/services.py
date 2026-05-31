@@ -89,7 +89,7 @@ from world.combat.types import (
     PreparedClashContribution,
     RoundResolutionResult,
 )
-from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.challenge_resolution import resolve_challenge
@@ -523,17 +523,6 @@ def resolve_combat_technique(
     return _build_combat_result(technique_use_result, resolver)
 
 
-# ---------------------------------------------------------------------------
-# ActionCategory -> FatigueCategory mapping (same values)
-# ---------------------------------------------------------------------------
-
-_ACTION_TO_FATIGUE_CATEGORY: dict[str, str] = {
-    ActionCategory.PHYSICAL: FatigueCategory.PHYSICAL,
-    ActionCategory.SOCIAL: FatigueCategory.SOCIAL,
-    ActionCategory.MENTAL: FatigueCategory.MENTAL,
-}
-
-
 def add_participant(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -822,6 +811,11 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
     from world.vitals.services import can_act  # noqa: PLC0415
 
     encounter = participant.encounter
+
+    # The focused technique's authored category is authoritative (#614): it drives
+    # which passive slot must stay empty. Override any client-supplied value.
+    if focused_action is not None:
+        focused_category = focused_action.action_category
 
     # Agency check — not dead and not incapacitated. A dying-but-conscious
     # character keeps awareness and passes naturally (no dying_final_round concept).
@@ -1878,9 +1872,7 @@ def _resolve_pc_action(
         return outcome
 
     target = action.focused_opponent_target
-    fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
-        action.focused_category, FatigueCategory.PHYSICAL
-    )
+    fatigue_category = action.focused_category or ActionCategory.PHYSICAL
 
     # Combo upgrades require an active opponent target — bail out early if defeated.
     if target is not None and action.combo_upgrade:

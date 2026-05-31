@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend, TargetKind
+from actions.constants import ActionBackend, ActionCategory, TargetKind
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -219,6 +219,10 @@ class PlayerAction:
     target_spec: TargetSpec | None = None
     enhancements: tuple[AvailableEnhancement, ...] = ()
     strain: StrainAvailability | None = None
+
+    # Physical/social/mental arena (set from the technique for combat actions;
+    # None when no backend supplies one yet — non-magical actions classify later).
+    action_category: ActionCategory | None = None
 
 
 class ActionInterrupted(Exception):

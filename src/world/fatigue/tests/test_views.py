@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
-from world.fatigue.constants import REST_AP_COST, FatigueCategory, FatigueZone
+from world.fatigue.constants import REST_AP_COST, ActionCategory, FatigueZone
 from world.fatigue.models import FatiguePool
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat as _setup_stat
@@ -39,7 +39,7 @@ class FatigueStatusViewTests(APITestCase):
         """GET should return physical, social, and mental fatigue data."""
         response = self.client.get("/api/fatigue/status/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        for category in FatigueCategory:
+        for category in ActionCategory:
             cat = category.value
             self.assertIn(cat, response.data)
             self.assertIn("current", response.data[cat])
@@ -53,7 +53,7 @@ class FatigueStatusViewTests(APITestCase):
         """A new character should have 0 current fatigue in all categories."""
         response = self.client.get("/api/fatigue/status/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        for category in FatigueCategory:
+        for category in ActionCategory:
             self.assertEqual(response.data[category.value]["current"], 0)
             self.assertEqual(response.data[category.value]["zone"], FatigueZone.FRESH)
 

@@ -15,7 +15,7 @@ from world.combat.serializers import ParticipantSerializer
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
-    FatigueCategory,
+    ActionCategory,
 )
 from world.fatigue.models import FatiguePool
 from world.fatigue.tests import setup_stat as _setup_stat
@@ -43,13 +43,13 @@ class ParticipantSerializerFatigueTests(TestCase):
         _setup_stat(char, "willpower", 20, TraitCategory.META)  # display 2
 
         self.expected_capacity = {
-            FatigueCategory.PHYSICAL.value: (
+            ActionCategory.PHYSICAL.value: (
                 3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
             ),
-            FatigueCategory.SOCIAL.value: (
+            ActionCategory.SOCIAL.value: (
                 4 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
             ),
-            FatigueCategory.MENTAL.value: (
+            ActionCategory.MENTAL.value: (
                 5 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
             ),
         }
@@ -94,7 +94,7 @@ class ParticipantSerializerFatigueTests(TestCase):
         data = ParticipantSerializer(self.participant, context={"request": request}).data
 
         fatigue = data["fatigue"]
-        for category in FatigueCategory:
+        for category in ActionCategory:
             self.assertEqual(fatigue[category.value]["current"], 0)
             self.assertEqual(
                 fatigue[category.value]["capacity"],

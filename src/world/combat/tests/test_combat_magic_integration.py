@@ -29,7 +29,7 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_combat_technique
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
-from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.constants import EffortLevel
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
@@ -111,7 +111,7 @@ class AnimaDeductionTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )
@@ -132,7 +132,7 @@ class AnimaDeductionTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )
@@ -165,7 +165,7 @@ class EventEmissionTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -196,7 +196,7 @@ class EventEmissionTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -247,7 +247,7 @@ class ReactiveScarCancelTest(TestCase):
             result = resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )
@@ -288,7 +288,7 @@ class ReactiveScarCancelTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -325,7 +325,7 @@ class MishapTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )
@@ -359,7 +359,7 @@ class FlatBonusPullCheckTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )
@@ -408,7 +408,7 @@ class FullHappyPathTest(TestCase):
                 result = resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -511,7 +511,7 @@ class IdentityIntensityModifierRaisesCombatDamageTest(TestCase):
             result = resolve_combat_technique(
                 participant=participant,
                 action=action,
-                fatigue_category=FatigueCategory.PHYSICAL,
+                fatigue_category=ActionCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
             )

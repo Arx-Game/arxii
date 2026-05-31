@@ -17,6 +17,7 @@ from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
+from actions.constants import ActionCategory
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
@@ -754,6 +755,16 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         )
         CharacterGift.objects.create(character=sheet, gift=gift)
 
+        # The technique's action arena derives from the character's Path — no
+        # off-path picks (noobtrap prevention). Falls back to the model default
+        # if the path has no authored category.
+        selected_path = draft.selected_path
+        derived_category = (
+            selected_path.action_category
+            if selected_path and selected_path.action_category
+            else ActionCategory.PHYSICAL
+        )
+
         # Create a real Technique from the cantrip template
         technique = Technique.objects.create(
             name=custom_name,
@@ -764,6 +775,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             control=cantrip.base_control,
             anima_cost=cantrip.base_anima_cost,
             level=1,
+            action_category=derived_category,
             description=custom_description,
             source_cantrip=cantrip,
             creator=sheet,
