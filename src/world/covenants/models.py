@@ -42,9 +42,12 @@ class Covenant(SharedMemoryModel):
 
     organization = models.OneToOneField(
         "societies.Organization",
+        null=True,  # auto-populated in Covenant.save() — None only in-memory pre-save
         on_delete=models.CASCADE,
-        primary_key=True,
         related_name="covenant",
+        # NOTE: NOT primary_key=True — Covenant keeps its own auto-id pk.
+        # The OneToOne is just a relationship; pk-using code (views, serializers,
+        # FKs from CovenantLegendCredit etc.) continues to work unchanged.
     )
     name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
