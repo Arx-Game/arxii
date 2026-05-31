@@ -55,6 +55,13 @@ Regenerates `docs/systems/MODEL_MAP.md` — an auto-generated map of all
 Django model relationships and service function signatures. Prevents
 expensive codebase searches when working across multiple apps.
 
+### github-operations
+
+Conventions for `gh` CLI work: read the issue/PR number from the URL the
+create command returns (never compute it — issues and PRs share one counter,
+so it is rarely `N+1`), verify number↔title before any mutation, and keep
+issue/PR writes to one-per-message. Permanent good practice.
+
 ### grounding-before-action `[TEMP — HARNESS-BUNDLING-WORKAROUND]`
 
 **Temporary workaround for a Claude Code 2.1.158 regression** where a tool

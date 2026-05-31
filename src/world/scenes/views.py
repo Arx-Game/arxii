@@ -262,11 +262,17 @@ class PersonaViewSet(viewsets.ModelViewSet):
     permission_classes = [CanCreatePersonaInScene]
 
     def get_queryset(self) -> QuerySet[Persona]:
-        return Persona.objects.select_related(
-            "character_sheet",
-            "character_sheet__roster_entry",
-            "thumbnail",
-        ).order_by("created_at")
+        # Exclude OOC system/narrator identities (e.g. the combat Narrator)
+        # from the persona picker; their authored interactions still display.
+        return (
+            Persona.objects.select_related(
+                "character_sheet",
+                "character_sheet__roster_entry",
+                "thumbnail",
+            )
+            .filter(is_system=False)
+            .order_by("created_at")
+        )
 
 
 class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):

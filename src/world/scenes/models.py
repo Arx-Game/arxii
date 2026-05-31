@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -103,11 +105,11 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         return self.privacy_mode == ScenePrivacyMode.EPHEMERAL
 
     @cached_property
-    def participations_cached(self) -> list["SceneParticipation"]:
+    def participations_cached(self) -> list[SceneParticipation]:
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
 
-    def is_owner(self, account: "AccountDB | None") -> bool:
+    def is_owner(self, account: AccountDB | None) -> bool:
         """Return True if ``account`` owns this scene."""
         if account is None:
             return False
@@ -115,7 +117,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             part.account_id == account.id and part.is_owner for part in self.participations_cached
         )
 
-    def has_character_present(self, character_ids: "set[int]") -> bool:
+    def has_character_present(self, character_ids: set[int]) -> bool:
         """Check if any of the given characters are at this scene's location.
 
         Uses the room's contents cache (Evennia identity map) instead of
@@ -126,7 +128,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         present_ids = {ob.pk for ob in self.location.contents}
         return bool(present_ids & set(character_ids))
 
-    def is_gm(self, account: "AccountDB | None") -> bool:
+    def is_gm(self, account: AccountDB | None) -> bool:
         """Check if the given account is a GM of this scene.
 
         Uses participations_cached to avoid a query.
@@ -209,6 +211,13 @@ class Persona(SharedMemoryModel):
     is_fake_name = models.BooleanField(
         default=False,
         help_text="True when this persona obscures the character's identity",
+    )
+    is_system = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="OOC system/narrator/GM identity. Excluded from the persona "
+        "picker (PersonaViewSet filters is_system=False); its authored "
+        "interactions still display in the scene log.",
     )
     properties = models.ManyToManyField(
         "mechanics.Property",
@@ -467,7 +476,7 @@ class Interaction(SharedMemoryModel):
         return f"{self.persona.name}: {content_preview}..."
 
     @property
-    def cached_receivers(self) -> list["InteractionReceiver"]:
+    def cached_receivers(self) -> list[InteractionReceiver]:
         """Receiver records. Uses Prefetch(to_attr=) when available, else queries."""
         try:
             return self._cached_receivers
@@ -477,12 +486,12 @@ class Interaction(SharedMemoryModel):
             return list(InteractionReceiver.objects.filter(interaction=self))
 
     @cached_receivers.setter
-    def cached_receivers(self, value: list["InteractionReceiver"]) -> None:
+    def cached_receivers(self, value: list[InteractionReceiver]) -> None:
         """Allow Prefetch(to_attr='cached_receivers') to set this."""
         self._cached_receivers = value
 
     @property
-    def cached_target_personas(self) -> list["Persona"]:
+    def cached_target_personas(self) -> list[Persona]:
         """Target personas. Uses Prefetch(to_attr=) when available, else queries."""
         try:
             return self._cached_target_personas
@@ -490,12 +499,12 @@ class Interaction(SharedMemoryModel):
             return list(self.target_personas.all())
 
     @cached_target_personas.setter
-    def cached_target_personas(self, value: list["Persona"]) -> None:
+    def cached_target_personas(self, value: list[Persona]) -> None:
         """Allow Prefetch(to_attr='cached_target_personas') to set this."""
         self._cached_target_personas = value
 
     @property
-    def cached_favorites(self) -> list["InteractionFavorite"]:
+    def cached_favorites(self) -> list[InteractionFavorite]:
         """Favorites. Uses Prefetch(to_attr=) when available, else queries."""
         try:
             return self._cached_favorites
@@ -503,12 +512,12 @@ class Interaction(SharedMemoryModel):
             return list(self.favorites.all())
 
     @cached_favorites.setter
-    def cached_favorites(self, value: list["InteractionFavorite"]) -> None:
+    def cached_favorites(self, value: list[InteractionFavorite]) -> None:
         """Allow Prefetch(to_attr='cached_favorites') to set this."""
         self._cached_favorites = value
 
     @property
-    def cached_reactions(self) -> list["InteractionReaction"]:
+    def cached_reactions(self) -> list[InteractionReaction]:
         """Reactions. Uses Prefetch(to_attr=) when available, else queries."""
         try:
             return self._cached_reactions
@@ -516,12 +525,12 @@ class Interaction(SharedMemoryModel):
             return list(self.reactions.all())
 
     @cached_reactions.setter
-    def cached_reactions(self, value: list["InteractionReaction"]) -> None:
+    def cached_reactions(self, value: list[InteractionReaction]) -> None:
         """Allow Prefetch(to_attr='cached_reactions') to set this."""
         self._cached_reactions = value
 
     @property
-    def cached_action_links(self) -> "list[InteractionAction]":
+    def cached_action_links(self) -> list[InteractionAction]:
         """InteractionAction bridge rows for this POSE. Uses Prefetch(to_attr=) when available."""
         try:
             return self._cached_action_links
@@ -531,7 +540,7 @@ class Interaction(SharedMemoryModel):
             )
 
     @cached_action_links.setter
-    def cached_action_links(self, value: "list[InteractionAction]") -> None:
+    def cached_action_links(self, value: list[InteractionAction]) -> None:
         """Allow Prefetch(to_attr='cached_action_links') to set this."""
         self._cached_action_links = value
 
