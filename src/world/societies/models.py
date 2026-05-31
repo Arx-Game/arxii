@@ -26,6 +26,7 @@ from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.societies.constants import OrganizationKind
 from world.societies.types import ReputationTier
 
 # Validators for principle fields (-5 to +5 range)
@@ -206,6 +207,17 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="organizations",
         help_text="The type of organization, which determines default rank titles",
+    )
+    kind = models.CharField(
+        max_length=20,
+        null=True,  # temporarily nullable during migration; made non-null in Task A5
+        blank=True,
+        choices=OrganizationKind.choices,
+        help_text=(
+            "The kind of organization. Determines which per-kind details model "
+            "applies (e.g., COVENANT -> Covenant model) and which OrganizationType "
+            "row provides default rank titles (looked up by name == kind)."
+        ),
     )
 
     # Principle overrides - if null, inherit from society
