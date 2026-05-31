@@ -2,7 +2,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "noble",
+      "name": "noble_family",
       "rank_1_title": "Head of House",
       "rank_2_title": "Heir",
       "rank_3_title": "Family Member",
