@@ -1,18 +1,21 @@
 ---
-description: Use when working on a GitHub issue from start to merged PR. Picks up an issue (or prompts for one), runs brainstorm/spec/plan, implements, opens a PR, watches CI and fixes failures, and handles post-merge cleanup including filing follow-up issues.
+description: Use when working on a GitHub issue from start to merged PR. Picks up an issue (or prompts for one), drafts the spec onto the issue for team review, implements after a member approves it (spec:approved label), opens a PR, watches CI and fixes failures, and handles post-merge cleanup including filing follow-up issues.
 ---
 
 # issue-to-merged-pr
 
 This skill carries a GitHub issue from pickup through to a merged PR. It is
-**multi-invocation**: a single session typically does Pickup → Push, then
-exits while CI runs and human review is async. The user re-invokes the skill
-in a new session; the agent reads PR state and picks up the right phase.
-**No persistent on-disk workflow state — GitHub holds the truth.**
+**multi-invocation**: the agent works up to a human gate, then exits while
+review is async. There are **two** such gates — **spec review on the issue**
+(a member applies the `spec:approved` label) and **code review on the PR** —
+plus CI. The user re-invokes the skill in a new session; the agent reads the
+issue + PR state and picks up the right phase.
+**No persistent on-disk workflow state — GitHub (labels + issue body + PR)
+holds the truth. New specs live in the issue body rather than as committed
+`docs/superpowers/` files.**
 
-The full design is in
-`docs/superpowers/specs/2026-05-25-issue-to-merged-pr-design.md`. This file
-is the executable recipe.
+The full design is in `tools/skills/issue-to-merged-pr/references/design.md`.
+This file is the executable recipe.
 
 ## Required plugin
 
@@ -37,6 +40,31 @@ cleanup), the precheck is optional — those phases only need `gh`, `git`,
 and `jq`, all of which are devcontainer baseline.
 
 ## Phase detection on re-invocation
+
+Detection is two-stage: first the **issue/label state** (pre-PR phases), then —
+only once a PR exists — the **PR state** table further down.
+
+### Pre-PR phases (driven by issue labels — the spec lives on the issue)
+
+```bash
+gh issue view <N> --json state,labels,body
+```
+
+Read the `status:*` and `spec:approved` labels. First match wins:
+
+| labels on the issue | Phase |
+|---|---|
+| `spec:approved` present, no open PR yet | **Implementation** — flip `status:spec-review`→`status:implementing`, then build |
+| `status:spec-review`, no `spec:approved` | **Await-approval** — spec is on the issue; a member must apply `spec:approved`. Exit (review is on the human). |
+| `status:spec-draft` (or no `<!-- spec:start -->` marker in the body) | **Design** — draft the spec into the issue body |
+| no `status:*` label | **Pickup** (fresh) |
+
+**The agent MUST NEVER apply `spec:approved` itself.** Only a human org member
+applies it — GitHub restricts label-writes to Triage+, so outsiders can't, but
+the agent holds the maintainer PAT and so must self-restrain. The agent only
+polls for the label.
+
+Once an open PR exists for the branch, use the PR-state table below instead.
 
 When invoked with no arg, or with a PR number / issue number whose branch
 already has an open PR, run:
@@ -71,8 +99,9 @@ Pick the phase from this table (rows top-to-bottom; first match wins):
 | `OPEN` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
 | `OPEN` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
 
-If the branch matches the convention `<type>-<N>-<slug>` but has no open PR,
-the agent is mid-implementation and resumes from the Implementation step.
+If the branch exists but has no open PR, fall back to the **Pre-PR phases**
+table above (driven by the issue's labels) to decide between Design,
+Await-approval, and Implementation.
 
 ## Lifecycle
 
@@ -82,7 +111,8 @@ the agent is mid-implementation and resumes from the Implementation step.
   that doesn't have an issue yet, file one with `scripts/file-followup.sh`
   first and use its number.
 - Run `scripts/pickup-issue.sh <N>`. It checks the superpowers plugin,
-  fetches the issue, infers type, creates the branch, and emits JSON.
+  fetches the issue, infers type, ensures the lane labels exist, claims the
+  issue (assign + `status:spec-draft`), creates the branch, and emits JSON.
 
 ### 2. Design (skipped for trivial issue types)
 
@@ -91,28 +121,53 @@ Skip the design step when:
 - Issue body is < 300 characters AND has no markdown section headers.
 - Issue title starts with `fix(<scope>): typo|lint|format|…`.
 
-Otherwise: invoke `superpowers:brainstorming`. **Override the spec-review
-substep**: when the brainstorming flow reaches "dispatch spec-document-
-reviewer," dispatch the reviewer with the prompt at
-`tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead
-of superpowers' default.
+When skipping, go straight to Implementation (claim `status:implementing`).
 
-**MANDATORY before the spec is finalized: run the `verify-against-code` pass**
+Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
+invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
+
+- **Spec destination:** write the spec into the **issue body**, between
+  `<!-- spec:start -->` and `<!-- spec:end -->` markers, preserving the original
+  problem statement above them (`gh issue edit <N> --body-file`). Don't create a
+  new committed `docs/superpowers/` spec file for this work.
+- **Spec-review dispatch:** when the brainstorming flow reaches "dispatch
+  spec-document-reviewer," dispatch with the prompt at
+  `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
+  superpowers' default.
+
+**MANDATORY before posting the spec: run the `verify-against-code` pass**
 (skill at `tools/skills/verify-against-code/`). For every new surface the design
 proposes, verify against code (not docs/summaries) and label it
 `[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line + caller
 evidence; treat INDEX/MODEL_MAP/architecture docs as possibly-stale hints and
 correct any stale doc at its source. **Embed the resulting anti-reinvention
-ledger as a section in the spec.** A spec without a code-verified ledger is not
-finalized. (This codifies CLAUDE.md's "Anti-Reinvention Pass" into the workflow.)
+ledger as a section of the spec in the issue body.** A spec without a
+code-verified ledger is not finalized. (This codifies CLAUDE.md's
+"Anti-Reinvention Pass" into the workflow.)
 
-After the spec is approved and committed, invoke
-`superpowers:writing-plans` for the plan.
+Then hand off for **spec review** and exit:
+
+1. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
+2. Post a comment that @-mentions the review target (default `@TehomCD`;
+   configurable to a `@Arx-Game/<team>` handle) and links the spec section.
+3. **Exit.** Spec review is async and on a human. Do NOT proceed to plan or
+   implementation, and **do NOT apply `spec:approved`** — only a member does.
+
+The agent resumes (in a later invocation) once a member has applied
+`spec:approved`; the plan from `superpowers:writing-plans` is produced then and
+is **ephemeral** (worktree-only, never committed).
 
 Record the decision (ran vs. skipped) — it goes in the PR body's Notes
 section.
 
 ### 3. Implementation
+
+Entry condition: the issue carries `spec:approved` (a member approved the spec
+on the issue). On entry, flip the lane:
+`gh issue edit <N> --remove-label status:spec-review --add-label status:implementing`.
+Create the worktree (`superpowers:using-git-worktrees`), then invoke
+`superpowers:writing-plans` to produce the **ephemeral** plan (worktree-only,
+never committed).
 
 When `superpowers:writing-plans` reaches its execution-handoff (the
 "Subagent-Driven vs. Inline? Which approach?" prompt), **do NOT prompt — go
@@ -154,9 +209,12 @@ call `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
 opening the PR) and collect the issue numbers. Then:
 
 ```bash
-PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SPEC_LINK="docs/superpowers/specs/<file>.md" PR_SYNC_SUMMARY="..." \
+PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
+
+The PR body references the approved spec via `Closes #<issue>` — the spec lives
+in the issue body, so there is no spec-file link to pass.
 
 ### 6. CI watch
 

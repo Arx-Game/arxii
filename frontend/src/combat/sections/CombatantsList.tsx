@@ -110,12 +110,17 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
       className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/30"
       data-testid={`participant-row-${participant.id}`}
     >
-      {/* Avatar — initial-letter only (v1 simplification: per-participant persona
-       * thumbnail fetch would require a separate query per PC).
-       * TODO(avatars): fetch primary persona thumbnail_media_url per participant
-       * once the encounter detail serializer exposes character_sheet_id.
+      {/* Avatar — portrait resolves via the PC's primary persona thumbnail;
+       * falls back to an initial-letter avatar when there is none (#630).
        */}
-      <PersonaAvatar source={{ name: participant.character_name }} size="sm" />
+      <PersonaAvatar
+        source={{
+          name: participant.character_name,
+          thumbnailUrl: participant.thumbnail_url,
+          thumbnailMediaUrl: participant.thumbnail_media_url,
+        }}
+        size="sm"
+      />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>

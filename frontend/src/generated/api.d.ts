@@ -16100,6 +16100,19 @@ export interface components {
       readonly active_conditions: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+       *
+       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
+       *     when the character has no primary persona.
+       */
+      readonly thumbnail_url: string | null;
+      /**
+       * @description PlayerMedia portrait URL via the primary persona's thumbnail.
+       *
+       *     ``None`` when there is no primary persona or it has no thumbnail.
+       */
+      readonly thumbnail_media_url: string | null;
     };
     /**
      * @description Read serializer for combat participants.
