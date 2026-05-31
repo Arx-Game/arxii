@@ -14,6 +14,21 @@ These principles govern every implementation decision downstream. When a mechani
 
 3. **Time scale is RL-months, not days.** Arx-time is fundamentally different from MMO-time (Arx 1 ran ~10 years). Project durations should target weeks-to-months for high-tier progression, not weekend grinds. Anti-inflation concerns that dominate MMO design largely don't apply — power growth is measured in real-world months, so steep exponential scaling on high tiers is *expected and welcomed*, not a balance problem.
 
+## Plan 1 Status — SHIPPED 2026-05-31
+
+Plan 1 (Org Refactor + Project Foundation) is implemented on branch `spec/projects-buildings-sanctum-design`. Highlights:
+
+- **`OrganizationKind` TextChoices** (9 values: NOBLE, BUSINESS, GUILD, GANG, SECRET_SOCIETY, COMMONER_FAMILY, COVENANT, DEVOTIONAL, OTHER) — replaces `Organization.org_type` FK as the discriminator
+- **`OrganizationType` repurposed** as admin-editable per-kind rank-title catalog with `clean()` validation that `name` must be in `OrganizationKind.values`; `get_by_name()` cache mirrors PR #632's pattern
+- **`Organization.society`** nullable for standalone orgs; `get_effective_principle` raises ValueError if no override + null society
+- **`Covenant`** linked to Organization via plain `OneToOneField` (NOT primary_key=True — that broke view tests; switched after first attempt) with `transaction.atomic`-wrapped auto-create in `save()`; field is NOT NULL at DB level
+- **`Project` + `Contribution` framework** with discriminator pattern, both completion modes (SINGLE_THRESHOLD, TIERED_PERIOD), kind handler registry, cron lifecycle (`projects.lifecycle_tick` at 15-min interval), StatDefinition seeding for achievement stats
+- **Two adversarial review passes** applied 4 critical fixes pre-Phase-B: NOT NULL constraint on `Covenant.organization`, `transaction.atomic` on save, `OrganizationType.clean()` validation, `OrganizationType.get_by_name()` cache
+
+**Test results:** all 22 projects tests + all covenants tests + all societies tests pass. Per the `feedback_subagents_struggle_on_test_db` memory, Phases B-F shipped via direct execution after subagent flow stalled on test-DB locks in Phase A.
+
+**Plans 2-4** (NPC Interaction framework, Permits+Buildings, Room Features+Sanctum) are next.
+
 ## Scope Overview
 
 | Subsystem | Status | Notes |
