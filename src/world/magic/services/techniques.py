@@ -177,33 +177,51 @@ def _derive_power(
 ) -> int:
     """Derive effective power. NEVER stored — recomputed each cast.
 
-    power = max(0, channeled_intensity + sum of matched power-scoped modifiers).
+    Each matched power-category target contributes both its CharacterModifier rows
+    (#634) and its active-condition effects (#636), summed together. Targets named
+    ``power_multiplier`` contribute a percent-delta applied multiplicatively to
+    channeled intensity; all other power targets are flat additive bonuses::
+
+        flat   = Σ (additive power contributions)
+        delta  = Σ (power_multiplier percent-delta contributions)   # 0 when none
+        power  = max(0, round(channeled_intensity * (100 + delta) / 100) + flat)
+
     Matched = the global power target (no resonance scope) plus any resonance-scoped
     power target whose resonance is one of the technique's gift resonances. Power-scoped
-    modifiers raise landed effect only; channeled intensity (anima/mishap/Soulfray) is
-    untouched. Damage-type scoping deferred to #653.
+    contributions raise landed effect only; channeled intensity (anima/mishap/Soulfray)
+    is untouched by construction. Damage-type scoping deferred to #653.
     """
+    from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+    from world.mechanics.constants import POWER_MULTIPLIER_TARGET_NAME  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
-    power = channeled_intensity
     if character is None:
-        return max(0, power)
+        return max(0, channeled_intensity)
     sheet = _get_character_sheet(character)
     if sheet is None:
-        return max(0, power)
+        return max(0, channeled_intensity)
 
     technique_resonance_ids: set[int] = set()
     if technique is not None:
         technique_resonance_ids = {r.id for r in technique.gift.resonances.all()}
 
+    flat = 0
+    multiplier_delta = 0
     for target in _get_power_targets():
         if (
             target.target_resonance_id is None
             or target.target_resonance_id in technique_resonance_ids
         ):
-            power += get_modifier_total(sheet, target)
+            contribution = get_modifier_total(sheet, target) + get_condition_modifier_total(
+                sheet, target
+            )
+            if target.name == POWER_MULTIPLIER_TARGET_NAME:
+                multiplier_delta += contribution
+            else:
+                flat += contribution
 
-    return max(0, power)
+    scaled = round(channeled_intensity * (100 + multiplier_delta) / 100)
+    return max(0, scaled + flat)
 
 
 def get_runtime_technique_stats(
