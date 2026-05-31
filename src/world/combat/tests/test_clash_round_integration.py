@@ -43,6 +43,9 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -404,6 +407,54 @@ class ResolveRoundClashIntegrationTests(TestCase):
             [],
             "No clash_outcomes expected for a RESOLVED clash in the next round.",
         )
+
+    def test_resolved_clash_broadcasts_outcome_narration(self) -> None:
+        """A clash resolving during the post-pass broadcasts a Narrator OUTCOME line (#644).
+
+        The PC's bare CombatRoundAction (no technique) and the targetless NPC
+        action never produce a "resolves" narration, so the clash outcome line
+        is the only OUTCOME interaction matching that token.
+        """
+        encounter = self._make_encounter()
+        encounter.scene = SceneFactory()
+        encounter.save(update_fields=["scene"])
+        participant = self._make_participant(encounter)
+        opponent = self._make_opponent(encounter)
+
+        self._add_npc_action(opponent, round_number=1)
+
+        pool_consequence = ConsequencePoolFactory()
+        clash = ClashFactory(
+            encounter=encounter,
+            npc_opponent=opponent,
+            status=ClashStatus.ACTIVE,
+            progress=0,
+            pc_win_threshold=1,
+            npc_win_threshold=1,
+            resolution_consequence_pool=pool_consequence,
+        )
+
+        technique = self._make_technique()
+        ClashContributionDeclaration.objects.create(
+            encounter=encounter,
+            round_number=1,
+            participant=participant,
+            clash=clash,
+            action_slot=ClashActionSlot.FOCUSED,
+            technique=technique,
+            strain_commitment=0,
+        )
+        CombatRoundAction.objects.create(participant=participant, round_number=1)
+
+        with force_check_outcome(self.outcome_critical):
+            resolve_round(encounter)
+
+        clash.refresh_from_db()
+        self.assertEqual(clash.status, ClashStatus.RESOLVED, "Clash should be RESOLVED.")
+        outcomes = Interaction.objects.filter(
+            mode=InteractionMode.OUTCOME, content__icontains="resolves"
+        )
+        self.assertEqual(outcomes.count(), 1, "Expected one clash OUTCOME narration line.")
 
     # ---------------------------------------------------------------------------
     # 6. Atomic rollback: if run_clash_round raises, nothing persists

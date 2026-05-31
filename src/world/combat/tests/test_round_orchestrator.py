@@ -50,6 +50,9 @@ from world.mechanics.factories import (
 )
 from world.mechanics.models import CharacterChallengeRecord
 from world.mechanics.types import AvailableAction, CapabilitySource
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -744,6 +747,50 @@ class ResolveDeclaredChallengesTests(TestCase):
             result.challenge_outcomes[0].challenge_instance_id,
             challenge_instance.pk,
         )
+
+    def test_challenge_resolution_broadcasts_outcome_narration(self) -> None:
+        """A resolved declared challenge broadcasts a Narrator OUTCOME line (#644).
+
+        The challenge-only participant has no combat action and there is no NPC,
+        so the sole OUTCOME interaction is the challenge narration.
+        """
+        encounter, participant = self._setup_declaring_encounter()
+        encounter.scene = SceneFactory()
+        encounter.save(update_fields=["scene"])
+        challenge_instance = ChallengeInstanceFactory()
+        approach = ChallengeApproachFactory(
+            challenge_template=challenge_instance.template,
+        )
+
+        RoundChallengeDeclaration.objects.create(
+            encounter=encounter,
+            round_number=1,
+            participant=participant,
+            challenge_instance=challenge_instance,
+            challenge_approach=approach,
+        )
+
+        cap_source = _make_dummy_capability_source()
+        available = _make_available_action(
+            challenge_instance_id=challenge_instance.pk,
+            approach_id=approach.pk,
+            capability_source=cap_source,
+        )
+
+        with patch(
+            "world.combat.services.get_available_actions",
+            return_value=[available],
+        ):
+            with patch(
+                "world.mechanics.challenge_resolution.perform_check",
+                side_effect=lambda *_a, **_kw: self._make_mock_check_result(),
+            ):
+                resolve_round(encounter)
+
+        outcomes = Interaction.objects.filter(
+            mode=InteractionMode.OUTCOME, content__icontains="attempts"
+        )
+        self.assertEqual(outcomes.count(), 1, "Expected one challenge OUTCOME narration line.")
 
     def test_two_participants_both_challenges_resolve(self) -> None:
         """Two participants with challenge declarations both resolve post-combat."""

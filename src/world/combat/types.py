@@ -217,6 +217,10 @@ class ClashRoundResult:
         pc_delta_sum: The raw sum of all PC contribution deltas this round.
         npc_delta: The NPC push magnitude (non-negative) passed in by the caller.
         progress_after: The updated ``clash.progress`` value after this round.
+        resolution: The ``ClashResolutionResult`` when this round crossed a
+            threshold and the clash resolved; ``None`` for a non-resolving round.
+            Surfaces the result ``run_clash_round`` would otherwise discard so the
+            round-resolution layer can broadcast an outcome narration (#644).
     """
 
     clash_round: ClashRound
@@ -224,6 +228,7 @@ class ClashRoundResult:
     pc_delta_sum: int
     npc_delta: int
     progress_after: int
+    resolution: ClashResolutionResult | None = None
 
 
 # ---------------------------------------------------------------------------
