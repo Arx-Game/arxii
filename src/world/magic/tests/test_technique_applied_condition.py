@@ -16,9 +16,9 @@ class TechniqueAppliedConditionTests(EvenniaTestCase):
             minimum_success_level=1,
         )
         # SL=1 (at threshold): 2 + floor(0.5 * 4) + 1*0 = 4
-        self.assertEqual(ac.compute_severity(effective_intensity=4, success_level=1), 4)
+        self.assertEqual(ac.compute_severity(effective_power=4, success_level=1), 4)
         # SL=3: 2 + floor(0.5 * 4) + 1*2 = 6
-        self.assertEqual(ac.compute_severity(effective_intensity=4, success_level=3), 6)
+        self.assertEqual(ac.compute_severity(effective_power=4, success_level=3), 6)
 
     def test_compute_duration_falls_back_to_template(self):
         from world.magic.factories import TechniqueAppliedConditionFactory
@@ -32,6 +32,6 @@ class TechniqueAppliedConditionTests(EvenniaTestCase):
         ac.condition.default_duration_value = 5
         ac.condition.save(update_fields=["default_duration_value"])
         self.assertEqual(
-            ac.compute_duration_rounds(effective_intensity=10, success_level=2),
+            ac.compute_duration_rounds(effective_power=10, success_level=2),
             5,
         )
