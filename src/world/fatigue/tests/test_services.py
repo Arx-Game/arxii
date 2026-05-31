@@ -12,8 +12,8 @@ from world.fatigue.constants import (
     MIN_FATIGUE_COST,
     REST_AP_COST,
     WELL_RESTED_MULTIPLIER,
+    ActionCategory,
     EffortLevel,
-    FatigueCategory,
     FatigueZone,
 )
 from world.fatigue.models import FatiguePool
@@ -77,7 +77,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
 
-        capacity = get_fatigue_capacity(self.sheet, FatigueCategory.PHYSICAL)
+        capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
         expected = 3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
         assert capacity == expected
 
@@ -87,7 +87,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "composure", 40, TraitCategory.SOCIAL)
         _setup_stat(char, "willpower", 10, TraitCategory.META)
 
-        capacity = get_fatigue_capacity(self.sheet, FatigueCategory.SOCIAL)
+        capacity = get_fatigue_capacity(self.sheet, ActionCategory.SOCIAL)
         expected = 4 * CAPACITY_STAT_MULTIPLIER + 1 * CAPACITY_WILLPOWER_MULTIPLIER
         assert capacity == expected
 
@@ -97,7 +97,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "stability", 50, TraitCategory.MENTAL)
         _setup_stat(char, "willpower", 30, TraitCategory.META)
 
-        capacity = get_fatigue_capacity(self.sheet, FatigueCategory.MENTAL)
+        capacity = get_fatigue_capacity(self.sheet, ActionCategory.MENTAL)
         expected = 5 * CAPACITY_STAT_MULTIPLIER + 3 * CAPACITY_WILLPOWER_MULTIPLIER
         assert capacity == expected
 
@@ -111,14 +111,14 @@ class GetFatigueCapacityTests(TestCase):
         pool.well_rested = True
         pool.save()
 
-        capacity = get_fatigue_capacity(self.sheet, FatigueCategory.PHYSICAL)
+        capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
         base = 3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
         expected = int(base * WELL_RESTED_MULTIPLIER)
         assert capacity == expected
 
     def test_zero_stats_gives_zero_capacity(self):
         """Characters with no stats have 0 capacity."""
-        capacity = get_fatigue_capacity(self.sheet, FatigueCategory.PHYSICAL)
+        capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
         assert capacity == 0
 
 
@@ -145,34 +145,34 @@ class GetFatigueZoneTests(TestCase):
         """0-40% fatigue is FRESH."""
         # Capacity = 3*10 + 2*3 = 36. 0% fatigue.
         self._set_fatigue_and_capacity(0)
-        assert get_fatigue_zone(self.sheet, FatigueCategory.PHYSICAL) == FatigueZone.FRESH
+        assert get_fatigue_zone(self.sheet, ActionCategory.PHYSICAL) == FatigueZone.FRESH
 
     def test_strained_zone(self):
         """41-60% fatigue is STRAINED."""
         # Capacity = 36. 50% = 18
         self._set_fatigue_and_capacity(18)
-        zone = get_fatigue_zone(self.sheet, FatigueCategory.PHYSICAL)
+        zone = get_fatigue_zone(self.sheet, ActionCategory.PHYSICAL)
         assert zone == FatigueZone.STRAINED
 
     def test_tired_zone(self):
         """61-80% fatigue is TIRED."""
         # Capacity = 36. ~72% = 26
         self._set_fatigue_and_capacity(26)
-        zone = get_fatigue_zone(self.sheet, FatigueCategory.PHYSICAL)
+        zone = get_fatigue_zone(self.sheet, ActionCategory.PHYSICAL)
         assert zone == FatigueZone.TIRED
 
     def test_overexerted_zone(self):
         """81-99% fatigue is OVEREXERTED."""
         # Capacity = 36. ~92% = 33
         self._set_fatigue_and_capacity(33)
-        zone = get_fatigue_zone(self.sheet, FatigueCategory.PHYSICAL)
+        zone = get_fatigue_zone(self.sheet, ActionCategory.PHYSICAL)
         assert zone == FatigueZone.OVEREXERTED
 
     def test_exhausted_zone(self):
         """100%+ fatigue is EXHAUSTED."""
         # Capacity = 36. Over 100% = 40
         self._set_fatigue_and_capacity(40)
-        zone = get_fatigue_zone(self.sheet, FatigueCategory.PHYSICAL)
+        zone = get_fatigue_zone(self.sheet, ActionCategory.PHYSICAL)
         assert zone == FatigueZone.EXHAUSTED
 
 
@@ -192,7 +192,7 @@ class GetFatiguePenaltyTests(TestCase):
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
 
-        assert get_fatigue_penalty(self.sheet, FatigueCategory.PHYSICAL) == 0
+        assert get_fatigue_penalty(self.sheet, ActionCategory.PHYSICAL) == 0
 
     def test_strained_penalty(self):
         """STRAINED zone has -1 penalty."""
@@ -203,7 +203,7 @@ class GetFatiguePenaltyTests(TestCase):
         pool.set_current("physical", 18)  # ~50% of 36 capacity
         pool.save()
 
-        assert get_fatigue_penalty(self.sheet, FatigueCategory.PHYSICAL) == -1
+        assert get_fatigue_penalty(self.sheet, ActionCategory.PHYSICAL) == -1
 
     def test_exhausted_penalty(self):
         """EXHAUSTED zone has -4 penalty."""
@@ -214,7 +214,7 @@ class GetFatiguePenaltyTests(TestCase):
         pool.set_current("physical", 40)  # >100% of 36 capacity
         pool.save()
 
-        assert get_fatigue_penalty(self.sheet, FatigueCategory.PHYSICAL) == -4
+        assert get_fatigue_penalty(self.sheet, ActionCategory.PHYSICAL) == -4
 
 
 class ApplyFatigueTests(TestCase):
@@ -229,7 +229,7 @@ class ApplyFatigueTests(TestCase):
 
     def test_medium_effort_full_cost(self):
         """Medium effort applies base cost * 1.0."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
         assert cost == 10
 
         pool = get_or_create_fatigue_pool(self.sheet)
@@ -237,35 +237,35 @@ class ApplyFatigueTests(TestCase):
 
     def test_very_low_effort_reduced_cost(self):
         """Very low effort applies base cost * 0.1 but at least MIN_FATIGUE_COST."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.VERY_LOW)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.VERY_LOW)
         # int(10 * 0.1) = 1, which equals MIN_FATIGUE_COST
         assert cost == MIN_FATIGUE_COST
 
     def test_low_effort_half_cost(self):
         """Low effort applies base cost * 0.5."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.LOW)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.LOW)
         assert cost == 5
 
     def test_high_effort_double_cost(self):
         """High effort applies base cost * 2.0."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.HIGH)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.HIGH)
         assert cost == 20
 
     def test_extreme_effort_triple_plus_cost(self):
         """Extreme effort applies base cost * 3.5."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.EXTREME)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.EXTREME)
         assert cost == 35
 
     def test_min_fatigue_cost_enforced(self):
         """Even very low effort on a tiny base cost returns at least MIN_FATIGUE_COST."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 1, EffortLevel.VERY_LOW)
+        cost = apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 1, EffortLevel.VERY_LOW)
         # int(1 * 0.1) = 0, but MIN_FATIGUE_COST = 1
         assert cost == MIN_FATIGUE_COST
 
     def test_fatigue_accumulates(self):
         """Multiple applications stack."""
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM)
+        apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
+        apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 5, EffortLevel.MEDIUM)
 
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 15
@@ -277,7 +277,7 @@ class ApplyFatigueTests(TestCase):
         _setup_stat(char, "willpower", 10, TraitCategory.META)
         # Capacity = 1*10 + 1*3 = 13
 
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 20, EffortLevel.MEDIUM)
+        apply_fatigue(self.sheet, ActionCategory.PHYSICAL, 20, EffortLevel.MEDIUM)
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 20  # Exceeds capacity of 13
 
@@ -304,19 +304,19 @@ class ShouldCheckCollapseTests(TestCase):
     def test_very_low_always_safe(self):
         """Very low effort never triggers collapse check."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.VERY_LOW)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.VERY_LOW)
         assert result is False
 
     def test_low_always_safe(self):
         """Low effort never triggers collapse check."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.LOW)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.LOW)
         assert result is False
 
     def test_medium_safe_when_overexerted(self):
         """Medium effort does NOT trigger collapse when overexerted."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.MEDIUM)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.MEDIUM)
         assert result is False
 
     def test_medium_collapses_when_exhausted(self):
@@ -329,19 +329,19 @@ class ShouldCheckCollapseTests(TestCase):
         # stamina display=3, so capacity = 3*10 + 2*3 = 36
         pool.set_current("physical", 40)  # 111% of 36 → exhausted
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.MEDIUM)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.MEDIUM)
         assert result is True
 
     def test_high_when_overexerted(self):
         """High effort triggers collapse when overexerted."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is True
 
     def test_extreme_when_overexerted(self):
         """Extreme effort triggers collapse when overexerted."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.EXTREME)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.EXTREME)
         assert result is True
 
     def test_high_when_fresh(self):
@@ -349,7 +349,7 @@ class ShouldCheckCollapseTests(TestCase):
         char = self.sheet.character
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
     def test_high_when_strained(self):
@@ -360,7 +360,7 @@ class ShouldCheckCollapseTests(TestCase):
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 18)  # ~50%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
     def test_high_when_tired(self):
@@ -371,7 +371,7 @@ class ShouldCheckCollapseTests(TestCase):
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 26)  # ~72%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
     def test_extreme_when_exhausted(self):
@@ -382,7 +382,7 @@ class ShouldCheckCollapseTests(TestCase):
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 40)  # >100%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.EXTREME)
+        result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.EXTREME)
         assert result is True
 
 
@@ -502,7 +502,7 @@ class GetFatiguePercentageTests(TestCase):
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
 
-        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        pct = get_fatigue_percentage(self.sheet, ActionCategory.PHYSICAL)
         assert pct == 0.0
 
     def test_half_capacity(self):
@@ -515,7 +515,7 @@ class GetFatiguePercentageTests(TestCase):
         pool.set_current("physical", 18)
         pool.save()
 
-        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        pct = get_fatigue_percentage(self.sheet, ActionCategory.PHYSICAL)
         assert pct == 50.0
 
     def test_over_capacity(self):
@@ -528,12 +528,12 @@ class GetFatiguePercentageTests(TestCase):
         pool.set_current("physical", 72)
         pool.save()
 
-        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        pct = get_fatigue_percentage(self.sheet, ActionCategory.PHYSICAL)
         assert pct == 200.0
 
     def test_zero_capacity_no_fatigue_returns_zero(self):
         """Zero capacity with no fatigue returns 0%."""
-        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        pct = get_fatigue_percentage(self.sheet, ActionCategory.PHYSICAL)
         assert pct == 0.0
 
     def test_zero_capacity_with_fatigue_returns_hundred(self):
@@ -542,7 +542,7 @@ class GetFatiguePercentageTests(TestCase):
         pool.set_current("physical", 5)
         pool.save()
 
-        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        pct = get_fatigue_percentage(self.sheet, ActionCategory.PHYSICAL)
         assert pct == 100.0
 
 
@@ -570,7 +570,7 @@ class AttemptEnduranceCheckTests(TestCase):
         """Endurance check passes when perform_check returns positive success_level."""
         self._setup_character(stamina_internal=30, willpower_internal=20, fatigue=29)
         mock_perform_check.return_value = MagicMock(success_level=1)
-        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        result = attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         assert result is True
         mock_perform_check.assert_called_once()
 
@@ -579,7 +579,7 @@ class AttemptEnduranceCheckTests(TestCase):
         """Endurance check fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=11)
         mock_perform_check.return_value = MagicMock(success_level=0)
-        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        result = attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         assert result is False
 
     @patch("world.fatigue.services.perform_check")
@@ -587,7 +587,7 @@ class AttemptEnduranceCheckTests(TestCase):
         """Endurance check fails when perform_check returns negative success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=0)
         mock_perform_check.return_value = MagicMock(success_level=-1)
-        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        result = attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         assert result is False
 
     @patch("world.fatigue.services.perform_check")
@@ -597,7 +597,7 @@ class AttemptEnduranceCheckTests(TestCase):
         # target = int((200 - 60) * 3) = 420
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=26)
         mock_perform_check.return_value = MagicMock(success_level=1)
-        attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         call_kwargs = mock_perform_check.call_args[1]
         assert call_kwargs["target_difficulty"] == 420
 
@@ -628,7 +628,7 @@ class AttemptPowerThroughTests(TestCase):
         # strain_damage = max(1, int(0.022*10)) = max(1, 0) = 1
         self._setup_character(stamina_internal=30, willpower_internal=50, fatigue=46)
         mock_perform_check.return_value = MagicMock(success_level=1)
-        succeeded, strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        succeeded, strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert succeeded is True
         assert strain_damage == 1
 
@@ -637,7 +637,7 @@ class AttemptPowerThroughTests(TestCase):
         """Power through fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=70)
         mock_perform_check.return_value = MagicMock(success_level=0)
-        succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        succeeded, _strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert succeeded is False
 
     @patch("world.fatigue.services.perform_check")
@@ -645,7 +645,7 @@ class AttemptPowerThroughTests(TestCase):
         """Power through succeeds with high success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=50)
         mock_perform_check.return_value = MagicMock(success_level=3)
-        succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        succeeded, _strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert succeeded is True
 
     @patch("world.fatigue.services.perform_check")
@@ -655,5 +655,5 @@ class AttemptPowerThroughTests(TestCase):
         # strain_damage = max(1, int(1.0 * 10)) = 10
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=26)
         mock_perform_check.return_value = MagicMock(success_level=1)
-        _succeeded, strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        _succeeded, strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert strain_damage == 10

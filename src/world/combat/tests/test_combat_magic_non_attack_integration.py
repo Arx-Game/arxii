@@ -26,7 +26,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_combat_technique
-from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.constants import EffortLevel
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
@@ -140,7 +140,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -181,7 +181,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )
@@ -229,7 +229,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    fatigue_category=FatigueCategory.PHYSICAL,
+                    fatigue_category=ActionCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
                 )

@@ -47,7 +47,7 @@ def execute_action_with_fatigue(
 
     Args:
         character_sheet: The character's sheet.
-        fatigue_category: FatigueCategory value (physical/social/mental).
+        fatigue_category: ActionCategory value (physical/social/mental).
         base_fatigue_cost: Base fatigue cost of the action.
         effort_level: EffortLevel value.
         check_fn: Optional callable(effort_modifier, fatigue_penalty) -> check result.
