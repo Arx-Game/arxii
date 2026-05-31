@@ -4,9 +4,10 @@
 # 1. Precheck: superpowers plugin must be installed.
 # 2. Fetch the issue via `gh issue view`.
 # 3. Infer the issue type from labels (feature|fix|chore|refactor|test|docs|perf).
-# 4. Build slug from the title (lowercase, alphanumerics + hyphens, max 40 chars).
-# 5. Create branch <type>-<N>-<slug> from origin/main.
-# 6. Emit JSON {type, slug, branch, parent_issue_url} on stdout.
+# 4. Ensure lane labels exist; claim the issue (assign self + status:spec-draft).
+# 5. Build slug from the title (lowercase, alphanumerics + hyphens, max 40 chars).
+# 6. Create branch <type>-<N>-<slug> from origin/main.
+# 7. Emit JSON {type, slug, branch, parent_issue_url} on stdout.
 #
 # Exits:
 #   0  success
@@ -65,7 +66,21 @@ if [[ -z "$TYPE" ]]; then
   exit 1
 fi
 
-# 4. Build slug
+# 4. Ensure lane labels exist (idempotent) and claim the issue.
+for spec in \
+  "status:spec-draft|BFD4F2|Agent drafting the spec into the issue body" \
+  "status:spec-review|FBCA04|Spec on the issue; awaiting org-member approval" \
+  "status:implementing|1D76DB|Spec approved; implementation in progress" \
+  "spec:approved|0E8A16|Org member approved the spec — clear to implement (members only)"; do
+  name="${spec%%|*}"; rest="${spec#*|}"; color="${rest%%|*}"; desc="${rest##*|}"
+  gh label create "$name" --color "$color" --description "$desc" --force >/dev/null 2>&1 || true
+done
+# Claim: assign self and move to the spec-draft lane (drop legacy status:in-progress).
+gh issue edit "$ISSUE" --add-assignee "$CURRENT_USER" >/dev/null
+gh issue edit "$ISSUE" --add-label "status:spec-draft" >/dev/null
+gh issue edit "$ISSUE" --remove-label "status:in-progress" >/dev/null 2>&1 || true
+
+# 5. Build slug
 TITLE=$(jq -r '.title' <<<"$ISSUE_JSON")
 SLUG=$(echo "$TITLE" \
   | tr '[:upper:]' '[:lower:]' \
@@ -74,11 +89,11 @@ SLUG=$(echo "$TITLE" \
   | sed 's/-$//')
 BRANCH="${TYPE}-${ISSUE}-${SLUG}"
 
-# 5. Create branch from origin/main
+# 6. Create branch from origin/main
 git fetch origin main --quiet
 git checkout -b "$BRANCH" origin/main
 
-# 6. Emit JSON
+# 7. Emit JSON
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")
 jq -n \
   --arg type "$TYPE" \

@@ -12,6 +12,9 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
 )
 from flows.object_states.character_state import CharacterState
+from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.fatigue.models import FatiguePool
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
@@ -19,6 +22,7 @@ from world.items.factories import (
     TemplateSlotFactory,
 )
 from world.items.models import EquippedItem
+from world.vitals.models import CharacterVitals
 
 
 class CharacterStateDisplayWornTests(TestCase):
@@ -89,8 +93,77 @@ class CharacterStateDisplayWornTests(TestCase):
         self.assertIn("Shirt", result)
         self.assertIn("Coat", result)
 
-    def test_get_display_status_returns_empty_placeholder(self) -> None:
-        # Phase A placeholder; combat roadmap follow-up will populate this.
+    def test_get_display_status_empty_without_sheet(self) -> None:
+        # CharacterFactory has no CharacterSheet → no vitals/fatigue/conditions.
+        self.assertEqual(self.state.get_display_status(), "")
+
+
+class CharacterStateDisplayStatusTests(TestCase):
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.context = MagicMock()
+        self.state = CharacterState(self.character, context=self.context)
+
+    def test_empty_when_healthy_unfatigued_no_conditions(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        self.assertEqual(self.state.get_display_status(), "")
+
+    def test_includes_wound_descriptor_when_hurt(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=40, max_health=100)
+        result = self.state.get_display_status()
+        self.assertIn("Status", result)
+        self.assertIn("badly wounded", result)
+
+    def test_includes_fatigue_zone_when_fatigued(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        # capacity is 0 for a statless test sheet, so any current > 0 → EXHAUSTED.
+        FatiguePool.objects.create(character_sheet=self.sheet, physical_current=1)
+        result = self.state.get_display_status()
+        self.assertIn("exhausted", result.lower())
+
+    def test_includes_visible_condition_observer_text(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        template = ConditionTemplateFactory(
+            name="VisibleBleed",
+            is_visible_to_others=True,
+            observer_description="bleeding heavily",
+        )
+        ConditionInstanceFactory(target=self.character, condition=template)
+        result = self.state.get_display_status()
+        self.assertIn("bleeding heavily", result)
+
+    def test_visible_conditions_ordered_by_display_priority(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        low = ConditionTemplateFactory(
+            name="LowPrio",
+            is_visible_to_others=True,
+            observer_description="faintly trembling",
+            display_priority=1,
+        )
+        high = ConditionTemplateFactory(
+            name="HighPrio",
+            is_visible_to_others=True,
+            observer_description="wreathed in flame",
+            display_priority=99,
+        )
+        ConditionInstanceFactory(target=self.character, condition=low)
+        ConditionInstanceFactory(target=self.character, condition=high)
+        result = self.state.get_display_status()
+        self.assertLess(result.index("wreathed in flame"), result.index("faintly trembling"))
+
+    def test_hidden_condition_excluded(self) -> None:
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        template = ConditionTemplateFactory(
+            name="HiddenPain",
+            is_visible_to_others=False,
+            observer_description="secret agony",
+        )
+        ConditionInstanceFactory(target=self.character, condition=template)
+        self.assertEqual(self.state.get_display_status(), "")
+
+    def test_empty_when_no_vitals_row(self) -> None:
+        # Sheet exists but no CharacterVitals/fatigue/conditions → nothing to say.
         self.assertEqual(self.state.get_display_status(), "")
 
 
