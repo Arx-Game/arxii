@@ -17,6 +17,7 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.models.gifts import Gift
 
@@ -273,6 +274,15 @@ class Technique(SharedMemoryModel):
         help_text=(
             "Base safety/precision. When intensity exceeds control at runtime, "
             "effects become unpredictable and anima cost can spike."
+        ),
+    )
+    action_category = models.CharField(
+        max_length=10,
+        choices=ActionCategory.choices,
+        default=ActionCategory.PHYSICAL,
+        help_text=(
+            "Physical/social/mental arena this technique acts in "
+            "(drives combat slot + fatigue routing)."
         ),
     )
     anima_cost = models.PositiveIntegerField(
