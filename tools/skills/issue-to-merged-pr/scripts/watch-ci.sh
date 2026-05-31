@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # watch-ci.sh <pr-number>
 #
-# Polls gh pr checks for the given PR per the cadence in the spec
-# (docs/superpowers/specs/2026-05-25-issue-to-merged-pr-design.md §
-# "CI watch cadence"). Idempotent across sessions.
+# Polls gh pr checks for the given PR per the cadence in the design doc
+# (../design.md § "CI watch cadence"). Idempotent across sessions.
 #
 # Stdout: "OK" if all checks pass, "FAIL <check-name>" on the first failure.
 #

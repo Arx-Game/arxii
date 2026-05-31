@@ -27,8 +27,7 @@ class EventName(models.TextChoices):
     TECHNIQUE_PRE_CAST = "technique_pre_cast", "Technique Pre-Cast"
     TECHNIQUE_CAST = "technique_cast", "Technique Cast"
     TECHNIQUE_AFFECTED = "technique_affected", "Technique Affected"
-    # Corruption (Magic Scope #7) — see
-    # docs/superpowers/specs/2026-04-25-magic-scope-7-corruption-design.md §3.5
+    # Corruption (Magic Scope #7)
     CORRUPTION_ACCRUING = "corruption_accruing", "Corruption accruing (pre-mutation)"
     CORRUPTION_ACCRUED = "corruption_accrued", "Corruption accrued (post-mutation)"
     CORRUPTION_WARNING = "corruption_warning", "Corruption warning (stage 3-4)"

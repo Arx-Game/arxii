@@ -4,8 +4,6 @@
  * Triggered by the "▸ details" affordance in ThreadPullPicker rows.
  * The PullEffectPreview handles its own state (tier selection, preview fetch,
  * effects display) — no orchestration needed here.
- *
- * Per spec §5 of docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
  */
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
