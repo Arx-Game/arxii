@@ -147,7 +147,7 @@ class DamageTypePowerDerivationTests(TestCase):
         )
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
-        self.technique = TechniqueFactory()
+        self.technique = TechniqueFactory(damage_profile=False)
 
     def _add_power(self, target, value):
         source = DistinctionModifierSourceFactory()
