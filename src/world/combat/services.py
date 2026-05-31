@@ -812,6 +812,11 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
 
     encounter = participant.encounter
 
+    # The focused technique's authored category is authoritative (#614): it drives
+    # which passive slot must stay empty. Override any client-supplied value.
+    if focused_action is not None:
+        focused_category = focused_action.action_category
+
     # Agency check — not dead and not incapacitated. A dying-but-conscious
     # character keeps awareness and passes naturally (no dying_final_round concept).
     if not can_act(participant.character_sheet):
