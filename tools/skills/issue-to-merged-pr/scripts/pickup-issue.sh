@@ -93,11 +93,20 @@ BRANCH="${TYPE}-${ISSUE}-${SLUG}"
 git fetch origin main --quiet
 git checkout -b "$BRANCH" origin/main
 
-# 7. Emit JSON
+# 7. Emit JSON (includes model recommendation from complexity:* label)
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")
+COMPLEXITY=$(jq -r '.labels[] | select(.name | startswith("complexity:")) | .name' <<<"$ISSUE_JSON" | head -1)
+case "$COMPLEXITY" in
+  "complexity:high")   MODEL="claude-opus-4-8" ;;
+  "complexity:medium") MODEL="claude-sonnet-4-6" ;;
+  "complexity:low")    MODEL="claude-sonnet-4-6" ;;
+  *)                   MODEL="" ;;
+esac
 jq -n \
   --arg type "$TYPE" \
   --arg slug "$SLUG" \
   --arg branch "$BRANCH" \
   --arg url "$URL" \
-  '{type: $type, slug: $slug, branch: $branch, parent_issue_url: $url}'
+  --arg model "$MODEL" \
+  --arg complexity "$COMPLEXITY" \
+  '{type: $type, slug: $slug, branch: $branch, parent_issue_url: $url, model: $model, complexity: $complexity}'
