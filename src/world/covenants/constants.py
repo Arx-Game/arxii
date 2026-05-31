@@ -3,7 +3,8 @@
 from django.db import models
 
 # Name of the OrganizationType row used for Covenant-backed Organizations.
-# Must match the `name` field in initial_org_types.json fixture.
+# `Covenant.save()` uses `get_or_create` keyed on this name to bootstrap the
+# row on first use, so no fixture loading is required.
 COVENANT_ORG_TYPE_NAME = "covenant"
 
 
