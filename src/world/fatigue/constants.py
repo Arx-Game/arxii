@@ -1,10 +1,6 @@
 from django.db import models
 
-
-class FatigueCategory(models.TextChoices):
-    PHYSICAL = "physical", "Physical"
-    SOCIAL = "social", "Social"
-    MENTAL = "mental", "Mental"
+from actions.constants import ActionCategory
 
 
 class FatigueZone(models.TextChoices):
@@ -72,9 +68,9 @@ REST_AP_COST = 10
 
 # Endurance stat per fatigue category
 FATIGUE_ENDURANCE_STAT = {
-    FatigueCategory.PHYSICAL: "stamina",
-    FatigueCategory.SOCIAL: "composure",
-    FatigueCategory.MENTAL: "stability",
+    ActionCategory.PHYSICAL: "stamina",
+    ActionCategory.SOCIAL: "composure",
+    ActionCategory.MENTAL: "stability",
 }
 
 # Collapse risk zones per effort level. Maps effort → minimum zone where collapse triggers.

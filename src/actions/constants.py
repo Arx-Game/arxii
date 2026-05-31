@@ -63,6 +63,19 @@ class ActionBackend(models.TextChoices):
     REGISTRY = "registry", "Registry"
 
 
+class ActionCategory(models.TextChoices):
+    """Physical/social/mental arena for any action (magical or not).
+
+    The single canonical axis: techniques classify into it, combat actions
+    carry it (focused/attack category), and fatigue pools key off it. Climbing
+    a wall is physical, flirting is social, a feat of memory is mental.
+    """
+
+    PHYSICAL = "physical", "Physical"
+    SOCIAL = "social", "Social"
+    MENTAL = "mental", "Mental"
+
+
 class PlayerDecision(StrEnum):
     """Player decisions for paused resolution pipelines."""
 

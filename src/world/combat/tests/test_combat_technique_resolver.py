@@ -24,7 +24,7 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
-from world.fatigue.constants import EffortLevel, FatigueCategory
+from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 
 
@@ -58,7 +58,7 @@ def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
         participant=participant,
         action=action,
         pull_flat_bonus=pull_flat_bonus,
-        fatigue_category=FatigueCategory.PHYSICAL,
+        fatigue_category=ActionCategory.PHYSICAL,
         offense_check_type=MagicMock(),
         offense_check_fn=None,
     )

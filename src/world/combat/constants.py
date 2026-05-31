@@ -7,6 +7,12 @@ import issues when serializers need to reference them.
 
 from django.db import models
 
+# Canonical physical/social/mental axis lives in actions.constants;
+# re-exported here for combat-local imports (explicit alias = intentional re-export).
+from actions.constants import (
+    ActionCategory as ActionCategory,  # noqa: PLC0414 — re-export converged canonical enum for combat-local imports
+)
+
 # ---------------------------------------------------------------------------
 # Encounter enums
 # ---------------------------------------------------------------------------
@@ -93,14 +99,6 @@ class OpponentStatus(models.TextChoices):
 # ---------------------------------------------------------------------------
 # Action enums
 # ---------------------------------------------------------------------------
-
-
-class ActionCategory(models.TextChoices):
-    """Broad category of a combat action."""
-
-    PHYSICAL = "physical", "Physical"
-    SOCIAL = "social", "Social"
-    MENTAL = "mental", "Mental"
 
 
 class TargetingMode(models.TextChoices):

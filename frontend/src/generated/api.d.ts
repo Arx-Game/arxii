@@ -10694,6 +10694,13 @@ export interface components {
       readonly reward_value: string;
     };
     /**
+     * @description * `physical` - Physical
+     *     * `social` - Social
+     *     * `mental` - Mental
+     * @enum {string}
+     */
+    ActionCategoryEnum: 'physical' | 'social' | 'mental';
+    /**
      * @description * `submit` - Submit
      *     * `edit` - Edit
      *     * `agree` - Agree
@@ -17301,6 +17308,9 @@ export interface components {
       readonly target_spec: components['schemas']['TargetSpec'] | null;
       readonly enhancements: components['schemas']['AvailableEnhancement'][];
       readonly strain: components['schemas']['StrainAvailability'] | null;
+      readonly action_category:
+        | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
+        | null;
     };
     /**
      * @description Write serializer - player creates feedback.

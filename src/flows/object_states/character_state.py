@@ -83,8 +83,9 @@ class CharacterState(BaseState):
         """
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+        from actions.constants import ActionCategory  # noqa: PLC0415
         from world.conditions.services import get_active_conditions  # noqa: PLC0415
-        from world.fatigue.constants import FatigueCategory, FatigueZone  # noqa: PLC0415
+        from world.fatigue.constants import FatigueZone  # noqa: PLC0415
         from world.fatigue.services import get_fatigue_zone  # noqa: PLC0415
         from world.vitals.constants import WOUND_DESCRIPTIONS  # noqa: PLC0415
 
@@ -119,7 +120,7 @@ class CharacterState(BaseState):
                 FatigueZone.EXHAUSTED,
             ]
             worst_rank = 0
-            for category in FatigueCategory.values:
+            for category in ActionCategory.values:
                 worst_rank = max(worst_rank, zone_order.index(get_fatigue_zone(sheet, category)))
             if worst_rank > 0:
                 clauses.append(str(zone_order[worst_rank].label).lower())

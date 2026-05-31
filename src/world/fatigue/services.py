@@ -25,7 +25,7 @@ from world.fatigue.constants import (
     WELL_RESTED_MULTIPLIER,
     ZONE_PENALTIES,
     ZONE_THRESHOLDS,
-    FatigueCategory,
+    ActionCategory,
     FatigueZone,
 )
 from world.fatigue.models import FatiguePool
@@ -68,7 +68,7 @@ def get_fatigue_capacity(
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value (physical/social/mental).
+        category: ActionCategory value (physical/social/mental).
         well_rested: Optional pre-resolved well_rested flag. Pass it when the
             caller already has the FatiguePool loaded (e.g. via a prefetch) to
             avoid an extra ``get_or_create_fatigue_pool`` query. When ``None``
@@ -98,7 +98,7 @@ def get_fatigue_percentage(character_sheet: CharacterSheet, category: str) -> fl
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value.
+        category: ActionCategory value.
 
     Returns:
         Percentage (0.0 to potentially >100.0 if over capacity).
@@ -136,7 +136,7 @@ def get_fatigue_zone(character_sheet: CharacterSheet, category: str) -> str:
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value.
+        category: ActionCategory value.
 
     Returns:
         FatigueZone value string.
@@ -150,7 +150,7 @@ def get_fatigue_penalty(character_sheet: CharacterSheet, category: str) -> int:
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value.
+        category: ActionCategory value.
 
     Returns:
         Negative integer penalty (0 for FRESH).
@@ -172,7 +172,7 @@ def apply_fatigue(
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value.
+        category: ActionCategory value.
         base_cost: Base fatigue cost of the action.
         effort_level: EffortLevel value.
 
@@ -204,7 +204,7 @@ def should_check_collapse(
 
     Args:
         character_sheet: The character's sheet.
-        category: FatigueCategory value.
+        category: ActionCategory value.
         effort_level: EffortLevel value.
 
     Returns:
@@ -403,7 +403,7 @@ def get_full_status(character_sheet: CharacterSheet) -> dict:
     """
     pool = get_or_create_fatigue_pool(character_sheet)
     status: dict = {}
-    for category in FatigueCategory:
+    for category in ActionCategory:
         cat = category.value
         capacity = get_fatigue_capacity(character_sheet, cat)
         current = pool.get_current(cat)

@@ -45,22 +45,19 @@ export interface YourTurnProps {
 const PASSIVE_SLOTS: ActionSlot[] = ['passive-physical', 'passive-social', 'passive-mental'];
 
 /**
- * Derive the category of the focused slot from the selected technique.
- *
- * TODO(phase-7-follow-up): The technique's category (Physical/Social/Mental)
- * is not currently surfaced in the PlayerAction descriptor or the available
- * actions response — ActionRef only carries technique_id. A richer typing
- * phase should expose `effect_type.category` or `style.category` in the
- * PlayerAction so this can be derived without a separate fetch.
- *
- * For Phase 7, we stub the focused category as 'physical' so the slot
- * composition logic has something concrete to work with. The real slot
- * category is computed in a follow-up when the API exposes it.
+ * Derive the focused slot's category from the selected technique's
+ * `action_category` (#614), surfaced on the PlayerAction descriptor. The
+ * matching passive slot is hidden (spec §6). Returns null when no focused
+ * technique is selected or its category is unset.
  */
-function resolveFocusedCategory(_context: ActionContext): ActionSlot | null {
-  // Stub: always return 'physical' so passive-physical is hidden.
-  // Follow-up: derive from technique.effect_type.category or technique.style.category.
-  return 'passive-physical';
+function resolveFocusedCategory(
+  context: ActionContext,
+  availableActions: PlayerAction[]
+): ActionSlot | null {
+  if (context.techniqueId === undefined) return null;
+  const selected = availableActions.find((a) => a.ref.technique_id === context.techniqueId);
+  if (!selected?.action_category) return null;
+  return `passive-${selected.action_category}` as ActionSlot;
 }
 
 /**
@@ -238,7 +235,7 @@ export function YourTurn({
   // Slot composition
   // ---------------------------------------------------------------------------
 
-  const focusedCategory = resolveFocusedCategory(focusedContext);
+  const focusedCategory = resolveFocusedCategory(focusedContext, availableActions);
   const visiblePassiveSlots = passiveSlotsToRender(focusedCategory);
 
   // ---------------------------------------------------------------------------

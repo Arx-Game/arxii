@@ -113,6 +113,17 @@ Await-approval, and Implementation.
 - Run `scripts/pickup-issue.sh <N>`. It checks the superpowers plugin,
   fetches the issue, infers type, ensures the lane labels exist, claims the
   issue (assign + `status:spec-draft`), creates the branch, and emits JSON.
+- **Model selection.** Read the `model` and `complexity` fields from the
+  emitted JSON. If `model` is non-empty, switch now — before any design,
+  planning, or implementation work:
+  - `complexity:high` → `claude-opus-4-8` — run `/model claude-opus-4-8`
+  - `complexity:medium` → `claude-sonnet-4-6` — run `/model claude-sonnet-4-6`
+  - `complexity:low` → `claude-sonnet-4-6` as the session model; use
+    `opts.model: "claude-haiku-4-5-20251001"` for leaf subagents in workflow
+    scripts where appropriate.
+  - No `complexity:*` label → no change; proceed on the current model.
+  In workflow scripts (`agent()` calls), set `opts.model` consistently with
+  the above mapping so subagents inherit the right tier.
 
 ### 2. Design (skipped for trivial issue types)
 
@@ -217,6 +228,12 @@ The PR body references the approved spec via `Closes #<issue>` — the spec live
 in the issue body, so there is no spec-file link to pass.
 
 ### 6. CI watch
+
+> ⚠️ **NEVER use Opus for CI watch or any looping/polling phase.** The watch
+> loop runs up to 25 minutes at 60-second intervals — potentially 25+ model
+> calls for pure polling work. If you switched to Opus at pickup, switch back
+> to Sonnet (`/model claude-sonnet-4-6`) before running `watch-ci.sh`. Opus
+> is for design and implementation, not waiting.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): post a brief status comment, exit the session.

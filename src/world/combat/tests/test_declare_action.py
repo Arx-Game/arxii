@@ -49,6 +49,23 @@ class DeclareActionTargetValidationTests(TestCase):
             character_sheet=self.ally_participant.character_sheet, health=100, max_health=100
         )
 
+    def test_focused_category_derived_from_technique(self) -> None:
+        """focused_category comes from the technique, overriding the client value (#614)."""
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_type_buff,
+            action_category=ActionCategory.MENTAL,
+        )
+        TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
+        action = declare_action(
+            self.participant,
+            focused_action=technique,
+            focused_category=ActionCategory.PHYSICAL,  # client value — overridden by the technique
+            effort_level=EffortLevel.MEDIUM,
+            focused_ally_target=self.ally_participant,
+        )
+        self.assertEqual(action.focused_category, ActionCategory.MENTAL)
+
     def test_xor_targets(self) -> None:
         """Providing both focused_opponent_target and focused_ally_target raises ValueError."""
         technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type_attack)
