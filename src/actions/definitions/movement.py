@@ -8,6 +8,7 @@ from typing import Any, ClassVar
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.constants import ActionCategory
 from actions.definitions.item_helpers import resolve_item_instance
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
@@ -28,6 +29,7 @@ class GetAction(Action):
     name: str = "Get"
     icon: str = "hand"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_get"
@@ -75,6 +77,7 @@ class DropAction(Action):
     name: str = "Drop"
     icon: str = "drop"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_drop"
@@ -122,6 +125,7 @@ class GiveAction(Action):
     name: str = "Give"
     icon: str = "gift"
     category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_give"
@@ -175,6 +179,7 @@ class TraverseExitAction(Action):
     name: str = "Go"
     icon: str = "door"
     category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
     intent_event: str | None = "before_traverse"
@@ -240,6 +245,7 @@ class HomeAction(Action):
     name: str = "Home"
     icon: str = "home"
     category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
     def execute(
