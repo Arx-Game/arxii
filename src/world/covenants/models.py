@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 class Covenant(SharedMemoryModel):
     """The foundational social/magical structure that binds members under a sworn oath.
 
+    Per-kind extension of Organization for kind=COVENANT. Each Covenant has a
+    backing Organization auto-created in save() if not provided. Covenant.pk
+    equals organization.pk.
+
     Slice A scope: identity, type, level (placeholder until Slice D), formed/dissolved
     timestamps, free-text sworn objective.
 
@@ -36,6 +40,16 @@ class Covenant(SharedMemoryModel):
     - dissolution_reason, dissolution_kind — Slice B
     """
 
+    organization = models.OneToOneField(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        related_name="covenant",
+        # NOT NULL at the DB level — the auto-create in save() always populates it
+        # BEFORE super().save() runs, so the DB never sees a null. bulk_create()
+        # is therefore unsafe for Covenant; always use single .save() calls.
+        # NOT primary_key=True — Covenant keeps its own auto-id pk so views,
+        # serializers, and FKs from CovenantLegendCredit continue to work.
+    )
     name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
         max_length=20,
@@ -52,6 +66,40 @@ class Covenant(SharedMemoryModel):
     )
     formed_at = models.DateTimeField(auto_now_add=True)
     dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if self.organization_id is None:
+            # Lazy import to avoid circular dependency.
+            from django.db import transaction  # noqa: PLC0415
+
+            from world.covenants.constants import COVENANT_ORG_TYPE_NAME  # noqa: PLC0415
+            from world.societies.models import Organization, OrganizationType  # noqa: PLC0415
+
+            # Wrap the auto-create + save in atomic so a failure in either
+            # rolls back BOTH. Without this, a Covenant validation error
+            # leaves an orphaned Organization row.
+            with transaction.atomic():
+                # get_or_create so tests work without loading the fixture and
+                # production-fresh DBs auto-bootstrap with sane defaults. Staff
+                # can still customize rank titles via admin.
+                covenant_org_type, _ = OrganizationType.objects.get_or_create(
+                    name=COVENANT_ORG_TYPE_NAME,
+                    defaults={
+                        "rank_1_title": "Coven Mother",
+                        "rank_2_title": "Adept",
+                        "rank_3_title": "Initiate",
+                        "rank_4_title": "Novice",
+                        "rank_5_title": "Aspirant",
+                    },
+                )
+                self.organization = Organization.objects.create(
+                    name=self.name,
+                    society=None,
+                    org_type=covenant_org_type,
+                )
+                super().save(*args, **kwargs)
+            return
+        super().save(*args, **kwargs)
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:

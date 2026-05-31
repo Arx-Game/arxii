@@ -305,6 +305,20 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.projects.services import scan_active_projects
+
+    register_task(
+        CronDefinition(
+            task_key="projects.lifecycle_tick",
+            callable=scan_active_projects,
+            interval=timedelta(minutes=15),
+            description=(
+                "Scan ACTIVE Projects; transition completion-ready ones to RESOLVING. "
+                "Interval is tunable; final cadence likely per-IC-day post-balance pass."
+            ),
+        )
+    )
+
     from world.missions.services.cron import apply_mission_reward_batch
 
     register_task(
