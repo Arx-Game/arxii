@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.combat.constants import ClashResolution
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 
@@ -167,6 +168,70 @@ def render_action_outcome_narration(
     if tail_clauses:
         return head + ", " + ", ".join(tail_clauses) + "."
     return head + "."
+
+
+def render_challenge_outcome_narration(
+    *,
+    actor_label: str,
+    challenge_name: str,
+    approach_name: str,
+    outcome_label: str,
+    success_level: int,
+) -> str:
+    """Render a one-line, deterministic outcome narration for a resolved challenge.
+
+    Pure function — no DB access, no randomness. Sibling of
+    ``render_action_outcome_narration`` for the challenge-resolution path. The
+    caller supplies primitives extracted from the ``ChallengeResolutionResult``
+    and the resolving participant, so this stays DB-free and unit-testable.
+
+    Examples:
+        "Kira attempts Scale the Wall (Athletics) and succeeds (Decisive Success)."
+        "Kira attempts Scale the Wall (Athletics) and fails (Failure)."
+    """
+    verb = "succeeds" if success_level > 0 else "fails"
+    return (
+        f"{actor_label} attempts {challenge_name} ({approach_name}) and {verb} ({outcome_label})."
+    )
+
+
+# Per-tier resolution clause for clash-outcome narration. Keys are
+# ``ClashResolution`` members (str-valued TextChoices, so a raw value string
+# from a resolved clash matches the same key). ``{opponent}`` is interpolated
+# at render time for NPC-favored tiers.
+_CLASH_TIER_CLAUSES: dict[str, str] = {
+    ClashResolution.PC_DECISIVE: "resolves decisively in the casters' favor",
+    ClashResolution.PC_MARGINAL: "resolves narrowly in the casters' favor",
+    ClashResolution.MUTUAL: "ends in a mutual stalemate",
+    ClashResolution.NPC_MARGINAL: "resolves narrowly in {opponent}'s favor",
+    ClashResolution.NPC_DECISIVE: "resolves decisively in {opponent}'s favor",
+    ClashResolution.ABANDONED: "is abandoned",
+}
+
+
+def render_clash_outcome_narration(
+    *,
+    flavor_label: str,
+    opponent_label: str,
+    resolution_tier: str,
+    consequence_label: str | None = None,
+) -> str:
+    """Render a one-line, deterministic outcome narration for a resolved clash.
+
+    Pure function — no DB access, no randomness. Primitives in (the caller
+    extracts them from the ``ClashResolutionResult`` + its ``Clash``) so this
+    stays DB-free and unit-testable like ``render_action_outcome_narration``.
+
+    Examples:
+        "The Break with the Pyromancer resolves decisively in the casters' favor."
+        "The Ward with the Pyromancer resolves decisively in the Pyromancer's "
+        "favor, leaving Stagger."
+    """
+    clause = _CLASH_TIER_CLAUSES.get(resolution_tier, "resolves").format(opponent=opponent_label)
+    head = f"The {flavor_label} with {opponent_label} {clause}"
+    if consequence_label:
+        return f"{head}, leaving {consequence_label}."
+    return f"{head}."
 
 
 def broadcast_action_outcome(
