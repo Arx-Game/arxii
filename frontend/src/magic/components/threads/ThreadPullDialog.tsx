@@ -97,6 +97,7 @@ export function ThreadPullDialog({
       setSelectedTier(1);
       setSelectedThreadIds([]);
       setPreview(null);
+      setPreviewLoading(false);
       setPreviewError(null);
       setCommitError(null);
     }
@@ -122,6 +123,7 @@ export function ThreadPullDialog({
   const runPreview = useCallback(() => {
     if (selectedResonanceId === null || selectedThreadIds.length === 0) {
       setPreview(null);
+      setPreviewLoading(false);
       return;
     }
     setPreviewLoading(true);
