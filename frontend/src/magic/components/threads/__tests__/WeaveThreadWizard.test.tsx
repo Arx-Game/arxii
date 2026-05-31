@@ -249,17 +249,34 @@ describe('WeaveThreadWizard', () => {
       expect(btn.textContent).toContain('Acquire a Thread Weaving Unlock');
     });
 
-    it('disables unsupported kinds (TRAIT, TECHNIQUE, etc.)', () => {
-      // Even if eligibility says true, unsupported kinds are still disabled
+    it('enables TRAIT, TECHNIQUE, ROOM, RELATIONSHIP_TRACK when eligibility is true', () => {
+      // These kinds are now supported — they should be enabled when the character has the unlock.
       const summary = makeSummary({
-        weaving_eligibility: { TRAIT: true, TECHNIQUE: true, ROOM: true },
+        weaving_eligibility: {
+          TRAIT: true,
+          TECHNIQUE: true,
+          ROOM: true,
+          RELATIONSHIP_TRACK: true,
+        },
       });
       render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
         wrapper: createWrapper(),
       });
-      expect(screen.getByTestId('kind-button-TRAIT')).toBeDisabled();
-      expect(screen.getByTestId('kind-button-TECHNIQUE')).toBeDisabled();
-      expect(screen.getByTestId('kind-button-ROOM')).toBeDisabled();
+      expect(screen.getByTestId('kind-button-TRAIT')).not.toBeDisabled();
+      expect(screen.getByTestId('kind-button-TECHNIQUE')).not.toBeDisabled();
+      expect(screen.getByTestId('kind-button-ROOM')).not.toBeDisabled();
+      expect(screen.getByTestId('kind-button-RELATIONSHIP_TRACK')).not.toBeDisabled();
+    });
+
+    it('disables RELATIONSHIP_CAPSTONE (still unsupported)', () => {
+      // RELATIONSHIP_CAPSTONE remains deferred/unsupported.
+      const summary = makeSummary({
+        weaving_eligibility: { RELATIONSHIP_CAPSTONE: true },
+      });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      expect(screen.getByTestId('kind-button-RELATIONSHIP_CAPSTONE')).toBeDisabled();
     });
   });
 
