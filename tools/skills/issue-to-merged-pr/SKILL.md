@@ -110,7 +110,8 @@ Await-approval, and Implementation.
   that doesn't have an issue yet, file one with `scripts/file-followup.sh`
   first and use its number.
 - Run `scripts/pickup-issue.sh <N>`. It checks the superpowers plugin,
-  fetches the issue, infers type, creates the branch, and emits JSON.
+  fetches the issue, infers type, ensures the lane labels exist, claims the
+  issue (assign + `status:spec-draft`), creates the branch, and emits JSON.
 
 ### 2. Design (skipped for trivial issue types)
 
