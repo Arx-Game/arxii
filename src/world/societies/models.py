@@ -179,12 +179,12 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
     A specific group or faction within a Society.
 
     Organizations are the primary groupings that characters can belong to.
-    Each organization belongs to a society and has a type that determines
-    its default rank structure.
+    Each organization belongs to a society and has a kind that determines
+    its default rank structure via the OrganizationType catalog.
 
     Organizations can override:
     - Principle values (inherit from society if not set)
-    - Rank titles (inherit from org_type if not set)
+    - Rank titles (inherit from OrganizationType row for this kind if not set)
     """
 
     name = models.CharField(
@@ -202,21 +202,12 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         related_name="organizations",
         help_text="The society this organization belongs to",
     )
-    org_type = models.ForeignKey(
-        OrganizationType,
-        on_delete=models.PROTECT,
-        related_name="organizations",
-        help_text="The type of organization, which determines default rank titles",
-    )
     kind = models.CharField(
         max_length=20,
-        null=True,  # temporarily nullable during migration; made non-null in Task A5
-        blank=True,
         choices=OrganizationKind.choices,
         help_text=(
             "The kind of organization. Determines which per-kind details model "
-            "applies (e.g., COVENANT -> Covenant model) and which OrganizationType "
-            "row provides default rank titles (looked up by name == kind)."
+            "applies and which OrganizationType row provides default rank titles."
         ),
     )
 
@@ -258,31 +249,31 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         help_text="Override for power principle (-5 to +5). If null, uses society's value.",
     )
 
-    # Rank title overrides - if blank, inherit from org_type
+    # Rank title overrides - if blank, inherit from OrganizationType for this kind
     rank_1_title_override = models.CharField(
         max_length=50,
         blank=True,
-        help_text="Override for rank 1 title. If blank, uses org_type's default.",
+        help_text="Override for rank 1 title. If blank, uses OrganizationType default for kind.",
     )
     rank_2_title_override = models.CharField(
         max_length=50,
         blank=True,
-        help_text="Override for rank 2 title. If blank, uses org_type's default.",
+        help_text="Override for rank 2 title. If blank, uses OrganizationType default for kind.",
     )
     rank_3_title_override = models.CharField(
         max_length=50,
         blank=True,
-        help_text="Override for rank 3 title. If blank, uses org_type's default.",
+        help_text="Override for rank 3 title. If blank, uses OrganizationType default for kind.",
     )
     rank_4_title_override = models.CharField(
         max_length=50,
         blank=True,
-        help_text="Override for rank 4 title. If blank, uses org_type's default.",
+        help_text="Override for rank 4 title. If blank, uses OrganizationType default for kind.",
     )
     rank_5_title_override = models.CharField(
         max_length=50,
         blank=True,
-        help_text="Override for rank 5 title. If blank, uses org_type's default.",
+        help_text="Override for rank 5 title. If blank, uses OrganizationType default for kind.",
     )
 
     objects = NaturalKeyManager()
@@ -317,11 +308,10 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         return getattr(self.society, principle_name)
 
     def get_rank_title(self, rank: int) -> str:
-        """
-        Get the effective title for a rank.
+        """Get the effective title for a rank.
 
-        Returns the organization's override if set, otherwise returns the
-        org_type's default title for that rank.
+        Returns the organization's override if set; otherwise looks up the
+        default for the kind's OrganizationType row.
 
         Args:
             rank: The rank number (1-5, where 1 is highest)
@@ -331,6 +321,7 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
         Raises:
             ValueError: If rank is not 1-5
+            RuntimeError: If no OrganizationType row exists for this kind
         """
         if rank < RANK_MIN or rank > RANK_MAX:
             msg = f"Rank must be {RANK_MIN}-{RANK_MAX}, got {rank}"
@@ -341,8 +332,18 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         if override_value:
             return override_value
 
+        # Fall back to the OrganizationType row for this kind.
+        try:
+            org_type = OrganizationType.objects.get(name=self.kind)
+        except OrganizationType.DoesNotExist as exc:
+            msg = (
+                f"No OrganizationType row found for kind={self.kind!r}. "
+                "Run `arx manage loaddata initial_org_types` to seed defaults."
+            )
+            raise RuntimeError(msg) from exc
+
         default_field = f"rank_{rank}_title"
-        return getattr(self.org_type, default_field)
+        return getattr(org_type, default_field)
 
 
 class OrganizationMembership(SharedMemoryModel):

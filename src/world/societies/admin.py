@@ -34,9 +34,8 @@ class OrganizationInline(admin.TabularInline):
 
     model = Organization
     extra = 0
-    fields = ["name", "org_type", "description"]
+    fields = ["name", "kind", "description"]
     show_change_link = True
-    raw_id_fields = ["org_type"]
 
 
 class OrganizationMembershipInline(admin.TabularInline):
@@ -181,16 +180,16 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "society",
-        "org_type",
+        "kind",
         "member_count",
     ]
-    list_filter = ["society__realm", "society", "org_type"]
+    list_filter = ["society__realm", "society", "kind"]
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
     inlines = [OrganizationMembershipInline]
 
     fieldsets = (
-        (None, {"fields": ("name", "society", "org_type", "description")}),
+        (None, {"fields": ("name", "society", "kind", "description")}),
         (
             "Principle Overrides",
             {

@@ -11,6 +11,7 @@ import factory.django as factory_django
 from world.character_creation.factories import RealmFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.societies.constants import OrganizationKind
 from world.societies.models import (
     CovenantLegendCredit,
     LegendDeedStory,
@@ -74,7 +75,7 @@ class OrganizationFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Organization {n}")
     description = factory.Faker("paragraph")
     society = factory.SubFactory(SocietyFactory)
-    org_type = factory.SubFactory(OrganizationTypeFactory)
+    kind = OrganizationKind.GUILD
 
     # Principle overrides - all null by default (inherit from society)
     mercy_override = None
@@ -84,7 +85,7 @@ class OrganizationFactory(factory_django.DjangoModelFactory):
     allegiance_override = None
     power_override = None
 
-    # Rank title overrides - all blank by default (inherit from org_type)
+    # Rank title overrides - all blank by default (inherit from OrganizationType for kind)
     rank_1_title_override = ""
     rank_2_title_override = ""
     rank_3_title_override = ""
@@ -242,49 +243,16 @@ class EstablishedPersonaFactory(PersonaFactory):
 class NobleFamilyOrganizationFactory(OrganizationFactory):
     """Factory for creating noble family organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="noble_family",
-            defaults={
-                "rank_1_title": "Head of House",
-                "rank_2_title": "Heir",
-                "rank_3_title": "Noble Family Member",
-                "rank_4_title": "Distant Relation",
-                "rank_5_title": "Ward",
-            },
-        )[0]
-    )
+    kind = OrganizationKind.NOBLE
 
 
 class GuildOrganizationFactory(OrganizationFactory):
     """Factory for creating guild organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="guild",
-            defaults={
-                "rank_1_title": "Guildmaster",
-                "rank_2_title": "Master",
-                "rank_3_title": "Journeyman",
-                "rank_4_title": "Apprentice",
-                "rank_5_title": "Initiate",
-            },
-        )[0]
-    )
+    kind = OrganizationKind.GUILD
 
 
 class SecretSocietyOrganizationFactory(OrganizationFactory):
     """Factory for creating secret society organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="secret_society",
-            defaults={
-                "rank_1_title": "Grand Master",
-                "rank_2_title": "Inner Circle",
-                "rank_3_title": "Initiate",
-                "rank_4_title": "Acolyte",
-                "rank_5_title": "Outsider Contact",
-            },
-        )[0]
-    )
+    kind = OrganizationKind.SECRET_SOCIETY
