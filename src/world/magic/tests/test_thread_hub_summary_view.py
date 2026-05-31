@@ -19,13 +19,19 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterResonanceFactory,
+    CharacterTechniqueFactory,
     CharacterThreadWeavingUnlockFactory,
+    GiftFactory,
     ResonanceFactory,
+    TechniqueFactory,
     ThreadFactory,
     ThreadWeavingUnlockFactory,
     ThreadXPLockedLevelFactory,
 )
+from world.mechanics.factories import PropertyFactory
+from world.relationships.factories import RelationshipTrackFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 
 
 def _link_account_to_sheet(account, character, sheet):
@@ -240,3 +246,134 @@ class ThreadHubSummaryAltGuardTests(APITestCase):
         self.client.force_authenticate(user=self.account)
         response = self.client.get(_URL, {"character_sheet_id": self.sheet1.pk})
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+
+class ThreadHubSummaryPickerDataTests(APITestCase):
+    """Picker data fields (weavable_traits, weavable_techniques, room_property_ids,
+    weavable_relationship_track_ids) are populated from the character's handlers + unlocks."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory(username="picker_data_account")
+        cls.character = CharacterFactory(db_key="PickerDataChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        _link_account_to_sheet(cls.account, cls.character, cls.sheet)
+
+        # TRAIT unlock + matching trait value > 0
+        cls.trait = TraitFactory(name="Persuasion")
+        cls.trait_unlock = ThreadWeavingUnlockFactory(
+            target_kind="TRAIT",
+            unlock_trait=cls.trait,
+            unlock_gift=None,
+            unlock_room_property=None,
+            unlock_track=None,
+        )
+        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.trait_unlock)
+        CharacterTraitValueFactory(
+            character=cls.character,
+            trait=cls.trait,
+            value=30,  # display_value = 3.0
+        )
+
+        # TECHNIQUE unlock + matching CharacterTechnique
+        cls.gift = GiftFactory(name="TestGift")
+        cls.technique = TechniqueFactory(name="TestTechnique", gift=cls.gift)
+        cls.tech_unlock = ThreadWeavingUnlockFactory(
+            target_kind="TECHNIQUE",
+            unlock_trait=None,
+            unlock_gift=cls.gift,
+            unlock_room_property=None,
+            unlock_track=None,
+        )
+        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.tech_unlock)
+        CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
+
+        # ROOM unlock
+        cls.prop = PropertyFactory(name="Sacred Ground")
+        cls.room_unlock = ThreadWeavingUnlockFactory(
+            target_kind="ROOM",
+            unlock_trait=None,
+            unlock_gift=None,
+            unlock_room_property=cls.prop,
+            unlock_track=None,
+        )
+        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.room_unlock)
+
+        # RELATIONSHIP_TRACK unlock
+        cls.track = RelationshipTrackFactory(name="Loyalty")
+        cls.track_unlock = ThreadWeavingUnlockFactory(
+            target_kind="RELATIONSHIP_TRACK",
+            unlock_trait=None,
+            unlock_gift=None,
+            unlock_room_property=None,
+            unlock_track=cls.track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.track_unlock)
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        # Invalidate the technique handler cache so it re-reads for each test.
+        if "techniques" in self.character.__dict__:
+            del self.character.__dict__["techniques"]
+
+    def test_weavable_trait_with_value_appears(self) -> None:
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200, response.data)
+        traits = response.data["weavable_traits"]
+        self.assertEqual(len(traits), 1)
+        self.assertEqual(traits[0]["trait_id"], self.trait.pk)
+        self.assertEqual(traits[0]["name"], "Persuasion")
+        self.assertAlmostEqual(float(traits[0]["display_value"]), 3.0, places=1)
+
+    def test_trait_with_zero_value_excluded(self) -> None:
+        """Trait unlock exists but character's value is 0 → not in weavable_traits."""
+        zero_trait = TraitFactory(name="ZeroTrait")
+        zero_unlock = ThreadWeavingUnlockFactory(
+            target_kind="TRAIT",
+            unlock_trait=zero_trait,
+            unlock_gift=None,
+            unlock_room_property=None,
+            unlock_track=None,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=zero_unlock)
+        # No CharacterTraitValue row → handler returns DefaultTraitValue with value=0
+
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200)
+        trait_ids = [t["trait_id"] for t in response.data["weavable_traits"]]
+        self.assertNotIn(zero_trait.pk, trait_ids)
+
+    def test_weavable_technique_appears(self) -> None:
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200)
+        techniques = response.data["weavable_techniques"]
+        self.assertEqual(len(techniques), 1)
+        self.assertEqual(techniques[0]["technique_id"], self.technique.pk)
+        self.assertEqual(techniques[0]["name"], "TestTechnique")
+        self.assertEqual(techniques[0]["gift_id"], self.gift.pk)
+        self.assertEqual(techniques[0]["gift_name"], "TestGift")
+
+    def test_room_property_id_appears(self) -> None:
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.prop.pk, response.data["room_property_ids"])
+
+    def test_relationship_track_id_appears(self) -> None:
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.track.pk, response.data["weavable_relationship_track_ids"])
+
+    def test_empty_character_has_empty_picker_lists(self) -> None:
+        """Character with no weaving unlocks gets four empty lists."""
+        empty_account = AccountFactory(username="picker_empty_account")
+        empty_char = CharacterFactory(db_key="PickerEmptyChar")
+        empty_sheet = CharacterSheetFactory(character=empty_char)
+        _link_account_to_sheet(empty_account, empty_char, empty_sheet)
+
+        self.client.force_authenticate(user=empty_account)
+        response = self.client.get(_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["weavable_traits"], [])
+        self.assertEqual(response.data["weavable_techniques"], [])
+        self.assertEqual(response.data["room_property_ids"], [])
+        self.assertEqual(response.data["weavable_relationship_track_ids"], [])
