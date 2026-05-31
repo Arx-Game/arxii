@@ -34,6 +34,7 @@ Current scope (Tasks 2.1–5.1):
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -1640,8 +1641,14 @@ def run_clash_round(
                 clash=clash, round_number=round_number, config=config_clash
             )
 
-    # If a resolution was determined, fire resolve_clash.
+    # If a resolution was determined, fire resolve_clash and surface its result
+    # on the round result (it was previously computed and discarded). The
+    # round-resolution layer reads ``ClashRoundResult.resolution`` to broadcast
+    # an outcome narration (#644).
     if resolution is not None:
-        resolve_clash(clash=clash, resolution=resolution, round_number=round_number)
+        clash_resolution = resolve_clash(
+            clash=clash, resolution=resolution, round_number=round_number
+        )
+        round_result = replace(round_result, resolution=clash_resolution)
 
     return round_result

@@ -28,7 +28,11 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
 )
 from world.combat.models import Clash, ClashRound, CombatOpponent
-from world.combat.types import ClashRoundResult, PreparedClashContribution
+from world.combat.types import (
+    ClashResolutionResult,
+    ClashRoundResult,
+    PreparedClashContribution,
+)
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -222,6 +226,58 @@ class RunClashRoundTests(TestCase):
         self.assertEqual(clash.status, ClashStatus.RESOLVED)
         # Overshoot = 0 < 3 → MARGINAL.
         self.assertEqual(clash.resolution, ClashResolution.PC_MARGINAL)
+
+    def test_round_result_carries_resolution_when_clash_resolves(self) -> None:
+        """run_clash_round surfaces the ClashResolutionResult on the round result.
+
+        The resolution tier is computed by resolve_clash and was previously
+        discarded; it must now ride back on ClashRoundResult.resolution so the
+        round driver can broadcast an outcome narration (#644).
+        """
+        config_clash = ClashConfigFactory(
+            decisive_overshoot=3,
+            max_round_cap=12,
+            delta_success=1,
+        )
+        clash = ClashFactory(progress=4, pc_win_threshold=5, npc_win_threshold=20)
+        sheet = self._make_character()
+        technique = self._make_technique()
+        contribution = self._make_contribution(character_sheet=sheet, technique=technique)
+
+        with force_check_outcome(self.outcome_success):
+            result = run_clash_round(
+                clash=clash,
+                round_number=1,
+                pc_contributions=[contribution],
+                config_clash=config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertIsInstance(result.resolution, ClashResolutionResult)
+        self.assertEqual(result.resolution.resolution, ClashResolution.PC_MARGINAL)
+        self.assertEqual(result.resolution.clash.pk, clash.pk)
+
+    def test_round_result_resolution_is_none_when_clash_stays_active(self) -> None:
+        """A non-resolving round leaves ClashRoundResult.resolution as None."""
+        entry = ThreatPoolEntryFactory(clash_npc_pressure=3)
+        clash = ClashFactory(
+            progress=5,
+            pc_win_threshold=20,
+            npc_win_threshold=20,
+            triggering_threat_entry=entry,
+        )
+
+        result = run_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[],
+            config_clash=self.config_clash,
+            config_strain=self.config_strain,
+        )
+
+        clash.refresh_from_db()
+        self.assertEqual(clash.status, ClashStatus.ACTIVE)
+        self.assertIsNone(result.resolution)
 
     # -------------------------------------------------------------------------
     # 5. Per-round pool fires

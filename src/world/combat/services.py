@@ -2245,6 +2245,22 @@ def _resolve_declared_challenges(
         )
         outcomes.append(outcome)
 
+        # Broadcast a durable, Narrator-authored OUTCOME line for this challenge,
+        # mirroring the per-action broadcast in _resolve_pc_action (#644).
+        from world.combat.interaction_services import (  # noqa: PLC0415
+            broadcast_action_outcome,
+            render_challenge_outcome_narration,
+        )
+
+        narration = render_challenge_outcome_narration(
+            actor_label=str(decl.participant),
+            challenge_name=outcome.challenge_name,
+            approach_name=outcome.approach_name,
+            outcome_label=outcome.check_result.outcome_name,
+            success_level=outcome.check_result.success_level,
+        )
+        broadcast_action_outcome(encounter=encounter, narration=narration)
+
     # Delete all bridge rows for this round inside the outer atomic block.
     RoundChallengeDeclaration.objects.filter(
         encounter=encounter,
@@ -2376,6 +2392,25 @@ def _resolve_clashes(
             config_strain=config_strain,
         )
         outcomes.append(result)
+
+        # When the clash resolved this round, broadcast a durable, Narrator-
+        # authored OUTCOME line for the break/lock/ward result (#644). Mirrors
+        # the per-action broadcast in _resolve_pc_action.
+        if result.resolution is not None:
+            from world.combat.interaction_services import (  # noqa: PLC0415
+                broadcast_action_outcome,
+                render_clash_outcome_narration,
+            )
+
+            opponent_label = clash.npc_opponent.name if clash.npc_opponent_id else "?"
+            consequence = result.resolution.consequence_applied
+            narration = render_clash_outcome_narration(
+                flavor_label=clash.get_flavor_display(),
+                opponent_label=opponent_label,
+                resolution_tier=result.resolution.resolution,
+                consequence_label=consequence.label if consequence is not None else None,
+            )
+            broadcast_action_outcome(encounter=encounter, narration=narration)
 
     # 6. Delete all declarations for this round (inside caller's atomic block).
     ClashContributionDeclaration.objects.filter(

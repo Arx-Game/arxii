@@ -63,6 +63,22 @@ def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
     }
 
 
+def _get_power_targets() -> list[ModifierTarget]:
+    """Look up all 'power'-category ModifierTargets in a single query.
+
+    Returns global (target_resonance is None) and resonance-scoped power targets.
+    Caller filters scoped targets by the technique's resonances.
+    """
+    from world.mechanics.constants import POWER_CATEGORY_NAME  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    return list(
+        ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME).select_related(
+            "category", "target_resonance"
+        )
+    )
+
+
 def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
     """Get the CharacterSheet for a character, or None if not found."""
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
@@ -156,16 +172,38 @@ def _build_resonance_involvements(
 def _derive_power(
     *,
     channeled_intensity: int,
-    technique: Technique | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
-    character: ObjectDB | None,  # noqa: ARG001 — reserved for future power terms (#634-#637)
+    technique: Technique | None,
+    character: ObjectDB | None,
 ) -> int:
     """Derive effective power. NEVER stored — recomputed each cast.
 
-    PR1: power == channeled intensity. Later issues (#634-#637) add level,
-    threads, aura/resonance, and power-scoped modifier terms here. The
-    ``technique``/``character`` params are the future inputs; unused in PR1.
+    power = max(0, channeled_intensity + sum of matched power-scoped modifiers).
+    Matched = the global power target (no resonance scope) plus any resonance-scoped
+    power target whose resonance is one of the technique's gift resonances. Power-scoped
+    modifiers raise landed effect only; channeled intensity (anima/mishap/Soulfray) is
+    untouched. Damage-type scoping deferred to #653.
     """
-    return channeled_intensity
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    power = channeled_intensity
+    if character is None:
+        return max(0, power)
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return max(0, power)
+
+    technique_resonance_ids: set[int] = set()
+    if technique is not None:
+        technique_resonance_ids = {r.id for r in technique.gift.resonances.all()}
+
+    for target in _get_power_targets():
+        if (
+            target.target_resonance_id is None
+            or target.target_resonance_id in technique_resonance_ids
+        ):
+            power += get_modifier_total(sheet, target)
+
+    return max(0, power)
 
 
 def get_runtime_technique_stats(
