@@ -114,13 +114,13 @@ A reusable framework for *delayed multi-tick investment with outcome rolls*. Any
 
 - `kind` — TextChoices discriminator (`BUILDING_CONSTRUCTION`, `ROOM_FEATURE_PROGRESSION`, plus deferred kinds)
 - `completion_mode` — TextChoices (`SINGLE_THRESHOLD`, `TIERED_PERIOD`)
-- `status` — TextChoices (`PLANNING`, `ACTIVE`, `RESOLVING`, `COMPLETED`, `FAILED`)
-- `owner_persona` FK (the persona who initiated and is the "weighted check" source at resolution)
+- `status` — TextChoices (`PLANNING`, `ACTIVE`, `RESOLVING`, `COMPLETED`, `FAILED`, `CANCELLED`) — `CANCELLED` covers manual cancellation + Building-decay-mid-project per Coherence Pass Notes
+- `owner_persona` FK (the persona who initiated and is the "weighted check" source at resolution; resolved from `account.active_persona` at creation if triggered from an account-level action like permit activation)
 - `started_at`, `time_limit` (datetime — always set; both modes use it)
 - `threshold_target` (int, nullable — only for `SINGLE_THRESHOLD`)
 - `current_progress` (int, accumulates from contributions)
-- `outcome_tier` (set at completion, nullable until then; `OutcomeTier` TextChoices: `CATASTROPHIC`, `FAILED`, `PARTIAL`, `SUCCESS`, `CRITICAL`)
-- `resonance` FK (optional — references existing resonance type model; drives `ResonanceGrant` emission on contributions)
+- `outcome_tier` (set at completion, nullable until then; representation per "Outcome Tier Model Choice" below)
+- `resonance` FK (optional — references the `Resonance` model row; drives `ResonanceGrant` emission on contributions)
 - `description` (text — staff-authored or template-derived narrative)
 
 **Per-kind typed payload** via discriminator pattern (mirrors `LocationValueModifier`, `ConditionInstance`, `Consequence` from existing codebase). Each kind owns its own details model:
@@ -666,6 +666,20 @@ Ship the first `RoomFeatureKind` end-to-end: a magical home (Personal) or sacred
 
 **Sanctum ownership is narrower than Building ownership in general.** A Building can be owned by Persona OR any Organization. But to install a Sanctum into one of its rooms, the building's owner must be **Persona OR Covenant specifically** — not any other org type. This constraint lives on the Sanctum `RoomFeatureKind` row as `required_building_owner_types=[PERSONA, COVENANT]`.
 
+**Architectural gap — Covenant ownership of Buildings.** Verified during coherence pass: `Covenant` (at `world/covenants/models.py:25`) is NOT a `societies.Organization` — they're separate models with no FK relationship. `LocationOwnership.holder_organization` is FK to `societies.Organization` only. So as written, a Covenant cannot directly own a building via `LocationOwnership`. **Three options for the implementer to pick from:**
+
+- **(I) Extend `LocationOwnership`** with a new `HolderType.COVENANT` value + `holder_covenant` FK to `covenants.Covenant`. Update `DiscriminatorMixin` map, `effective_owner`, `is_owner`, `ownership_for`, etc. to handle the new holder type. Cleanest architecturally — Covenant becomes a first-class holder type alongside Persona/Organization. Real migration cost on existing infrastructure.
+- **(II) Auto-shadow `Organization` per `Covenant`** — every Covenant has an associated `Organization` (1:1 FK on Covenant, auto-created at Covenant creation). Building ownership uses the shadow Organization; "is this org a covenant" check via the reverse-FK. Lower infrastructure cost but introduces shadow records that exist purely for plumbing.
+- **(III) Bridge at the Sanctum layer only** — Building owner is just `Organization` per existing `LocationOwnership`. A new `CovenantBuildingSponsorship` (or similar) model declares "this Organization-owned Building is sponsored by Covenant X for Sanctum-feature purposes." Sanctum install validates the sponsorship. Workaround that scopes the complexity to where it matters but adds bridge-model overhead.
+
+**Recommendation: (I)** — Covenant ownership of locations is likely meaningful beyond just Sanctums (covenant chapter houses, meeting circles, ritual chambers); promoting Covenant to a first-class holder type means future Covenant-owned-location features compose for free. The migration cost is real but bounded. Implementer picks final; whichever path is chosen, `BuildingProfile.owning_covenant` becomes a helper:
+
+```python
+def get_owning_covenant(building_profile) -> Covenant | None:
+    """Resolve the Covenant that owns this building, or None."""
+    # Implementation depends on the chosen option (I/II/III above)
+```
+
 ### Per-PC Weaving Slots
 
 - **1 personal Sanctum slot** — your own home (if you own a Sanctum, this is dedicated to it; consumed when you weave into your own Sanctum as `PERSONAL_OWN`)
@@ -898,6 +912,7 @@ When this spec is approved, the following get filed as GitHub issues. Organized 
 ### Critical Followup (Next Build Phase After Sanctum MVP)
 
 - **Room Builder Tool** (per Subsystem D) — cosmetic edits + structural changes via `INTERIOR_DESIGN` Project kind. **Cosmetic-vs-structural split flagged for senior dev review.**
+- **Inactivity-detection system** (per Coherence Pass Notes) — Sanctum/Building decay machinery is parked because there's no comprehensive "player went inactive" detection today. Designing this system is its own initiative; until it ships, decay is a hook-without-a-trigger.
 
 ### Subsystem A — Additional Project Kinds
 
@@ -1105,3 +1120,61 @@ This spec was revised after the brainstorming session via parallel Explore-agent
 - `FunctionaryRole` + `FunctionaryServiceOption` (missions use branching graphs, not menu-driven immediate-resolution)
 - `ActivatePermitAction` + permit-activation service
 - New ResonanceGrant `source_*` typed FKs (cross-cut migration)
+
+---
+
+## Coherence Pass Notes (Second Audit)
+
+A second pass through the spec surfaced these clarifications and gaps. Each lands in the appropriate subsystem at implementation time; documented here as a checklist so they aren't lost.
+
+### Covenant cannot directly own a Building (architectural)
+
+Already flagged inline in Subsystem F. Three options presented; recommendation is **(I) extend `LocationOwnership`** to make Covenant a first-class holder type. This is the largest blocking architectural decision in the spec — implementer should pick and document the choice at the top of the implementation plan, since downstream code in multiple subsystems depends on it.
+
+### `is_owner` cascades through org membership already (good news)
+
+Per `world/locations/CLAUDE.md`: `is_owner(persona, room)` already returns True when the cascade-resolved owner is "an Organization this persona is a current member of (any rank)." This means our Subsystem E feature-install permission gate simplifies:
+
+- **Originally specced:** `is_tenant(persona, room) OR persona in building.managers OR is_owner(persona, room)`
+- **What's actually needed:** the three-way OR is still correct, because `is_owner` cascade covers (a) direct persona ownership and (b) org-membership-of-owning-org, but it does NOT cover the manager-tier role (managers are a building-level concept, not in LocationOwnership). So all three checks are independent and all three are needed.
+- **For Covenant Sanctums specifically**, "active covenant member" via `CharacterCovenantRole.left_at IS NULL` is checked separately for the bonus-distribution rule, but the basic permission-to-weave gate is "the building is owned by a covenant you're a member of" — which `is_owner` handles for free once Covenant ownership works (per the architectural gap above).
+
+### Account-level permits vs Persona-level Projects (resolution rule)
+
+`ItemInstance.owner` is FK to `AccountDB`. `Project.owner_persona` is FK to `Persona`. When Bob activates a permit, we need to determine which Persona is initiating the construction Project. **Implementation rule: resolve via `account.active_persona` (or equivalent — verify the actual accessor during implementation)** at the moment of activation. The Project's `owner_persona` snapshots that resolution at creation. If the player switches personas mid-project, the Project's owner_persona stays bound to the original persona (they initiated; they own the project for outcome-roll purposes). For Building ownership at completion: same rule — the Project's owner_persona becomes the Building's owner via `LocationOwnership` (unless the wizard captured an explicit "owned by org X" override).
+
+### Construction Project contributor permissions (default rule)
+
+Spec was fuzzy on who can contribute to a `BUILDING_CONSTRUCTION` Project. **Default rule:** the Project's owner_persona, all `BuildingManager`-equivalents (during construction there's no Building yet, so this means whoever the owner explicitly invited in via a "co-builder" allowlist on `BuildingConstructionDetails`), and anyone with explicit invitation. For Sanctum's `ROOM_FEATURE_PROGRESSION` projects, contributors are scoped per Subsystem E (tenants/managers/owners of the target room). Add `co_contributor_personas` m2m to the per-kind details models when finer-grained invitation control is needed.
+
+### Decay-in-progress Project handling
+
+What happens to a `ROOM_FEATURE_PROGRESSION` Project on a room whose Building decays mid-progress? **Rule:** Building decay (entering `DECAYED` or `HIDDEN` state) cancels all active Projects targeting rooms in the building. Cancellation refunds partial contributions per the same per-tier outcome rules as a `FAILED` outcome (most-but-not-all returned). Same for active rituals (no Sanctum decay-mid-ritual edge cases since rituals are atomic, but document for sanity).
+
+### No comprehensive "broader inactivity-cleanup" system exists today
+
+Spec deferred Building decay timing to "broader player-inactivity rules." Verification found only narrow decay tasks (`cleanup_decayed_modifiers`, condition decay, form expiration) — there's **no comprehensive player-inactivity-detection system** yet. **Honest restatement:** Sanctum and Building decay are *parked* — the `decayed_state` field exists, the cron task scaffolding can be registered, but the *trigger* for "owner went inactive" is undefined until someone designs the inactivity system. Spec should NOT promise decay-on-inactive behavior in the MVP; the field exists as a hook for future work. **Update Section 5 Critical Followup list to add "inactivity-detection system design"** as a separate follow-up (alongside Room Builder Tool).
+
+### `Persona.character_sheet` reverse-relation access pattern
+
+Spec code samples reference `persona.character_sheet` traversal. Verify this is the actual accessor (probably FK from `Persona` to `CharacterSheet` with this name, but the implementer should confirm — could be `persona.sheet`, `persona.character_sheet`, `persona.character`, etc.). Pattern is sound; the attribute name needs verification at implementation time.
+
+### Cron task `task_key` namespace
+
+New cron tasks register with task_keys: `projects.lifecycle_tick`, `sanctum.resonance_generation_tick`. Verify no existing tasks use these keys. Lean toward dotted namespace per app (`projects.*`, `sanctum.*`) for clarity — matches existing patterns like `ap.daily_regen`, `locations.cleanup_decayed_modifiers`.
+
+### Permit consumed item lifecycle
+
+Spec uses the existing consumable pattern (`is_consumable=True`, `max_charges=1`, decrement to 0). After consumption, the permit item persists with `charges=0`. **Decision needed:** does the spent permit clutter the player's inventory forever, or is it auto-removed after activation? Lean toward auto-removal (`game_object.delete()` after `OwnershipEvent` of type `CONSUMED` is recorded — the OwnershipEvent ledger preserves the audit trail). Confirm with senior dev.
+
+### "Pause" status for Projects
+
+Project lifecycle currently has `PLANNING`, `ACTIVE`, `RESOLVING`, `COMPLETED`, `FAILED`. Decay-in-progress + manual pause scenarios suggest adding `CANCELLED` (and possibly `PAUSED`) status values. Adding `CANCELLED` is straightforward; `PAUSED` can be deferred until use case appears.
+
+### Distinct `WardBuildingRule` model vs fields on `Area`
+
+Subsystem C deferred this implementation choice. Reading existing `world/locations/CLAUDE.md` and seeing that `LocationValueModifier` is the established pattern for "this ward has property X" data, **probable best path:** model ward permit eligibility as `LocationValueModifier` rows with new `StatKey` values (`PERMIT_ELIGIBILITY`, `BUILD_COST_MULTIPLIER`) rather than a new dedicated model. This composes with the existing cascade resolver and reuses the existing `effective_value` read path. Implementer should evaluate vs a dedicated `WardBuildingRule` model and pick based on whether the data shape fits the cascade-modifier idiom.
+
+### Building decay does NOT cascade-delete owned items / rooms
+
+When a Building enters `DECAYED` or `HIDDEN` state, its rooms, owned items, occupant tenancies, etc. must NOT cascade-delete. The decay state is reversible. Implementation must use `decayed_state` as a read-side filter (decayed buildings hidden from default listings, exits hidden from grid) without touching the underlying data. Important to document in the spec to prevent over-zealous cleanup logic.
