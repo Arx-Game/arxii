@@ -2,7 +2,7 @@
 # watch-ci.sh <pr-number>
 #
 # Polls gh pr checks for the given PR per the cadence in the design doc
-# (../design.md § "CI watch cadence"). Idempotent across sessions.
+# (../references/design.md § "CI watch cadence"). Idempotent across sessions.
 #
 # Stdout: "OK" if all checks pass, "FAIL <check-name>" on the first failure.
 #

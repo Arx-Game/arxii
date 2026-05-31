@@ -69,14 +69,14 @@ skill into an existing container, recreate the container
    ```
 3. Ensure `gh` and `jq` are installed and `gh auth login` is complete with
    a token carrying the scopes listed in the design doc
-   (`design.md` § "Auth and token").
+   (`references/design.md` § "Auth and token").
 
 If you skip step 2, `pickup-issue.sh` will fail fast (exit 2) with the
 install command in the error message.
 
 ## Design and rationale
 
-See `design.md` for
+See `references/design.md` for
 the full design: phase-detection table, CI watch cadence, bail conditions,
 cross-issue overlap detection, token scopes, distribution model.
 

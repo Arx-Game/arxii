@@ -19,7 +19,7 @@ Ambiguous "?" sentences force the user to guess whether they're being asked to r
 
 ### Spec review happens on the issue (not in the repo)
 
-Feature specs live in the **GitHub issue body** (between `<!-- spec:start -->` and `<!-- spec:end -->` markers), **not** in `docs/superpowers/` — that directory is gitignored and no longer holds committed specs/plans. The `issue-to-merged-pr` flow drafts the spec onto the issue, flags the team, then **stops** until a human org member approves it. Lanes are tracked by **labels** (the source of truth):
+New feature specs live in the **GitHub issue body** (between `<!-- spec:start -->` and `<!-- spec:end -->` markers) rather than as committed `docs/superpowers/` files. (Specs predating this convention still live in `docs/superpowers/`; they're being triaged into `docs/` or issues — see #660.) The `issue-to-merged-pr` flow drafts the spec onto the issue, flags the team, then **stops** until a human org member approves it. Lanes are tracked by **labels** (the source of truth):
 
 - `status:spec-draft` — agent is writing the spec into the issue body
 - `status:spec-review` — spec posted; awaiting approval (agent has exited)

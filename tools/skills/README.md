@@ -47,7 +47,7 @@ Carries a GitHub issue through to a merged PR with minimal human gating:
 brainstorm/spec/plan, implementation, PR, CI watch and fix loop,
 post-merge cleanup. Multi-invocation, GitHub-as-truth. See
 [issue-to-merged-pr/README.md](issue-to-merged-pr/README.md) and the
-[design doc](issue-to-merged-pr/design.md).
+[design doc](issue-to-merged-pr/references/design.md).
 
 ### codebase-indexing
 

@@ -11,10 +11,11 @@ review is async. There are **two** such gates — **spec review on the issue**
 plus CI. The user re-invokes the skill in a new session; the agent reads the
 issue + PR state and picks up the right phase.
 **No persistent on-disk workflow state — GitHub (labels + issue body + PR)
-holds the truth. Specs live in the issue body, not in `docs/superpowers/`.**
+holds the truth. New specs live in the issue body rather than as committed
+`docs/superpowers/` files.**
 
-The full design is in `tools/skills/issue-to-merged-pr/design.md`. This file
-is the executable recipe.
+The full design is in `tools/skills/issue-to-merged-pr/references/design.md`.
+This file is the executable recipe.
 
 ## Required plugin
 
@@ -125,11 +126,10 @@ When skipping, go straight to Implementation (claim `status:implementing`).
 Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
 invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
 
-- **Spec destination:** the spec does NOT go to a `docs/superpowers/` file.
-  Write it into the **issue body**, between `<!-- spec:start -->` and
-  `<!-- spec:end -->` markers, preserving the original problem statement above
-  them (`gh issue edit <N> --body-file`). No spec file is committed;
-  `docs/superpowers/` is gitignored.
+- **Spec destination:** write the spec into the **issue body**, between
+  `<!-- spec:start -->` and `<!-- spec:end -->` markers, preserving the original
+  problem statement above them (`gh issue edit <N> --body-file`). Don't create a
+  new committed `docs/superpowers/` spec file for this work.
 - **Spec-review dispatch:** when the brainstorming flow reaches "dispatch
   spec-document-reviewer," dispatch with the prompt at
   `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
