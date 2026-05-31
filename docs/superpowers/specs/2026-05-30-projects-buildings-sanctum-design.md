@@ -27,20 +27,78 @@ These principles govern every implementation decision downstream. When a mechani
 | **G. Asset/Companion system** | Framework noted, mostly deferred | Hook stub fires; full impl filed as issues |
 | **Critical Followup: Room Builder Tool** | Deferred to next phase after Sanctum | Required for full player experience |
 
-## Anti-Reinvention Pass (REQUIRED during implementation)
+## Anti-Reinvention Pass — Verification Results
 
-Per the project's `verify-against-code` skill — these MUST be verified against actual code before the implementation commits to a path. Docs (including this spec) are hints; existing code is the source of truth.
+Verified against actual code via parallel Explore agents on 2026-05-30. Findings here override docs and prior brainstorming assumptions.
 
-1. **`Covenant` model** — verify it exists, find its membership cap, find its active-member predicate, find how Path levels aggregate
-2. **Existing thread-weaving infrastructure** — verify how threads are currently modeled and what the per-PC thread cap mechanism is; determine whether `SanctumThread` extends an existing model or creates a new one
-3. **`Ritual` model** — verify how rituals are currently authored and how "requires sanctum owner" can be expressed (maybe via a ritual-meta extension, maybe via the existing `execution_kind` framework)
-4. **`Persona.path_level`** (or equivalent) — verify this field exists and represents what we think (the PC's level in their Path); the homecoming cap depends on it
-5. **`LocationOwnership` + `LocationTenancy` service helpers** — verify these cover the Sanctum permission gate cleanly (per the Explore agent's report, they should)
-6. **`RoomProfile.is_outdoor`** (or equivalent) — verify the outer-grid-room flag for site validation
-7. **`Area` extensibility** — verify whether ward-level permit flags can be added directly to `Area` or whether an extension model (`AreaPermitConfig` 1:1) is cleaner
-8. **`world.missions/` NPC interaction overlap** — figure out whether mission NPC interactions become a *consumer* of subsystem B or whether B *absorbs* what missions has
-9. **`ItemTemplate` / `ItemInstance`** patterns for the `BuildingPermit` kind
-10. **`ResonanceGrant` + `GainSource`** enum — add new enum values cleanly, add `source_sanctum` / `source_project` typed FKs without breaking existing grants
+### ✅ Confirmed (reuse directly)
+
+1. **`Area` is already tiered.** `world.areas.constants.AreaLevel` is an `IntegerChoices` with `BUILDING=10`, `NEIGHBORHOOD=20`, `WARD=30`, `CITY=40`, `REGION=50`. **Buildings ARE already an Area level** — we build a `BuildingProfile`-style OneToOne extension (mirroring `RoomProfile` at the Room level), not a "thin wrapper."
+2. **`RoomProfile.is_outdoor`** exists (`evennia_extensions/models.py:372-410`) — identifies outer-grid rooms.
+3. **`AreaClosure`** is a materialized view (`world/areas/models.py:68-91`) — ward-of-room queries via closure walk.
+4. **`world.locations.services` helpers** — all 9 exist with the signatures the spec assumes: `effective_owner`, `current_tenants`, `is_owner`, `is_tenant`, `transfer_ownership`, `grant_tenancy`, `end_tenancy`, `ownership_history_for`, `tenancy_history_for` (file `src/world/locations/services.py`).
+5. **`LocationOwnership` + `LocationTenancy`** with Persona|Organization holder + Area|Room target — exact discriminator pattern the spec assumes.
+6. **`DiscriminatorMixin`** at `src/core/mixins.py:12-98` with `_validate_discriminator()` API.
+7. **Cron infrastructure** — custom registry via `world.game_clock.tasks.register_all_tasks()` + `register_task(CronDefinition(task_key=..., callable=..., interval=...))` pattern. NOT Celery/Django-Q. Evennia `GameTickScript` runs due tasks every 5 minutes.
+8. **Decay/cleanup pattern** — `cleanup_decayed_modifiers` in `world/locations/services.py:915-943` wired via cron. Reusable shape for Sanctum/Building decay.
+9. **`ActionPointPool.spend(amount)`** at `world/action_points/models.py:86-395` for AP contributions.
+10. **`CurrencyBalance.gold`** at `world/items/models.py:541-562` for money contributions.
+11. **`CharacterXP.spend_xp(amount)`** at `world/progression/models/character_xp.py:56-62` — threads already use this pattern (`world/magic/services/threads.py:220-229`).
+12. **`Covenant`** at `world/covenants/models.py:25-65` exists with `level` field (Slice D placeholder).
+13. **`CharacterCovenantRole`** at `world/covenants/models.py:216-301` is the membership model with `engaged: bool` flag, `left_at` timestamp. Active membership query: `CharacterCovenantRole.objects.filter(covenant=cov, character_sheet=sheet, left_at__isnull=True).exists()`.
+14. **`Thread`** at `world/magic/models/threads.py:266-610` with per-PC active-thread constraints already enforced via partial unique constraints. `Thread.level` (0-30+ scale) represents strength. `TargetKind` discriminator already handles ROOM targeting via `target_object` FK.
+15. **`Ritual`** at `world/magic/models/rituals.py:49-210` with `execution_kind` dispatch (SERVICE/FLOW/SCENE_ACTION) and `author_account` for player-authored rituals.
+16. **`Resonance` model** (at `world/magic/models/affinity.py:53-106`) is a proper Django model with FK to `Affinity`, NOT TextChoices. Resonance types are queryable rows.
+17. **`ResonanceGrant`** at `world/magic/models/grant.py:21-158` with rigid discriminator-FK pattern (CheckConstraints enforce exactly one typed source FK per row).
+18. **`perform_check`** at `world/checks/services.py:28-100` supports trait modifiers, `extra_modifiers` injection (for contribution bonuses), and effort levels.
+19. **`LegendEntry` + `LegendDeedStory`** at `world/societies/models.py:719-943` with the API the spec assumes.
+20. **`Distinction`** at `world/distinctions/models.py` — exists, no asset-grant hook yet but extensible for subsystem G.
+21. **`ItemTemplate` + `ItemInstance` + `OwnershipEvent` + consumable pattern** — all exist in `world/items/models.py`. Consumable items use `is_consumable=True` + `max_charges=N` + `charges` decrement (items persist with `charges=0` after exhaustion, not deleted).
+22. **`MissionGiverStanding`** at `world/missions/models.py:1216-1268` is a perfect schema template for our `NPCStanding` — same shape (giver FK + character FK + affection int + cooldown). Generalize its scope for the new system; missions and our framework don't overlap on NPC interaction shape (missions are branching graphs; we're menu-driven immediate-resolution).
+
+### ⚠️ Spec corrections required
+
+1. **`Persona.path_level` does NOT exist.** Path level is on `CharacterClassLevel`, accessed via `get_character_path_level(character)` helper in `world/progression/services/skill_development.py:46-56`. **Ritual of Homecoming cap formula must use this helper**, traversing `persona → character_sheet → character`. Update Subsystem F service code accordingly.
+
+2. **`Ritual` has NO role-gating field.** "Requires X to lead" must be handled at **service-level validation** inside `perform_homecoming_ritual` and `perform_purging_ritual`, NOT as a model field on the existing `Ritual` table. No `Ritual` model migration needed. This is cleaner — Ritual stays generic; ritual-specific access rules live with the ritual-specific service.
+
+3. **`grant_resonance` signature is explicit-kwarg with typed source FKs**, not a generic source FK. Real signature in `world/magic/services/resonance.py:62-73`:
+   ```python
+   def grant_resonance(
+       character_sheet: CharacterSheet,
+       resonance: ResonanceModel,
+       amount: int,
+       *,
+       source: str,
+       pose_endorsement=None, scene_entry_endorsement=None,
+       room_profile=None, staff_account=None, outfit_item_facet=None,
+   ) -> CharacterResonance:
+   ```
+   Adding Sanctum support requires: (a) new `GainSource` enum values (`SANCTUM_WEAVING`, `SANCTUM_OWNER_BONUS`, `PROJECT_CONTRIBUTION`), (b) new typed FK fields on `ResonanceGrant` model (`source_sanctum_details`, `source_project`), (c) new `CheckConstraint` rows that enforce exactly-one-source per row, (d) new optional kwargs on `grant_resonance` to populate them. Real migration cost — not a no-op.
+
+4. **`OutcomeTier` pattern divergence.** Codebase uses `CheckOutcome` model rows with `success_level: int` (-10 to +10) at `world/traits/models.py:467-505`, NOT a 5-tier TextChoices enum. For projects, **choose**: (i) reuse `CheckOutcome` rows (more consistent, more extensible — recommended); OR (ii) define a separate 5-tier enum and document why (cleaner per-tier code dispatch, less query overhead). Spec previously assumed (ii); recommend switching to (i) during implementation unless there's a strong reason otherwise.
+
+5. **Achievements use `StatDefinition` + `StatTracker`**, NOT `FactStat`. API: `character_sheet.stats.increment(stat_def, 1)` (`world/achievements/models.py:21-89`). Project contribution aggregation creates a new `StatDefinition(key="projects.total_contributed")` row and increments via the existing handler. Spec previously called this `FactStat` — fix in implementation.
+
+6. **Items extend via FK rows (`ItemFacet` pattern), not per-kind subclasses.** `BuildingPermitDetails` should be `OneToOneField(ItemInstance, on_delete=CASCADE)` — mirrors `ItemFacet`'s composition style at `world/items/models.py:564-608`. Permit-specific fields hang off `BuildingPermitDetails`, queryable by `permit.item_instance.permit_details`.
+
+7. **`ItemInstance.owner` is FK to `AccountDB`** (not Persona) at `world/items/models.py:346-352`. "Who owns this permit" queries are Account-level. Permission gates that need persona-level identity must traverse `account → roster → active_persona` or similar — implementation pass figures out the cleanest pattern.
+
+8. **No generic `use_item()` action exists.** Need to **build `ActivatePermitAction`** in `src/actions/definitions/items.py` (subclass `Action`, key `"activate_permit"`, `execute()` method dispatches to permit-activation service) + register in `actions/registry.py`. Reference existing pattern: `EquipAction` at `src/actions/definitions/items.py:20-64`. Add to Subsystem C's today's-scope deliverables.
+
+9. **No item-as-permission pattern exists.** Need to **build `PermitRequired` prerequisite** in `src/actions/prerequisites.py` (or wire validation directly into the construction-wizard submission service — simpler). Add to Subsystem C's today's-scope deliverables.
+
+10. **`Covenant.level` is placeholder for Slice D.** Cap formula for Covenant `base_resonance` cannot use `covenant.level` directly until Slice D ships. **Interim formula**: `cap = sum(get_character_path_level(member.character_sheet.character) for member in active_members) * 10`, OR a fixed-per-covenant-size formula. Lock in during implementation; the formula is a tunable knob in the spec.
+
+11. **Item activation needs `OwnershipEventType` extension** — current enum values are `CREATED`/`GIVEN`/`STOLEN`/`TRANSFERRED`. Adding `ACTIVATED` and `CONSUMED` requires migration to `OwnershipEventType` choices (or use the `notes` field for activation metadata — less queryable but no migration).
+
+### ❌ Confirmed must-build (no existing duplication)
+
+1. **Project framework** (Subsystem A) — entirely new. Nothing in the codebase resembles "delayed multi-tick contribution-pooling endeavor with outcome rolls." Missions are different (authored branching content).
+2. **Ward permit rules / `WardBuildingRule`** (Subsystem C) — no existing ward-flag mechanism. Building permits cannot extend an existing model; the ward-policy infrastructure is genuinely new.
+3. **`Building` (as Area+Profile pattern)** (Subsystem D) — no `Building`/`Construction`/`Property`/`Estate`/`Manor`/`Holding` model exists. `Property` in `world/mechanics/models.py` is mechanical-modifier properties, NOT buildings.
+4. **`FunctionaryRole` + `FunctionaryServiceOption`** (Subsystem B) — missions are branching graphs, not menu-driven immediate-resolution. The frameworks are distinct.
+5. **`ActivatePermitAction` + `PermitRequired` prerequisite** (Subsystem C) — see corrections 8 + 9 above.
 
 ---
 
@@ -128,14 +186,25 @@ The exact authoring shape for per-tier effects (effect rows like `ConsequenceEff
 
 ### Integration with Existing Systems
 
-- `ResonanceGrant` (already in `magic.services.gain`) — add `GainSource.PROJECT_CONTRIBUTION` enum value + typed FK to source `Project`. Contributions to projects with a resonance set emit grants.
+- `ResonanceGrant` (in `world.magic.services.resonance.grant_resonance`) — add `GainSource.PROJECT_CONTRIBUTION` enum value + new typed FK `source_project` on `ResonanceGrant` model + new `CheckConstraint` enforcing exactly-one-source + new optional kwarg on `grant_resonance`. Contributions to projects with a resonance set emit grants.
 - `LegendEntry` + `LegendDeedStory` — same pattern as missions. Project completion with legend-worthy outcomes lets contributors author entries.
-- `FactStat` (achievements) — aggregate "total AP contributed to projects," "projects completed at CRITICAL," etc. become natural achievement stats.
-- `perform_check` — check contributions are stock perform_check calls.
+- **`StatDefinition` + `StatTracker`** (achievements, at `world/achievements/models.py:21-89`) — aggregate "total AP contributed to projects," "projects completed at CRITICAL," etc. become natural achievement stats via `character_sheet.stats.increment(stat_def, 1)`. Seed `StatDefinition` rows like `key="projects.total_contributed"`, `key="projects.completed_critical"`, etc. (Spec previously referenced "FactStat" — the actual model is `StatDefinition`/`StatTracker`.)
+- `perform_check` — check contributions are stock `perform_check` calls. The owner's weighted resolution roll uses `extra_modifiers` to inject cumulative contribution bonuses.
+
+### Outcome Tier Model Choice
+
+Codebase uses `CheckOutcome` model rows with `success_level: int` (-10 to +10) at `world/traits/models.py:467-505`, NOT a 5-tier TextChoices enum. For Project outcomes:
+
+- **Recommended (i):** Reuse `CheckOutcome` model rows — define new outcome rows like `CheckOutcome(name="Project Catastrophic", success_level=-2)` ... `CheckOutcome(name="Project Critical", success_level=2)`. More consistent with the codebase's open-ended pattern; per-kind tier mapping uses `success_level` for ordering.
+- **Alternative (ii):** Define a separate `ProjectOutcomeTier` TextChoices enum with the 5-tier vocabulary (CATASTROPHIC/FAILED/PARTIAL/SUCCESS/CRITICAL). Cleaner per-tier dispatch, less query overhead, but diverges from the codebase pattern.
+
+Implementation should default to **(i)** unless there's a strong reason otherwise — document the choice during implementation. Spec text below uses the 5-tier names as conceptual labels; the actual representation is the implementer's call.
 
 ### Today's Scope
 
-Build the `Project` base model, the `Contribution` table, the cron lifecycle (supporting both `completion_mode`s from day one), the outcome-tier discriminator, AND the `BuildingConstructionDetails` + `RoomFeatureProgressionDetails` per-kind models. Other kinds get filed as issues — each ships its own per-kind details model + service hook when implemented.
+Build the `Project` base model, the `Contribution` table, the cron lifecycle (supporting both `completion_mode`s from day one), the outcome-tier representation (per "Outcome Tier Model Choice" above), AND the `BuildingConstructionDetails` + `RoomFeatureProgressionDetails` per-kind models. Other kinds get filed as issues — each ships its own per-kind details model + service hook when implemented.
+
+**Cron task registration:** Register the Project cron-tick scanner via `register_task(CronDefinition(task_key="projects.lifecycle_tick", callable=scan_active_projects, interval=...))` in `world.game_clock.tasks.register_all_tasks()`. Reuse the existing cron-registration pattern (no new scheduler infrastructure needed).
 
 ### Open Detail-Level Decisions
 
@@ -181,6 +250,8 @@ A reusable framework for *immediate menu-driven atomic interactions* with NPCs. 
 - `last_interaction_summary` (text — free-text summary of last meaningful interaction)
 
 **Class-1 nameless functionaries have *no row here*** — every interaction starts fresh, nothing to remember.
+
+**Schema template reuse:** `MissionGiverStanding` at `world/missions/models.py:1216-1268` is a near-identical schema (giver FK + character FK + affection int + cooldown). The implementation pass should use it as the structural template for `NPCStanding` — same shape, just generalized scope (not mission-specific). Missions' branching-graph interaction pattern doesn't overlap with our menu-driven framework, so the two systems are distinct *consumers* of a similar standing data shape.
 
 **Interaction state** is ephemeral and session-scoped — kept in the player's session/UI state for the duration of one menu interaction. Not persisted. When the player picks a final action, that action resolves and any persistent effects are committed.
 
@@ -299,17 +370,22 @@ Filed as issue if the global inactivity-rules system needs updates to feed this 
 
 ### Integration with Existing Systems
 
-- `ItemTemplate` / `ItemInstance` / `OwnershipEvent` (already in `world.items`) — the permit is just a new `ItemKind`. Inventory, ownership transfer, audit trail all reuse existing item infrastructure.
-- `world.locations.services` — site validation uses `effective_owner(room)` and ward-cascade helpers to determine the ward of the activation point.
+- `ItemTemplate` / `ItemInstance` / `OwnershipEvent` (already in `world.items`) — the permit is a new `ItemTemplate` row + a per-permit-instance details model (`BuildingPermitDetails` with `OneToOneField(ItemInstance)` — mirrors `ItemFacet` composition pattern at `world/items/models.py:564-608`, NOT per-kind subclasses).
+- Consumable pattern: permit's `ItemTemplate` sets `is_consumable=True`, `max_charges=1`; activation decrements `charges` to 0 (item persists, not deleted).
+- `ItemInstance.owner` is FK to `AccountDB`, not Persona — "who owns this permit" queries are Account-level. When checking persona-level identity for activation, traverse `account → active_persona` (implementation determines cleanest path).
+- `OwnershipEvent` — adding `ACTIVATED` and `CONSUMED` to `OwnershipEventType` choices requires a migration. Alternative: use the existing `notes` field for activation metadata. Implementation choice; lean toward extending the enum for queryability.
+- `world.locations.services` — site validation uses `effective_owner(room)` and ward-cascade helpers (via `AreaClosure`) to determine the ward of the activation point.
 - Subsystem B's `FunctionaryServiceOption.effect_spec` — the "issue permit" effect calls a service that creates the `ItemInstance` with negotiated parameters.
 
 ### Today's Scope
 
-- Add ward-level permit flags to the existing area/ward model
-- Build `BuildingPermit` `ItemTemplate` + `BuildingPermitDetails`
+- Add ward-level permit flags to the existing area/ward model (new `WardBuildingRule` 1:1 to `Area` or fields directly on `Area` — implementation decides)
+- Build `BuildingPermit` `ItemTemplate` (single row) + `BuildingPermitDetails` model (`OneToOneField(ItemInstance)`)
 - Implement `validate_permit_site` service function
-- Implement permit-activation flow (use item → site validation → opens construction wizard)
+- **Build `ActivatePermitAction`** in `src/actions/definitions/items.py` (subclass `Action`, key `"activate_permit"`, dispatches to permit-activation service) + register in `actions/registry.py`. Reference existing pattern: `EquipAction` at `src/actions/definitions/items.py:20-64`.
+- **Build `PermitRequired` prerequisite** in `src/actions/prerequisites.py` OR wire validation directly into the construction-wizard submission service (latter is simpler; lean toward it unless the permission check needs to surface in multiple action contexts)
 - Builders Guild Clerk's permit-issuance options live in subsystem B; per-option effect specs that create permit `ItemInstance`s are wired here
+- Extend `OwnershipEventType` enum with `ACTIVATED`, `CONSUMED` values (migration)
 - **Seed at least one ward in an existing test/dev city with each permit-eligibility flag** so the slice is testable end-to-end
 
 ### Filed Issues (Deferred)
@@ -336,14 +412,16 @@ Spawn and manage Buildings as the persistent grid result of completed `BUILDING_
 
 ### Data Layer
 
-**`Building`** lives as a thin wrapper around an existing `Area` (the locations hierarchy already has `Room → Building → Neighborhood → Ward → City → Region`; "Building" is an Area-tier in that hierarchy, not a brand-new model). Fields:
+**`Building` is implemented as a `BuildingProfile` model with `OneToOneField(Area)`** — mirroring how `RoomProfile` extends the room-level `ObjectDB`. The locations hierarchy already defines `AreaLevel.BUILDING = 10` (verified at `world/areas/constants.py:4-13`), so Buildings ARE already an Area level — no new tier definition needed. `BuildingProfile` carries the building-specific metadata that's not part of generic `Area`. Fields:
 
-- `area` OneToOne to the underlying `Area` row
+- `area` OneToOneField (the underlying `Area` row with `level=AreaLevel.BUILDING`)
 - `kind` FK to `BuildingKind`
 - `scope` (IntegerChoices 1-5)
-- `linked_outer_grid_room` FK (the outer-grid room from which entry exits lead in)
+- `linked_outer_grid_room` FK (the outer-grid room from which entry exits lead in — must have `is_outdoor=True` on its `RoomProfile`)
 - `constructed_at` (datetime)
 - `decayed_state` — TextChoices (`ACTIVE`, `DECAYED`, `HIDDEN`)
+
+Building-as-Area + BuildingProfile-extension pattern means: `LocationOwnership` rows naturally point at the Building's `Area` (no special-casing); `AreaClosure` naturally cascades from rooms-inside-building up through ward/city; `locations.services` helpers (`is_owner`, `current_tenants`, etc.) work without modification.
 
 **`BuildingKind`** — hybrid declarative + service-hook. Fields:
 
@@ -360,9 +438,9 @@ Spawn and manage Buildings as the persistent grid result of completed `BUILDING_
 - `default_room_count` (int)
 - `cost_multiplier` (decimal)
 
-**`BuildingManager`** — m2m through-model between `Building` and `Persona`. Multiple managers per building allowed (permission tier). Fields:
+**`BuildingManager`** — m2m through-model between `BuildingProfile` and `Persona`. Multiple managers per building allowed (permission tier). Fields:
 
-- `building` FK
+- `building_profile` FK
 - `persona` FK
 - `granted_by_persona` FK (audit)
 - `granted_at` (datetime)
@@ -435,13 +513,13 @@ The Sanctum MVP can ship without Room Builder Tool because Sanctum installation 
 
 ### Today's Scope
 
-- `Building`, `BuildingKind`, `BuildingKindScopeConfig`, `BuildingManager` models
+- `BuildingProfile`, `BuildingKind`, `BuildingKindScopeConfig`, `BuildingManager` models
 - House `BuildingKind` row with scope configs for tiers 1-5 (labels, room counts, cost multipliers)
 - `BuildingConstructionDetails` Project payload model with `BUILDING_CONSTRUCTION` kind enum value
 - Construction wizard UI (React)
 - Room-generation service function (`GENERIC` strategy)
-- Construction completion handler that materializes Building + Rooms + `LocationOwnership` + `BuildingManager` + entry exit
-- `decayed_state` field on Building but **no decay machinery built** — that hooks into the broader inactivity system when it exists
+- Construction completion handler that materializes Area (with `level=AreaLevel.BUILDING`) + BuildingProfile + Rooms + `LocationOwnership` + `BuildingManager` + entry exit
+- `decayed_state` field on `BuildingProfile` but **no decay machinery built today** — when broader inactivity-cleanup work happens, hook into the existing `register_task(CronDefinition(...))` pattern in `world.game_clock.tasks` (mirrors `cleanup_decayed_modifiers` at `world/locations/services.py:915-943`)
 
 ### Filed Issues (Deferred)
 
@@ -624,35 +702,35 @@ Org Sanctums are members-only (no non-member helper weavings).
 
 `world.magic.sanctum.services.perform_homecoming_ritual(sanctum, leader_persona, resonance_sacrificed, narrative_text)`:
 
-1. Validate leader is a manager (Personal) or designated covenant manager (Covenant).
+1. **Validate leader is a manager (Personal) or designated covenant manager (Covenant)** — this gate lives in service-level validation, NOT as a `Ritual` model field. The Ritual model has no role-gating field today (verified); adding one would require a migration to a generic model used by many systems. Service-level validation is cleaner.
 2. Validate `resonance_sacrificed` doesn't exceed leader's personal resonance pool.
 3. Compute `base_resonance_gained = resonance_sacrificed / 100` (100:1 efficiency).
 4. Compute current cap:
-   - **Personal:** `cap = owner_persona.path_level * 10`
-   - **Covenant:** anti-reinvention pass identifies the appropriate aggregate (likely something like `sum(member.path_level for member in active_members) * 10` or a covenant-level Path equivalent — deferred to spec writing once covenant model is verified)
+   - **Personal:** `cap = get_character_path_level(owner_persona.character_sheet.character) * 10` — uses the existing helper at `world/progression/services/skill_development.py:46-56`. `Persona.path_level` does NOT exist; the value lives on `CharacterClassLevel` and is retrieved via this traversal.
+   - **Covenant:** interim formula `cap = sum(get_character_path_level(member.character_sheet.character) for member in active_members) * 10`, where `active_members` are `CharacterCovenantRole` rows with `left_at IS NULL`. (Final formula likely shifts to use `Covenant.level` once Slice D's Covenant level-up work ships — `Covenant.level` is a placeholder today per the model's own docstring.)
 5. Apply gain up to cap; any overflow goes to `pending_sacrifice_overflow` (held in escrow until cap rises).
 6. Deduct `resonance_sacrificed` from leader's personal pool.
 7. Update `last_homecoming_ritual_at`.
-8. Emit a `LegendDeedStory`-style entry capturing the `narrative_text` the player wrote.
+8. Emit a `LegendDeedStory`-style entry capturing the `narrative_text` the player wrote (use `world.societies.LegendEntry` + `LegendDeedStory` per `world/societies/models.py:719-943`).
 9. Periodic check (on next cron tick or owner level-up event): if `pending_sacrifice_overflow > 0` AND current cap > current `base_resonance + overflow_to_absorb`, absorb overflow up to new cap. Surfaces as a notification.
 
 ### Service: Purging Ritual
 
 `world.magic.sanctum.services.perform_purging_ritual(sanctum, leader_persona, new_resonance_type, resonance_sacrificed)`:
 
-1. Validate leader is a manager (Personal) or designated covenant manager (Covenant).
-2. Validate this is a *different* resonance type from current (no-op purges rejected).
+1. **Service-level validation:** leader is a manager (Personal) or designated covenant manager (Covenant). Same pattern as Homecoming — no `Ritual` model field for role-gating.
+2. Validate this is a *different* `Resonance` row from current (no-op purges rejected).
 3. Cost is steep — `resonance_sacrificed >= sanctum.base_resonance * some_multiplier` (initial value 1×, tunable). Purging requires re-consecrating the entire imbued resonance.
 4. Validate cost is paid (from leader's personal pool).
-5. Atomically: change `resonance_type` to `new_resonance_type`; **all `SanctumThread` rows attached to this Sanctum have their effective resonance type recomputed** (the thread adopts the room's new type).
+5. Atomically: change `resonance_type` FK to `new_resonance_type` (a `Resonance` model row, not an enum); **all `SanctumThread` rows attached to this Sanctum have their effective resonance type recomputed** (the thread adopts the room's new type — implementation either denormalizes or always reads from `sanctum.resonance_type` lazily).
 6. Drain some fraction of `base_resonance` (purging is destructive — initial value: 50% retained, tunable).
 7. Update `last_purging_ritual_at`.
-8. Emit Legend entries for the leader AND all woven thread holders.
+8. Emit `LegendEntry` rows for the leader AND all woven thread holders.
 9. Broadcast a system notification to all woven thread holders ("Your thread in [Sanctum] has been re-consecrated to [new type]").
 
 ### Resonance Generation Cron Tick
 
-A scheduled task per cron tick (frequency tunable — likely hourly or per-IC-day) iterates `RoomFeatureInstance` rows where `feature_kind=SANCTUM`:
+A scheduled task registered via `register_task(CronDefinition(task_key="sanctum.resonance_generation_tick", callable=..., interval=...))` in `world.game_clock.tasks.register_all_tasks()`. Frequency tunable — likely per-IC-day or every few hours. Iterates `RoomFeatureInstance` rows where `feature_kind=SANCTUM`:
 
 ```python
 LEVEL_MULTIPLIERS = [1.0, 1.5, 2.0, 3.0, 6.0]  # index = level - 1
@@ -666,42 +744,57 @@ for sanctum in active_sanctums:
     if not threads:
         continue  # no income paid if no one woven
 
-    # Independent draw per weaver
+    # Independent draw per weaver — grant_resonance is explicit-kwarg
     for thread in threads:
         income = thread.thread_strength * pool_per_thread
         grant_resonance(
-            target=thread.weaver_persona,
-            amount=income,
-            resonance_type=sanctum.resonance_type,
+            character_sheet=thread.weaver_persona.character_sheet,
+            resonance=sanctum.resonance_type,  # actual Resonance row, not enum
+            amount=int(income),
             source=GainSource.SANCTUM_WEAVING,
-            source_sanctum=sanctum,
+            source_sanctum_details=sanctum,  # new typed FK on ResonanceGrant
         )
 
     # Owner bonus
     if sanctum.owner_mode == PERSONAL:
+        manager_personas = {bm.persona_id for bm in sanctum.building_profile.managers.all()}
         bonus_recipients = [
             t.weaver_persona for t in threads
-            if t.weaver_persona in sanctum.building.managers
+            if t.weaver_persona_id in manager_personas
         ]
     else:  # COVENANT
+        covenant = sanctum.building_profile.owning_covenant  # resolved from LocationOwnership
+        active_member_ids = set(
+            CharacterCovenantRole.objects.filter(
+                covenant=covenant, left_at__isnull=True
+            ).values_list("character_sheet__persona__id", flat=True)
+        )
         bonus_recipients = [
             t.weaver_persona for t in threads
-            if covenant.is_active_member(t.weaver_persona)
+            if t.weaver_persona_id in active_member_ids
         ]
 
     other_threads_count = len(threads) - 1
     for recipient in bonus_recipients:
         # +1 per other thread (not counting their own)
         grant_resonance(
-            target=recipient,
+            character_sheet=recipient.character_sheet,
+            resonance=sanctum.resonance_type,
             amount=other_threads_count,
-            resonance_type=sanctum.resonance_type,
             source=GainSource.SANCTUM_OWNER_BONUS,
-            source_sanctum=sanctum,
+            source_sanctum_details=sanctum,
         )
 ```
 
 Level multipliers and `K` are tunable. The shape is locked.
+
+**Required schema changes to `ResonanceGrant` (in `world/magic/models/grant.py`) to make the above work:**
+
+- Add `source_sanctum_details = ForeignKey(SanctumDetails, null=True, blank=True, ...)`
+- Add `source_project = ForeignKey(Project, null=True, blank=True, ...)`
+- Add new `CheckConstraint` rows enforcing exactly-one-source per row (mirrors existing constraints at `grant.py:88-154`)
+- Add `GainSource` enum values: `SANCTUM_WEAVING`, `SANCTUM_OWNER_BONUS`, `PROJECT_CONTRIBUTION` (in `world/magic/constants.py:130-138`)
+- Add corresponding optional kwargs (`source_sanctum_details=None`, `source_project=None`) to `grant_resonance` at `world/magic/services/resonance.py:62-73`
 
 ### Thread Weaving and Slot Enforcement
 
@@ -728,14 +821,15 @@ Level multipliers and `K` are tunable. The shape is locked.
 
 The deferred `Spec D` ROOM thread anchor cap: **ROOM thread anchor cap = Sanctum level (for Personal) or unlimited subject to covenant membership (for Covenant); 0 if no Sanctum installed.** Rooms without a Sanctum simply aren't thread-anchorable. #511 closes when this spec ships — the formula IS Sanctum-the-feature.
 
-### Integration with Existing Systems (REQUIRES Anti-Reinvention Pass)
+### Integration with Existing Systems (Verified)
 
-- **`Covenant` model** — verify it exists, find its membership cap, find its active-member predicate, find how Path levels aggregate
-- **Existing thread-weaving infrastructure** — verify how threads are currently modeled and what the per-PC thread cap mechanism is
-- **`Ritual` model** — verify how rituals are currently authored and how "requires sanctum owner" can be expressed
-- **`ResonanceGrant`** + `magic.services.gain.grant_resonance` — add `GainSource.SANCTUM_WEAVING` and `SANCTUM_OWNER_BONUS` enum values; add `source_sanctum` typed FK
-- **`Persona.path_level`** (or equivalent) — verify this field exists and represents the PC's level in their Path
-- **`LegendEntry` / `LegendDeedStory`** — used for the homecoming personalization narratives and purging notifications
+- **`Covenant`** at `world/covenants/models.py:25-65` — exists with `level` field (currently a Slice D placeholder). Active membership via `CharacterCovenantRole` (`covenants/models.py:216-301`) — query: `CharacterCovenantRole.objects.filter(covenant=cov, character_sheet=sheet, left_at__isnull=True).exists()`. The `engaged` boolean flag marks the "fulfilling" role.
+- **`Thread`** at `world/magic/models/threads.py:266-610` — `Thread.level` represents strength; `target_kind` discriminator handles ROOM via `target_object` FK; per-PC active-thread uniqueness already enforced via partial unique constraints. Decide during implementation whether `SanctumThread` extends `Thread` (with a new `target_kind=SANCTUM` value + new `target_sanctum_details` FK) or is a separate join table — lean toward extending `Thread` for consistency with existing thread targeting.
+- **`Ritual`** at `world/magic/models/rituals.py:49-210` — Ritual of Homecoming + Purging Ritual ship as `Ritual` rows with `execution_kind=SERVICE` and `service_function_path` pointing at the Sanctum service functions. No model migration needed; **role-gating is service-level validation**, not a Ritual field.
+- **`ResonanceGrant`** + `grant_resonance` — see "Required schema changes to ResonanceGrant" block above. Adding `source_sanctum_details` + `source_project` typed FKs + new `GainSource` enum values + new `CheckConstraint` rows + new kwargs.
+- **Path level access** via `get_character_path_level(character)` helper at `world/progression/services/skill_development.py:46-56`. `Persona.path_level` does NOT exist; traverse `persona → character_sheet → character` and call the helper.
+- **`LegendEntry` / `LegendDeedStory`** at `world/societies/models.py:719-943` — used as the spec assumed.
+- **`Resonance` + `Affinity`** model rows at `world/magic/models/affinity.py:53-106` — `SanctumDetails.resonance_type` is FK to `Resonance`, not a TextChoices enum. UI populates the resonance picker from `Resonance.objects.all()` (possibly filtered by what's narratively appropriate).
 
 ### Today's Scope (the Sanctum MVP)
 
@@ -891,31 +985,40 @@ When this spec is approved, the following get filed as GitHub issues. Organized 
 
 - `Project` + `Contribution` + `ProjectKind` enum (subsystem A)
 - `BuildingConstructionDetails`, `RoomFeatureProgressionDetails` (subsystem A per-kind payloads)
+- Outcome-tier representation per "Outcome Tier Model Choice" in Subsystem A — likely new `CheckOutcome` rows or a new `ProjectOutcomeTier` enum (implementation chooses)
 - `BuildingKind` + `BuildingKindScopeConfig` + House row (subsystem D)
-- `Building` (thin wrapper over `Area`) + `BuildingManager` through-model (subsystem D)
-- Ward-level permit flags added to existing `Area` / area-extension model (subsystem C)
-- `BuildingPermit` `ItemTemplate` kind + `BuildingPermitDetails` (subsystem C)
-- `FunctionaryRole` + `FunctionaryServiceOption` + `OptionRequirement` + `NPCStanding` (subsystem B)
+- `BuildingProfile` (OneToOneField to `Area` with `level=AreaLevel.BUILDING`) + `BuildingManager` through-model (subsystem D)
+- Ward-level permit flags (new `WardBuildingRule` 1:1 to `Area`, or fields directly on `Area` — implementation decides) (subsystem C)
+- `BuildingPermit` `ItemTemplate` row (single row, not a kind subclass) + `BuildingPermitDetails` (`OneToOneField(ItemInstance)`) (subsystem C)
+- Extend `OwnershipEventType` enum with `ACTIVATED`, `CONSUMED` values (subsystem C migration)
+- `FunctionaryRole` + `FunctionaryServiceOption` + `OptionRequirement` + `NPCStanding` (subsystem B; `NPCStanding` schema mirrors `MissionGiverStanding` at `world/missions/models.py:1216-1268`)
 - Builders Guild Clerk `FunctionaryRole` row + permit-issuance option rows (B + C wiring)
 - `RoomFeatureKind` + `RoomFeatureInstance` (subsystem E)
 - Sanctum `RoomFeatureKind` row (E + F wiring)
-- `SanctumDetails` + `SanctumThread` (subsystem F)
-- Ritual of Homecoming + Purging Ritual `Ritual` rows (subsystem F)
-- `GainSource.SANCTUM_WEAVING`, `GainSource.SANCTUM_OWNER_BONUS`, `GainSource.PROJECT_CONTRIBUTION` enum values + `source_sanctum` / `source_project` typed FKs added to `ResonanceGrant` (cross-cut)
+- `SanctumDetails` + `SanctumThread` (subsystem F; consider extending existing `Thread` model with new `target_kind=SANCTUM` + `target_sanctum_details` FK)
+- Ritual of Homecoming + Purging Ritual `Ritual` rows (subsystem F; `execution_kind=SERVICE` + `service_function_path` pointing at the Sanctum services)
+- **`ResonanceGrant` extensions:** add `source_sanctum_details` + `source_project` typed FKs, add `GainSource` enum values `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `PROJECT_CONTRIBUTION`, add `CheckConstraint` rows enforcing exactly-one-source (cross-cut)
+- **`StatDefinition` seed rows:** `projects.total_contributed`, `projects.completed_critical`, `sanctums.owned`, `sanctums.helper_threads_woven` (and others as desired) — uses `world/achievements/models.py` infrastructure
 
 **Service functions:**
 
-- Project cron-tick scanner + lifecycle resolver (subsystem A)
+- Project cron-tick scanner + lifecycle resolver (subsystem A) — **registered via `register_task(CronDefinition(task_key="projects.lifecycle_tick", ...))` in `world.game_clock.tasks.register_all_tasks()`**
 - Per-kind outcome handlers for `BUILDING_CONSTRUCTION` and `ROOM_FEATURE_PROGRESSION`
 - `validate_permit_site` (subsystem C)
 - Construction wizard submission service (subsystem D)
 - Room generation service (`GENERIC` strategy — linear chain placeholder)
 - Sanctum progression handler (`world.magic.sanctum.services.handle_progression`)
-- Ritual of Homecoming service (`perform_homecoming_ritual`)
+- Ritual of Homecoming service (`perform_homecoming_ritual`) — uses `get_character_path_level(persona.character_sheet.character)` for cap
 - Purging Ritual service (`perform_purging_ritual`)
-- Sanctum resonance generation cron tick
+- Sanctum resonance generation cron tick — **registered via `register_task(CronDefinition(task_key="sanctum.resonance_generation_tick", ...))`** alongside the Project tick
 - Thread weave / sever services with slot enforcement
+- Extended `grant_resonance` with new optional kwargs (`source_sanctum_details=None`, `source_project=None`)
 - Stubs for all other Project kinds, FunctionaryRoles, RoomFeatureKinds (raise `NotImplementedError` so dispatcher exists but doesn't accidentally succeed)
+
+**Actions / prerequisites:**
+
+- **`ActivatePermitAction`** in `src/actions/definitions/items.py` (subclass `Action`, key `"activate_permit"`, `execute()` dispatches to permit-activation service) — registered in `actions/registry.py`. Reference: `EquipAction` at `src/actions/definitions/items.py:20-64`.
+- Permit-required validation in construction-wizard submission service (simpler than a generic `PermitRequired` prerequisite; can be promoted to a prerequisite later if other actions need permit-gating)
 
 **UI (React, frontend):**
 
@@ -964,5 +1067,41 @@ When this spec is approved, the following get filed as GitHub issues. Organized 
 These were called out during brainstorming as worth revisiting:
 
 1. **Cosmetic-vs-structural split in Room Builder Tool** (Section: Subsystem D, Critical Followup) — revisit when designing Room Builder Tool, not now.
-2. **Covenant `base_resonance` cap formula** — pick exact formula once `Covenant` model is verified during anti-reinvention pass.
+2. **Covenant `base_resonance` cap formula** — interim formula provided (sum of active members' Path levels × 10); revisit once `Covenant.level` work in Slice D ships and the proper Covenant-level expression is available.
 3. **Tuning numbers** (level multipliers, `K` constant, Purging Ritual cost multiplier, retention fraction, cron tick frequency) — initial values provided; balance pass during implementation.
+4. **`OutcomeTier` representation choice** — reuse `CheckOutcome` model rows (more consistent with codebase) vs separate `ProjectOutcomeTier` TextChoices enum (cleaner per-tier dispatch). Recommendation: `CheckOutcome` rows. Implementation pass picks final.
+5. **`SanctumThread` model strategy** — extend existing `Thread` with new `TargetKind.SANCTUM` + new typed FK, OR create a separate join model. Recommendation: extend `Thread` for consistency. Implementation pass picks final.
+
+---
+
+## Verification Findings (Post-Brainstorm Anti-Reinvention Audit)
+
+This spec was revised after the brainstorming session via parallel Explore-agent verification against the actual codebase. The "Anti-Reinvention Pass — Verification Results" section near the top reflects those findings in detail. Summary of changes from the initial draft:
+
+**Reuse confirmed (no spec changes needed beyond explicit references):**
+
+- `Area`/`AreaLevel.BUILDING`, `RoomProfile.is_outdoor`, `AreaClosure`, all 9 `locations.services` helpers, `DiscriminatorMixin`, cron infrastructure (`world.game_clock.tasks`), decay pattern, `ActionPointPool`, `CurrencyBalance`, `CharacterXP.spend_xp`, `Covenant` + `CharacterCovenantRole`, `Thread`, `Ritual` (with `execution_kind` dispatch), `Resonance` + `Affinity` (model rows, not enums), `ResonanceGrant` (with rigid discriminator pattern), `perform_check`, `LegendEntry`/`LegendDeedStory`, `Distinction`, `ItemTemplate`/`ItemInstance`/`OwnershipEvent`/consumable pattern (`is_consumable`+`max_charges`+`charges`), `MissionGiverStanding` (schema template for `NPCStanding`).
+
+**Corrections folded into the spec:**
+
+1. `Persona.path_level` doesn't exist → use `get_character_path_level(character)` helper, traversing `persona → character_sheet → character`
+2. `Ritual` has no role-gating field → handle Sanctum-owner gating at service-level validation, not as a Ritual model field
+3. `grant_resonance` is explicit-kwarg signature → adding Sanctum support requires new typed FKs on `ResonanceGrant`, new `GainSource` enum values, new `CheckConstraint` rows, new optional kwargs
+4. Codebase uses `CheckOutcome` model rows (open-ended `success_level: int`) instead of fixed-tier enums → spec offers two paths; recommendation is to reuse `CheckOutcome` rows
+5. Achievements use `StatDefinition` + `StatTracker` (not `FactStat`) → reference corrected throughout
+6. `BuildingPermitDetails` is `OneToOneField(ItemInstance)` mirroring `ItemFacet` composition, NOT a per-kind subclass
+7. `ItemInstance.owner` is FK to `AccountDB` (not Persona) → permission gates traverse `account → active_persona` for persona-level identity
+8. `Building` IS already an `Area` level (`AreaLevel.BUILDING = 10`) → spec uses `BuildingProfile` OneToOne extension, mirroring `RoomProfile`, NOT a "thin wrapper" model
+9. No generic `use_item()` action exists → add `ActivatePermitAction` to Subsystem C deliverables
+10. No item-as-permission prerequisite pattern exists → wire validation directly into construction-wizard submission service (simpler than building generic `PermitRequired` prerequisite)
+11. `OwnershipEventType` enum needs `ACTIVATED` + `CONSUMED` values for permit activation auditability
+12. `Covenant.level` is Slice D placeholder → use interim cap formula (sum of active members' Path levels × 10) until Slice D ships
+
+**No-existing-duplication confirmed (clear to build new):**
+
+- Project framework (entirely new)
+- Ward permit rules (`WardBuildingRule` or equivalent — entirely new)
+- `BuildingProfile` model (no existing Building/Construction/Property/Estate model)
+- `FunctionaryRole` + `FunctionaryServiceOption` (missions use branching graphs, not menu-driven immediate-resolution)
+- `ActivatePermitAction` + permit-activation service
+- New ResonanceGrant `source_*` typed FKs (cross-cut migration)
