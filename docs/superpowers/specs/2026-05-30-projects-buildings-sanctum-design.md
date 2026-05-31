@@ -666,19 +666,32 @@ Ship the first `RoomFeatureKind` end-to-end: a magical home (Personal) or sacred
 
 **Sanctum ownership is narrower than Building ownership in general.** A Building can be owned by Persona OR any Organization. But to install a Sanctum into one of its rooms, the building's owner must be **Persona OR Covenant specifically** — not any other org type. This constraint lives on the Sanctum `RoomFeatureKind` row as `required_building_owner_types=[PERSONA, COVENANT]`.
 
-**Architectural gap — Covenant ownership of Buildings.** Verified during coherence pass: `Covenant` (at `world/covenants/models.py:25`) is NOT a `societies.Organization` — they're separate models with no FK relationship. `LocationOwnership.holder_organization` is FK to `societies.Organization` only. So as written, a Covenant cannot directly own a building via `LocationOwnership`. **Three options for the implementer to pick from:**
+**Architectural decision — Covenant IS-A Organization.** Verified during coherence pass: `Covenant` (at `world/covenants/models.py:25`) and `societies.Organization` are currently separate models with no relationship. `LocationOwnership.holder_organization` is FK to `societies.Organization` only.
 
-- **(I) Extend `LocationOwnership`** with a new `HolderType.COVENANT` value + `holder_covenant` FK to `covenants.Covenant`. Update `DiscriminatorMixin` map, `effective_owner`, `is_owner`, `ownership_for`, etc. to handle the new holder type. Cleanest architecturally — Covenant becomes a first-class holder type alongside Persona/Organization. Real migration cost on existing infrastructure.
-- **(II) Auto-shadow `Organization` per `Covenant`** — every Covenant has an associated `Organization` (1:1 FK on Covenant, auto-created at Covenant creation). Building ownership uses the shadow Organization; "is this org a covenant" check via the reverse-FK. Lower infrastructure cost but introduces shadow records that exist purely for plumbing.
-- **(III) Bridge at the Sanctum layer only** — Building owner is just `Organization` per existing `LocationOwnership`. A new `CovenantBuildingSponsorship` (or similar) model declares "this Organization-owned Building is sponsored by Covenant X for Sanctum-feature purposes." Sanctum install validates the sponsorship. Workaround that scopes the complexity to where it matters but adds bridge-model overhead.
+**Decision (senior dev, 2026-05-31):** Covenants are conceptually a *kind of* Organization — magical groups with definable membership, sharing the same governance/membership/audit code surface as other Organization types. Implementation: every `Covenant` gets a backing `Organization` row, so a Covenant-owned Building uses `LocationOwnership.holder_organization` pointing at the Covenant's backing Org. This lets all Organization-level features (membership listing, governance, audit history, location ownership) work for Covenants without duplication.
 
-**Recommendation: (I)** — Covenant ownership of locations is likely meaningful beyond just Sanctums (covenant chapter houses, meeting circles, ritual chambers); promoting Covenant to a first-class holder type means future Covenant-owned-location features compose for free. The migration cost is real but bounded. Implementer picks final; whichever path is chosen, `BuildingProfile.owning_covenant` becomes a helper:
+**Implementation path (implementer picks the exact Django pattern):**
+
+- **Preferred: explicit OneToOne composition** — `Covenant.organization = OneToOneField("societies.Organization", primary_key=True)` (or non-PK 1:1 with auto-creation in `Covenant.save()`). Safest with SharedMemoryModel pattern; no Django-magic edge cases. Each model is a normal SharedMemoryModel subclass on its own.
+- **Alternative: Django multi-table inheritance** (`class Covenant(Organization)`). More idiomatic Django but verify SharedMemoryModel interaction during implementation — Evennia's idmapper patterns may not play cleanly with auto-generated parent-table rows.
+
+**Either way:**
+
+- Existing `Covenant` rows need a small data migration to create backing `Organization` rows (low risk — Covenant work is Slice A, model is sparse, few rows exist).
+- "Is this owner a Covenant?" check becomes a reverse-FK query: `hasattr(organization, "covenant")` or `Organization.objects.filter(pk=org.pk, covenant__isnull=False).exists()`.
+- `BuildingProfile.owning_covenant` helper:
 
 ```python
 def get_owning_covenant(building_profile) -> Covenant | None:
-    """Resolve the Covenant that owns this building, or None."""
-    # Implementation depends on the chosen option (I/II/III above)
+    """Return the Covenant that owns this building, or None."""
+    owner = effective_owner(building_profile.linked_outer_grid_room)  # or area-direct lookup
+    if owner is None or owner.holder_type != HolderType.ORGANIZATION:
+        return None
+    org = owner.holder_organization
+    return getattr(org, "covenant", None)  # OneToOne reverse access
 ```
+
+- The Sanctum `required_building_owner_types` constraint becomes: owner is Persona, OR owner is an Organization whose `covenant` reverse-FK is non-null.
 
 ### Per-PC Weaving Slots
 
@@ -1127,9 +1140,11 @@ This spec was revised after the brainstorming session via parallel Explore-agent
 
 A second pass through the spec surfaced these clarifications and gaps. Each lands in the appropriate subsystem at implementation time; documented here as a checklist so they aren't lost.
 
-### Covenant cannot directly own a Building (architectural)
+### Covenant ownership of Buildings — RESOLVED
 
-Already flagged inline in Subsystem F. Three options presented; recommendation is **(I) extend `LocationOwnership`** to make Covenant a first-class holder type. This is the largest blocking architectural decision in the spec — implementer should pick and document the choice at the top of the implementation plan, since downstream code in multiple subsystems depends on it.
+Senior dev decision (2026-05-31): **Covenant IS-A Organization** conceptually. Implementation creates a backing `Organization` for every `Covenant` (preferred: explicit OneToOne composition). `LocationOwnership.holder_organization` then works for Covenant-owned buildings without extension. Shared Organization-level features (membership, governance, audit, location ownership) cover both Organizations and Covenants without duplication. Full details inline in Subsystem F — Data Layer.
+
+Small data migration needed (Covenant rows backfill Organization rows). Low risk since Covenant work is Slice A.
 
 ### `is_owner` cascades through org membership already (good news)
 
