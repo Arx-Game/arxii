@@ -220,16 +220,63 @@ describe('YourTurn — Task 7.1 slot composition', () => {
     expect(screen.getByTestId('action-card-focused')).toBeInTheDocument();
   });
 
-  it('renders passive Social and Mental cards when focused=Physical (stub)', () => {
-    // Category resolution stubs to 'passive-physical' (see resolveFocusedCategory comment)
+  it('renders all three passive cards when no focused technique is selected', () => {
+    // No focused technique → no category to hide → all passives visible (#614).
     setupMocks();
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
 
-    // passive-physical is hidden (focused category), social + mental are visible
-    expect(screen.queryByTestId('action-card-passive-physical')).not.toBeInTheDocument();
+    expect(screen.getByTestId('action-card-passive-physical')).toBeInTheDocument();
     expect(screen.getByTestId('action-card-passive-social')).toBeInTheDocument();
     expect(screen.getByTestId('action-card-passive-mental')).toBeInTheDocument();
+  });
+
+  it('hides the passive slot matching the focused technique action_category (#614)', async () => {
+    setupMocks();
+    const base = makePlayerAction(null, 'Flame Strike');
+    const focusedTech: PlayerAction = {
+      ...base,
+      ref: { ...base.ref, technique_id: 1 },
+      action_category: 'physical',
+    };
+
+    // Override the focused card so "select technique" picks technique_id=1.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 1 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [focusedTech] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    // Before selecting: all passives visible.
+    expect(screen.getByTestId('action-card-passive-physical')).toBeInTheDocument();
+
+    // Select the focused technique (id=1, action_category='physical').
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+
+    // passive-physical now hidden; social + mental remain.
+    await waitFor(() => {
+      expect(screen.queryByTestId('action-card-passive-physical')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('action-card-passive-social')).toBeInTheDocument();
+    expect(screen.getByTestId('action-card-passive-mental')).toBeInTheDocument();
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
   it('renders the submit button', () => {
