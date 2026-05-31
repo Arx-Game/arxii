@@ -61,6 +61,21 @@ class ModifierTargetFactory(DjangoModelFactory):
     is_active = True
 
 
+class PowerCategoryFactory(ModifierCategoryFactory):
+    """The 'power' ModifierCategory — derived-power buffs. Default, not equipment-driven."""
+
+    name = "power"
+    description = "Power buffs that raise a technique's landed effect (derived, never stored)."
+
+
+class GlobalPowerTargetFactory(ModifierTargetFactory):
+    """The unscoped global 'power' ModifierTarget (applies to every cast)."""
+
+    category = factory.SubFactory(PowerCategoryFactory)
+    name = "power"
+    target_resonance = None
+
+
 class ModifierSourceFactory(DjangoModelFactory):
     """Factory for creating ModifierSource instances.
 
