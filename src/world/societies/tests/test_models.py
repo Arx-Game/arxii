@@ -123,18 +123,9 @@ class OrganizationModelTests(TestCase):
             allegiance=4,
             power=-3,
         )
-        cls.org_type = OrganizationTypeFactory(
-            name="test_org_type",
-            rank_1_title="Leader",
-            rank_2_title="Officer",
-            rank_3_title="Member",
-            rank_4_title="Associate",
-            rank_5_title="Contact",
-        )
         cls.organization = OrganizationFactory(
             name="Test Organization",
             society=cls.society,
-            org_type=cls.org_type,
         )
 
     def test_organization_str_representation(self):
@@ -164,16 +155,11 @@ class OrganizationPrincipleInheritanceTests(TestCase):
             allegiance=4,
             power=-3,
         )
-        cls.org_type = OrganizationTypeFactory()
         # Organization with no overrides - inherits from society
-        cls.org_no_override = OrganizationFactory(
-            society=cls.society,
-            org_type=cls.org_type,
-        )
+        cls.org_no_override = OrganizationFactory(society=cls.society)
         # Organization with some overrides
         cls.org_with_override = OrganizationFactory(
             society=cls.society,
-            org_type=cls.org_type,
             mercy_override=5,
             method_override=-5,
             # status, change, allegiance, power use society values
@@ -207,8 +193,14 @@ class OrganizationRankTitleTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Set up shared test data."""
+        """Set up shared test data.
+
+        Uses GANG kind so the OrganizationType row name == 'gang' matches the kind value.
+        The OrganizationTypeFactory's name is overridden to match the kind value so that
+        get_rank_title() finds the right row by name lookup.
+        """
         cls.org_type = OrganizationTypeFactory(
+            name="gang",
             rank_1_title="Chief",
             rank_2_title="Lieutenant",
             rank_3_title="Soldier",
@@ -223,7 +215,7 @@ class OrganizationRankTitleTests(TestCase):
         )
 
     def test_inherits_from_org_type_when_no_override(self):
-        """Test organization inherits org_type titles when override is blank."""
+        """Test organization inherits OrganizationType titles when override is blank."""
         assert self.org_no_override.get_rank_title(1) == "Chief"
         assert self.org_no_override.get_rank_title(2) == "Lieutenant"
         assert self.org_no_override.get_rank_title(3) == "Soldier"
@@ -236,7 +228,7 @@ class OrganizationRankTitleTests(TestCase):
         assert self.org_with_override.get_rank_title(3) == "Knight"
 
     def test_inherits_unset_titles_with_partial_override(self):
-        """Test organization inherits org_type titles for unset overrides."""
+        """Test organization inherits OrganizationType titles for unset overrides."""
         assert self.org_with_override.get_rank_title(2) == "Lieutenant"
         assert self.org_with_override.get_rank_title(4) == "Recruit"
         assert self.org_with_override.get_rank_title(5) == "Prospect"
@@ -308,8 +300,8 @@ class OrganizationMembershipValidationTests(TestCase):
 
     def test_membership_get_title(self):
         """Test getting the title from organization for this rank."""
-        org_type = OrganizationTypeFactory(rank_2_title="Captain")
-        org = OrganizationFactory(org_type=org_type)
+        gang_type = OrganizationTypeFactory(name="gang", rank_2_title="Captain")
+        org = OrganizationFactory(org_type=gang_type)
         membership = OrganizationMembershipFactory(organization=org, rank=2)
 
         assert membership.get_title() == "Captain"

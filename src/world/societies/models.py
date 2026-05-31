@@ -122,19 +122,25 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
     Organization types define the structure and naming conventions for
     organizations. Each type has five ranks with customizable default titles.
 
-    The six standard types are:
-    - noble_family: Traditional noble houses
+    Standard types (seeded via initial_org_types.json fixture):
+    - noble: Traditional noble houses
     - commoner_family: Non-noble family structures
     - business: Commercial enterprises
     - guild: Professional associations
     - secret_society: Clandestine organizations
     - gang: Criminal organizations
+    - covenant: Magical oath groups (added 2026-05-31)
+    - devotional: Religious orders + militant holy orders (added 2026-05-31)
+    - other: Catch-all for orgs that don't fit the above (added 2026-05-31)
+
+    Per `feedback_flavor_text_design_pass` memory: rank titles are admin-
+    editable. Fixture seeds defaults; staff customize via admin without a PR.
     """
 
     name = models.CharField(
         max_length=50,
         unique=True,
-        help_text="Unique identifier for this organization type (e.g., 'noble_family')",
+        help_text="Unique identifier for this organization type (e.g., 'noble', 'covenant')",
     )
 
     # Default rank titles - can be overridden per organization
@@ -178,8 +184,8 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
     A specific group or faction within a Society.
 
     Organizations are the primary groupings that characters can belong to.
-    Each organization belongs to a society and has a type that determines
-    its default rank structure.
+    Each organization belongs to a society (optional for standalone orgs like
+    covenants) and has a type that determines its default rank structure.
 
     Organizations can override:
     - Principle values (inherit from society if not set)
@@ -197,9 +203,14 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
     )
     society = models.ForeignKey(
         Society,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="organizations",
-        help_text="The society this organization belongs to",
+        help_text=(
+            "The society this organization belongs to. May be NULL for "
+            "standalone organizations (e.g., covenants) that exist independently."
+        ),
     )
     org_type = models.ForeignKey(
         OrganizationType,
@@ -279,7 +290,8 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         fields = ["name"]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.society.name})"
+        society_label = self.society.name if self.society else "standalone"
+        return f"{self.name} ({society_label})"
 
     def get_effective_principle(self, principle_name: str) -> int:
         """
@@ -297,18 +309,24 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
         Raises:
             AttributeError: If principle_name is not a valid principle
+            ValueError: If society is None and no override is set for the principle
         """
         override_field = f"{principle_name}_override"
         override_value = getattr(self, override_field)
         if override_value is not None:
             return override_value
+        if self.society is None:
+            msg = (
+                f"Cannot resolve principle {principle_name!r} for standalone "
+                f"organization {self.name!r}: no society and no override set."
+            )
+            raise ValueError(msg)
         return getattr(self.society, principle_name)
 
     def get_rank_title(self, rank: int) -> str:
-        """
-        Get the effective title for a rank.
+        """Get the effective title for a rank.
 
-        Returns the organization's override if set, otherwise returns the
+        Returns the organization's override if set; otherwise returns the
         org_type's default title for that rank.
 
         Args:

@@ -2,6 +2,10 @@
 
 from django.db import models
 
+# Name of the OrganizationType row used for Covenant-backed Organizations.
+# Must match the `name` field in initial_org_types.json fixture.
+COVENANT_ORG_TYPE_NAME = "covenant"
+
 
 class CovenantType(models.TextChoices):
     """The type of magically-empowered oath."""
