@@ -666,32 +666,68 @@ Ship the first `RoomFeatureKind` end-to-end: a magical home (Personal) or sacred
 
 **Sanctum ownership is narrower than Building ownership in general.** A Building can be owned by Persona OR any Organization. But to install a Sanctum into one of its rooms, the building's owner must be **Persona OR Covenant specifically** — not any other org type. This constraint lives on the Sanctum `RoomFeatureKind` row as `required_building_owner_types=[PERSONA, COVENANT]`.
 
-**Architectural decision — Covenant IS-A Organization.** Verified during coherence pass: `Covenant` (at `world/covenants/models.py:25`) and `societies.Organization` are currently separate models with no relationship. `LocationOwnership.holder_organization` is FK to `societies.Organization` only.
+**Architectural decision — Organization gets a `kind` discriminator + per-kind details models.** Verified during coherence pass: `Covenant` (at `world/covenants/models.py:25`) and `societies.Organization` are currently separate models with no relationship. `LocationOwnership.holder_organization` is FK to `societies.Organization` only.
 
-**Decision (senior dev, 2026-05-31):** Covenants are conceptually a *kind of* Organization — magical groups with definable membership, sharing the same governance/membership/audit code surface as other Organization types. Implementation: every `Covenant` gets a backing `Organization` row, so a Covenant-owned Building uses `LocationOwnership.holder_organization` pointing at the Covenant's backing Org. This lets all Organization-level features (membership listing, governance, audit history, location ownership) work for Covenants without duplication.
+**Decision (senior dev, 2026-05-31):** There will be many kinds of organizations (Noble Houses, Trade Guilds, Criminal Gangs, Covenants, etc.) all sharing a common membership/governance/audit/location-ownership surface but with kind-specific fields. Model this with the **discriminator + per-kind details** pattern (same shape as Projects, Buildings, Room Features) — `Organization` is the base with a `kind` enum, and each kind's specific data lives in a OneToOne details model.
 
-**Implementation path (implementer picks the exact Django pattern):**
+**Model shape:**
 
-- **Preferred: explicit OneToOne composition** — `Covenant.organization = OneToOneField("societies.Organization", primary_key=True)` (or non-PK 1:1 with auto-creation in `Covenant.save()`). Safest with SharedMemoryModel pattern; no Django-magic edge cases. Each model is a normal SharedMemoryModel subclass on its own.
-- **Alternative: Django multi-table inheritance** (`class Covenant(Organization)`). More idiomatic Django but verify SharedMemoryModel interaction during implementation — Evennia's idmapper patterns may not play cleanly with auto-generated parent-table rows.
+```python
+class Organization(SharedMemoryModel):
+    name = ...
+    kind = TextChoices(NOBLE_HOUSE, TRADE_GUILD, CRIMINAL_GANG, COVENANT, OTHER, ...)
+    founded_at, dissolved_at, description, ...
+    # Common surface: membership (via OrganizationMembership), governance,
+    # audit history, location ownership — all work for every kind
 
-**Either way:**
+class Covenant(SharedMemoryModel):
+    """Per-kind details for kind=COVENANT — magical oath group."""
+    organization = OneToOneField(Organization, primary_key=True, ...)
+    covenant_type = ...      # DURANCE / BATTLE / ...
+    sworn_objective = ...
+    level = ...              # Slice D progression placeholder
+    # ...etc per existing covenants/models.py Covenant fields
 
-- Existing `Covenant` rows need a small data migration to create backing `Organization` rows (low risk — Covenant work is Slice A, model is sparse, few rows exist).
-- "Is this owner a Covenant?" check becomes a reverse-FK query: `hasattr(organization, "covenant")` or `Organization.objects.filter(pk=org.pk, covenant__isnull=False).exists()`.
+# Future kinds (filed as separate work, not built today):
+# class NobleHouse(SharedMemoryModel): organization OneToOne, heraldry, head_persona, ...
+# class TradeGuild(SharedMemoryModel): organization OneToOne, monopoly_resource, ...
+# class CriminalGang(SharedMemoryModel): organization OneToOne, territory, heat_level, ...
+```
+
+**What this gives:**
+
+- One `LocationOwnership.holder_organization` FK serves all org types
+- `OrganizationMembership` works for every kind (Noble House nobles, Guild members, Gang crew, Covenant oathbound — all the same membership API)
+- Adding new org types = new `OrganizationKind` enum value + new per-kind details model + zero changes to `Organization`, `OrganizationMembership`, `LocationOwnership`, or `is_owner` cascade
+- The "is this owner a Covenant?" check becomes `org.kind == OrganizationKind.COVENANT` (or `org.covenant` access for covenant-specific fields)
+- Same pattern as Projects (`Project.kind` + per-kind details), Buildings (`BuildingKind` + per-kind details), Room Features (`RoomFeatureKind` + per-kind details) — single discoverable convention for the whole codebase
+
+**Migration cost (small since Organization infrastructure is currently empty):**
+
+- Add `Organization.kind` TextChoices column with `OrganizationKind` enum (`NOBLE_HOUSE`, `TRADE_GUILD`, `CRIMINAL_GANG`, `COVENANT`, `OTHER`)
+- Migrate existing `Covenant` model: add `organization = OneToOneField(Organization, primary_key=True, ...)` + auto-create backing Org in `Covenant.save()` (set `kind=COVENANT`)
+- Data migration: backfill existing Covenant rows with backing Organization rows
+- Other org-kind details models (`NobleHouse`, `TradeGuild`, `CriminalGang`) ship as their concrete consumers materialize — out of scope for the Sanctum slice, filed as future work
+
+**Implementation path:** Explicit OneToOne composition (preferred over Django multi-table inheritance for SharedMemoryModel safety — verify MTI compatibility with idmapper if the implementer wants to use it, but lean toward OneToOne by default).
+
+**For Sanctum specifically:**
+
+- `required_building_owner_types = [PERSONA, OrganizationKind.COVENANT]` — narrows by kind, not by separate model
+- Future room features could specify other org-kind requirements (a "Heraldic Hall" requires `NOBLE_HOUSE`; a "Smuggler's Hideout" requires `CRIMINAL_GANG`; etc.) using the same constraint mechanism
 - `BuildingProfile.owning_covenant` helper:
 
 ```python
 def get_owning_covenant(building_profile) -> Covenant | None:
     """Return the Covenant that owns this building, or None."""
-    owner = effective_owner(building_profile.linked_outer_grid_room)  # or area-direct lookup
+    owner = effective_owner(building_profile.linked_outer_grid_room)
     if owner is None or owner.holder_type != HolderType.ORGANIZATION:
         return None
     org = owner.holder_organization
-    return getattr(org, "covenant", None)  # OneToOne reverse access
+    if org.kind != OrganizationKind.COVENANT:
+        return None
+    return org.covenant  # OneToOne reverse access
 ```
-
-- The Sanctum `required_building_owner_types` constraint becomes: owner is Persona, OR owner is an Organization whose `covenant` reverse-FK is non-null.
 
 ### Per-PC Weaving Slots
 
@@ -1142,9 +1178,9 @@ A second pass through the spec surfaced these clarifications and gaps. Each land
 
 ### Covenant ownership of Buildings — RESOLVED
 
-Senior dev decision (2026-05-31): **Covenant IS-A Organization** conceptually. Implementation creates a backing `Organization` for every `Covenant` (preferred: explicit OneToOne composition). `LocationOwnership.holder_organization` then works for Covenant-owned buildings without extension. Shared Organization-level features (membership, governance, audit, location ownership) cover both Organizations and Covenants without duplication. Full details inline in Subsystem F — Data Layer.
+Senior dev decision (2026-05-31): **`Organization` gets a `kind` discriminator + per-kind details models** — the same pattern used by Projects, Buildings, Room Features. Covenant is one of those kinds (`kind=COVENANT`); Noble Houses, Trade Guilds, Criminal Gangs are future kinds following the same pattern. `LocationOwnership.holder_organization` works for all org types unchanged. Full details inline in Subsystem F — Data Layer.
 
-Small data migration needed (Covenant rows backfill Organization rows). Low risk since Covenant work is Slice A.
+Migration: add `Organization.kind` enum, migrate existing `Covenant` model to have `OneToOneField(Organization)` + auto-create backing Org on save, data migration backfills existing Covenant rows. Low risk since Organization infrastructure is currently empty and Covenant work is Slice A.
 
 ### `is_owner` cascades through org membership already (good news)
 
