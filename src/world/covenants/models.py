@@ -72,17 +72,30 @@ class Covenant(SharedMemoryModel):
             # Lazy import to avoid circular dependency.
             from django.db import transaction  # noqa: PLC0415
 
-            from world.covenants.constants import COVENANT_ORG_KIND  # noqa: PLC0415
-            from world.societies.models import Organization  # noqa: PLC0415
+            from world.covenants.constants import COVENANT_ORG_TYPE_NAME  # noqa: PLC0415
+            from world.societies.models import Organization, OrganizationType  # noqa: PLC0415
 
             # Wrap the auto-create + save in atomic so a failure in either
             # rolls back BOTH. Without this, a Covenant validation error
             # leaves an orphaned Organization row.
             with transaction.atomic():
+                # get_or_create so tests work without loading the fixture and
+                # production-fresh DBs auto-bootstrap with sane defaults. Staff
+                # can still customize rank titles via admin.
+                covenant_org_type, _ = OrganizationType.objects.get_or_create(
+                    name=COVENANT_ORG_TYPE_NAME,
+                    defaults={
+                        "rank_1_title": "Coven Mother",
+                        "rank_2_title": "Adept",
+                        "rank_3_title": "Initiate",
+                        "rank_4_title": "Novice",
+                        "rank_5_title": "Aspirant",
+                    },
+                )
                 self.organization = Organization.objects.create(
                     name=self.name,
                     society=None,
-                    kind=COVENANT_ORG_KIND,
+                    org_type=covenant_org_type,
                 )
                 super().save(*args, **kwargs)
             return

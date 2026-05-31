@@ -2,10 +2,9 @@
 
 from django.db import models
 
-from world.societies.constants import OrganizationKind
-
-# The OrganizationKind value Covenants register as.
-COVENANT_ORG_KIND = OrganizationKind.COVENANT
+# Name of the OrganizationType row used for Covenant-backed Organizations.
+# Must match the `name` field in initial_org_types.json fixture.
+COVENANT_ORG_TYPE_NAME = "covenant"
 
 
 class CovenantType(models.TextChoices):

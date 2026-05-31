@@ -11,7 +11,6 @@ import factory.django as factory_django
 from world.character_creation.factories import RealmFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
-from world.societies.constants import OrganizationKind
 from world.societies.models import (
     CovenantLegendCredit,
     LegendDeedStory,
@@ -75,7 +74,7 @@ class OrganizationFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Organization {n}")
     description = factory.Faker("paragraph")
     society = factory.SubFactory(SocietyFactory)
-    kind = OrganizationKind.GUILD
+    org_type = factory.SubFactory(OrganizationTypeFactory)
 
     # Principle overrides - all null by default (inherit from society)
     mercy_override = None
@@ -85,7 +84,7 @@ class OrganizationFactory(factory_django.DjangoModelFactory):
     allegiance_override = None
     power_override = None
 
-    # Rank title overrides - all blank by default (inherit from OrganizationType for kind)
+    # Rank title overrides - all blank by default (inherit from org_type)
     rank_1_title_override = ""
     rank_2_title_override = ""
     rank_3_title_override = ""
@@ -243,16 +242,16 @@ class EstablishedPersonaFactory(PersonaFactory):
 class NobleFamilyOrganizationFactory(OrganizationFactory):
     """Factory for creating noble family organizations with appropriate rank titles."""
 
-    kind = OrganizationKind.NOBLE
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="noble")
 
 
 class GuildOrganizationFactory(OrganizationFactory):
     """Factory for creating guild organizations with appropriate rank titles."""
 
-    kind = OrganizationKind.GUILD
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="guild")
 
 
 class SecretSocietyOrganizationFactory(OrganizationFactory):
     """Factory for creating secret society organizations with appropriate rank titles."""
 
-    kind = OrganizationKind.SECRET_SOCIETY
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="secret_society")
