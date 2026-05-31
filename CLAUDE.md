@@ -17,6 +17,17 @@ Ambiguous "?" sentences force the user to guess whether they're being asked to r
 
 > For end-to-end issue → merged-PR work, see the `issue-to-merged-pr` skill at `tools/skills/issue-to-merged-pr/`. It handles branch creation, PR opening, CI watching, and post-merge cleanup. The conventions below still apply; the skill is built on top of them.
 
+### Spec review happens on the issue (not in the repo)
+
+New feature specs live in the **GitHub issue body** (between `<!-- spec:start -->` and `<!-- spec:end -->` markers) rather than as committed `docs/superpowers/` files. (Specs predating this convention still live in `docs/superpowers/`; they're being triaged into `docs/` or issues — see #660.) The `issue-to-merged-pr` flow drafts the spec onto the issue, flags the team, then **stops** until a human org member approves it. Lanes are tracked by **labels** (the source of truth):
+
+- `status:spec-draft` — agent is writing the spec into the issue body
+- `status:spec-review` — spec posted; awaiting approval (agent has exited)
+- `spec:approved` — **member-only gate.** On our public repo, GitHub lets only Triage+ org members apply labels, so this label *is* the authorization boundary. **Agents MUST NEVER apply `spec:approved`** — they hold the maintainer PAT but must self-restrain and only poll for it.
+- `status:implementing` — approved; building toward a PR (normal code review)
+
+Comments are for discussion only — never gate on them (anyone can comment on a public issue). The `superpowers:writing-plans` output is **ephemeral** (worktree-only, never committed).
+
 **IMPORTANT: Never work directly on main.** Always create a feature branch before making changes:
 
 ```bash
