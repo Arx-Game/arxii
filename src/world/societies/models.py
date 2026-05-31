@@ -18,7 +18,7 @@ Note: Realm model is in the `realms` app, not here.
 """
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -118,24 +118,25 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
 
 class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
     """
-    A type of organization with default rank titles.
+    Per-kind rank-title catalog. One row per OrganizationKind value.
 
-    Organization types define the structure and naming conventions for
-    organizations. Each type has five ranks with customizable default titles.
+    Repurposed in Plan 1 Phase A: was previously the kind discriminator; the
+    discriminator role moved to `Organization.kind` (TextChoices). This model
+    now stores the admin-editable default rank titles for each kind.
 
-    The six standard types are:
-    - noble_family: Traditional noble houses
-    - commoner_family: Non-noble family structures
-    - business: Commercial enterprises
-    - guild: Professional associations
-    - secret_society: Clandestine organizations
-    - gang: Criminal organizations
+    Standard kinds (must match OrganizationKind enum values):
+    - noble, business, guild, gang, secret_society, commoner_family
+    - covenant, devotional, other
+
+    Per `feedback_flavor_text_design_pass` memory: rank titles are admin-
+    editable. Fixture seeds defaults; staff customize via admin without a PR.
     """
 
+    # Name must be one of OrganizationKind.values (enforced in clean()).
     name = models.CharField(
         max_length=50,
         unique=True,
-        help_text="Unique identifier for this organization type (e.g., 'noble_family')",
+        help_text="Must match an OrganizationKind enum value (noble, covenant, etc.).",
     )
 
     # Default rank titles - can be overridden per organization
@@ -167,11 +168,51 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
+    # Cache keyed by name → instance. Cleared via clear_name_cache() (test cache
+    # flusher registered in apps.py). Avoids per-call DB hits from
+    # Organization.get_rank_title() which is called in tight loops (membership
+    # rendering, etc.).
+    _name_cache: ClassVar[dict[str, "OrganizationType"]] = {}
+
     class NaturalKeyConfig:
         fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """Validate name matches an OrganizationKind value.
+
+        Without this, admin could create OrganizationType rows with arbitrary
+        names that don't correspond to any OrganizationKind — silently breaking
+        get_rank_title() for orgs of that kind.
+        """
+        super().clean()
+        from world.societies.constants import OrganizationKind  # noqa: PLC0415
+
+        if self.name not in OrganizationKind.values:
+            msg = (
+                f"OrganizationType.name must be one of OrganizationKind values "
+                f"({list(OrganizationKind.values)}); got {self.name!r}."
+            )
+            raise ValidationError({"name": msg})
+
+    @classmethod
+    def get_by_name(cls, name: str) -> "OrganizationType":
+        """Cached lookup by name. Use instead of `OrganizationType.objects.get(name=...)`.
+
+        Caches by name → instance to avoid per-call DB hits in hot paths like
+        Organization.get_rank_title(). The cache is cleared between tests via
+        the test_cache_flusher registry (see apps.py).
+        """
+        if name not in cls._name_cache:
+            cls._name_cache[name] = cls.objects.get(name=name)
+        return cls._name_cache[name]
+
+    @classmethod
+    def clear_name_cache(cls) -> None:
+        """Clear the name→instance cache. Called between tests."""
+        cls._name_cache.clear()
 
 
 class Organization(NaturalKeyMixin, SharedMemoryModel):
@@ -345,9 +386,11 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         if override_value:
             return override_value
 
-        # Fall back to the OrganizationType row for this kind.
+        # Fall back to the OrganizationType row for this kind. Use the cached
+        # get_by_name lookup to avoid per-call DB hits in tight loops (e.g.,
+        # membership rendering).
         try:
-            org_type = OrganizationType.objects.get(name=self.kind)
+            org_type = OrganizationType.get_by_name(self.kind)
         except OrganizationType.DoesNotExist as exc:
             msg = (
                 f"No OrganizationType row found for kind={self.kind!r}. "

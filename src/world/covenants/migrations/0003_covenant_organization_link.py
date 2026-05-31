@@ -15,11 +15,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Pre-launch: no existing Covenant rows. Add organization as NOT NULL
+        # OneToOneField. Covenant.save() always populates it before super().save(),
+        # so the DB never sees a null. bulk_create on Covenant is therefore
+        # unsafe and discouraged.
         migrations.AddField(
             model_name="covenant",
             name="organization",
             field=models.OneToOneField(
-                null=True,  # nullable temporarily — auto-populated by Covenant.save()
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="covenant",
                 to="societies.organization",

@@ -42,12 +42,13 @@ class Covenant(SharedMemoryModel):
 
     organization = models.OneToOneField(
         "societies.Organization",
-        null=True,  # auto-populated in Covenant.save() — None only in-memory pre-save
         on_delete=models.CASCADE,
         related_name="covenant",
-        # NOTE: NOT primary_key=True — Covenant keeps its own auto-id pk.
-        # The OneToOne is just a relationship; pk-using code (views, serializers,
-        # FKs from CovenantLegendCredit etc.) continues to work unchanged.
+        # NOT NULL at the DB level — the auto-create in save() always populates it
+        # BEFORE super().save() runs, so the DB never sees a null. bulk_create()
+        # is therefore unsafe for Covenant; always use single .save() calls.
+        # NOT primary_key=True — Covenant keeps its own auto-id pk so views,
+        # serializers, and FKs from CovenantLegendCredit continue to work.
     )
     name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
@@ -69,14 +70,22 @@ class Covenant(SharedMemoryModel):
     def save(self, *args: object, **kwargs: object) -> None:
         if self.organization_id is None:
             # Lazy import to avoid circular dependency.
+            from django.db import transaction  # noqa: PLC0415
+
             from world.covenants.constants import COVENANT_ORG_KIND  # noqa: PLC0415
             from world.societies.models import Organization  # noqa: PLC0415
 
-            self.organization = Organization.objects.create(
-                name=self.name,
-                society=None,
-                kind=COVENANT_ORG_KIND,
-            )
+            # Wrap the auto-create + save in atomic so a failure in either
+            # rolls back BOTH. Without this, a Covenant validation error
+            # leaves an orphaned Organization row.
+            with transaction.atomic():
+                self.organization = Organization.objects.create(
+                    name=self.name,
+                    society=None,
+                    kind=COVENANT_ORG_KIND,
+                )
+                super().save(*args, **kwargs)
+            return
         super().save(*args, **kwargs)
 
     @cached_property
