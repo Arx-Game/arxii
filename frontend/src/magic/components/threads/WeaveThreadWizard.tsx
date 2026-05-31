@@ -3,9 +3,8 @@
  *
  * Steps:
  *   1. Pick anchor kind (TargetKind) — disabled if character has no unlock for that kind.
- *   2. Pick anchor — kind-specific picker. FACET and COVENANT_ROLE are supported;
- *      TRAIT, TECHNIQUE, ROOM are stubbed as "not yet supported in this UI".
- *      RELATIONSHIP_TRACK and RELATIONSHIP_CAPSTONE are deferred per spec.
+ *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, ROOM,
+ *      and RELATIONSHIP_TRACK are supported; RELATIONSHIP_CAPSTONE is deferred per spec.
  *   3. Pick resonance — combobox over useCharacterResonances().
  *   4. Narrative — optional name (max 120) and description.
  *   5. Confirm — summary card + [Weave] button.
@@ -31,10 +30,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCharacterResonances, useWeaveThread } from '../../queries';
-import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
+import type {
+  CharacterResonance,
+  RelationshipTrack,
+  RoomBrief,
+  TargetKind,
+  ThreadHubSummary,
+} from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
-import type { components } from '@/generated/api';
-type RelationshipTrack = components['schemas']['RelationshipTrack'];
 
 // ---------------------------------------------------------------------------
 // Local anchor-picker data types
@@ -148,7 +151,7 @@ async function fetchRoomOptions(summary: ThreadHubSummary | undefined): Promise<
   const qs = propertyIds.map((id) => `property_id=${id}`).join('&');
   const res = await apiFetch(`/api/magic/rooms-by-property/?${qs}`);
   if (!res.ok) throw new Error('Failed to load rooms');
-  const data = (await res.json()) as Array<{ id: number; name: string }>;
+  const data = (await res.json()) as RoomBrief[];
   return data.map((r) => ({ id: r.id, label: r.name }));
 }
 

@@ -295,6 +295,7 @@ export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingO
 // ---------------------------------------------------------------------------
 
 export type RoomBrief = components['schemas']['RoomBrief'];
+export type RelationshipTrack = components['schemas']['RelationshipTrack'];
 
 // ---------------------------------------------------------------------------
 // Applicable Pulls
