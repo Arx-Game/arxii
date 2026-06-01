@@ -23,7 +23,7 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.models import (
-    MissionGiverStanding,
+    MissionGiverCooldown,
     MissionInstance,
     MissionNodeSnapshot,
     MissionParticipant,
@@ -33,7 +33,7 @@ from world.missions.services.run import accept_mission, share_mission
 
 
 def _make_character(level: int = 1) -> "object":
-    """A Character ObjectDB with a CharacterSheet at the given level."""
+    """A Character ObjectDB with a CharacterSheet (auto-creates PRIMARY persona)."""
     character = CharacterFactory()
     sheet = CharacterSheetFactory(character=character)
     if level > 0:
@@ -50,7 +50,7 @@ class AcceptMissionTests(TestCase):
     """accept_mission creates the run, holder, entry-node snapshot, and cooldown."""
 
     def setUp(self) -> None:
-        self.giver = MissionGiverFactory()
+        self.giver = MissionGiverFactory(name="accept-giver")
         self.template = MissionTemplateFactory(name="accept-t", cooldown=timedelta(days=2))
         self.entry_node = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
@@ -78,8 +78,8 @@ class AcceptMissionTests(TestCase):
 
         accept_mission(self.giver, self.template, self.character)
 
-        # Cooldown row exists with future available_at.
-        cd = MissionGiverStanding.objects.get(giver=self.giver, character=self.character)
+        # Cooldown row exists with future available_at — per-(giver, character).
+        cd = MissionGiverCooldown.objects.get(giver=self.giver, character=self.character)
         self.assertGreater(cd.available_at, timezone.now())
 
         # offer_missions now returns no offers from this giver for this char.
@@ -87,22 +87,44 @@ class AcceptMissionTests(TestCase):
 
     def test_accept_uses_upsert_for_existing_cooldown_row(self) -> None:
         # Pre-existing cooldown (e.g. from a prior, expired run on this giver).
-        MissionGiverStanding.objects.create(
+        MissionGiverCooldown.objects.create(
             giver=self.giver,
             character=self.character,
             available_at=timezone.now() - timedelta(days=1),
         )
         accept_mission(self.giver, self.template, self.character)
-        rows = MissionGiverStanding.objects.filter(giver=self.giver, character=self.character)
+        rows = MissionGiverCooldown.objects.filter(giver=self.giver, character=self.character)
         self.assertEqual(rows.count(), 1)
         self.assertGreater(rows.first().available_at, timezone.now())
+
+    def test_room_trigger_giver_also_gets_cooldown(self) -> None:
+        # Regression guard: in an earlier iteration cooldown was keyed on
+        # persona pairs, which silently skipped ROOM_TRIGGER and
+        # ENVIRONMENTAL_DETAIL givers (no NPC persona). Per-(giver,
+        # character) keying restores cooldown for every giver kind.
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.missions.constants import GiverKind
+
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        giver = MissionGiverFactory(
+            name="noticeboard", giver_kind=GiverKind.ROOM_TRIGGER, target=room
+        )
+        template = MissionTemplateFactory(name="rt-t", cooldown=timedelta(hours=4))
+        MissionNodeFactory(template=template, key="entry", is_entry=True)
+        giver.templates.add(template)
+        character = _make_character()
+        accept_mission(giver, template, character)
+        cd = MissionGiverCooldown.objects.get(giver=giver, character=character)
+        self.assertGreater(cd.available_at, timezone.now())
+        # Pool gated immediately by the cooldown.
+        self.assertEqual(offer_missions(giver, character, count=5), [])
 
 
 class ShareMissionTests(TestCase):
     """share_mission adds a non-holder participant; no cooldown side effect."""
 
     def setUp(self) -> None:
-        self.giver = MissionGiverFactory()
+        self.giver = MissionGiverFactory(name="share-giver")
         self.template = MissionTemplateFactory(name="share-t")
         MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
@@ -129,10 +151,10 @@ class ShareMissionTests(TestCase):
 
         # Holder has a cooldown from the accept; sharee MUST NOT.
         self.assertTrue(
-            MissionGiverStanding.objects.filter(giver=self.giver, character=self.holder).exists()
+            MissionGiverCooldown.objects.filter(giver=self.giver, character=self.holder).exists()
         )
         self.assertFalse(
-            MissionGiverStanding.objects.filter(giver=self.giver, character=sharee).exists()
+            MissionGiverCooldown.objects.filter(giver=self.giver, character=sharee).exists()
         )
 
 

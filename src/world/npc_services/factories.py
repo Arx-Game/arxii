@@ -1,0 +1,84 @@
+"""FactoryBoy factories for the unified NPC service framework."""
+
+from datetime import timedelta
+
+from django.utils import timezone
+import factory
+from factory.django import DjangoModelFactory
+
+from world.npc_services.constants import DrawMode, OfferKind
+from world.npc_services.models import (
+    NPCRole,
+    NPCServiceOffer,
+    NPCStanding,
+    OfferCooldown,
+    PermitOfferDetails,
+)
+
+
+class NPCStandingFactory(DjangoModelFactory):
+    """Per-(PC persona, NPC persona) affection row.
+
+    Standing is just affection now — cooldown moved to ``OfferCooldown``.
+    Tests exercising the affection side pass ``affection=`` explicitly.
+    """
+
+    class Meta:
+        model = NPCStanding
+
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    npc_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    affection = 0
+
+
+class NPCRoleFactory(DjangoModelFactory):
+    class Meta:
+        model = NPCRole
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"npc-role-{n}")
+    description = ""
+    default_description_template = ""
+    default_rapport_starting_value = 0
+    faction_affiliation = None
+
+
+class NPCServiceOfferFactory(DjangoModelFactory):
+    class Meta:
+        model = NPCServiceOffer
+
+    role = factory.SubFactory(NPCRoleFactory)
+    kind = OfferKind.PERMIT
+    label = factory.Sequence(lambda n: f"offer-{n}")
+    draw_mode = DrawMode.MENU
+    eligibility_rule = factory.LazyFunction(dict)
+    rapport_requirement = 0
+    is_final = True
+    rapport_delta_success = 0
+    rapport_delta_failure = 0
+    cooldown = None
+    check_type = None
+    check_difficulty = 0
+
+
+class OfferCooldownFactory(DjangoModelFactory):
+    """Per-(offer, persona) cooldown row.
+
+    Default ``available_at`` is 1 second in the past so the row exists
+    without gating. Tests exercising an active cooldown override
+    ``available_at`` with a future datetime.
+    """
+
+    class Meta:
+        model = OfferCooldown
+
+    offer = factory.SubFactory(NPCServiceOfferFactory)
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
+
+
+class PermitOfferDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = PermitOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PERMIT)

@@ -6,7 +6,6 @@ from rest_framework.routers import DefaultRouter
 from world.missions.views import (
     MissionCategoryViewSet,
     MissionGiverOfferingViewSet,
-    MissionGiverStandingViewSet,
     MissionGiverViewSet,
     MissionInstanceViewSet,
     MissionNodeViewSet,
@@ -45,11 +44,6 @@ router.register(
     r"giver-offerings",
     MissionGiverOfferingViewSet,
     basename="mission-giver-offering",
-)
-router.register(
-    r"giver-standings",
-    MissionGiverStandingViewSet,
-    basename="mission-giver-standing",
 )
 # D4.3 staff-power instance ops (list/retrieve/destroy only).
 router.register(r"instances", MissionInstanceViewSet, basename="mission-instance")

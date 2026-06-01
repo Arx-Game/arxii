@@ -23,8 +23,8 @@ from world.distinctions.factories import (
 )
 from world.missions.constants import AccessTier, ArcScope
 from world.missions.factories import (
+    MissionGiverCooldownFactory,
     MissionGiverFactory,
-    MissionGiverStandingFactory,
     MissionTemplateFactory,
 )
 from world.missions.services.availability import offer_missions
@@ -69,7 +69,7 @@ class OfferMissionsFilterTests(TestCase):
         giver.templates.add(cooled, fresh)
         character = _make_character_with_level(level=1)
 
-        MissionGiverStandingFactory(
+        MissionGiverCooldownFactory(
             giver=giver,
             character=character,
             available_at=timezone.now() + timedelta(days=1),
@@ -77,12 +77,8 @@ class OfferMissionsFilterTests(TestCase):
 
         result = offer_missions(giver, character, count=10)
 
-        # Cooldown is per-giver, so BOTH templates on this giver are gated:
-        # the design §10 cooldown gates the GIVER, not specific templates.
-        # Re-reading the implementation — the cooldown row is per
-        # (giver, character) AND we exclude templates only when there's a
-        # matching cooldown row. Since the row matches this (giver, char),
-        # all templates surfaced via that giver are blocked.
+        # Cooldown is per-(giver, character), so the entire pool from
+        # this giver is gated for this character.
         self.assertEqual(result, [])
 
     def test_predicate_filters_out(self) -> None:

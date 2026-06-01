@@ -12,7 +12,6 @@ import type {
   MissionCategory,
   MissionGiver,
   MissionGiverOffering,
-  MissionGiverStanding,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -276,17 +275,6 @@ export async function listGiverOfferings(
 ): Promise<PaginatedResponse<MissionGiverOffering>> {
   const res = await apiFetch(`${BASE_URL}/giver-offerings/${buildQueryString(filters)}`);
   if (!res.ok) throw new Error('Failed to load offerings');
-  return res.json();
-}
-
-export async function listGiverStandings(
-  filters: {
-    giver?: number;
-    character?: number;
-  } = {}
-): Promise<PaginatedResponse<MissionGiverStanding>> {
-  const res = await apiFetch(`${BASE_URL}/giver-standings/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load standings');
   return res.json();
 }
 

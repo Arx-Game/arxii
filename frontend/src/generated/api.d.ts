@@ -7145,80 +7145,6 @@ export interface paths {
     patch: operations['missions_giver_offerings_partial_update'];
     trace?: never;
   };
-  '/api/missions/giver-standings/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    get: operations['missions_giver_standings_list'];
-    put?: never;
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    post: operations['missions_giver_standings_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/missions/giver-standings/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    get: operations['missions_giver_standings_retrieve'];
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    put: operations['missions_giver_standings_update'];
-    post?: never;
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    delete: operations['missions_giver_standings_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Normally written by ``services.run.accept_mission`` (cooldown side)
-     *     and future flirt/seduce checks (affection side). CRUD here is for
-     *     staff overrides — clear a cooldown, bump or penalize affection.
-     */
-    patch: operations['missions_giver_standings_partial_update'];
-    trace?: never;
-  };
   '/api/missions/givers/': {
     parameters: {
       query?: never;
@@ -7846,6 +7772,277 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/cooldowns/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    get: operations['npc_services_cooldowns_list'];
+    put?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    post: operations['npc_services_cooldowns_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/cooldowns/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    get: operations['npc_services_cooldowns_retrieve'];
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    put: operations['npc_services_cooldowns_update'];
+    post?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    delete: operations['npc_services_cooldowns_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    patch: operations['npc_services_cooldowns_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/interactions/end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/interactions/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/interactions/start/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_start_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    get: operations['npc_services_offers_list'];
+    put?: never;
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    post: operations['npc_services_offers_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    get: operations['npc_services_offers_retrieve'];
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    put: operations['npc_services_offers_update'];
+    post?: never;
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    delete: operations['npc_services_offers_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for offers (gated services on an NPC role). */
+    patch: operations['npc_services_offers_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/permit-details/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    get: operations['npc_services_permit_details_list'];
+    put?: never;
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    post: operations['npc_services_permit_details_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/permit-details/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    get: operations['npc_services_permit_details_retrieve'];
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    put: operations['npc_services_permit_details_update'];
+    post?: never;
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    delete: operations['npc_services_permit_details_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for permit offer details (1:1 to an NPCServiceOffer). */
+    patch: operations['npc_services_permit_details_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/roles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    get: operations['npc_services_roles_list'];
+    put?: never;
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    post: operations['npc_services_roles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/roles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    get: operations['npc_services_roles_retrieve'];
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    put: operations['npc_services_roles_update'];
+    post?: never;
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    delete: operations['npc_services_roles_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
+    patch: operations['npc_services_roles_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/standings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    get: operations['npc_services_standings_list'];
+    put?: never;
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    post: operations['npc_services_standings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/standings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    get: operations['npc_services_standings_retrieve'];
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    put: operations['npc_services_standings_update'];
+    post?: never;
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    delete: operations['npc_services_standings_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for per-(PC persona, NPC persona) standing rows. */
+    patch: operations['npc_services_standings_partial_update'];
     trace?: never;
   };
   '/api/personas/': {
@@ -12445,6 +12642,12 @@ export interface components {
     DraftDistinctionSyncResult: {
       distinctions: components['schemas']['DraftDistinctionEntry'][];
     };
+    /**
+     * @description * `menu` - Menu
+     *     * `pool` - Pool
+     * @enum {string}
+     */
+    DrawModeEnum: 'menu' | 'pool';
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
       readonly id: number;
@@ -13719,6 +13922,14 @@ export interface components {
        */
       visibility?: components['schemas']['VisibilityF91Enum'];
     };
+    /** @description One eligible offer in the interaction state response. */
+    InteractionOffer: {
+      id: number;
+      label: string;
+      kind: string;
+      is_final: boolean;
+      rapport_requirement: number;
+    };
     InteractionReaction: {
       readonly id: number;
       /** @description The interaction being reacted to */
@@ -13736,6 +13947,24 @@ export interface components {
       readonly id: number;
       readonly persona_name: string;
       readonly persona_id: number;
+    };
+    /** @description POST /api/npc-services/interactions/resolve/ body. */
+    InteractionResolveRequestRequest: {
+      offer_id: number;
+    };
+    /** @description POST /api/npc-services/interactions/start/ body. */
+    InteractionStartRequestRequest: {
+      role_id: number;
+      /** @description Optional — pass for class-2+ named NPCs whose standing should be loaded and persisted. Omit / null for class-1 nameless functionaries. */
+      npc_persona_id?: number | null;
+    };
+    /** @description Response shape for start/resolve — current session state. */
+    InteractionState: {
+      role_id: number;
+      current_rapport: number;
+      closed: boolean;
+      available_offers: components['schemas']['InteractionOffer'][];
+      last_result_message?: string;
     };
     /** @description Serializer for InteractionType lookup records. */
     InteractionType: {
@@ -13974,41 +14203,6 @@ export interface components {
       /** @description Optional organization this giver fronts for (used by ORG arc-scope). */
       org?: number | null;
       is_active?: boolean;
-    };
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Per design §6/§10 ``available_at`` is normally set by
-     *     ``services.run.accept_mission`` (= now + template.cooldown) and
-     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
-     *     surface is for staff overrides — clear a cooldown manually,
-     *     bump/penalize affection — not for ordinary runtime writes.
-     */
-    MissionGiverStanding: {
-      readonly id: number;
-      giver: number;
-      character: number;
-      /** Format: date-time */
-      available_at: string;
-      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
-      affection?: number;
-    };
-    /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Per design §6/§10 ``available_at`` is normally set by
-     *     ``services.run.accept_mission`` (= now + template.cooldown) and
-     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
-     *     surface is for staff overrides — clear a cooldown manually,
-     *     bump/penalize affection — not for ordinary runtime writes.
-     */
-    MissionGiverStandingRequest: {
-      giver: number;
-      character: number;
-      /** Format: date-time */
-      available_at: string;
-      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
-      affection?: number;
     };
     /**
      * @description Staff-side serializer for MissionInstance (assign + remove surfaces).
@@ -14591,6 +14785,140 @@ export interface components {
        */
       readonly primary_persona_id: number | null;
     };
+    NPCRole: {
+      readonly id: number;
+      /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
+      name: string;
+      /** @description Admin-editable flavor; what this role does in the world. */
+      description?: string;
+      /** @description Fallback flavor description rendered when a class-1 nameless NPC of this role is presented to the player. Class-2+ NPCs use their persona's description instead. */
+      default_description_template?: string;
+      /** @description Initial in-interaction rapport for class-1 interactions. Class-2/3/4 interactions start at `default + NPCStanding.affection`. */
+      default_rapport_starting_value?: number;
+      /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
+      faction_affiliation?: number | null;
+    };
+    NPCRoleRequest: {
+      /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
+      name: string;
+      /** @description Admin-editable flavor; what this role does in the world. */
+      description?: string;
+      /** @description Fallback flavor description rendered when a class-1 nameless NPC of this role is presented to the player. Class-2+ NPCs use their persona's description instead. */
+      default_description_template?: string;
+      /** @description Initial in-interaction rapport for class-1 interactions. Class-2/3/4 interactions start at `default + NPCStanding.affection`. */
+      default_rapport_starting_value?: number;
+      /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
+      faction_affiliation?: number | null;
+    };
+    NPCServiceOffer: {
+      readonly id: number;
+      role: number;
+      /**
+       * @description Discriminator: routes to per-kind details model + effect handler registered in `world.npc_services.effects.OFFER_EFFECT_HANDLERS`.
+       *
+       *     * `permit` - Permit
+       */
+      kind: components['schemas']['NPCServiceOfferKindEnum'];
+      /** @description UI display text for the menu option. */
+      label: string;
+      /**
+       * @description MENU = deterministic option always shown if eligible. POOL = NPC draws from a pool per visit (mission-style; #686).
+       *
+       *     * `menu` - Menu
+       *     * `pool` - Pool
+       */
+      draw_mode?: components['schemas']['DrawModeEnum'];
+      /** @description Predicate JSON evaluated via `world.missions.predicates.evaluate`. Empty dict = no gate. Drives both visibility and selectability — if it fails, the offer doesn't appear in the menu. */
+      eligibility_rule?: unknown;
+      /** @description Minimum in-interaction rapport to see/select this option. Separate from durable eligibility; 0 = no rapport gate. */
+      rapport_requirement?: number;
+      /** @description Final actions resolve + end the interaction. Non-final actions adjust rapport and re-render the menu (e.g., flattery/negotiation). */
+      is_final?: boolean;
+      /** @description Rapport delta on success of a non-final check-based action. */
+      rapport_delta_success?: number;
+      /** @description Rapport delta on failure of a non-final check-based action. */
+      rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
+    };
+    /**
+     * @description * `permit` - Permit
+     * @enum {string}
+     */
+    NPCServiceOfferKindEnum: 'permit';
+    NPCServiceOfferRequest: {
+      role: number;
+      /**
+       * @description Discriminator: routes to per-kind details model + effect handler registered in `world.npc_services.effects.OFFER_EFFECT_HANDLERS`.
+       *
+       *     * `permit` - Permit
+       */
+      kind: components['schemas']['NPCServiceOfferKindEnum'];
+      /** @description UI display text for the menu option. */
+      label: string;
+      /**
+       * @description MENU = deterministic option always shown if eligible. POOL = NPC draws from a pool per visit (mission-style; #686).
+       *
+       *     * `menu` - Menu
+       *     * `pool` - Pool
+       */
+      draw_mode?: components['schemas']['DrawModeEnum'];
+      /** @description Predicate JSON evaluated via `world.missions.predicates.evaluate`. Empty dict = no gate. Drives both visibility and selectability — if it fails, the offer doesn't appear in the menu. */
+      eligibility_rule?: unknown;
+      /** @description Minimum in-interaction rapport to see/select this option. Separate from durable eligibility; 0 = no rapport gate. */
+      rapport_requirement?: number;
+      /** @description Final actions resolve + end the interaction. Non-final actions adjust rapport and re-render the menu (e.g., flattery/negotiation). */
+      is_final?: boolean;
+      /** @description Rapport delta on success of a non-final check-based action. */
+      rapport_delta_success?: number;
+      /** @description Rapport delta on failure of a non-final check-based action. */
+      rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
+    };
+    /**
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
+     *
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
+     */
+    NPCStanding: {
+      readonly id: number;
+      /** @description The PC's persona that holds this standing. */
+      persona: number;
+      /** @description The NPC's persona the standing is with. */
+      npc_persona: number;
+      /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
+      affection?: number;
+      /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
+      last_interaction_summary?: string;
+      /** Format: date-time */
+      readonly last_changed_at: string;
+    };
+    /**
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
+     *
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
+     */
+    NPCStandingRequest: {
+      /** @description The PC's persona that holds this standing. */
+      persona: number;
+      /** @description The NPC's persona the standing is with. */
+      npc_persona: number;
+      /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
+      affection?: number;
+      /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
+      last_interaction_summary?: string;
+    };
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;
@@ -14644,6 +14972,37 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    OfferCooldown: {
+      readonly id: number;
+      offer: number;
+      persona: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at: string;
+    };
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    OfferCooldownRequest: {
+      offer: number;
+      persona: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at: string;
+    };
     /**
      * @description Read serializer for combat opponents.
      *
@@ -15365,21 +15724,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['MissionGiverOffering'][];
     };
-    PaginatedMissionGiverStandingList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['MissionGiverStanding'][];
-    };
     PaginatedMissionInstanceList: {
       /** @example 123 */
       count: number;
@@ -15485,6 +15829,51 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['MissionTemplate'][];
     };
+    PaginatedNPCRoleList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCRole'][];
+    };
+    PaginatedNPCServiceOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCServiceOffer'][];
+    };
+    PaginatedNPCStandingList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCStanding'][];
+    };
     PaginatedNarrativeMessageDeliveryList: {
       /** @example 123 */
       count: number;
@@ -15499,6 +15888,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NarrativeMessageDelivery'][];
+    };
+    PaginatedOfferCooldownList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OfferCooldown'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
@@ -15560,6 +15964,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PendingStageAdvanceOffer'][];
+    };
+    PaginatedPermitOfferDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PermitOfferDetails'][];
     };
     PaginatedPersonaList: {
       /** @example 123 */
@@ -16521,23 +16940,6 @@ export interface components {
       is_active?: boolean;
     };
     /**
-     * @description Staff CRUD for per-(giver, character) standing rows.
-     *
-     *     Per design §6/§10 ``available_at`` is normally set by
-     *     ``services.run.accept_mission`` (= now + template.cooldown) and
-     *     ``affection`` is moved by future flirt/seduce gameplay. The CRUD
-     *     surface is for staff overrides — clear a cooldown manually,
-     *     bump/penalize affection — not for ordinary runtime writes.
-     */
-    PatchedMissionGiverStandingRequest: {
-      giver?: number;
-      character?: number;
-      /** Format: date-time */
-      available_at?: string;
-      /** @description Per-character standing / affection with this giver. Authoring tool exposes 'giver_standing_at_least' predicate gates against this value (Phase C). Negative values are permitted and mean disliked — the Phase-C 'giver_standing_at_least: N' gate uses plain >= comparison so it works uniformly across the integer range (e.g. 'at least -5' is True for affection=-3, False for affection=-10). Movement mechanic (flirt/seduce checks against the NPC) is adjacent gameplay work, not built here. */
-      affection?: number;
-    };
-    /**
      * @description Editor CRUD for MissionNode rows.
      *
      *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
@@ -16737,6 +17139,83 @@ export interface components {
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
+    PatchedNPCRoleRequest: {
+      /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
+      name?: string;
+      /** @description Admin-editable flavor; what this role does in the world. */
+      description?: string;
+      /** @description Fallback flavor description rendered when a class-1 nameless NPC of this role is presented to the player. Class-2+ NPCs use their persona's description instead. */
+      default_description_template?: string;
+      /** @description Initial in-interaction rapport for class-1 interactions. Class-2/3/4 interactions start at `default + NPCStanding.affection`. */
+      default_rapport_starting_value?: number;
+      /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
+      faction_affiliation?: number | null;
+    };
+    PatchedNPCServiceOfferRequest: {
+      role?: number;
+      /**
+       * @description Discriminator: routes to per-kind details model + effect handler registered in `world.npc_services.effects.OFFER_EFFECT_HANDLERS`.
+       *
+       *     * `permit` - Permit
+       */
+      kind?: components['schemas']['NPCServiceOfferKindEnum'];
+      /** @description UI display text for the menu option. */
+      label?: string;
+      /**
+       * @description MENU = deterministic option always shown if eligible. POOL = NPC draws from a pool per visit (mission-style; #686).
+       *
+       *     * `menu` - Menu
+       *     * `pool` - Pool
+       */
+      draw_mode?: components['schemas']['DrawModeEnum'];
+      /** @description Predicate JSON evaluated via `world.missions.predicates.evaluate`. Empty dict = no gate. Drives both visibility and selectability — if it fails, the offer doesn't appear in the menu. */
+      eligibility_rule?: unknown;
+      /** @description Minimum in-interaction rapport to see/select this option. Separate from durable eligibility; 0 = no rapport gate. */
+      rapport_requirement?: number;
+      /** @description Final actions resolve + end the interaction. Non-final actions adjust rapport and re-render the menu (e.g., flattery/negotiation). */
+      is_final?: boolean;
+      /** @description Rapport delta on success of a non-final check-based action. */
+      rapport_delta_success?: number;
+      /** @description Rapport delta on failure of a non-final check-based action. */
+      rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
+    };
+    /**
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
+     *
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
+     */
+    PatchedNPCStandingRequest: {
+      /** @description The PC's persona that holds this standing. */
+      persona?: number;
+      /** @description The NPC's persona the standing is with. */
+      npc_persona?: number;
+      /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
+      affection?: number;
+      /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
+      last_interaction_summary?: string;
+    };
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    PatchedOfferCooldownRequest: {
+      offer?: number;
+      persona?: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at?: string;
+    };
     /**
      * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
      *
@@ -16750,6 +17229,10 @@ export interface components {
     PatchedOutfitRenameRequest: {
       name?: string;
       description?: string;
+    };
+    PatchedPermitOfferDetailsRequest: {
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer?: number;
     };
     PatchedPersonaRequest: {
       /** @description The character sheet this persona belongs to. */
@@ -17201,6 +17684,15 @@ export interface components {
        * @description Prompt expires after this time. Stale rows are deleted on next access.
        */
       readonly expires_at: string;
+    };
+    PermitOfferDetails: {
+      readonly id: number;
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer: number;
+    };
+    PermitOfferDetailsRequest: {
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer: number;
     };
     Persona: {
       readonly id: number;
@@ -29583,150 +30075,6 @@ export interface operations {
       };
     };
   };
-  missions_giver_standings_list: {
-    parameters: {
-      query?: {
-        character?: number;
-        giver?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedMissionGiverStandingList'];
-        };
-      };
-    };
-  };
-  missions_giver_standings_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['MissionGiverStandingRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MissionGiverStanding'];
-        };
-      };
-    };
-  };
-  missions_giver_standings_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this mission giver standing. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MissionGiverStanding'];
-        };
-      };
-    };
-  };
-  missions_giver_standings_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this mission giver standing. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['MissionGiverStandingRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MissionGiverStanding'];
-        };
-      };
-    };
-  };
-  missions_giver_standings_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this mission giver standing. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  missions_giver_standings_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this mission giver standing. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedMissionGiverStandingRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MissionGiverStanding'];
-        };
-      };
-    };
-  };
   missions_givers_list: {
     parameters: {
       query?: {
@@ -31116,6 +31464,818 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  npc_services_cooldowns_list: {
+    parameters: {
+      query?: {
+        offer?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOfferCooldownList'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferCooldownRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferCooldownRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_cooldowns_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedOfferCooldownRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_interactions_end_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description No interaction in progress. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_interactions_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionResolveRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description Offer not eligible / session closed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No interaction in progress / offer not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_interactions_start_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionStartRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description An interaction is already in flight. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_offers_list: {
+    parameters: {
+      query?: {
+        draw_mode?: string;
+        kind?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        role?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCServiceOfferList'];
+        };
+      };
+    };
+  };
+  npc_services_offers_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCServiceOfferRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCServiceOffer'];
+        };
+      };
+    };
+  };
+  npc_services_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc service offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCServiceOffer'];
+        };
+      };
+    };
+  };
+  npc_services_offers_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc service offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCServiceOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCServiceOffer'];
+        };
+      };
+    };
+  };
+  npc_services_offers_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc service offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_offers_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc service offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedNPCServiceOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCServiceOffer'];
+        };
+      };
+    };
+  };
+  npc_services_permit_details_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPermitOfferDetailsList'];
+        };
+      };
+    };
+  };
+  npc_services_permit_details_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PermitOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_permit_details_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this permit offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_permit_details_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this permit offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PermitOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_permit_details_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this permit offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_permit_details_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this permit offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPermitOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_roles_list: {
+    parameters: {
+      query?: {
+        faction_affiliation?: number;
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCRoleList'];
+        };
+      };
+    };
+  };
+  npc_services_roles_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCRoleRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCRole'];
+        };
+      };
+    };
+  };
+  npc_services_roles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCRole'];
+        };
+      };
+    };
+  };
+  npc_services_roles_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCRoleRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCRole'];
+        };
+      };
+    };
+  };
+  npc_services_roles_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_roles_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedNPCRoleRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCRole'];
+        };
+      };
+    };
+  };
+  npc_services_standings_list: {
+    parameters: {
+      query?: {
+        npc_persona?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCStandingList'];
+        };
+      };
+    };
+  };
+  npc_services_standings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCStandingRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCStanding'];
+        };
+      };
+    };
+  };
+  npc_services_standings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCStanding'];
+        };
+      };
+    };
+  };
+  npc_services_standings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCStandingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCStanding'];
+        };
+      };
+    };
+  };
+  npc_services_standings_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_standings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc standing. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedNPCStandingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCStanding'];
+        };
       };
     };
   };

@@ -21,13 +21,13 @@ from dataclasses import dataclass
 import random
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
 from django.utils import timezone
 
 from core_management.permissions import is_staff_observer
 from world.checks.outcome_utils import select_weighted
 from world.missions.constants import AccessTier, ArcScope
-from world.missions.predicates import CharacterPredicateContext, evaluate
+from world.missions.models import MissionGiverCooldown
+from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.stories.models import Era
 
 if TYPE_CHECKING:
@@ -126,11 +126,18 @@ def _eligible_templates(  # noqa: PLR0913 — kwargs split to keep callsites rea
         STAFF_ONLY templates; staff see both tiers
     """
     now = timezone.now()
-    qs = giver.templates.filter(is_active=True).exclude(
-        Q(givers__standings__character=character)
-        & Q(givers__standings__giver=giver)
-        & Q(givers__standings__available_at__gt=now),
-    )
+    qs = giver.templates.filter(is_active=True)
+    # Per-(giver, character) cooldown — works for every giver kind.
+    # When a current MissionGiverCooldown row exists for this pair, the
+    # entire pool surfaced via this giver is gated. Behaviour matches
+    # pre-refactor: cooldown was always per-(giver, character), keyed on
+    # the giver itself rather than its target NPC's persona.
+    if MissionGiverCooldown.objects.filter(
+        giver=giver,
+        character=character,
+        available_at__gt=now,
+    ).exists():
+        return []
     if not is_staff_observer(character):
         qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
     # DESIGN: a staff character testing a STAFF_ONLY template will pass

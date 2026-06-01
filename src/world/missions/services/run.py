@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.missions.models import (
-    MissionGiverStanding,
+    MissionGiverCooldown,
     MissionInstance,
     MissionNode,
     MissionParticipant,
@@ -67,7 +67,11 @@ def accept_mission(
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
-    MissionGiverStanding.objects.update_or_create(
+    # Per-(giver, character) cooldown — works for every giver kind
+    # (NPC, ROOM_TRIGGER, ENVIRONMENTAL_DETAIL). Cooldown and persona
+    # standing are deliberately orthogonal; affection (when it applies)
+    # lives on world.npc_services.models.NPCStanding.
+    MissionGiverCooldown.objects.update_or_create(
         giver=giver,
         character=character,
         defaults={"available_at": timezone.now() + template.cooldown},

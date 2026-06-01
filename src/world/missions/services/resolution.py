@@ -72,11 +72,11 @@ from world.missions.models import (
     MissionNodeSnapshot,
     MissionOptionRoute,
 )
-from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import PresentedOption
+from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
