@@ -44,6 +44,8 @@ class OwnershipEventType(models.TextChoices):
     GIVEN = "given", "Given"
     STOLEN = "stolen", "Stolen"
     TRANSFERRED = "transferred", "Transferred"
+    ACTIVATED = "activated", "Activated"  # consumable used (e.g. permit redeemed)
+    CONSUMED = "consumed", "Consumed"  # item destroyed by use (e.g. permit absorbed into project)
 
 
 class GearArchetype(models.TextChoices):

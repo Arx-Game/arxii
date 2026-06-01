@@ -281,9 +281,18 @@ def _resolve_min_npc_standing(
 # discriminator column — `is_consumable` / `is_container` / etc. are
 # orthogonal flags. Each persona-scoped IC item type lives behind a
 # specific template name.
-HAS_ITEM_PERSONA_HOLDER_DISPATCH: dict[str, tuple[str, str]] = {
-    # template.name -> (reverse-relation name, persona FK field name)
-    # "building_permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
+# Dispatch shape: template.name -> (reverse-relation, persona FK, active_filter).
+# The optional ``active_filter`` is a path under the reverse relation that the
+# resolver applies to exclude "spent" items — e.g. ``"consumed_at__isnull=True"``
+# for permits where holding a consumed permit shouldn't gate "has_item" True.
+# An empty dict {} means "always count" (the legacy 2-tuple behaviour).
+HAS_ITEM_PERSONA_HOLDER_DISPATCH: dict[str, tuple[str, str, dict[str, object]]] = {
+    # template.name -> (reverse-relation name, persona FK field name, extra filter on the relation)
+    "building_permit": (
+        "building_permit_details",
+        "holder_persona",
+        {"consumed_at__isnull": True},  # consumed permits no longer "owned" for gating
+    ),  # Plan 3 (#668)
 }
 
 
@@ -321,11 +330,16 @@ def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
             "(relation, persona_field) pair before gating offers on it."
         )
         raise NotImplementedError(msg)
-    relation, persona_field = HAS_ITEM_PERSONA_HOLDER_DISPATCH[name]
-    filter_kwargs = {
+    relation, persona_field, active_filter = HAS_ITEM_PERSONA_HOLDER_DISPATCH[name]
+    filter_kwargs: dict[str, object] = {
         f"{relation}__{persona_field}": ctx.presented_persona,
         "template_id": template_id,
     }
+    # Each (path, value) in active_filter becomes "<relation>__<path>=<value>"
+    # — e.g. for permits, "building_permit_details__consumed_at__isnull=True"
+    # excludes already-spent permits from the "owned" set.
+    for sub_path, value in active_filter.items():
+        filter_kwargs[f"{relation}__{sub_path}"] = value
     return ItemInstance.objects.filter(**filter_kwargs).exists()
 
 
@@ -490,11 +504,7 @@ LEAF_RESOLVERS: LeafRegistry = {
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
     "min_npc_standing": _resolve_min_npc_standing,
-    # has_item is implemented but not registered yet — Plan 3 (#668) lands
-    # both the BuildingPermitDetails.holder_persona FK AND the matching
-    # dispatch entry in HAS_ITEM_PERSONA_HOLDER_DISPATCH, then registers
-    # the leaf here. Registering it now would mean every call raises
-    # NotImplementedError until that lands.
+    "has_item": _resolve_has_item,
     "is_member_of_org": _resolve_is_member_of_org,
     "min_org_reputation": _resolve_min_org_reputation,
     "min_society_standing": _resolve_min_society_standing,

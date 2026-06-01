@@ -113,14 +113,30 @@ class AvailableOffersTests(TestCase):
         self.assertEqual(available_offers(session), [])
 
 
+def _seed_permit_prereqs():
+    """Seed the BuildingPermit template + return a default BuildingKind.
+
+    The PERMIT effect handler (issue_permit, registered by buildings)
+    requires both to be present. Tests that exercise resolve_offer on a
+    PERMIT-kind offer call this and pass the returned kind to the
+    PermitOfferDetailsFactory.
+    """
+    from world.buildings.factories import BuildingKindFactory
+    from world.buildings.seeds import ensure_building_permit_template
+
+    ensure_building_permit_template()
+    return BuildingKindFactory(name="test-kind")
+
+
 class ResolveOfferTests(TestCase):
     """Final-action close + non-final rapport adjustment + cross-session safety."""
 
     def test_final_action_dispatches_effect_and_closes(self) -> None:
+        kind = _seed_permit_prereqs()
         character, persona = _pc()
         role = NPCRoleFactory()
         offer = NPCServiceOfferFactory(role=role, label="permit", is_final=True)
-        PermitOfferDetailsFactory(offer=offer)
+        PermitOfferDetailsFactory(offer=offer, building_kind=kind)
         session = start_interaction(role=role, persona=persona, character=character)
         result = resolve_offer(session, offer)
         self.assertEqual(result.kind, OfferKind.PERMIT)
@@ -128,6 +144,7 @@ class ResolveOfferTests(TestCase):
         self.assertEqual(len(session.results), 1)
 
     def test_non_final_action_adjusts_rapport_keeps_session_open(self) -> None:
+        kind = _seed_permit_prereqs()
         character, persona = _pc()
         role = NPCRoleFactory(default_rapport_starting_value=0)
         offer = NPCServiceOfferFactory(
@@ -136,7 +153,7 @@ class ResolveOfferTests(TestCase):
             is_final=False,
             rapport_delta_success=3,
         )
-        PermitOfferDetailsFactory(offer=offer)
+        PermitOfferDetailsFactory(offer=offer, building_kind=kind)
         session = start_interaction(role=role, persona=persona, character=character)
         resolve_offer(session, offer)
         self.assertFalse(session.closed)
@@ -171,6 +188,7 @@ class EndInteractionPersistsAffectionTests(TestCase):
     """Class 2-4 close persists new affection; class-1 is a no-op."""
 
     def test_class_2_persists_new_affection(self) -> None:
+        kind = _seed_permit_prereqs()
         character, persona = _pc()
         npc_persona = PersonaFactory()
         role = NPCRoleFactory(default_rapport_starting_value=0)
@@ -180,7 +198,7 @@ class EndInteractionPersistsAffectionTests(TestCase):
             is_final=False,
             rapport_delta_success=4,
         )
-        PermitOfferDetailsFactory(offer=offer)
+        PermitOfferDetailsFactory(offer=offer, building_kind=kind)
         session = start_interaction(
             role=role, persona=persona, character=character, npc_persona=npc_persona
         )
@@ -190,12 +208,13 @@ class EndInteractionPersistsAffectionTests(TestCase):
         self.assertEqual(standing.affection, 4)
 
     def test_class_1_no_persistence(self) -> None:
+        kind = _seed_permit_prereqs()
         character, persona = _pc()
         role = NPCRoleFactory()
         offer = NPCServiceOfferFactory(
             role=role, label="flatter", is_final=False, rapport_delta_success=4
         )
-        PermitOfferDetailsFactory(offer=offer)
+        PermitOfferDetailsFactory(offer=offer, building_kind=kind)
         session = start_interaction(role=role, persona=persona, character=character)
         resolve_offer(session, offer)
         end_interaction(session)

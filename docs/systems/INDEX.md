@@ -415,6 +415,53 @@ ROOM_FEATURE_PROGRESSION).
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
 
+### Buildings (Permits + Construction + Materials)
+Plan 3 (#668). Permits authorize **(ward × kind)** building construction via the
+unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
+`BUILDING_CONSTRUCTION` Projects with materials snapshotted onto the building.
+
+- **Models:** `BuildingKind` (open catalog with 9 non-exclusive flags: residential/
+  commercial/fortified/occult/maritime/agrarian/aerial/subterranean/secret +
+  `rooms_per_size_tier` multiplier), `Building` (decorates an Area at level
+  BUILDING; `target_size`, `target_grandeur`, `max_rooms` mutable), `BuildingMaterial`
+  (per-building snapshot of materials used at construction), `MaterialLoreEffect`
+  (per-template special properties — godswar stone → resonance_amp etc.; zero
+  rows shipped, content-authored), `BuildingPermitDetails` (persona-scoped permit
+  holder, building_kind + approved_wards M2M), `BuildingConstructionDetails`
+  (Project per-kind payload for BUILDING_CONSTRUCTION).
+- **Key functions** (`world.buildings.services`):
+  - `issue_permit(offer, persona) -> EffectResult` — real PERMIT effect handler
+    (replaces Plan 2's stub; registered via `BuildingsConfig.ready()`)
+  - `validate_permit_site(permit_details, site_room, acting_persona, target_size) -> ValidationResult`
+    — raises typed `PermitValidationError` subclasses with `user_message`
+  - `activate_permit(permit_details, site_room, acting_persona, target_size, target_grandeur) -> Project`
+    — consumes the permit, spawns the construction project
+  - `complete_building_construction(project) -> Building` — runs at project completion;
+    spawns Building, snapshots materials, deletes consumed instances
+  - `contribution_value_for_construction(contribution) -> int` — material/money
+    value formula (materials ~110% baseline, lore-bearing materials scale by
+    `lore_value`)
+- **Formula:** `Building.max_rooms = BuildingKind.rooms_per_size_tier × Project.target_size`.
+  House at `rooms_per_size_tier=20` gives Size-1=20, Size-5=100, Size-10=200 rooms.
+- **Action:** `ActivatePermitAction` (in `src/actions/definitions/items.py`).
+- **Predicate leaf:** `has_item` (persona-scoped) registered with the
+  `building_permit` dispatch entry — checks if a persona holds an unconsumed
+  building permit.
+- **Seeding:** `ensure_plan_3_seeds()` in `world.buildings.seeds` (get-or-create
+  the BuildingPermit ItemTemplate + House BuildingKind + wires House onto
+  Builders Guild Clerk PERMIT offers). NOT a committed fixture (per #683).
+- **Out of scope, filed as followups:** BuildingKind catalog expansion (#694),
+  MaterialLoreEffect content authoring (#695), Building → Neighborhood → Domain
+  progression (#696), BUILDING_RENOVATION / BUILDING_EXTENSION / BUILDING_UPGRADE
+  project kinds (#673), placeholder room generation upgrade (#670 Room Builder
+  Tool).
+- **Cross-app dependencies:** `world.areas` (Area + AreaClosure + ward fields),
+  `world.items` (ItemTemplate + ItemInstance + OwnershipEvent + `lore_value`),
+  `world.projects` (Project + Contribution), `world.npc_services` (NPCRole +
+  NPCServiceOffer + PermitOfferDetails), `world.scenes` (Persona), `world.predicates`
+  (`has_item` leaf dispatch).
+- **Source:** `src/world/buildings/`
+
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 

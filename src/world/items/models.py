@@ -375,6 +375,17 @@ class ItemInstance(SharedMemoryModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    lore_value = models.IntegerField(
+        default=0,
+        help_text=(
+            "Material construction-value boost. Used by the buildings system "
+            "to inflate this instance's value when contributed as a MATERIAL "
+            "to a BUILDING_CONSTRUCTION project. Pure number — more = more "
+            "valuable in construction. Special properties (e.g. godswar stone "
+            "grants resonance_amp to inhabitants) live on world.buildings."
+            "MaterialLoreEffect, NOT here."
+        ),
+    )
 
     class Meta:
         indexes = [
