@@ -28,6 +28,8 @@ New feature specs live in the **GitHub issue body** (between `<!-- spec:start --
 
 Comments are for discussion only — never gate on them (anyone can comment on a public issue). The `superpowers:writing-plans` output is **ephemeral** (worktree-only, never committed).
 
+These labels (plus issue assignment and close state) also drive the **Project board** automatically — assignment → *In progress*, the `status:*`/`spec:*` labels → the *Stage* swimlane, close → *Done*/*Cancelled*. See `docs/project-board-automation.md`. Don't hand-move cards; change the label/assignment and the board follows.
+
 **IMPORTANT: Never work directly on main.** Always create a feature branch before making changes:
 
 ```bash
