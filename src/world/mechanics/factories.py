@@ -196,6 +196,18 @@ class BlocksAnimaRegenPropertyFactory(PropertyFactory):
     description = "Blocks daily anima regeneration while this stage is active."
 
 
+class FatigueCollapseImmunePropertyFactory(PropertyFactory):
+    """Named factory for the 'fatigue_collapse_immune' property tag.
+
+    Applied to condition templates (e.g. Audere, Audere Majora) to suppress
+    fatigue-based KO while the condition is active.
+    ``django_get_or_create = ("name",)`` is inherited; repeated calls return the same row.
+    """
+
+    name = "fatigue_collapse_immune"
+    description = "Suppresses collapse from fatigue while this condition is active."
+
+
 class ObjectPropertyFactory(DjangoModelFactory):
     """Factory for creating ObjectProperty instances."""
 

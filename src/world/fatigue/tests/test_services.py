@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.factories import StrainConfigFactory
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
@@ -19,6 +20,7 @@ from world.fatigue.constants import (
 from world.fatigue.models import FatiguePool
 from world.fatigue.services import (
     apply_fatigue,
+    apply_technique_fatigue,
     attempt_endurance_check,
     attempt_power_through,
     get_fatigue_capacity,
@@ -657,3 +659,85 @@ class AttemptPowerThroughTests(TestCase):
         mock_perform_check.return_value = MagicMock(success_level=1)
         _succeeded, strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert strain_damage == 10
+
+
+class ApplyTechniqueFatigueTests(TestCase):
+    """Tests for apply_technique_fatigue."""
+
+    def setUp(self):
+        super().setUp()
+        FatiguePool.flush_instance_cache()
+        self.sheet = CharacterSheetFactory()
+        self.config = StrainConfigFactory()  # base=25, strain=50
+
+    def test_zero_cost_returns_zero(self):
+        """Zero effective_anima_cost skips fatigue entirely."""
+        result = apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 0, 0)
+        self.assertEqual(result, 0)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 0)
+
+    def test_base_only_no_strain(self):
+        """Base anima with no strain uses base_anima_fatigue_ratio (25%)."""
+        # 8 base anima, 0 strain → (8 * 25 + 0 * 50) // 100 = 2
+        result = apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 8, 0)
+        self.assertEqual(result, 2)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 2)
+
+    def test_strain_portion_costs_more(self):
+        """Strain portion uses strain_anima_fatigue_ratio (50%), higher than base."""
+        # 10 total (6 base + 4 strain) → (6*25 + 4*50) // 100 = (150+200)//100 = 3
+        result = apply_technique_fatigue(self.sheet, ActionCategory.MENTAL, 10, 4)
+        self.assertEqual(result, 3)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        self.assertEqual(pool.get_current(ActionCategory.MENTAL), 3)
+
+    def test_correct_pool_category_used(self):
+        """Fatigue accrues to the correct pool category."""
+        apply_technique_fatigue(self.sheet, ActionCategory.SOCIAL, 4, 0)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 0)
+        self.assertEqual(pool.get_current(ActionCategory.SOCIAL), 1)  # (4*25)//100=1
+
+    def test_no_collapse_check_below_overexerted(self):
+        """Below OVEREXERTED threshold, no collapse check fires."""
+        with patch("world.fatigue.services.attempt_endurance_check") as mock_check:
+            apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 4, 0)
+            mock_check.assert_not_called()
+
+    def test_immune_skips_collapse_check(self):
+        """immune_to_fatigue_collapse=True skips collapse even at EXHAUSTED zone."""
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.set_current(ActionCategory.PHYSICAL, 9999)
+        pool.save()
+        FatiguePool.flush_instance_cache()
+
+        with patch("world.fatigue.services.attempt_endurance_check") as mock_check:
+            apply_technique_fatigue(
+                self.sheet,
+                ActionCategory.PHYSICAL,
+                4,
+                0,
+                immune_to_fatigue_collapse=True,
+            )
+            mock_check.assert_not_called()
+
+    def test_collapse_check_fires_at_overexerted(self):
+        """At OVEREXERTED+ zone without immunity, endurance check fires."""
+        char = self.sheet.character
+        _setup_stat(char, "stamina", 10, TraitCategory.PHYSICAL)  # display 1
+        _setup_stat(char, "willpower", 10, TraitCategory.META)
+
+        pool = get_or_create_fatigue_pool(self.sheet)
+        capacity = 1 * CAPACITY_STAT_MULTIPLIER + 1 * CAPACITY_WILLPOWER_MULTIPLIER
+        # Set to 85% of capacity → OVEREXERTED zone
+        pool.set_current(ActionCategory.PHYSICAL, int(capacity * 0.85))
+        pool.save()
+        FatiguePool.flush_instance_cache()
+
+        with patch(
+            "world.fatigue.services.attempt_endurance_check", return_value=True
+        ) as mock_check:
+            apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 4, 0)
+            mock_check.assert_called_once()

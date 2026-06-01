@@ -190,6 +190,64 @@ def apply_fatigue(
     return actual_cost
 
 
+_TECHNIQUE_COLLAPSE_ZONES = {FatigueZone.OVEREXERTED, FatigueZone.EXHAUSTED}
+_DEFAULT_BASE_RATIO = 25
+_DEFAULT_STRAIN_RATIO = 50
+
+
+def apply_technique_fatigue(
+    character_sheet: CharacterSheet,
+    category: str,
+    effective_anima_cost: int,
+    strain_commitment: int,
+    *,
+    immune_to_fatigue_collapse: bool = False,
+) -> int:
+    """Accrue fatigue from a technique cast and conditionally check collapse.
+
+    Fatigue = (base_portion * base_ratio + strain_portion * strain_ratio) // 100.
+    base_portion = max(effective_anima_cost - strain_commitment, 0).
+    strain_portion = max(strain_commitment, 0).
+    Ratios are read from StrainConfig (pk=1); falls back to 25/50 if absent.
+
+    Returns:
+        Fatigue points applied (0 if effective_anima_cost == 0).
+    """
+    if effective_anima_cost <= 0:
+        return 0
+
+    from world.combat.models import StrainConfig  # noqa: PLC0415
+
+    config = StrainConfig.objects.filter(pk=1).first()
+    base_ratio = config.base_anima_fatigue_ratio if config else _DEFAULT_BASE_RATIO
+    strain_ratio = config.strain_anima_fatigue_ratio if config else _DEFAULT_STRAIN_RATIO
+
+    base_portion = max(effective_anima_cost - strain_commitment, 0)
+    strain_portion = max(strain_commitment, 0)
+    amount = (base_portion * base_ratio + strain_portion * strain_ratio) // 100
+
+    pool = get_or_create_fatigue_pool(character_sheet)
+    pool.set_current(category, pool.get_current(category) + amount)
+    pool.save()
+
+    if amount == 0 or immune_to_fatigue_collapse:
+        return amount
+
+    # Skip collapse check when capacity is unconfigured (no stats set up).
+    if get_fatigue_capacity(character_sheet, category) <= 0:
+        return amount
+
+    zone = get_fatigue_zone(character_sheet, category)
+    if zone not in _TECHNIQUE_COLLAPSE_ZONES:
+        return amount
+
+    endurance_passed = attempt_endurance_check(character_sheet, category)
+    if not endurance_passed:
+        attempt_power_through(character_sheet, category)
+
+    return amount
+
+
 def should_check_collapse(
     character_sheet: CharacterSheet,
     category: str,

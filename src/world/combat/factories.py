@@ -271,6 +271,8 @@ class StrainConfigFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("pk",)
 
     pk = 1
+    base_anima_fatigue_ratio = 25
+    strain_anima_fatigue_ratio = 50
 
 
 class ClashConfigFactory(factory_django.DjangoModelFactory):
