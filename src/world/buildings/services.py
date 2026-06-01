@@ -145,12 +145,14 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         owner=persona.character_sheet.character.db_account if _has_account(persona) else None,
         charges=1,
     )
+    persona_name = getattr(persona, "display_ic", None)  # noqa: GETATTR_LITERAL — display_ic is a method on Persona; absent on null guard
+    holder_persona_name = persona_name() if callable(persona_name) else str(persona)
     permit = BuildingPermitDetails.objects.create(
         item_instance=instance,
         holder_persona=persona,
+        holder_persona_name=holder_persona_name,
         building_kind=details.building_kind,
         max_target_size=details.default_max_target_size,
-        cost_modifier=1,
         issued_by_role=offer.role,
     )
     permit.approved_wards.set(details.default_approved_wards.all())
@@ -176,11 +178,14 @@ def _has_account(persona: Persona) -> bool:
     Test characters created without a played account have no db_account;
     we want issuance to still work (the permit just won't have an
     Account-side owner). The IC owner is holder_persona which is
-    required.
+    required. Narrow except: AttributeError (no sheet/character/account
+    attribute chain) or DoesNotExist on the reverse OneToOne.
     """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
     try:
         return persona.character_sheet.character.db_account_id is not None
-    except Exception:  # noqa: BLE001 — defensive: AttributeError or missing FK
+    except (AttributeError, ObjectDoesNotExist):
         return False
 
 
@@ -231,13 +236,13 @@ def validate_permit_site(
         )
         raise PermitHolderMismatchError(msg)
 
-    sheet = getattr(site_room, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne, may be absent on non-Character ObjectDB. Wait, sheet_data is for Characters; rooms use room_profile
-    # Actually rooms have room_profile / RoomProfile. Walk to RoomProfile for is_outdoor.
     room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne; absent on non-Room ObjectDB
-    if room_profile is None or not getattr(room_profile, "is_outdoor", False):  # noqa: GETATTR_LITERAL — defensive default
-        msg = f"Site {getattr(site_room, 'pk', '?')} is not an outdoor room."  # noqa: GETATTR_LITERAL — defensive in error message
+    if room_profile is None:
+        msg = f"Site {getattr(site_room, 'pk', '?')} has no RoomProfile (not a room)."  # noqa: GETATTR_LITERAL — defensive in error message
         raise PermitSiteNotOutdoorError(msg)
-    _ = sheet  # silence unused
+    if not room_profile.is_outdoor:
+        msg = f"Site {site_room.pk} is not an outdoor room."
+        raise PermitSiteNotOutdoorError(msg)
 
     ward = _ward_for_room(site_room)
     if ward is None or not permit_details.approved_wards.filter(pk=ward.pk).exists():
@@ -270,23 +275,22 @@ def _ward_for_room(site_room) -> Area | None:
     Rooms in Evennia don't directly link to wards — they link via
     ``RoomProfile`` → ``Area`` (or via ``LocationOwnership``). For
     Plan 3 we read ``room_profile.area`` and walk up the closure until
-    we hit a level=WARD area.
+    we hit a level=WARD area. ``select_related("ancestor")`` so we get
+    the Ward row in one query instead of two.
     """
     from world.areas.constants import AreaLevel  # noqa: PLC0415
-    from world.areas.models import Area, AreaClosure  # noqa: PLC0415
+    from world.areas.models import AreaClosure  # noqa: PLC0415
 
     room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne
-    site_area = getattr(room_profile, "area", None) if room_profile else None  # noqa: GETATTR_LITERAL — area FK on profile may be absent in tests
+    site_area = room_profile.area if room_profile else None
     if site_area is None:
         return None
-    ward_id = (
-        AreaClosure.objects.filter(descendant=site_area, ancestor__level=AreaLevel.WARD)
-        .values_list("ancestor_id", flat=True)
+    closure = (
+        AreaClosure.objects.select_related("ancestor")
+        .filter(descendant=site_area, ancestor__level=AreaLevel.WARD)
         .first()
     )
-    if ward_id is None:
-        return None
-    return Area.objects.filter(pk=ward_id).first()
+    return closure.ancestor if closure else None
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +310,10 @@ def activate_permit(
 
     Re-runs ``validate_permit_site`` (defense in depth — callers should
     have validated already, but the consumer is the authoritative gate).
-    Sets ``consumed_at`` + ``consumed_by_persona`` on the permit and
-    writes an ``OwnershipEvent(ACTIVATED, then CONSUMED)`` audit row.
+    Locks the permit row via ``select_for_update`` so concurrent
+    activations can't both pass the ``consumed_at is None`` check.
+    Sets ``consumed_at`` + ``consumed_by_persona`` and writes an
+    ``OwnershipEvent(ACTIVATED, then CONSUMED)`` audit row.
     """
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.models import OwnershipEvent  # noqa: PLC0415
@@ -318,6 +324,10 @@ def activate_permit(
             f"{TARGET_GRANDEUR_MIN}-{TARGET_GRANDEUR_MAX} range."
         )
         raise PermitSizeExceedsCapError(msg)
+    # Lock the permit row inside the atomic — concurrent activations
+    # must serialize. Re-read consumed_at from the lock so we don't act
+    # on stale in-memory state.
+    permit_details = BuildingPermitDetails.objects.select_for_update().get(pk=permit_details.pk)
     validation = validate_permit_site(permit_details, site_room, acting_persona, target_size)
     now = timezone.now()
     permit_details.consumed_at = now
@@ -352,7 +362,7 @@ def _spawn_construction_project(  # noqa: PLR0913 — kwargs split for callsite 
     *,
     permit_details: BuildingPermitDetails,
     ward: Area,
-    site_room,
+    site_room,  # noqa: ARG001 — accepted for caller symmetry; details model doesn't store site_room
     acting_persona: Persona,
     target_size: int,
     target_grandeur: int,
@@ -360,51 +370,39 @@ def _spawn_construction_project(  # noqa: PLR0913 — kwargs split for callsite 
     """Create the Project shell for a building under construction.
 
     Plan 1's Project framework owns the project surface; we just author
-    a row with the right kind + details payload. The details model
-    lives in world.projects (BuildingConstructionDetails); we create it
-    here with the snapshot of size/grandeur/permit.
+    a row with the right kind + details payload. The threshold/time-
+    limit are sensible defaults pre-content; tuning per BuildingKind +
+    target_size happens via a later content-authoring layer.
     """
-    from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus  # noqa: PLC0415
+    from datetime import timedelta  # noqa: PLC0415
+
+    from world.buildings.models import BuildingConstructionDetails  # noqa: PLC0415
+    from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
+    now = timezone.now()
+    # Default threshold scales linearly with size×grandeur — content
+    # authoring can override per kind. Time limit defaults to 30 days
+    # for SINGLE_THRESHOLD construction (#673 will tune by kind).
+    threshold = target_size * target_grandeur * 100
     project = Project.objects.create(
         kind=ProjectKind.BUILDING_CONSTRUCTION,
-        status=ProjectStatus.ACTIVE,
         completion_mode=CompletionMode.SINGLE_THRESHOLD,
-        title=f"Construct {permit_details.building_kind.name} at {ward.name}",
+        owner_persona=acting_persona,
+        started_at=now,
+        time_limit=now + timedelta(days=30),
+        threshold_target=threshold,
+        description=f"Construct {permit_details.building_kind.name} at {ward.name}",
     )
-    # The Project framework's per-kind details model already exists for
-    # BUILDING_CONSTRUCTION (Plan 1). We attach the size + grandeur +
-    # permit snapshot here.
-    _attach_construction_details(
+    BuildingConstructionDetails.objects.create(
         project=project,
         permit_details=permit_details,
         ward=ward,
-        site_room=site_room,
         target_size=target_size,
         target_grandeur=target_grandeur,
         constructed_by_persona=acting_persona,
     )
     return project
-
-
-def _attach_construction_details(**kwargs) -> None:
-    """Hook for attaching per-kind construction details.
-
-    Plan 1 ships ``BuildingConstructionDetails`` in ``world.projects``.
-    The exact field shape may evolve; this thin wrapper isolates the
-    coupling so test-only paths can stub it.
-    """
-    from world.projects.models import BuildingConstructionDetails  # noqa: PLC0415
-
-    BuildingConstructionDetails.objects.create(
-        project=kwargs["project"],
-        permit_details=kwargs["permit_details"],
-        ward=kwargs["ward"],
-        target_size=kwargs["target_size"],
-        target_grandeur=kwargs["target_grandeur"],
-        constructed_by_persona=kwargs["constructed_by_persona"],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -413,21 +411,36 @@ def _attach_construction_details(**kwargs) -> None:
 
 
 @transaction.atomic
-def complete_building_construction(project: Project) -> Building:
+def complete_building_construction(
+    project: Project,
+    outcome_tier: object | None = None,  # noqa: ARG001 — projects.KindHandler signature; unused in Plan 3
+) -> Building:
     """Spawn a Building from a completed BUILDING_CONSTRUCTION project.
+
+    Registered with ``world.projects.services.register_kind_handler`` at
+    app-ready time. Signature matches the framework's ``KindHandler``
+    callable (project, outcome_tier).
 
     Reads the project's ``BuildingConstructionDetails`` for kind / size /
     grandeur / ward. Creates the Building (with an Area shell at level
     BUILDING parented to the ward), computes ``max_rooms`` via the
     formula, snapshots material contributions to ``BuildingMaterial``
-    rows, deletes consumed ItemInstances, generates placeholder
-    linear-chain rooms.
+    rows (bulk_create), deletes consumed ItemInstances in one statement,
+    generates the placeholder entry-hall Room.
+
+    Idempotent: if a Building already exists for this project, return it
+    without re-creating. The unique constraint on
+    ``Building.source_project`` enforces this at the DB level too.
     """
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
-    from world.items.models import OwnershipEvent  # noqa: PLC0415
+    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
     from world.projects.constants import ContributionKind  # noqa: PLC0415
+
+    existing = Building.objects.filter(source_project=project).first()
+    if existing is not None:
+        return existing
 
     details = project.building_construction_details
     permit = details.permit_details
@@ -450,53 +463,76 @@ def complete_building_construction(project: Project) -> Building:
         source_project=project,
     )
 
-    for contribution in project.contributions.filter(kind=ContributionKind.ITEM):
-        instance = contribution.item_instance
-        BuildingMaterial.objects.create(
-            building=building,
-            item_template=instance.template,
-            item_instance_pk=instance.pk,
-            units=instance.quantity,
-            quality_tier=instance.template.minimum_quality_tier,
-            lore_value=instance.lore_value,
-            contributed_by_persona=contribution.contributor_persona,
+    contributions = list(
+        project.contributions.filter(kind=ContributionKind.ITEM).select_related(
+            "item_instance__template__minimum_quality_tier",
+            "item_instance__quality_tier",
+            "item_instance__owner",
+            "contributor_persona",
         )
-        OwnershipEvent.objects.create(
-            item_instance=instance,
+    )
+    materials = [
+        BuildingMaterial(
+            building=building,
+            item_template=c.item_instance.template,
+            item_instance_pk=c.item_instance.pk,
+            units=c.item_instance.quantity,
+            # Use the instance's actual quality tier; fall back to
+            # template floor only when the instance has none set.
+            quality_tier=(
+                c.item_instance.quality_tier or c.item_instance.template.minimum_quality_tier
+            ),
+            lore_value=c.item_instance.lore_value,
+            contributed_by_persona=c.contributor_persona,
+        )
+        for c in contributions
+    ]
+    events = [
+        OwnershipEvent(
+            item_instance=c.item_instance,
             event_type=OwnershipEventType.CONSUMED,
-            from_account=instance.owner,
+            from_account=c.item_instance.owner,
             notes=f"Consumed by building construction (Project {project.pk})",
         )
-        instance.delete()
+        for c in contributions
+    ]
+    if materials:
+        BuildingMaterial.objects.bulk_create(materials)
+        OwnershipEvent.objects.bulk_create(events)
+        ItemInstance.objects.filter(pk__in=[c.item_instance_id for c in contributions]).delete()
 
     _generate_placeholder_rooms(building)
     return building
 
 
 def _generate_placeholder_rooms(building: Building) -> None:
-    """Generate the Plan 3 placeholder linear-chain rooms.
+    """Create the building's entry-hall Room; rest deferred to #670.
 
-    Creates ``building.max_rooms`` rooms named "Entry Hall, Hall 2,
-    Hall 3, ...". Each room has a single exit to the next. Explicitly a
-    stopgap — #670 (Room Builder Tool) lets players actually shape
-    their rooms.
-
-    Plan 3 deliberately does NOT create Evennia ObjectDB Room rows
-    here — room creation is part of #670's UX, and creating 200+
-    placeholder ObjectDBs at construction time would be wasteful for
-    Buildings that immediately get restructured. Instead, the placeholder
-    chain lives as a Project-completion intent that #670's UI surfaces:
-    "your Building has N planned rooms — author them now or accept the
-    defaults." For testing the construction pipeline, the chain is
-    represented by the ``max_rooms`` field alone.
+    Plan 3 creates exactly ONE Evennia Room ObjectDB (the entry hall)
+    with a RoomProfile linking it to the Building's Area, so the
+    Building is immediately enterable. The remaining ``max_rooms - 1``
+    rooms are authored later via #670 (Room Builder Tool) — creating
+    200+ placeholder ObjectDBs upfront would be wasteful for Buildings
+    that get immediately restructured.
     """
-    # Intentional no-op for Plan 3. The room budget is on
-    # ``building.max_rooms``; actual Room ObjectDB creation is deferred
-    # to #670 or to a future Plan-3 follow-up that authors them inline.
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    room = ObjectDB.objects.create(
+        db_key="Entry Hall",
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+    RoomProfile.objects.update_or_create(
+        objectdb=room,
+        defaults={"area": building.area, "is_outdoor": False},
+    )
     logger.info(
-        "Building %s constructed with max_rooms=%d (placeholder generation deferred to #670).",
+        "Building %s constructed with max_rooms=%d (entry hall created; "
+        "remaining %d rooms deferred to #670).",
         building.pk,
         building.max_rooms,
+        max(0, building.max_rooms - 1),
     )
 
 
@@ -513,10 +549,13 @@ def contribution_value_for_construction(contribution: Contribution) -> int:
 
     - AP: not value-bearing (gates labor checks elsewhere); returns 0.
     - MONEY: face value.
-    - ITEM (material): ``monetary × (1 + lore_value / 100) × MATERIAL_BASE_BOOST × units``.
+    - ITEM (material): ``monetary × max(0, 1 + lore_value / 100) × MATERIAL_BASE_BOOST × units``.
       Materials are 110% of base monetary value; lore-bearing materials
       scale up substantially (lore_value=100 → 2× on top of base = 220%
       effective; lore_value=900 → 10× on top of base = 1100% effective).
+      Negative lore_value is clamped at zero — sabotaged / corrupted
+      materials don't subtract from project value; the construction just
+      gets no benefit from them.
     - CHECK: pass-through value depends on the check's success_level; for
       Plan 3 we treat it as 0 (the project's labor surface lives elsewhere).
     """
@@ -530,6 +569,6 @@ def contribution_value_for_construction(contribution: Contribution) -> int:
             return 0
         monetary = instance.template.value
         units = instance.quantity
-        lore_multiplier = 1 + (instance.lore_value / LORE_VALUE_DIVISOR)
+        lore_multiplier = max(0, 1 + (instance.lore_value / LORE_VALUE_DIVISOR))
         return int(monetary * lore_multiplier * MATERIAL_BASE_BOOST * units)
     return 0

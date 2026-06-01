@@ -236,3 +236,130 @@ class ContributionValueTests(TestCase):
 
         contribution = ContributionFactory(kind=ContributionKind.AP, ap_amount=10)
         self.assertEqual(contribution_value_for_construction(contribution), 0)
+
+
+class ActivatePermitRoundtripTests(TestCase):
+    """End-to-end: issue → activate → complete. Catches broken imports
+    + missing handler registration that the per-function tests miss.
+    """
+
+    def _outdoor_room_in_ward(self, ward):
+        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.models import RoomProfile
+
+        site_area = AreaFactory(level=AreaLevel.NEIGHBORHOOD, parent=ward)
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfile.objects.update_or_create(
+            objectdb=room, defaults={"area": site_area, "is_outdoor": True}
+        )
+        return room
+
+    def test_full_roundtrip_issue_activate_complete(self) -> None:
+        from world.buildings.models import Building
+        from world.buildings.services import activate_permit, complete_building_construction
+        from world.items.constants import OwnershipEventType
+        from world.items.models import OwnershipEvent
+
+        ensure_building_permit_template()
+        house = ensure_house_kind()
+        ward = AreaFactory(level=AreaLevel.WARD, name="roundtrip-ward")
+        ward.permit_eligibility = PermitEligibility.OPEN
+        ward.save(update_fields=["permit_eligibility"])
+        ward.allowed_building_kinds.add(house)
+
+        room = self._outdoor_room_in_ward(ward)
+        _character, persona = _pc()
+        permit = BuildingPermitDetailsFactory(
+            holder_persona=persona, building_kind=house, max_target_size=10
+        )
+        permit.approved_wards.add(ward)
+
+        # Activate — exercises the previously-broken import path.
+        project = activate_permit(
+            permit_details=permit,
+            site_room=room,
+            acting_persona=persona,
+            target_size=5,
+            target_grandeur=5,
+        )
+        self.assertIsNotNone(project)
+        permit.refresh_from_db()
+        self.assertIsNotNone(permit.consumed_at)
+        # ACTIVATED + CONSUMED audit rows.
+        self.assertTrue(
+            OwnershipEvent.objects.filter(
+                item_instance=permit.item_instance,
+                event_type=OwnershipEventType.ACTIVATED,
+            ).exists()
+        )
+        self.assertTrue(
+            OwnershipEvent.objects.filter(
+                item_instance=permit.item_instance,
+                event_type=OwnershipEventType.CONSUMED,
+            ).exists()
+        )
+
+        # Complete — exercises the previously-unregistered project handler.
+        building = complete_building_construction(project)
+        self.assertEqual(building.kind, house)
+        self.assertEqual(building.target_size, 5)
+        self.assertEqual(building.max_rooms, house.rooms_per_size_tier * 5)
+        # Idempotent — second call returns the existing Building.
+        again = complete_building_construction(project)
+        self.assertEqual(building.pk, again.pk)
+        self.assertEqual(Building.objects.filter(source_project=project).count(), 1)
+
+    def test_activate_permit_concurrent_via_select_for_update(self) -> None:
+        """Second activation after first commit raises PermitAlreadyConsumedError."""
+        from world.buildings.services import activate_permit
+
+        ensure_building_permit_template()
+        house = ensure_house_kind()
+        ward = AreaFactory(level=AreaLevel.WARD, name="serialised-ward")
+        ward.permit_eligibility = PermitEligibility.OPEN
+        ward.save(update_fields=["permit_eligibility"])
+        ward.allowed_building_kinds.add(house)
+        room = self._outdoor_room_in_ward(ward)
+        _character, persona = _pc()
+        permit = BuildingPermitDetailsFactory(
+            holder_persona=persona, building_kind=house, max_target_size=10
+        )
+        permit.approved_wards.add(ward)
+
+        activate_permit(
+            permit_details=permit,
+            site_room=room,
+            acting_persona=persona,
+            target_size=5,
+            target_grandeur=5,
+        )
+        # Re-activation must fail because the first call committed
+        # consumed_at; the select_for_update would just serialize
+        # but the consumed-at check still rejects.
+        with self.assertRaises(PermitAlreadyConsumedError):
+            activate_permit(
+                permit_details=permit,
+                site_room=room,
+                acting_persona=persona,
+                target_size=5,
+                target_grandeur=5,
+            )
+
+
+class MaterialLoreEffectGuardTests(TestCase):
+    """units_per_tier=0 must be rejected by validation + DB constraint."""
+
+    def test_units_per_tier_zero_rejected_by_check_constraint(self) -> None:
+        from django.db import IntegrityError
+
+        from world.buildings.models import MaterialLoreEffect
+        from world.items.factories import ItemTemplateFactory
+
+        template = ItemTemplateFactory()
+        with self.assertRaises(IntegrityError):
+            MaterialLoreEffect.objects.create(
+                template=template,
+                target_stat="resonance_amp",
+                units_per_tier=0,
+                magnitude_per_tier=1,
+            )

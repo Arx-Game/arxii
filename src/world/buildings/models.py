@@ -19,6 +19,9 @@ Per the Plan 3 spec (#668):
 
 from __future__ import annotations
 
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -95,7 +98,11 @@ class MaterialLoreEffect(SharedMemoryModel):
         ),
     )
     units_per_tier = models.PositiveIntegerField(
-        help_text="Every N units of this material grants one tier of magnitude.",
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Every N units of this material grants one tier of magnitude. "
+            "Must be >= 1; zero would divide-by-zero in computed_stats()."
+        ),
     )
     magnitude_per_tier = models.IntegerField(
         help_text="Magnitude granted per tier (can be negative).",
@@ -105,6 +112,14 @@ class MaterialLoreEffect(SharedMemoryModel):
         blank=True,
         help_text="Cap on tiers from this material. Null = uncapped.",
     )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(units_per_tier__gte=1),
+                name="material_lore_effect_units_per_tier_gte_1",
+            ),
+        ]
 
     def __str__(self) -> str:
         cap = "" if self.max_tiers is None else f", cap {self.max_tiers}"
@@ -161,16 +176,37 @@ class Building(SharedMemoryModel):
         blank=True,
         related_name="buildings_constructed",
     )
-    source_project = models.ForeignKey(
+    source_project = models.OneToOneField(
         "projects.Project",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="resulting_building",
+        help_text=(
+            "The BUILDING_CONSTRUCTION project that produced this Building. "
+            "OneToOne so re-running ``complete_building_construction`` on a "
+            "completed project hits the unique constraint and the in-Python "
+            "idempotency guard catches the duplicate first."
+        ),
     )
 
     def __str__(self) -> str:
         return f"{self.kind.name}: {self.area.name}"
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        """Delete Building AND its decorated Area together.
+
+        Building.area is the primary key (OneToOne) — deleting Area
+        cascades to Building, but deleting Building directly would leave
+        the Area orphaned (a level=BUILDING Area with no decorator).
+        Override delete() to remove both atomically so callers can't
+        accidentally strand an Area.
+        """
+        area = self.area
+        result = super().delete(*args, **kwargs)
+        # Now delete the Area — cascade-deletes ownership/tenancy rows.
+        area.delete()
+        return result
 
     def computed_stats(self) -> dict[str, int]:
         """Aggregate per-stat magnitudes from material lore effects.
@@ -179,10 +215,18 @@ class Building(SharedMemoryModel):
         per material template, sums ``min(tiers, max_tiers) × magnitude_per_tier``
         per target_stat. Returns ``{stat_name: total_magnitude}``.
 
-        Plan 3 ships this method as the framework hook. With no
-        ``MaterialLoreEffect`` rows authored yet, it returns an empty
-        dict. Content authoring populates the effect rows; downstream
-        systems (sanctum, defense, prestige) interpret the stat names.
+        **Callers MUST prefetch** to avoid N+1::
+
+            Building.objects.prefetch_related(
+                "materials_used__item_template__lore_effects"
+            )
+
+        Without that prefetch, a Building with N materials × M effects
+        triggers N×M queries. Plan 3 ships this method as the framework
+        hook; with no ``MaterialLoreEffect`` rows authored yet, it
+        returns an empty dict. Content authoring populates the effect
+        rows; downstream systems (sanctum, defense, prestige) interpret
+        the stat names.
         """
         stats: dict[str, int] = {}
         for material in self.materials_used.all():
@@ -276,11 +320,25 @@ class BuildingPermitDetails(SharedMemoryModel):
     )
     holder_persona = models.ForeignKey(
         "scenes.Persona",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="held_building_permits",
         help_text=(
             "IC owner of the permit. Persona-scoped so cross-persona "
-            "leakage is impossible. Frozen at issuance."
+            "leakage is impossible. Frozen at issuance — but the FK is "
+            "SET_NULL on persona deletion so the row survives as an audit "
+            "stub (``holder_persona_name`` snapshots the persona's IC name "
+            "for that survival). Runtime issuance always sets this; the "
+            "null is only reachable via post-issuance persona deletion."
+        ),
+    )
+    holder_persona_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Snapshot of holder_persona's display name at issuance — "
+            "preserves the audit trail when the persona is later deleted."
         ),
     )
     building_kind = models.ForeignKey(
@@ -304,7 +362,7 @@ class BuildingPermitDetails(SharedMemoryModel):
     cost_modifier = models.DecimalField(
         max_digits=5,
         decimal_places=3,
-        default=1,
+        default=Decimal("1.000"),
         help_text="Multiplier on construction-side costs negotiated at issuance.",
     )
     issued_by_role = models.ForeignKey(
@@ -344,10 +402,23 @@ class BuildingPermitDetails(SharedMemoryModel):
                 name="bpd_holder_consumed_idx",
             ),
         ]
+        constraints = [
+            # One unconsumed permit per (holder, issuing role). Defense-in-
+            # depth against duplicate-dispatch of the PERMIT effect handler
+            # (front-end double-click, flow retry, etc.). Once consumed_at
+            # is set, the row no longer participates in this constraint and
+            # the holder may receive a new permit from the same role.
+            models.UniqueConstraint(
+                fields=["holder_persona", "issued_by_role"],
+                condition=models.Q(consumed_at__isnull=True),
+                name="bpd_one_unconsumed_per_holder_role",
+            ),
+        ]
 
     def __str__(self) -> str:
         used = "consumed" if self.consumed_at else "unconsumed"
-        return f"BuildingPermit#{self.pk} ({self.building_kind}, {used})"
+        holder = self.holder_persona or self.holder_persona_name or "<deleted>"
+        return f"BuildingPermit#{self.pk} ({self.building_kind}, {used}, holder={holder})"
 
 
 class BuildingConstructionDetails(SharedMemoryModel):
@@ -381,8 +452,15 @@ class BuildingConstructionDetails(SharedMemoryModel):
     target_grandeur = models.PositiveSmallIntegerField()
     constructed_by_persona = models.ForeignKey(
         "scenes.Persona",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="construction_projects_led",
+        help_text=(
+            "Persona that initiated the construction. SET_NULL so persona "
+            "deletion doesn't block the project's audit row. Audit ledger "
+            "lives on OwnershipEvent.notes for full attribution."
+        ),
     )
 
     def __str__(self) -> str:

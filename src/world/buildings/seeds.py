@@ -59,39 +59,42 @@ def ensure_house_kind() -> BuildingKind:
     return kind
 
 
-def ensure_builders_guild_clerk_permits_for_house() -> None:
-    """Wire House as the BuildingKind on the Builders Guild Clerk's PERMIT offers.
+def ensure_default_kind_on_permit_offers() -> None:
+    """Set House as default BuildingKind on every PERMIT offer missing one.
 
-    The Plan 2 npc_services seed creates the offers with empty
-    PermitOfferDetails (no kind set). This patches every PERMIT offer
-    on the clerk to authorize the House kind so the issue_permit handler
-    can run without raising PermitIssuanceError.
+    Plan 2's npc_services seed creates PermitOfferDetails rows without a
+    building_kind set. Without it, ``issue_permit`` raises
+    ``PermitIssuanceError`` — so any role with PERMIT offers (Builders
+    Guild Clerk today, future Cult Leader / Sailors' Guild / etc.) needs
+    a kind wired before its handlers can run. Patching ALL PERMIT offers
+    (not just the clerk's) means future roles inherit a sensible default
+    when content authors forget to set one.
 
-    Idempotent — re-running with kind already set is a no-op.
+    Idempotent — only patches rows where ``building_kind_id IS NULL``.
     """
     from world.npc_services.constants import OfferKind  # noqa: PLC0415
     from world.npc_services.models import NPCServiceOffer  # noqa: PLC0415
-    from world.npc_services.seeds import BUILDERS_GUILD_CLERK_ROLE_NAME  # noqa: PLC0415
 
     house = ensure_house_kind()
-    clerk_offers = NPCServiceOffer.objects.filter(
-        role__name=BUILDERS_GUILD_CLERK_ROLE_NAME, kind=OfferKind.PERMIT
+    unwired = NPCServiceOffer.objects.filter(
+        kind=OfferKind.PERMIT,
+        permit_offer_details__building_kind__isnull=True,
     ).select_related("permit_offer_details")
-    for offer in clerk_offers:
+    for offer in unwired:
         details = offer.permit_offer_details
-        if details.building_kind_id != house.pk:
-            details.building_kind = house
-            details.save(update_fields=["building_kind"])
+        details.building_kind = house
+        details.save(update_fields=["building_kind"])
+
+
+# Back-compat alias for callers using the old, clerk-specific name.
+ensure_builders_guild_clerk_permits_for_house = ensure_default_kind_on_permit_offers
 
 
 def ensure_plan_3_seeds() -> None:
     """Convenience: seed everything Plan 3 needs.
 
-    Safe to call multiple times (each component is idempotent via
-    ``get_or_create``).
+    Safe to call multiple times (each component is idempotent).
     """
     ensure_building_permit_template()
     ensure_house_kind()
-    # Wire House onto Builders Guild Clerk PERMIT offers when they exist.
-    # The clerk's npc_services seed creates the offers; this fills in the kind.
-    ensure_builders_guild_clerk_permits_for_house()
+    ensure_default_kind_on_permit_offers()

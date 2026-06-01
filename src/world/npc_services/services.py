@@ -221,8 +221,18 @@ def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
     if session.closed:
         return []
     now = timezone.now()
+    # select_related the PERMIT details + its building_kind so issue_permit
+    # doesn't pay 2 extra queries per PERMIT offer (mixed-kind roles only
+    # pay for unused reverse-OneToOne fetches on non-PERMIT offers, which
+    # is acceptable given the small per-role offer count). Pre-fetch the
+    # M2M default_approved_wards for the same reason.
     queryset = (
-        NPCServiceOffer.objects.select_related("role").filter(role=session.role).order_by("pk")
+        NPCServiceOffer.objects.select_related("role", "permit_offer_details__building_kind")
+        .prefetch_related(
+            "permit_offer_details__default_approved_wards",  # noqa: PREFETCH_STRING — PermitOfferDetails is a SharedMemoryModel; Prefetch(to_attr=...) would leak the per-request M2M list across requests via the identity map (feedback_prefetch_to_attr_leaks)
+        )
+        .filter(role=session.role)
+        .order_by("pk")
     )
     return [
         offer
