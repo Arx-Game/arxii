@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0005_technique_action_category"),
+        ("magic", "0006_alter_techniqueappliedcondition_duration_intensity_multiplier_and_more"),
     ]
 
     operations = [
