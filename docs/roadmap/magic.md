@@ -1028,11 +1028,14 @@ See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-
     kinds stubbed pending picker hooks).
 
   What's deferred:
-  - `ThreadPullDialog` (multi-thread pull) — designed at the component level
-    but not shipped; needs a combat panel host that doesn't exist yet.
-  - TRAIT / TECHNIQUE / ROOM / Relationship anchor pickers in the Weave
-    wizard — currently stubbed "coming soon" pending list endpoints for
-    `CharacterTraitValue` / `CharacterTechnique` / etc.
+  - TRAIT / TECHNIQUE / ROOM / RELATIONSHIP_TRACK anchor pickers — **SHIPPED (#538):**
+    `ThreadHubSummary` now carries `weavable_traits`, `weavable_techniques`,
+    `room_property_ids`, and `weavable_relationship_track_ids`; all four pickers are wired
+    in `WeaveThreadWizard` (`frontend/src/magic/components/threads/WeaveThreadWizard.tsx`).
+  - `ThreadPullDialog` (multi-thread pull) — **SHIPPED (#539):** `ThreadPullDialog`
+    (`frontend/src/magic/components/threads/ThreadPullDialog.tsx`) is wired into
+    `PullEffectPreview` and mounted in the YourTurn combat panel in
+    `frontend/src/combat/components/panels/YourTurn.tsx`.
   - E2E smoke test for `/threads`.
   - Teacher display name in `TeachingOfferCard` (currently shows "Teacher #N").
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
