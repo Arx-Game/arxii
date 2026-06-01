@@ -64,6 +64,30 @@ class MissingPrimaryPersonaError(LookupError):
         self.character = character
 
 
+class ResolveOfferError(ValueError):
+    """Base class for offer-grant failures.
+
+    Carries a fixed ``user_message`` separate from the internal exception
+    message so callers can surface a safe string to the client without
+    leaking object IDs or eligibility reasoning. Per
+    `feedback_codeql_exceptions`: never pass `str(exc)` to a response.
+    """
+
+    user_message: str = "Offer could not be granted."
+
+
+class SessionClosedError(ResolveOfferError):
+    user_message = "This interaction has already ended."
+
+
+class OfferRoleMismatchError(ResolveOfferError):
+    user_message = "That offer is not available from this NPC."
+
+
+class OfferNotEligibleError(ResolveOfferError):
+    user_message = "That offer is not currently available."
+
+
 def persona_for_character(character: ObjectDB) -> Persona:
     """Return the PC's PRIMARY persona; raise loud on missing sheet/persona.
 
@@ -251,17 +275,18 @@ def resolve_offer(
     ``rapport_delta_failure`` accordingly; session stays open.
 
     Re-verifies eligibility at grant time so a stale UI can't grant an
-    offer the PC no longer qualifies for. Raises ``ValueError`` if the
-    offer isn't currently eligible.
+    offer the PC no longer qualifies for. Raises a ``ResolveOfferError``
+    subclass — callers surface ``exc.user_message`` to clients (never
+    ``str(exc)`` — see ``feedback_codeql_exceptions``).
     """
     if session.closed:
         msg = "Cannot resolve an offer on a closed interaction session."
-        raise ValueError(msg)
+        raise SessionClosedError(msg)
     if offer.role_id != session.role.pk:
         msg = (
             f"Offer {offer.pk} belongs to role {offer.role_id}, not session role {session.role.pk}."
         )
-        raise ValueError(msg)
+        raise OfferRoleMismatchError(msg)
     if not _is_offer_eligible(
         offer,
         persona=session.persona,
@@ -269,7 +294,7 @@ def resolve_offer(
         current_rapport=session.current_rapport,
     ):
         msg = f"Offer {offer.pk} ({offer.label!r}) is not currently eligible for this session."
-        raise ValueError(msg)
+        raise OfferNotEligibleError(msg)
 
     if offer.is_final:
         result = dispatch_offer_effect(offer, session.persona)

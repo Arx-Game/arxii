@@ -46,6 +46,7 @@ from world.npc_services.serializers import (
 )
 from world.npc_services.services import (
     InteractionSession,
+    ResolveOfferError,
     available_offers,
     end_interaction,
     persona_for_character,
@@ -298,8 +299,12 @@ class InteractionViewSet(viewsets.ViewSet):
             raise NotFound(msg)
         try:
             result = resolve_offer(session, offer)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+        except ResolveOfferError as exc:
+            # Surface the typed exception's ``user_message`` — never
+            # ``str(exc)`` (CodeQL: information exposure through an
+            # exception; ``feedback_codeql_exceptions``). The internal
+            # message identifies the offer + role for logs only.
+            raise ValidationError(exc.user_message) from exc
         if session.closed:
             request.session.pop(_SESSION_KEY, None)
         else:
