@@ -153,6 +153,34 @@ failure, not a feature. Always route through `perform_check` with the
 appropriate CheckType — character stats, conditions, buffs, relationships
 all influence the outcome.
 
+### Visibility = eligibility (no greyed-out locked options)
+
+For any gated player-facing surface (NPC service menus, crafting recipes,
+story branches, ritual options, mission picklists, action buttons), use a
+**single** predicate that drives both "does this option appear" and "can
+this player select it." Don't show locked options with red unlock prompts;
+don't surface options the player can't act on with a "you need X to use
+this" tooltip.
+
+Progressive disclosure happens through how staff **author the predicate**,
+not through a separate visibility layer. Staff can write rules like "show
+after standing tier ≥ X" or "show after the player has been told about
+this option by NPC Y." Being told about an option is itself a state change
+that feeds the same predicate.
+
+Players see fewer options because they satisfy fewer predicates — not
+because the UI is masking things from them. New players experience a
+small, focused surface; depth becomes visible as they engage with the
+world. The corpus of authored options can be huge; any one player's view
+is small.
+
+Concrete code consequence: gated surfaces have ONE `eligibility_rule`
+JSONField (or equivalent), not a `visibility_rule` + `eligibility_rule`
+split. If the predicate fails, the option isn't surfaced. If staff need
+"visible but currently blocked" UX (NPC cooldown, used your one-shot),
+that's something the predicate authors into its return shape, not a
+schema-level concept.
+
 ## UX placement
 
 ### IC vs UI placement test
@@ -187,6 +215,14 @@ the kudos count.
 
 The line is: does this reward the *character's existence in the world* or
 the *player's craft and contribution*? Character → IC. Player → OOC.
+
+Concrete code consequence: IC-meaningful state FKs to **Persona** (the IC
+identity layer), not to **AccountDB** (the OOC player). A player's noble
+character and their criminal alt are different personas; they must not
+share inventories, permits, society standing, or item-CRUD visibility.
+Account-scoped FKs on IC surfaces collapse this boundary silently. See
+[#684](https://github.com/Arx-Game/arxii/issues/684) for the audit + sweep
+moving `ItemInstance.owner` from AccountDB to Persona.
 
 ---
 
