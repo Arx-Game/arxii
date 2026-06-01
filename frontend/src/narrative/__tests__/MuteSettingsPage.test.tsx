@@ -38,7 +38,7 @@ function createWrapper() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeMutationIdle(mutateFn = vi.fn()) {
+function makeMutationIdle(mutateFn: ReturnType<typeof vi.fn> = vi.fn()) {
   return {
     mutate: mutateFn,
     mutateAsync: vi.fn(),

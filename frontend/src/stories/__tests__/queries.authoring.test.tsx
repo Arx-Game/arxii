@@ -114,7 +114,7 @@ describe('Stories Authoring Hooks (D2)', () => {
   // -------------------------------------------------------------------------
   describe('promoteEpisode', () => {
     it('POSTs to /api/episodes/{id}/promote/ and returns the episode', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockEpisode), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -142,7 +142,7 @@ describe('Stories Authoring Hooks (D2)', () => {
       // `'response' in err` then `response.json()`. Locks the real contract,
       // not a fabricated `{ response }`.
       const errorBody = { target: 'Promotion to PLOT requires a resting conclusion.' };
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(errorBody), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -174,7 +174,7 @@ describe('Stories Authoring Hooks (D2)', () => {
   // -------------------------------------------------------------------------
   describe('assignStory', () => {
     it('POSTs to /api/stories/{id}/assign-to-scope/', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockStory), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -206,7 +206,7 @@ describe('Stories Authoring Hooks (D2)', () => {
       const errorBody = {
         scope: 'This story is already assigned to a scope and cannot be re-assigned.',
       };
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(errorBody), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -244,7 +244,7 @@ describe('Stories Authoring Hooks (D2)', () => {
       // errors. Without the fix markBeat threw a plain Error (no
       // `.response`) so that branch was dead. Locks the real contract.
       const errorBody = { gm_notes: ['This field is required.'] };
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(errorBody), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -276,7 +276,7 @@ describe('Stories Authoring Hooks (D2)', () => {
   describe('listStoryNotes', () => {
     it('GETs /api/story-notes/?story=...', async () => {
       const paginated = { count: 1, next: null, previous: null, results: [mockStoryNote] };
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(paginated), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -303,7 +303,7 @@ describe('Stories Authoring Hooks (D2)', () => {
   // -------------------------------------------------------------------------
   describe('createStoryNote', () => {
     it('POSTs /api/story-notes/', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockStoryNote), {
           status: 201,
           headers: { 'Content-Type': 'application/json' },
