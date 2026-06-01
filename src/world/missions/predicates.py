@@ -108,9 +108,10 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
 # resolvers read ``ctx.sheet`` directly. The few resolvers gating on
 # models still keyed by ObjectDB (CharacterDistinction.character,
 # ConditionInstance via has_condition service, CharacterTraitValue.
-# character, MissionGiverStanding.character) walk ``ctx.character`` — the
-# @property on ResolverContext that returns ``sheet.character``.
-# Persona-aware resolvers consult ``ctx.presented_persona``.
+# character) walk ``ctx.character`` — the @property on ResolverContext
+# that returns ``sheet.character``. Persona-aware resolvers consult
+# ``ctx.presented_persona`` (incl. NPC standing + persona-scoped item
+# ownership).
 #
 # Resolvers must never inspect a target's sheet — only the acting
 # character's durable state. Params are the leaf's authored params and
@@ -233,34 +234,81 @@ def _resolve_has_skill(ctx: ResolverContext, *, skill: str) -> bool:
     return ctv is not None and ctv.value > 0
 
 
-def _resolve_min_giver_standing(ctx: ResolverContext, *, giver_id: int, min_affection: int) -> bool:
-    """True if the character's standing with the giver (by PK) is >= ``min_affection``.
+def _resolve_min_npc_standing(
+    ctx: ResolverContext, *, npc_persona_id: int, min_affection: int
+) -> bool:
+    """True if the PC's standing with the NPC persona (by PK) is >= ``min_affection``.
 
-    ``giver_id`` is the ``MissionGiver`` primary key. Standing is the
-    giver's affection toward the character. No standing row means
-    affection is implicitly 0. An unknown giver id fails closed
-    (returns False). PK-keyed so giver renames don't silently break
-    authored predicate rules.
+    Persona-keyed (NPCStanding lives in ``world.npc_services``); uses the
+    PC's currently-presented persona on the actor side. No standing row
+    means affection is implicitly 0 (so ``min_affection <= 0`` passes).
+    No presented persona on the actor side fails closed (TEMPORARY masks
+    can't hold standing; consistent with other persona-aware leaves).
+    Unknown ``npc_persona_id`` fails closed so authoring errors don't
+    silently gate-open.
     """
-    from world.missions.models import MissionGiverStanding  # noqa: PLC0415
+    from world.npc_services.models import NPCStanding  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
 
+    if ctx.presented_persona is None:
+        return False
     standing = (
-        MissionGiverStanding.objects.filter(giver_id=giver_id, character=ctx.character)
+        NPCStanding.objects.filter(
+            persona=ctx.presented_persona,
+            npc_persona_id=npc_persona_id,
+        )
         .values_list("affection", flat=True)
         .first()
     )
     if standing is None:
-        if not _giver_exists(giver_id):
+        if not Persona.objects.filter(pk=npc_persona_id).exists():
             return False
         return min_affection <= 0
     return standing >= min_affection
 
 
-def _giver_exists(giver_id: int) -> bool:
-    """Internal helper: True if a MissionGiver with this PK exists."""
-    from world.missions.models import MissionGiver  # noqa: PLC0415
+def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
+    """True if the PC's presented persona holds an item of this template.
 
-    return MissionGiver.objects.filter(pk=giver_id).exists()
+    Persona-scoped, deliberately. IC-meaningful items (permits, writs,
+    titles, favor tokens) must be tied to the persona that earned them —
+    different personas of the same account must not share them. The
+    storage parent (``ItemInstance.owner = AccountDB``) is bypassed for
+    IC entitlement; resolution dispatches on template kind to the
+    per-kind details model's ``holder_persona`` FK (e.g.,
+    ``BuildingPermitDetails.holder_persona``).
+
+    No presented persona → False (fail-closed for TEMPORARY masks).
+    Template kinds without a persona-scoped details model wired up are
+    not gateable by this leaf — the dispatcher raises rather than
+    silently falling back to account-scoped lookup. Broader audit:
+    #684.
+    """
+    from world.items.models import ItemInstance, ItemTemplate  # noqa: PLC0415
+
+    if ctx.presented_persona is None:
+        return False
+    template = ItemTemplate.objects.filter(pk=template_id).first()
+    if template is None:
+        return False
+    # Per-kind dispatch on template kind → reverse-FK to a persona-scoped
+    # details model. PERMIT is the only kind wired today (Plan 3 / #668);
+    # other IC item kinds register their (kind, reverse_relation_name,
+    # persona_field_name) entries here as they land.
+    persona_holder_dispatch: dict[str, tuple[str, str]] = {
+        # template.kind value -> (reverse-relation name, persona FK field)
+        # "permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
+    }
+    kind = getattr(template, "kind", None)  # noqa: GETATTR_LITERAL — ItemTemplate may not have `kind` on all kinds (Plan 3 adds it for PERMIT)
+    if kind not in persona_holder_dispatch:
+        # Unwired kind — fail closed rather than account-fallback.
+        return False
+    relation, persona_field = persona_holder_dispatch[kind]
+    filter_kwargs = {
+        f"{relation}__{persona_field}": ctx.presented_persona,
+        "template_id": template_id,
+    }
+    return ItemInstance.objects.filter(**filter_kwargs).exists()
 
 
 def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:
@@ -423,7 +471,8 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_character_level": _resolve_min_character_level,
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
-    "min_giver_standing": _resolve_min_giver_standing,
+    "min_npc_standing": _resolve_min_npc_standing,
+    "has_item": _resolve_has_item,
     "is_member_of_org": _resolve_is_member_of_org,
     "min_org_reputation": _resolve_min_org_reputation,
     "min_society_standing": _resolve_min_society_standing,

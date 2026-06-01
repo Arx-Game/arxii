@@ -13,7 +13,6 @@ from world.missions.models import (
     MissionCategory,
     MissionGiver,
     MissionGiverOffering,
-    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -401,9 +400,10 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
-# D3 giver-library serializers — MissionGiver, MissionGiverOffering (the
-# template-link through-model), MissionGiverStanding (the per-character
-# cooldown + affection row).
+# D3 giver-library serializers — MissionGiver + MissionGiverOffering (the
+# template-link through-model). NPCStanding (the per-(persona, npc_persona)
+# row, formerly MissionGiverStanding) is serialized in
+# `world.npc_services.serializers`.
 # ---------------------------------------------------------------------------
 
 
@@ -549,22 +549,6 @@ class MissionInstanceSerializer(serializers.ModelSerializer):
             "source_beat",
         ]
         read_only_fields = ["id", "started_at"]
-
-
-class MissionGiverStandingSerializer(serializers.ModelSerializer):
-    """Staff CRUD for per-(giver, character) standing rows.
-
-    Per design §6/§10 ``available_at`` is normally set by
-    ``services.run.accept_mission`` (= now + template.cooldown) and
-    ``affection`` is moved by future flirt/seduce gameplay. The CRUD
-    surface is for staff overrides — clear a cooldown manually,
-    bump/penalize affection — not for ordinary runtime writes.
-    """
-
-    class Meta:
-        model = MissionGiverStanding
-        fields = ["id", "giver", "character", "available_at", "affection"]
-        read_only_fields = ["id"]
 
 
 class MissionCategorySerializer(serializers.ModelSerializer):

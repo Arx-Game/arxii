@@ -33,7 +33,6 @@ from rest_framework.serializers import BaseSerializer
 from world.missions.filters import (
     MissionGiverFilterSet,
     MissionGiverOfferingFilterSet,
-    MissionGiverStandingFilterSet,
     MissionNodeFilterSet,
     MissionOptionFilterSet,
     MissionOptionRouteCandidateFilterSet,
@@ -45,7 +44,6 @@ from world.missions.models import (
     MissionCategory,
     MissionGiver,
     MissionGiverOffering,
-    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -59,7 +57,6 @@ from world.missions.serializers import (
     MissionCategorySerializer,
     MissionGiverOfferingSerializer,
     MissionGiverSerializer,
-    MissionGiverStandingSerializer,
     MissionInstanceSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
@@ -282,8 +279,8 @@ class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
 
 # ---------------------------------------------------------------------------
 # D3 giver-library viewsets — staff CRUD for MissionGiver + its links to
-# templates (MissionGiverOffering) and per-character standing rows
-# (MissionGiverStanding).
+# templates (MissionGiverOffering). NPCStanding's viewset lives in
+# `world.npc_services.views` since standing is shared across kinds.
 # ---------------------------------------------------------------------------
 
 
@@ -331,22 +328,6 @@ class MissionInstanceViewSet(
     serializer_class = MissionInstanceSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = MissionStudioPagination
-
-
-class MissionGiverStandingViewSet(viewsets.ModelViewSet):
-    """Staff CRUD for per-(giver, character) standing rows.
-
-    Normally written by ``services.run.accept_mission`` (cooldown side)
-    and future flirt/seduce checks (affection side). CRUD here is for
-    staff overrides — clear a cooldown, bump or penalize affection.
-    """
-
-    queryset = MissionGiverStanding.objects.all().order_by("pk")
-    serializer_class = MissionGiverStandingSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    pagination_class = MissionStudioPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = MissionGiverStandingFilterSet
 
 
 class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):

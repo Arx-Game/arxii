@@ -15,15 +15,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.utils import timezone
 
 from world.missions.models import (
-    MissionGiverStanding,
     MissionInstance,
     MissionNode,
     MissionParticipant,
 )
 from world.missions.services.resolution import enter_node
+from world.npc_services.services import (
+    resolve_npc_persona_for_giver,
+    resolve_persona_for_character,
+    upsert_standing_cooldown,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -67,11 +70,18 @@ def accept_mission(
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
-    MissionGiverStanding.objects.update_or_create(
-        giver=giver,
-        character=character,
-        defaults={"available_at": timezone.now() + template.cooldown},
-    )
+    # Persona-keyed standing (unified NPCStanding lives in world.npc_services).
+    # If either side has no resolvable persona (ROOM_TRIGGER/ENVIRONMENTAL
+    # giver, character without sheet, NPC without PRIMARY persona), the
+    # cooldown row is skipped — non-NPC givers don't get standing tracking.
+    pc_persona = resolve_persona_for_character(character)
+    npc_persona = resolve_npc_persona_for_giver(giver)
+    if pc_persona is not None and npc_persona is not None:
+        upsert_standing_cooldown(
+            persona=pc_persona,
+            npc_persona=npc_persona,
+            cooldown=template.cooldown,
+        )
     return instance
 
 

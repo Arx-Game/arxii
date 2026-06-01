@@ -16,9 +16,10 @@ Two invariants this module enforces:
     that participant — no cross-attribution).
   * **Contractual consequence is the contract-holder's alone.** Phase 4
     only keeps the contract-holder identifiable (``contract_holder``);
-    cooldown / giver-standing / failure-penalty *application* is Phase 5+
-    (the model is now :class:`MissionGiverStanding`; the engine using it
-    for contractual consequence application beyond cooldown is Phase 5b+).
+    cooldown / NPC-standing / failure-penalty *application* is Phase 5+
+    (standing lives on :class:`world.npc_services.models.NPCStanding`;
+    the engine using it for contractual consequence application beyond
+    cooldown is Phase 5b+).
 
 This module owns NO check/consequence/routing math: it reuses the Phase-3
 per-character option-presentation body (extracted as

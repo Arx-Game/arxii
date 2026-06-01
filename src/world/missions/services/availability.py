@@ -21,13 +21,17 @@ from dataclasses import dataclass
 import random
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
 from django.utils import timezone
 
 from core_management.permissions import is_staff_observer
 from world.checks.outcome_utils import select_weighted
 from world.missions.constants import AccessTier, ArcScope
 from world.missions.predicates import CharacterPredicateContext, evaluate
+from world.npc_services.models import NPCStanding
+from world.npc_services.services import (
+    resolve_npc_persona_for_giver,
+    resolve_persona_for_character,
+)
 from world.stories.models import Era
 
 if TYPE_CHECKING:
@@ -126,11 +130,23 @@ def _eligible_templates(  # noqa: PLR0913 — kwargs split to keep callsites rea
         STAFF_ONLY templates; staff see both tiers
     """
     now = timezone.now()
-    qs = giver.templates.filter(is_active=True).exclude(
-        Q(givers__standings__character=character)
-        & Q(givers__standings__giver=giver)
-        & Q(givers__standings__available_at__gt=now),
-    )
+    qs = giver.templates.filter(is_active=True)
+    # Per-NPC cooldown: NPCStanding lives in world.npc_services and is
+    # keyed on (pc persona, npc persona). Resolve both sides; if either
+    # has no persona (ROOM_TRIGGER/ENVIRONMENTAL giver, character without
+    # sheet, NPC without PRIMARY persona) the cooldown can't be tracked —
+    # behaviour matches the pre-NPC-persona era where non-NPC givers had
+    # no standing rows at all.
+    pc_persona = resolve_persona_for_character(character)
+    npc_persona = resolve_npc_persona_for_giver(giver)
+    if pc_persona is not None and npc_persona is not None:
+        cooldown_active = NPCStanding.objects.filter(
+            persona=pc_persona,
+            npc_persona=npc_persona,
+            available_at__gt=now,
+        ).exists()
+        if cooldown_active:
+            return []  # entire pool on cooldown for this PC↔NPC pair
     if not is_staff_observer(character):
         qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
     # DESIGN: a staff character testing a STAFF_ONLY template will pass

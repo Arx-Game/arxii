@@ -1213,60 +1213,6 @@ class MissionGiverOffering(SharedMemoryModel):
         return f"{self.giver} → {self.template}"
 
 
-class MissionGiverStanding(SharedMemoryModel):
-    """Per-(giver, character) standing — cooldown plus an affection integer.
-
-    Generalises the original cooldown-only row to also carry the giver's
-    affection / standing with this character. Set by
-    ``services.run.accept_mission`` to ``now + template.cooldown`` (cooldown
-    side); the affection side is moved by future flirt/seduce-style checks
-    against the giver NPC (gameplay TBD — the model just carries the value).
-    ``services.availability.offer_missions`` excludes templates whose giver
-    has a standing row with ``available_at > now`` for this character.
-    Design §6 (giver standing) + §10 (contractual consequence is the
-    contract-holder's alone — sharees never get standing rows from accept).
-    """
-
-    giver = models.ForeignKey(
-        MissionGiver,
-        on_delete=models.CASCADE,
-        related_name="standings",
-    )
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        related_name="+",
-    )
-    available_at = models.DateTimeField()
-    affection = models.IntegerField(
-        default=0,
-        help_text=(
-            "Per-character standing / affection with this giver. Authoring "
-            "tool exposes 'giver_standing_at_least' predicate gates against "
-            "this value (Phase C). Negative values are permitted and mean "
-            "disliked — the Phase-C 'giver_standing_at_least: N' gate uses "
-            "plain >= comparison so it works uniformly across the integer "
-            "range (e.g. 'at least -5' is True for affection=-3, False for "
-            "affection=-10). Movement mechanic (flirt/seduce checks against "
-            "the NPC) is adjacent gameplay work, not built here."
-        ),
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["giver", "character"],
-                name="unique_missiongiverstanding_giver_character",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return (
-            f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d} "
-            f"(affection={self.affection})"
-        )
-
-
 class MissionDeedRewardLine(SharedMemoryModel):
     """One persisted structured reward line for a :class:`MissionDeedRecord`.
 

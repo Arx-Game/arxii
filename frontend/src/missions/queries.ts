@@ -22,7 +22,6 @@ import {
   getMissionGiver,
   getMissionTemplate,
   listGiverOfferings,
-  listGiverStandings,
   listMissionCategories,
   listMissionGivers,
   listMissionNodes,
@@ -43,7 +42,6 @@ import type {
   MissionCategory,
   MissionGiver,
   MissionGiverOffering,
-  MissionGiverStanding,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -77,8 +75,6 @@ export const missionKeys = {
   giverDetail: (id: number) => [...missionKeys.givers(), 'detail', id] as const,
   offerings: () => [...missionKeys.all, 'offerings'] as const,
   offeringsFor: (filters: object) => [...missionKeys.offerings(), filters] as const,
-  standings: () => [...missionKeys.all, 'standings'] as const,
-  standingsFor: (filters: object) => [...missionKeys.standings(), filters] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
 };
@@ -204,18 +200,6 @@ export function useGiverOfferings(
     queryKey: missionKeys.offeringsFor(filters),
     queryFn: () => listGiverOfferings(filters),
     enabled: Boolean(filters.giver ?? filters.template),
-    // Consumers check isError and render inline so a fetch failure doesn't
-    // nuke the whole drill-down view.
-  });
-}
-
-export function useGiverStandings(
-  filters: { giver?: number; character?: number } = {}
-): UseQueryResult<PaginatedResponse<MissionGiverStanding>> {
-  return useQuery({
-    queryKey: missionKeys.standingsFor(filters),
-    queryFn: () => listGiverStandings(filters),
-    enabled: Boolean(filters.giver ?? filters.character),
     // Consumers check isError and render inline so a fetch failure doesn't
     // nuke the whole drill-down view.
   });

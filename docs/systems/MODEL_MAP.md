@@ -17,6 +17,8 @@
   - success_beats <- stories.Beat
   - failure_beats <- stories.Beat
   - expired_beats <- stories.Beat
+  - wound_pool_damage_types <- conditions.DamageType
+  - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
   - context_attachments <- mechanics.ContextConsequencePool
 
@@ -101,6 +103,7 @@
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
   - technique_grants <- magic.TechniqueCapabilityGrant
+  - technique_requirements <- magic.TechniqueCapabilityRequirement
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -112,6 +115,8 @@
 **Foreign Keys:**
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - resonance -> magic.Resonance [OneToOne] (nullable)
+  - wound_pool -> actions.ConsequencePool [FK] (nullable)
+  - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - technique_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
@@ -138,6 +143,7 @@
   - applied_on_entry_of <- conditions.ConditionStage
   - conditionstageonentry_set <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -163,6 +169,7 @@
   - auderethreshold_set <- magic.AudereThreshold
   - on_entry_assocs <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -178,6 +185,12 @@
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
   - capability -> conditions.CapabilityType [FK]
+
+### ConditionModifierEffect
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### ConditionCheckModifier
 **Foreign Keys:**
@@ -779,6 +792,7 @@
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
   - technique_grants <- magic.TechniqueCapabilityGrant
+  - technique_requirements <- magic.TechniqueCapabilityRequirement
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -790,6 +804,8 @@
 **Foreign Keys:**
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - resonance -> magic.Resonance [OneToOne] (nullable)
+  - wound_pool -> actions.ConsequencePool [FK] (nullable)
+  - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - technique_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
@@ -816,6 +832,7 @@
   - applied_on_entry_of <- conditions.ConditionStage
   - conditionstageonentry_set <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -841,6 +858,7 @@
   - auderethreshold_set <- magic.AudereThreshold
   - on_entry_assocs <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -856,6 +874,12 @@
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
   - capability -> conditions.CapabilityType [FK]
+
+### ConditionModifierEffect
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### ConditionCheckModifier
 **Foreign Keys:**
@@ -931,21 +955,23 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>, default_factory=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x0000027A61166660>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
-- `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
-- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
-- `get_capability_status(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus — Get the status of a capability for a target based on active conditions.`
-- `get_capability_value(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> int — Get the total value of a capability for a character.`
-- `get_check_modifier(target: 'ObjectDB', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult — Get the total modifier for a check type from active conditions.`
-- `get_condition_control_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to control loss rate for a condition.`
+- `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
+- `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
+- `get_capability_status(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus — Get the status of a capability for a target based on active conditions.`
+- `get_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Get the total value of a capability for a character.`
+- `get_check_modifier(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult — Get the total modifier for a check type from active conditions.`
+- `get_condition_control_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to control loss rate for a condition.`
 - `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None — Get a specific condition instance on a target.`
-- `get_condition_intensity_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
-- `get_condition_penalty_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
+- `get_condition_intensity_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
+- `get_condition_modifier_total(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> int — Sum active-condition contributions to a mechanics ModifierTarget (#636).`
+- `get_condition_penalty_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
 - `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
+- `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
-- `get_resistance_modifier(target: 'ObjectDB', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
-- `get_turn_order_modifier(target: 'ObjectDB') -> int — Get the total turn order modifier from all conditions.`
+- `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
+- `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
@@ -964,6 +990,7 @@
 ### Covenant
 **Foreign Keys:**
   - legend_summary -> societies.CovenantLegendSummary [OneToOne] (nullable)
+  - organization -> societies.Organization [OneToOne]
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
@@ -1137,6 +1164,7 @@
   - covenant_subroles <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
+  - projects <- projects.Project
 
 ### Gift
 **Foreign Keys:**
@@ -1192,12 +1220,15 @@
   - gift -> magic.Gift [FK]
   - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
+  - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
+  - clash_per_round_pool -> actions.ConsequencePool [FK] (nullable)
   - source_cantrip -> magic.Cantrip [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - capability_grants <- magic.TechniqueCapabilityGrant
+  - capability_requirements <- magic.TechniqueCapabilityRequirement
   - character_grants <- magic.CharacterTechnique
   - condition_applications <- magic.TechniqueAppliedCondition
   - damage_profiles <- magic.TechniqueDamageProfile
@@ -1212,6 +1243,11 @@
   - technique -> magic.Technique [FK]
   - capability -> conditions.CapabilityType [FK]
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
+
+### TechniqueCapabilityRequirement
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+  - capability -> conditions.CapabilityType [FK]
 
 ### CharacterTechnique
 **Foreign Keys:**
@@ -1571,7 +1607,7 @@
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
 - `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' — Derive affinity counts from a set of resonances.`
-- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int') -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
+- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig') -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
 - `compute_anchor_cap(thread: 'Thread') -> 'int' — Return the anchor-side cap for this thread (Spec A §2.4).`
 - `compute_effective_cap(thread: 'Thread') -> 'int' — Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
@@ -1600,7 +1636,7 @@
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -1625,6 +1661,7 @@
   - distinction_effects <- distinctions.DistinctionEffect
   - character_goals <- goals.CharacterGoal
   - goal_journals <- goals.GoalJournal
+  - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
 
@@ -1657,8 +1694,10 @@
   - category -> mechanics.PropertyCategory [FK]
 **Pointed to by:**
   - resonances <- magic.Resonance
+  - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - personas <- scenes.Persona
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
   - prerequisites <- mechanics.Prerequisite
@@ -1670,6 +1709,7 @@
   - required_by_approaches <- mechanics.ChallengeApproach
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_effects <- checks.ConsequenceEffect
+  - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ChallengeTemplateProperty
 **Foreign Keys:**
@@ -1794,7 +1834,7 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
-- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
+- `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
@@ -1804,6 +1844,132 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 wires authored values.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+
+
+## world.missions
+
+### MissionCategory
+**Pointed to by:**
+  - templates <- missions.MissionTemplate
+
+### MissionTemplate
+**Foreign Keys:**
+  - created_in_era -> stories.Era [FK] (nullable)
+**Pointed to by:**
+  - nodes <- missions.MissionNode
+  - instances <- missions.MissionInstance
+  - givers <- missions.MissionGiver
+  - offerings <- missions.MissionGiverOffering
+
+### MissionNode
+**Foreign Keys:**
+  - template -> missions.MissionTemplate [FK]
+**Pointed to by:**
+  - options <- missions.MissionOption
+
+### MissionOption
+**Foreign Keys:**
+  - node -> missions.MissionNode [FK]
+  - authored_check_type -> checks.CheckType [FK] (nullable)
+  - branch_target -> missions.MissionNode [FK] (nullable)
+  - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+**Pointed to by:**
+  - routes <- missions.MissionOptionRoute
+
+### MissionOptionRoute
+**Foreign Keys:**
+  - option -> missions.MissionOption [FK]
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
+  - target_node -> missions.MissionNode [FK] (nullable)
+  - consequence -> checks.Consequence [FK] (nullable)
+**Pointed to by:**
+  - candidates <- missions.MissionOptionRouteCandidate
+  - reward_templates <- missions.MissionOptionRouteReward
+
+### MissionOptionRouteCandidate
+**Foreign Keys:**
+  - route -> missions.MissionOptionRoute [FK]
+  - target_node -> missions.MissionNode [FK]
+  - consequence -> checks.Consequence [FK] (nullable)
+**Pointed to by:**
+  - reward_templates <- missions.MissionOptionRouteReward
+
+### MissionOptionRouteReward
+**Foreign Keys:**
+  - route -> missions.MissionOptionRoute [FK] (nullable)
+  - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
+
+### MissionInstance
+**Foreign Keys:**
+  - template -> missions.MissionTemplate [FK]
+  - current_node -> missions.MissionNode [FK] (nullable)
+  - source_beat -> stories.Beat [FK] (nullable)
+**Pointed to by:**
+  - participants <- missions.MissionParticipant
+  - snapshots <- missions.MissionNodeSnapshot
+  - deeds <- missions.MissionDeedRecord
+
+### MissionParticipant
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - character -> objects.ObjectDB [FK]
+
+### MissionNodeSnapshot
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - node -> missions.MissionNode [FK]
+  - participant -> missions.MissionParticipant [FK]
+
+### MissionDeedRecord
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - actor -> objects.ObjectDB [FK]
+  - node -> missions.MissionNode [FK]
+  - option -> missions.MissionOption [FK]
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - reward_lines <- missions.MissionDeedRewardLine
+  - queued_rewards <- missions.MissionRewardQueue
+
+### MissionGiver
+**Foreign Keys:**
+  - target -> objects.ObjectDB [FK] (nullable)
+  - org -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - offerings <- missions.MissionGiverOffering
+
+### MissionGiverOffering
+**Foreign Keys:**
+  - giver -> missions.MissionGiver [FK]
+  - template -> missions.MissionTemplate [FK]
+
+### MissionDeedRewardLine
+**Foreign Keys:**
+  - deed -> missions.MissionDeedRecord [FK]
+  - recipient -> objects.ObjectDB [FK]
+
+### MissionRewardQueue
+**Foreign Keys:**
+  - deed -> missions.MissionDeedRecord [FK]
+  - line -> missions.MissionDeedRewardLine [FK]
+
+### Service Functions
+- `accept_mission(giver: 'MissionGiver', template: 'MissionTemplate', character: 'ObjectDB') -> 'MissionInstance' — Create a live instance for ``character`` taking ``template`` from ``giver``.`
+- `apply_deed_rewards(deed: 'MissionDeedRecord') -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
+- `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
+- `build_group_option_list(instance: 'MissionInstance', node: 'MissionNode') -> 'list[PresentedOption]' — Union of every participant's Phase-3 option list at ``node``.`
+- `build_option_list(instance: 'MissionInstance', node: 'MissionNode', viewer: 'MissionParticipant') -> 'list[PresentedOption]' — Surface the options the acting ``viewer`` can take at ``node``.`
+- `contract_holder(instance: 'MissionInstance') -> 'MissionParticipant' — Return the instance's single contract-holding participant.`
+- `emit_terminal_rewards(instance: 'MissionInstance', route: 'MissionOptionRoute', deed: 'MissionDeedRecord') -> 'list[MissionDeedRewardLine]' — Emit one :class:`MissionDeedRewardLine` per (template × recipient).`
+- `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' — Record entry into ``node`` and advance the run's position.`
+- `group_resolve_node(instance: 'MissionInstance', node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'list[MissionDeedRecord]' — Resolve a multi-participant ``node`` from each participant's pick.`
+- `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
+- `offer_missions(giver: 'MissionGiver', character: 'ObjectDB', risk_dial: 'int' = 0, count: 'int' = 5, *, presented_persona: 'Persona | None' = None) -> 'list[MissionTemplate]' — Return up to ``count`` templates the giver offers this character right now.`
+- `on_mission_complete_for_beat(instance: 'MissionInstance') -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger (5b.3 stub-record).`
+- `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
+- `select_group_choice(node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'GroupChoice' — Resolve contested picks per ``node.conflict_mode``.`
+- `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
+- `validate_mission_option(option: 'MissionOption') -> 'None' — Validate post-save invariants for ``option``.`
 
 
 ## world.narrative
@@ -1838,6 +2004,42 @@
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
+
+
+## world.npc_services
+
+### NPCStanding
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - npc_persona -> scenes.Persona [FK]
+
+### NPCRole
+**Foreign Keys:**
+  - faction_affiliation -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - offers <- npc_services.NPCServiceOffer
+
+### NPCServiceOffer
+**Foreign Keys:**
+  - permit_offer_details -> npc_services.PermitOfferDetails [OneToOne] (nullable)
+  - role -> npc_services.NPCRole [FK]
+
+### PermitOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+
+### Service Functions
+- `available_offers(session: 'InteractionSession') -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
+- `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
+- `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
+- `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>) — Return an object to identify dataclass fields.`
+- `resolve_npc_persona_for_giver(giver: 'MissionGiver') -> 'Persona | None' — Return the NPC persona for a mission giver, or None if not resolvable.`
+- `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
+- `resolve_persona_for_character(character: 'ObjectDB') -> 'Persona | None' — Return the PC's primary persona for an Evennia Character ObjectDB.`
+- `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'ObjectDB', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
+- `upsert_standing_cooldown(*, persona: 'Persona', npc_persona: 'Persona', cooldown: 'timedelta') -> 'NPCStanding' — Upsert an NPCStanding row, setting ``available_at = now + cooldown``.`
 
 
 ## world.progression
@@ -2038,6 +2240,33 @@
 - `on_scene_finished(scene: world.scenes.models.Scene) -> None — Grant scene completion rewards to all participants.`
 - `remove_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None — Remove an unprocessed vote for the current week.`
 - `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' — Spend XP to unlock something for a character.`
+
+
+## world.projects
+
+### Project
+**Foreign Keys:**
+  - owner_persona -> scenes.Persona [FK]
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+**Pointed to by:**
+  - contributions <- projects.Contribution
+
+### Contribution
+**Foreign Keys:**
+  - project -> projects.Project [FK]
+  - contributor_persona -> scenes.Persona [FK]
+  - item_instance -> items.ItemInstance [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+
+### Service Functions
+- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
+- `register_stat_definitions() -> 'None' — Create the StatDefinition rows for project-related achievement stats.`
+- `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
+- `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 
 
 ## world.realms
@@ -2324,6 +2553,10 @@
   - invitations_sent <- events.EventInvitation
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
+  - projects_owned <- projects.Project
+  - project_contributions <- projects.Contribution
+  - npc_standings <- npc_services.NPCStanding
+  - standings_held_by <- npc_services.NPCStanding
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -2343,8 +2576,12 @@
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
   - interaction_targets <- scenes.InteractionTargetPersona
+  - action_links <- scenes.InteractionAction
+  - pose_links <- scenes.InteractionAction
   - receivers <- scenes.InteractionReceiver
   - referencing_updates <- relationships.RelationshipUpdate
+  - combat_round_actions <- combat.CombatRoundAction
+  - clash_contributions <- combat.ClashContribution
 
 ### InteractionFavorite
 **Foreign Keys:**
@@ -2360,6 +2597,11 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
+
+### InteractionAction
+**Foreign Keys:**
+  - pose -> scenes.Interaction [FK]
+  - action_interaction -> scenes.Interaction [FK]
 
 ### SceneSummaryRevision
 **Foreign Keys:**
@@ -2451,13 +2693,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x0000027A63F4F3B0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x76afe2a67eb0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x0000027A63F4F3B0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x76afe2a67eb0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2480,7 +2722,8 @@
 
 ### Organization
 **Foreign Keys:**
-  - society -> societies.Society [FK]
+  - covenant -> covenants.Covenant [OneToOne] (nullable)
+  - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
@@ -2488,6 +2731,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - event_invitations <- events.EventInvitation
+  - npc_roles <- npc_services.NPCRole
 
 ### OrganizationMembership
 **Foreign Keys:**
@@ -2845,6 +3089,8 @@
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence
+  - project_outcomes <- projects.Project
+  - project_contributions <- projects.Contribution
 
 ### ResultChart
 **Pointed to by:**

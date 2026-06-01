@@ -30,7 +30,6 @@ vi.mock('../api', () => ({
   listMissionGivers: vi.fn(),
   getMissionGiver: vi.fn(),
   listGiverOfferings: vi.fn(),
-  listGiverStandings: vi.fn(),
   listPredicateLeaves: vi.fn(),
   patchMissionTemplate: vi.fn(),
   patchMissionNode: vi.fn(),

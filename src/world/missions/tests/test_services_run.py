@@ -16,24 +16,24 @@ from django.utils import timezone
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
-from world.missions.constants import MissionStatus
+from world.missions.constants import GiverKind, MissionStatus
 from world.missions.factories import (
     MissionGiverFactory,
     MissionNodeFactory,
     MissionTemplateFactory,
 )
 from world.missions.models import (
-    MissionGiverStanding,
     MissionInstance,
     MissionNodeSnapshot,
     MissionParticipant,
 )
 from world.missions.services.availability import offer_missions
 from world.missions.services.run import accept_mission, share_mission
+from world.npc_services.models import NPCStanding
 
 
 def _make_character(level: int = 1) -> "object":
-    """A Character ObjectDB with a CharacterSheet at the given level."""
+    """A Character ObjectDB with a CharacterSheet (which auto-creates PRIMARY persona)."""
     character = CharacterFactory()
     sheet = CharacterSheetFactory(character=character)
     if level > 0:
@@ -46,11 +46,33 @@ def _make_character(level: int = 1) -> "object":
     return character
 
 
+def _make_npc_giver(*, name: str = "giver") -> "object":
+    """An NPC-kind MissionGiver whose target is a Character with a sheet (and PRIMARY persona).
+
+    Persona-keyed NPCStanding requires both sides to resolve to a Persona;
+    ROOM_TRIGGER / ENVIRONMENTAL_DETAIL givers skip standing entirely. Tests
+    that assert on standing rows must use this helper.
+    """
+    npc_target = CharacterFactory()
+    CharacterSheetFactory(character=npc_target)
+    return MissionGiverFactory(name=name, giver_kind=GiverKind.NPC, target=npc_target)
+
+
+def _pc_persona(character) -> "object":
+    """Look up the PC's primary persona for NPCStanding assertions."""
+    return character.sheet_data.primary_persona
+
+
+def _giver_npc_persona(giver) -> "object":
+    """Look up the NPC giver target's primary persona for NPCStanding assertions."""
+    return giver.target.sheet_data.primary_persona
+
+
 class AcceptMissionTests(TestCase):
     """accept_mission creates the run, holder, entry-node snapshot, and cooldown."""
 
     def setUp(self) -> None:
-        self.giver = MissionGiverFactory()
+        self.giver = _make_npc_giver(name="accept-giver")
         self.template = MissionTemplateFactory(name="accept-t", cooldown=timedelta(days=2))
         self.entry_node = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
@@ -78,8 +100,11 @@ class AcceptMissionTests(TestCase):
 
         accept_mission(self.giver, self.template, self.character)
 
-        # Cooldown row exists with future available_at.
-        cd = MissionGiverStanding.objects.get(giver=self.giver, character=self.character)
+        # Cooldown row exists with future available_at — keyed on personas now.
+        cd = NPCStanding.objects.get(
+            persona=_pc_persona(self.character),
+            npc_persona=_giver_npc_persona(self.giver),
+        )
         self.assertGreater(cd.available_at, timezone.now())
 
         # offer_missions now returns no offers from this giver for this char.
@@ -87,13 +112,16 @@ class AcceptMissionTests(TestCase):
 
     def test_accept_uses_upsert_for_existing_cooldown_row(self) -> None:
         # Pre-existing cooldown (e.g. from a prior, expired run on this giver).
-        MissionGiverStanding.objects.create(
-            giver=self.giver,
-            character=self.character,
+        NPCStanding.objects.create(
+            persona=_pc_persona(self.character),
+            npc_persona=_giver_npc_persona(self.giver),
             available_at=timezone.now() - timedelta(days=1),
         )
         accept_mission(self.giver, self.template, self.character)
-        rows = MissionGiverStanding.objects.filter(giver=self.giver, character=self.character)
+        rows = NPCStanding.objects.filter(
+            persona=_pc_persona(self.character),
+            npc_persona=_giver_npc_persona(self.giver),
+        )
         self.assertEqual(rows.count(), 1)
         self.assertGreater(rows.first().available_at, timezone.now())
 
@@ -102,7 +130,7 @@ class ShareMissionTests(TestCase):
     """share_mission adds a non-holder participant; no cooldown side effect."""
 
     def setUp(self) -> None:
-        self.giver = MissionGiverFactory()
+        self.giver = _make_npc_giver(name="share-giver")
         self.template = MissionTemplateFactory(name="share-t")
         MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         self.giver.templates.add(self.template)
@@ -128,11 +156,18 @@ class ShareMissionTests(TestCase):
         share_mission(self.instance, sharee)
 
         # Holder has a cooldown from the accept; sharee MUST NOT.
+        npc_persona = _giver_npc_persona(self.giver)
         self.assertTrue(
-            MissionGiverStanding.objects.filter(giver=self.giver, character=self.holder).exists()
+            NPCStanding.objects.filter(
+                persona=_pc_persona(self.holder),
+                npc_persona=npc_persona,
+            ).exists()
         )
         self.assertFalse(
-            MissionGiverStanding.objects.filter(giver=self.giver, character=sharee).exists()
+            NPCStanding.objects.filter(
+                persona=_pc_persona(sharee),
+                npc_persona=npc_persona,
+            ).exists()
         )
 
 

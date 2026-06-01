@@ -5,23 +5,18 @@ serializer mirrors the model's typeclass-validating clean() so invalid
 target/kind combos return 400.
 """
 
-from datetime import timedelta
-
 from django.test import TestCase
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import (
     AccountFactory,
-    CharacterFactory,
     ObjectDBFactory,
 )
 from world.missions.constants import GiverKind
 from world.missions.factories import (
     MissionGiverFactory,
     MissionGiverOfferingFactory,
-    MissionGiverStandingFactory,
     MissionTemplateFactory,
 )
 from world.societies.factories import OrganizationFactory
@@ -149,55 +144,6 @@ class OfferingViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
-class StandingViewSetTests(TestCase):
-    URL = "/api/missions/giver-standings/"
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.staff = _staff_account("staff-std-vs")
-        cls.giver = MissionGiverFactory(name="std-giver")
-        cls.character = CharacterFactory()
-        cls.standing = MissionGiverStandingFactory(
-            giver=cls.giver, character=cls.character, affection=42
-        )
-
-    def setUp(self) -> None:
-        self.client = APIClient()
-        self.client.force_authenticate(self.staff)
-
-    def test_list_filters_by_giver(self) -> None:
-        response = self.client.get(self.URL, {"giver": self.giver.pk})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
-
-    def test_patch_clears_cooldown(self) -> None:
-        # Staff override: set available_at to now to clear the cooldown.
-        response = self.client.patch(
-            f"{self.URL}{self.standing.pk}/",
-            {"available_at": timezone.now().isoformat()},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_patch_adjusts_affection(self) -> None:
-        response = self.client.patch(
-            f"{self.URL}{self.standing.pk}/",
-            {"affection": -10},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["affection"], -10)
-
-    def test_create_new_standing(self) -> None:
-        other_giver = MissionGiverFactory(name="std-other")
-        response = self.client.post(
-            self.URL,
-            {
-                "giver": other_giver.pk,
-                "character": self.character.pk,
-                "available_at": (timezone.now() + timedelta(days=1)).isoformat(),
-                "affection": 0,
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+# NPCStanding CRUD API tests moved to
+# world.npc_services.tests.test_api_standings — the standing model
+# relocated as part of the unified NPC service framework.

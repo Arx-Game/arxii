@@ -350,6 +350,49 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Source:** `src/world/narrative/`
+### NPC Services
+Unified "ask NPC for thing" framework: per-NPC-role offer surface, persona-keyed standing,
+per-kind effect handler dispatch. Covers permits today; missions/loans/training/favors
+register as additional kinds.
+
+- **Models:** `NPCRole`, `NPCServiceOffer` (kind discriminator + draw_mode + eligibility_rule),
+  `PermitOfferDetails` (1:1 per-kind details; mirrors `ItemFacet` composition),
+  `NPCStanding` (per-(PC persona, NPC persona); relocated from `world.missions.MissionGiverStanding`)
+- **Constants:** `OfferKind` (PERMIT; future MISSION/LOAN/TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL)
+- **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
+  `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;
+  Plan 3 (#668) fills in real `BuildingPermit` ItemInstance creation. Mission migration
+  onto this dispatch is #686.
+- **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
+  session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
+  → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`
+  → `end_interaction(session)` (persists new affection for class-2+ NPCs).
+- **Predicate engine reuse:** `world.missions.predicates` (shared utility, will be relocated
+  to a neutral app once #686 lands). `min_npc_standing` and persona-scoped `has_item` leaves
+  live there.
+- **Seeding:** `ensure_builders_guild_clerk_role()` in `world.npc_services.seeds` —
+  idempotent get_or_create; NOT a committed fixture (per #683).
+- **API:** `/api/npc-services/standings/`, `/api/npc-services/roles/`, `/api/npc-services/offers/`,
+  `/api/npc-services/permit-details/` — staff CRUD (IsAuthenticated + IsAdminUser).
+- **Cross-app dependencies:** `world.missions.predicates` (engine), `world.scenes.Persona`,
+  `world.items.ItemInstance`, `world.societies.Organization`, `core.mixins`.
+- **Source:** `src/world/npc_services/`
+
+### Projects (delayed multi-tick endeavors)
+Project framework: kind-discriminated long-running endeavors with contributions and
+outcome rolls. Plan 1 shipped the framework + two kinds (BUILDING_CONSTRUCTION,
+ROOM_FEATURE_PROGRESSION).
+
+- **Models:** `Project` (kind discriminator + status + completion_mode), `Contribution`
+  (per-actor per-project contribution log; privacy-aware), per-kind details models
+  (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
+- **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
+  `ContributionPrivacy`
+- **Stat definitions:** Project achievement stats are seeded in `AppConfig.ready()` via
+  `register_stat_definitions()`
+- **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
+- **Source:** `src/world/projects/`
+
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 

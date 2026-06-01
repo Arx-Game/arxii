@@ -23,7 +23,6 @@ export type MissionOptionRouteCandidate = components['schemas']['MissionOptionRo
 export type MissionOptionRouteReward = components['schemas']['MissionOptionRouteReward'];
 export type MissionGiver = components['schemas']['MissionGiver'];
 export type MissionGiverOffering = components['schemas']['MissionGiverOffering'];
-export type MissionGiverStanding = components['schemas']['MissionGiverStanding'];
 export type MissionInstance = components['schemas']['MissionInstance'];
 
 export type AccessTier = components['schemas']['AccessTierEnum'];

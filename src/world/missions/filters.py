@@ -16,7 +16,6 @@ from world.missions.constants import AccessTier, ArcScope
 from world.missions.models import (
     MissionGiver,
     MissionGiverOffering,
-    MissionGiverStanding,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -179,20 +178,4 @@ class MissionGiverOfferingFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = MissionGiverOffering
-        fields: list[str] = []
-
-
-class MissionGiverStandingFilterSet(django_filters.FilterSet):
-    """Filter MissionGiverStanding rows by giver / character.
-
-    Affection-range queries are rarely useful at the API surface (staff
-    just navigates to a specific (giver, character) pair); supporting
-    them later as ``min_affection`` / ``max_affection`` is trivial.
-    """
-
-    giver = django_filters.NumberFilter(field_name="giver_id")
-    character = django_filters.NumberFilter(field_name="character_id")
-
-    class Meta:
-        model = MissionGiverStanding
         fields: list[str] = []

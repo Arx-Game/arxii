@@ -35,8 +35,8 @@ from world.conditions.factories import (
 )
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory, ThreadFactory
-from world.missions.factories import MissionGiverFactory, MissionGiverStandingFactory
 from world.missions.predicates import CharacterPredicateContext, evaluate
+from world.npc_services.factories import NPCStandingFactory
 from world.roster.factories import RosterEntryFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
@@ -355,80 +355,93 @@ class ResonanceResolverTests(TestCase):
         self.assertTrue(evaluate(rule, self.ctx))
 
 
-class GiverStandingResolverTests(TestCase):
-    """min_giver_standing: gates on MissionGiverStanding.affection for a giver.
+class NPCStandingResolverTests(TestCase):
+    """min_npc_standing: gates on NPCStanding.affection for an NPC persona.
 
-    The giver is referenced by PK (since #577 — giver renames no longer
-    invalidate authored rules). The comparison is affection >= ``min``.
-    No standing row means affection is implicitly 0.
+    The NPC is referenced by Persona PK (NPCStanding is keyed on personas
+    after the unified-framework refactor). Comparison is affection >= ``min``.
+    No standing row means affection is implicitly 0. The PC side uses
+    ``ctx.presented_persona``; None presented persona fails closed
+    (consistent with other persona-aware leaves).
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.liked_giver = MissionGiverFactory(name="liked-giver")
-        cls.disliked_giver = MissionGiverFactory(name="disliked-giver")
-        cls.unknown_giver = MissionGiverFactory(name="unknown-giver")
-        MissionGiverStandingFactory(giver=cls.liked_giver, character=cls.character, affection=50)
-        MissionGiverStandingFactory(
-            giver=cls.disliked_giver, character=cls.character, affection=-20
-        )
+        cls.pc_persona = cls.sheet.primary_persona
+        cls.liked_npc = PersonaFactory()
+        cls.disliked_npc = PersonaFactory()
+        cls.unknown_npc = PersonaFactory()
+        NPCStandingFactory(persona=cls.pc_persona, npc_persona=cls.liked_npc, affection=50)
+        NPCStandingFactory(persona=cls.pc_persona, npc_persona=cls.disliked_npc, affection=-20)
 
     def setUp(self) -> None:
-        self.ctx = CharacterPredicateContext(self.character)
+        self.ctx = CharacterPredicateContext(self.character, presented_persona=self.pc_persona)
 
     def test_true_when_at_threshold(self) -> None:
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=50)
+            self.ctx.has_leaf(
+                "min_npc_standing", npc_persona_id=self.liked_npc.pk, min_affection=50
+            )
         )
 
     def test_true_when_above_threshold(self) -> None:
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=10)
+            self.ctx.has_leaf(
+                "min_npc_standing", npc_persona_id=self.liked_npc.pk, min_affection=10
+            )
         )
 
     def test_false_when_below_threshold(self) -> None:
         self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=51)
+            self.ctx.has_leaf(
+                "min_npc_standing", npc_persona_id=self.liked_npc.pk, min_affection=51
+            )
         )
 
     def test_negative_affection_below_zero_threshold(self) -> None:
         # disliked: affection=-20; threshold 0 must FAIL.
         self.assertFalse(
             self.ctx.has_leaf(
-                "min_giver_standing", giver_id=self.disliked_giver.pk, min_affection=0
+                "min_npc_standing", npc_persona_id=self.disliked_npc.pk, min_affection=0
             )
         )
 
     def test_no_standing_row_means_zero_affection(self) -> None:
-        # No standing row exists for unknown-giver/character → affection=0.
+        # No standing row exists for unknown_npc/pc_persona → affection=0.
         self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.unknown_giver.pk, min_affection=0)
+            self.ctx.has_leaf(
+                "min_npc_standing", npc_persona_id=self.unknown_npc.pk, min_affection=0
+            )
         )
         self.assertFalse(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.unknown_giver.pk, min_affection=1)
+            self.ctx.has_leaf(
+                "min_npc_standing", npc_persona_id=self.unknown_npc.pk, min_affection=1
+            )
         )
 
-    def test_false_when_no_such_giver(self) -> None:
+    def test_false_when_no_such_npc_persona(self) -> None:
         # Bogus PK — the predicate fails closed rather than raising.
-        self.assertFalse(self.ctx.has_leaf("min_giver_standing", giver_id=999999, min_affection=0))
+        self.assertFalse(
+            self.ctx.has_leaf("min_npc_standing", npc_persona_id=999999, min_affection=0)
+        )
+
+    def test_false_when_no_presented_persona(self) -> None:
+        # PC has no presented persona — fail closed (TEMPORARY masks can't hold standing).
+        ctx_no_persona = CharacterPredicateContext(self.character)
+        self.assertFalse(
+            ctx_no_persona.has_leaf(
+                "min_npc_standing", npc_persona_id=self.liked_npc.pk, min_affection=0
+            )
+        )
 
     def test_evaluate_dispatches(self) -> None:
         rule = {
-            "leaf": "min_giver_standing",
-            "params": {"giver_id": self.liked_giver.pk, "min_affection": 50},
+            "leaf": "min_npc_standing",
+            "params": {"npc_persona_id": self.liked_npc.pk, "min_affection": 50},
         }
         self.assertTrue(evaluate(rule, self.ctx))
-
-    def test_rename_does_not_invalidate_rule(self) -> None:
-        # The whole point of the migration to PK references: renaming the
-        # giver must NOT silently break authored rules that reference it.
-        self.liked_giver.name = "liked-giver-renamed"
-        self.liked_giver.save(update_fields=["name"])
-        self.assertTrue(
-            self.ctx.has_leaf("min_giver_standing", giver_id=self.liked_giver.pk, min_affection=50)
-        )
 
 
 class OrgMembershipResolverTests(TestCase):
