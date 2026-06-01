@@ -20,6 +20,7 @@ from world.magic.models import (
     Gift,
     ImbuingProseTemplate,
     IntensityTier,
+    LevelPowerConfig,
     MishapPoolTier,
     Motif,
     MotifResonance,
@@ -373,6 +374,19 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "resilience_check_type",
         "base_check_difficulty",
     ]
+
+
+@admin.register(LevelPowerConfig)
+class LevelPowerConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for level→power bonuses."""
+
+    list_display = ("pk", "character_level_bonus", "technique_level_bonus")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return not LevelPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
 
 
 @admin.register(ResonanceGainConfig)
