@@ -36,7 +36,6 @@ class OrganizationInline(admin.TabularInline):
     extra = 0
     fields = ["name", "org_type", "description"]
     show_change_link = True
-    raw_id_fields = ["org_type"]
 
 
 class OrganizationMembershipInline(admin.TabularInline):

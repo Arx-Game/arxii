@@ -174,12 +174,7 @@ class CombatTechniqueResolver:
         )
 
     def _sum_intensity_bump_pulls(self) -> int:
-        """Sum INTENSITY_BUMP scaled_values from active CombatPulls.
-
-        Isolated from compute_effective_intensity so __call__ can combine
-        the injected power (already includes identity modifiers) with the
-        pull-specific bump without double-counting the base technique intensity.
-        """
+        """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
         encounter = self.participant.encounter
         character = self.participant.character_sheet.character
         pull_bonus = 0
@@ -226,7 +221,7 @@ class CombatTechniqueResolver:
             if sl < profile.minimum_success_level:
                 continue
             budget = profile.compute_damage_budget(
-                effective_intensity=eff_intensity,
+                effective_power=eff_intensity,
                 success_level=sl,
             )
             scaled = int(budget * multiplier)
@@ -279,11 +274,11 @@ class CombatTechniqueResolver:
             if target is None:
                 continue
             severity = row.compute_severity(
-                effective_intensity=eff_intensity,
+                effective_power=eff_intensity,
                 success_level=sl,
             )
             duration = row.compute_duration_rounds(
-                effective_intensity=eff_intensity,
+                effective_power=eff_intensity,
                 success_level=sl,
             )
             bulk_applications.append(
@@ -359,20 +354,15 @@ def _sum_active_flat_bonuses(
     return total
 
 
-def compute_effective_intensity(
+def compute_intensity_for_clash(
     participant: CombatParticipant,
     action: CombatRoundAction,
 ) -> int:
-    """Aggregate the caster's effective scaling input for this cast.
+    """Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.
 
-    Sources today:
-    - technique.intensity (caster's invested power baseline)
-    - sum of INTENSITY_BUMP scaled_values from active CombatPulls
-
-    Future hooks (additive, no signature change required):
-    - Condition-derived intensity bumps
-    - Item-derived intensity bumps
-    - Environmental modifiers
+    Used exclusively to gate the clash-open check (intensity_floor). Future
+    intensity-ramp contributions (conditions, items, environment) can be added
+    here and they will tighten the floor automatically.
     """
     technique = action.focused_action
     if technique is None:

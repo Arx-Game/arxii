@@ -242,49 +242,16 @@ class EstablishedPersonaFactory(PersonaFactory):
 class NobleFamilyOrganizationFactory(OrganizationFactory):
     """Factory for creating noble family organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="noble_family",
-            defaults={
-                "rank_1_title": "Head of House",
-                "rank_2_title": "Heir",
-                "rank_3_title": "Noble Family Member",
-                "rank_4_title": "Distant Relation",
-                "rank_5_title": "Ward",
-            },
-        )[0]
-    )
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="noble")
 
 
 class GuildOrganizationFactory(OrganizationFactory):
     """Factory for creating guild organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="guild",
-            defaults={
-                "rank_1_title": "Guildmaster",
-                "rank_2_title": "Master",
-                "rank_3_title": "Journeyman",
-                "rank_4_title": "Apprentice",
-                "rank_5_title": "Initiate",
-            },
-        )[0]
-    )
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="guild")
 
 
 class SecretSocietyOrganizationFactory(OrganizationFactory):
     """Factory for creating secret society organizations with appropriate rank titles."""
 
-    org_type = factory.LazyFunction(
-        lambda: OrganizationType.objects.get_or_create(
-            name="secret_society",
-            defaults={
-                "rank_1_title": "Grand Master",
-                "rank_2_title": "Inner Circle",
-                "rank_3_title": "Initiate",
-                "rank_4_title": "Acolyte",
-                "rank_5_title": "Outsider Contact",
-            },
-        )[0]
-    )
+    org_type = factory.SubFactory(OrganizationTypeFactory, name="secret_society")
