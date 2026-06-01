@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { previewPull } from '../../api';
 import type { PreviewedEffect, PullPreviewResponse, Thread } from '../../types';
+import { ThreadPullDialog } from './ThreadPullDialog';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -76,6 +77,7 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [pullDialogOpen, setPullDialogOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -194,14 +196,14 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
         </div>
       )}
 
-      {/* Pull Now button — disabled pending Task 18 ThreadPullDialog */}
+      {/* Pull Now — opens ThreadPullDialog in ephemeral mode */}
       <div className="flex items-center gap-3">
         <Button
           type="button"
           disabled={!isAlwaysInAction}
           data-testid="pull-now-button"
           title={!isAlwaysInAction ? 'Requires combat context' : undefined}
-          // TODO Task 18: open ThreadPullDialog here instead of the disabled stub
+          onClick={() => isAlwaysInAction && setPullDialogOpen(true)}
         >
           Pull Now (RP)
         </Button>
@@ -211,6 +213,12 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
           </span>
         )}
       </div>
+
+      <ThreadPullDialog
+        characterSheetId={thread.owner}
+        open={pullDialogOpen}
+        onClose={() => setPullDialogOpen(false)}
+      />
     </div>
   );
 }
