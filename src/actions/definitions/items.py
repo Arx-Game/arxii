@@ -217,3 +217,92 @@ class TakeOutAction(Action):
         )
 
         return ActionResult(success=True)
+
+
+@dataclass
+class ActivatePermitAction(Action):
+    """Activate a BuildingPermit at the actor's current location.
+
+    Resolves the permit's ``BuildingPermitDetails`` and runs
+    ``activate_permit`` (which validates the site + spawns the
+    BUILDING_CONSTRUCTION project + writes ownership-event audit rows
+    + sets the permit's ``consumed_at``).
+
+    Inputs (kwargs):
+    - ``target`` — the BuildingPermit ItemInstance (or anything
+      ``resolve_item_instance`` accepts)
+    - ``target_size`` — int 1-10
+    - ``target_grandeur`` — int 1-10
+    """
+
+    key: str = "activate_permit"
+    name: str = "Activate Permit"
+    icon: str = "scroll"
+    category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    intent_event: str | None = "before_activate_permit"
+    result_event: str | None = "activate_permit"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def execute(  # noqa: PLR0911 — many early-return branches for distinct error messages
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.services import (  # noqa: PLC0415
+            PermitValidationError,
+            activate_permit,
+        )
+        from world.npc_services.services import (  # noqa: PLC0415 — relocates to world.scenes.services when #684 lands
+            persona_for_character,
+        )
+
+        target = kwargs.get("target")
+        if target is None:
+            return ActionResult(success=False, message="Activate which permit?")
+        target_size = kwargs.get("target_size")
+        target_grandeur = kwargs.get("target_grandeur")
+        if target_size is None or target_grandeur is None:
+            return ActionResult(
+                success=False,
+                message="Specify target_size and target_grandeur (1-10 each).",
+            )
+
+        item_instance = resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That can't be activated.")
+        permit_details = getattr(item_instance, "building_permit_details", None)  # noqa: GETATTR_LITERAL — reverse OneToOne may be absent on non-permit items
+        if permit_details is None:
+            return ActionResult(success=False, message="That's not a building permit.")
+
+        try:
+            persona = persona_for_character(actor)
+        except Exception:  # noqa: BLE001 — MissingPrimaryPersonaError; defensive
+            return ActionResult(
+                success=False,
+                message="You don't have a persona to activate this permit with.",
+            )
+
+        site_room = actor.location
+        if site_room is None:
+            return ActionResult(success=False, message="You aren't anywhere to activate this.")
+
+        try:
+            project = activate_permit(
+                permit_details=permit_details,
+                site_room=site_room,
+                acting_persona=persona,
+                target_size=target_size,
+                target_grandeur=target_grandeur,
+            )
+        except PermitValidationError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=(f"Permit activated — construction project #{project.pk} opened."),
+        )

@@ -156,6 +156,7 @@ class ActionRegistryTests(TestCase):
             "undress",
             "traverse_exit",
             "home",
+            "activate_permit",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

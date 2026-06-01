@@ -78,6 +78,33 @@ OFFER_EFFECT_HANDLERS: dict[str, EffectHandler] = {
     OfferKind.PERMIT.value: _stub_issue_permit,
 }
 
+# Save the default handler set so consumer apps can register replacements
+# via :func:`register_offer_effect_handler` and tests can roll back to the
+# Plan 2 baseline via :func:`reset_offer_effect_handlers` for isolation.
+_DEFAULT_HANDLERS: dict[str, EffectHandler] = dict(OFFER_EFFECT_HANDLERS)
+
+
+def register_offer_effect_handler(kind: str, handler: EffectHandler) -> None:
+    """Register/override a PER-KIND effect handler.
+
+    Replaces Plan 2's stub for ``kind=PERMIT`` with Plan 3's real
+    ``issue_permit`` at app-ready time. Tests can call this to wire a
+    mock handler; pair with :func:`reset_offer_effect_handlers` in
+    tearDown for isolation.
+    """
+    OFFER_EFFECT_HANDLERS[kind] = handler
+
+
+def reset_offer_effect_handlers() -> None:
+    """Restore the Plan 2 baseline handler set.
+
+    Test-only escape hatch — production code should never call this.
+    Use in tearDown when a test has registered a custom handler that
+    must not leak to subsequent tests.
+    """
+    OFFER_EFFECT_HANDLERS.clear()
+    OFFER_EFFECT_HANDLERS.update(_DEFAULT_HANDLERS)
+
 
 class UnregisteredOfferKindError(LookupError):
     """Raised when an offer is granted but its kind has no registered handler.
