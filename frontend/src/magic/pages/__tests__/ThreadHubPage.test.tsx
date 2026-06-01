@@ -86,6 +86,10 @@ const makeSummary = (overrides: Partial<ThreadHubSummary> = {}): ThreadHubSummar
   near_xp_lock_thread_ids: [],
   blocked_thread_ids: [],
   weaving_eligibility: {},
+  weavable_traits: [],
+  weavable_techniques: [],
+  room_property_ids: [],
+  weavable_relationship_track_ids: [],
   ...overrides,
 });
 

@@ -3,9 +3,8 @@
  *
  * Steps:
  *   1. Pick anchor kind (TargetKind) — disabled if character has no unlock for that kind.
- *   2. Pick anchor — kind-specific picker. FACET and COVENANT_ROLE are supported;
- *      TRAIT, TECHNIQUE, ROOM are stubbed as "not yet supported in this UI".
- *      RELATIONSHIP_TRACK and RELATIONSHIP_CAPSTONE are deferred per spec.
+ *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, ROOM,
+ *      and RELATIONSHIP_TRACK are supported; RELATIONSHIP_CAPSTONE is deferred per spec.
  *   3. Pick resonance — combobox over useCharacterResonances().
  *   4. Narrative — optional name (max 120) and description.
  *   5. Confirm — summary card + [Weave] button.
@@ -31,7 +30,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCharacterResonances, useWeaveThread } from '../../queries';
-import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
+import type {
+  CharacterResonance,
+  RelationshipTrack,
+  RoomBrief,
+  TargetKind,
+  ThreadHubSummary,
+} from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
 
 // ---------------------------------------------------------------------------
@@ -56,20 +61,12 @@ interface KindMeta {
 }
 
 const KIND_META: Record<string, KindMeta> = {
-  TRAIT: { label: 'Trait', supported: false, unsupportedNote: 'Trait picker coming soon.' },
-  TECHNIQUE: {
-    label: 'Technique',
-    supported: false,
-    unsupportedNote: 'Technique picker coming soon.',
-  },
-  ROOM: { label: 'Room', supported: false, unsupportedNote: 'Room picker coming soon.' },
+  TRAIT: { label: 'Trait', supported: true },
+  TECHNIQUE: { label: 'Technique', supported: true },
+  ROOM: { label: 'Room', supported: true },
   FACET: { label: 'Facet', supported: true },
   COVENANT_ROLE: { label: 'Covenant Role', supported: true },
-  RELATIONSHIP_TRACK: {
-    label: 'Relationship Track',
-    supported: false,
-    unsupportedNote: 'Not yet available — deferred.',
-  },
+  RELATIONSHIP_TRACK: { label: 'Relationship Track', supported: true },
   RELATIONSHIP_CAPSTONE: {
     label: 'Relationship Capstone',
     supported: false,
@@ -132,12 +129,60 @@ async function fetchCovenantRoleOptions(): Promise<AnchorOption[]> {
   return options;
 }
 
-async function fetchAnchorOptions(kind: TargetKind): Promise<AnchorOption[]> {
+function fetchTraitOptions(summary: ThreadHubSummary | undefined): AnchorOption[] {
+  return (summary?.weavable_traits ?? []).map((t) => ({
+    id: t.trait_id,
+    label: t.name,
+    sublabel: `${t.trait_type} · ${t.display_value}`,
+  }));
+}
+
+function fetchTechniqueOptions(summary: ThreadHubSummary | undefined): AnchorOption[] {
+  return (summary?.weavable_techniques ?? []).map((t) => ({
+    id: t.technique_id,
+    label: t.name,
+    sublabel: t.gift_name,
+  }));
+}
+
+async function fetchRoomOptions(summary: ThreadHubSummary | undefined): Promise<AnchorOption[]> {
+  const propertyIds = summary?.room_property_ids ?? [];
+  if (propertyIds.length === 0) return [];
+  const qs = propertyIds.map((id) => `property_id=${id}`).join('&');
+  const res = await apiFetch(`/api/magic/rooms-by-property/?${qs}`);
+  if (!res.ok) throw new Error('Failed to load rooms');
+  const data = (await res.json()) as RoomBrief[];
+  return data.map((r) => ({ id: r.id, label: r.name }));
+}
+
+async function fetchRelationshipTrackOptions(
+  summary: ThreadHubSummary | undefined
+): Promise<AnchorOption[]> {
+  const allowedIds = new Set(summary?.weavable_relationship_track_ids ?? []);
+  if (allowedIds.size === 0) return [];
+  const res = await apiFetch('/api/relationships/tracks/');
+  if (!res.ok) throw new Error('Failed to load relationship tracks');
+  const data = (await res.json()) as RelationshipTrack[];
+  return data.filter((t) => allowedIds.has(t.id)).map((t) => ({ id: t.id, label: t.name }));
+}
+
+async function fetchAnchorOptions(
+  kind: TargetKind,
+  summary: ThreadHubSummary | undefined
+): Promise<AnchorOption[]> {
   switch (kind) {
     case 'FACET':
       return fetchFacetOptions();
     case 'COVENANT_ROLE':
       return fetchCovenantRoleOptions();
+    case 'TRAIT':
+      return fetchTraitOptions(summary);
+    case 'TECHNIQUE':
+      return fetchTechniqueOptions(summary);
+    case 'ROOM':
+      return fetchRoomOptions(summary);
+    case 'RELATIONSHIP_TRACK':
+      return fetchRelationshipTrackOptions(summary);
     default:
       return [];
   }
@@ -241,7 +286,7 @@ export function WeaveThreadWizard({
 
     setAnchorLoading(true);
     try {
-      const options = await fetchAnchorOptions(kind);
+      const options = await fetchAnchorOptions(kind, summary);
       setAnchorOptions(options);
     } catch (err) {
       setAnchorError(err instanceof Error ? err.message : 'Failed to load options.');

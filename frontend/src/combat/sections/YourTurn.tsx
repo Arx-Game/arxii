@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type { ActionContext, ActionSlot } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
 import { useAvailableCombos, useDispatchPlayerAction, useUpgradeCombo } from '../queries';
 import type { AvailableCombo } from '../types';
 
@@ -225,10 +226,12 @@ export function YourTurn({
 
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [pullDialogOpen, setPullDialogOpen] = useState(false);
 
-  // Reset submitted when round advances.
+  // Reset submitted and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
+    setPullDialogOpen(false);
   }, [roundNumber]);
 
   // ---------------------------------------------------------------------------
@@ -443,6 +446,29 @@ export function YourTurn({
           ))}
         </div>
       )}
+
+      {/* Thread Pull row — opens ThreadPullDialog in ephemeral mode */}
+      <div
+        className="flex items-center justify-between rounded border border-primary/20 bg-primary/5 px-3 py-2"
+        data-testid="thread-pull-row"
+      >
+        <span className="text-xs font-semibold text-primary/80">✦ Thread Pulls</span>
+        <button
+          type="button"
+          onClick={() => setPullDialogOpen(true)}
+          disabled={isLocked}
+          data-testid="open-pull-dialog-btn"
+          className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Pull Threads
+        </button>
+      </div>
+
+      <ThreadPullDialog
+        characterSheetId={characterSheetId}
+        open={pullDialogOpen}
+        onClose={() => setPullDialogOpen(false)}
+      />
 
       {/* Submit declarations button */}
       <button
