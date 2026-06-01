@@ -492,6 +492,10 @@ const mockThreadHubSummary = {
     FACET: true,
     COVENANT_ROLE: false,
   },
+  weavable_traits: [],
+  weavable_techniques: [],
+  room_property_ids: [],
+  weavable_relationship_track_ids: [],
 };
 
 const mockTeachingOffer = {

@@ -19790,6 +19790,10 @@ export interface components {
       weaving_eligibility: {
         [key: string]: boolean;
       };
+      weavable_traits: components['schemas']['_WeavableTrait'][];
+      weavable_techniques: components['schemas']['_WeavableTechnique'][];
+      room_property_ids: number[];
+      weavable_relationship_track_ids: number[];
     };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-commit/.
@@ -20286,6 +20290,21 @@ export interface components {
       balance: number;
       lifetime_earned: number;
       flavor_text: string;
+    };
+    /** @description One entry in the weavable_techniques list. */
+    _WeavableTechnique: {
+      technique_id: number;
+      name: string;
+      gift_id: number;
+      gift_name: string;
+    };
+    /** @description One entry in the weavable_traits list. */
+    _WeavableTrait: {
+      trait_id: number;
+      name: string;
+      trait_type: string;
+      /** Format: double */
+      display_value: number;
     };
   };
   responses: never;

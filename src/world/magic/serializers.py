@@ -2288,6 +2288,24 @@ class _ResonanceBalanceSerializer(serializers.Serializer):
     flavor_text = serializers.CharField(allow_blank=True)
 
 
+class _WeavableTraitSerializer(serializers.Serializer):
+    """One entry in the weavable_traits list."""
+
+    trait_id = serializers.IntegerField()
+    name = serializers.CharField()
+    trait_type = serializers.CharField()
+    display_value = serializers.FloatField()
+
+
+class _WeavableTechniqueSerializer(serializers.Serializer):
+    """One entry in the weavable_techniques list."""
+
+    technique_id = serializers.IntegerField()
+    name = serializers.CharField()
+    gift_id = serializers.IntegerField()
+    gift_name = serializers.CharField()
+
+
 class ThreadHubSummarySerializer(serializers.Serializer):
     """Response serializer for GET /api/magic/thread-hub-summary/."""
 
@@ -2296,6 +2314,10 @@ class ThreadHubSummarySerializer(serializers.Serializer):
     near_xp_lock_thread_ids = _NearXPLockProspectSerializer(many=True)
     blocked_thread_ids = serializers.ListField(child=serializers.IntegerField())
     weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
+    weavable_traits = _WeavableTraitSerializer(many=True)
+    weavable_techniques = _WeavableTechniqueSerializer(many=True)
+    room_property_ids = serializers.ListField(child=serializers.IntegerField())
+    weavable_relationship_track_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 # =============================================================================

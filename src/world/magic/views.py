@@ -1318,12 +1318,15 @@ class ThreadHubSummaryView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return the Thread Hub summary for the acting character."""
+        from world.magic.constants import TargetKind  # noqa: PLC0415
+        from world.magic.models.weaving import CharacterThreadWeavingUnlock  # noqa: PLC0415
         from world.magic.services.threads import (  # noqa: PLC0415
             imbue_ready_threads,
             near_xp_lock_threads,
             threads_blocked_by_cap,
             weaving_eligibility_for,
         )
+        from world.traits.models import CharacterTraitValue  # noqa: PLC0415
 
         sheet = _resolve_actor_sheet(request, body_key="character_sheet_id", from_query=True)
         balances = [
@@ -1347,12 +1350,65 @@ class ThreadHubSummaryView(APIView):
         ]
         blocked = [t.pk for t in threads_blocked_by_cap(sheet)]
         eligibility = weaving_eligibility_for(sheet)
+
+        # Picker data for the Weave Thread Wizard anchor steps.
+        # Reads from character handler caches — zero extra queries after first load.
+        unlocks = list(
+            CharacterThreadWeavingUnlock.objects.filter(character=sheet).select_related(
+                "unlock",
+                "unlock__unlock_trait",
+                "unlock__unlock_gift",
+            )
+        )
+        character = sheet.character
+        weavable_traits: list[dict] = []
+        weavable_techniques: list[dict] = []
+        room_property_ids: list[int] = []
+        weavable_relationship_track_ids: list[int] = []
+
+        for cu in unlocks:
+            unlock = cu.unlock
+            kind = unlock.target_kind
+
+            if kind == TargetKind.TRAIT and unlock.unlock_trait_id:
+                trait = unlock.unlock_trait
+                tv = character.traits.get_trait_object(trait.name)
+                if isinstance(tv, CharacterTraitValue) and tv.value > 0:
+                    weavable_traits.append(
+                        {
+                            "trait_id": trait.pk,
+                            "name": trait.name,
+                            "trait_type": trait.trait_type,
+                            "display_value": tv.display_value,
+                        }
+                    )
+            elif kind == TargetKind.TECHNIQUE and unlock.unlock_gift_id:
+                gift = unlock.unlock_gift
+                weavable_techniques.extend(
+                    {
+                        "technique_id": technique.pk,
+                        "name": technique.name,
+                        "gift_id": gift.pk,
+                        "gift_name": gift.name,
+                    }
+                    for technique in character.techniques.all()
+                    if technique.gift_id == gift.pk
+                )
+            elif kind == TargetKind.ROOM and unlock.unlock_room_property_id:
+                room_property_ids.append(unlock.unlock_room_property_id)
+            elif kind == TargetKind.RELATIONSHIP_TRACK and unlock.unlock_track_id:
+                weavable_relationship_track_ids.append(unlock.unlock_track_id)
+
         payload = {
             "balances": balances,
             "ready_thread_ids": ready,
             "near_xp_lock_thread_ids": near,
             "blocked_thread_ids": blocked,
             "weaving_eligibility": eligibility,
+            "weavable_traits": weavable_traits,
+            "weavable_techniques": weavable_techniques,
+            "room_property_ids": room_property_ids,
+            "weavable_relationship_track_ids": weavable_relationship_track_ids,
         }
         return Response(ThreadHubSummarySerializer(payload).data)
 
