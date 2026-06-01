@@ -3,7 +3,7 @@ import { postLogin } from './api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 // Mock getCookie
 vi.mock('@/lib/utils', () => ({
