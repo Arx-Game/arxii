@@ -133,6 +133,7 @@ def _character_has_fatigue_collapse_immune(character: ObjectDB) -> bool:
     return ConditionInstance.objects.filter(
         target=character,
         is_suppressed=False,
+        resolved_at__isnull=True,
         condition__properties__name="fatigue_collapse_immune",
     ).exists()
 
@@ -481,12 +482,13 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
 
     # Step 8b: Technique fatigue — accrues to the matching action-category pool.
     # Collapse is suppressed when the character has the fatigue_collapse_immune condition.
-    technique_sheet = _get_character_sheet(character)
-    if technique_sheet is not None and cost.effective_cost > 0:
+    # sheet is also used in Steps 9 and 10; NPCs without a CharacterSheet skip those paths.
+    sheet = _get_character_sheet(character)
+    if sheet is not None and cost.effective_cost > 0:
         from world.fatigue.services import apply_technique_fatigue  # noqa: PLC0415
 
         apply_technique_fatigue(
-            technique_sheet,
+            sheet,
             technique.action_category,
             cost.effective_cost,
             strain_commitment,
@@ -514,9 +516,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
     )
 
     # Step 9: Per-cast corruption accrual (Magic Scope #7)
-    # Defensive sheet lookup: NPCs without a CharacterSheet skip corruption
-    # accrual silently (the orchestrator requires a sheet to write to).
-    sheet = _get_character_sheet(character)
+    # NPCs without a CharacterSheet skip corruption accrual silently.
     if sheet is not None:
         from world.magic.services.corruption import accrue_corruption_for_cast  # noqa: PLC0415
 
