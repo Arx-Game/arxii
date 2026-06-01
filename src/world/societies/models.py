@@ -122,19 +122,15 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
     Organization types define the structure and naming conventions for
     organizations. Each type has five ranks with customizable default titles.
 
-    Standard types (seeded via initial_org_types.json fixture):
-    - noble: Traditional noble houses
-    - commoner_family: Non-noble family structures
-    - business: Commercial enterprises
-    - guild: Professional associations
-    - secret_society: Clandestine organizations
-    - gang: Criminal organizations
-    - covenant: Magical oath groups (added 2026-05-31)
-    - devotional: Religious orders + militant holy orders (added 2026-05-31)
-    - other: Catch-all for orgs that don't fit the above (added 2026-05-31)
+    Rows are created on-demand by the systems that need them (e.g.,
+    `Covenant.save()` does `get_or_create(name="covenant", defaults=...)`).
+    No fixture is committed — fixtures are gitignored in this repo per the
+    seed-data convention. Staff customize rank titles via admin once a row
+    exists.
 
-    Per `feedback_flavor_text_design_pass` memory: rank titles are admin-
-    editable. Fixture seeds defaults; staff customize via admin without a PR.
+    Typical kind names used elsewhere:
+    - noble_family, commoner_family, business, guild, secret_society, gang
+    - covenant (used by `Covenant.save()` auto-create)
     """
 
     name = models.CharField(
