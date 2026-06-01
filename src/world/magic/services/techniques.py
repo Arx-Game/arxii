@@ -126,6 +126,17 @@ def _character_is_in_audere(character: ObjectDB) -> bool:
     ).exists()
 
 
+def _character_has_fatigue_collapse_immune(character: ObjectDB) -> bool:
+    """Return True if the character has any active condition granting fatigue_collapse_immune."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character,
+        is_suppressed=False,
+        condition__properties__name="fatigue_collapse_immune",
+    ).exists()
+
+
 def _build_resonance_involvements(
     *,
     technique: Technique,
@@ -467,6 +478,20 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
         pool = select_mishap_pool(control_deficit)
         if pool is not None and effective_check_result is not None:
             mishap = _resolve_mishap(character, pool, effective_check_result)
+
+    # Step 8b: Technique fatigue — accrues to the matching action-category pool.
+    # Collapse is suppressed when the character has the fatigue_collapse_immune condition.
+    technique_sheet = _get_character_sheet(character)
+    if technique_sheet is not None and cost.effective_cost > 0:
+        from world.fatigue.services import apply_technique_fatigue  # noqa: PLC0415
+
+        apply_technique_fatigue(
+            technique_sheet,
+            technique.action_category,
+            cost.effective_cost,
+            strain_commitment,
+            immune_to_fatigue_collapse=_character_has_fatigue_collapse_immune(character),
+        )
 
     resonance_involvements = _build_resonance_involvements(
         technique=technique,
