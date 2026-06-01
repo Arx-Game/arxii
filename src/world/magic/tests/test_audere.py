@@ -21,9 +21,11 @@ from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
     IntensityTierFactory,
+    wire_audere_power_multipliers,
 )
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.factories import FatigueCollapseImmunePropertyFactory
 
 
 class AudereThresholdModelTests(TestCase):
@@ -279,3 +281,20 @@ class AudereLifecycleTests(TestCase):
         self.anima.refresh_from_db()
         assert self.anima.maximum == 50
         assert self.anima.pre_audere_maximum is None
+
+
+class AudereConditionPropertyTests(TestCase):
+    """Audere and Audere Majora grant fatigue_collapse_immune."""
+
+    def setUp(self):
+        super().setUp()
+        FatigueCollapseImmunePropertyFactory()  # ensure property row exists
+        self.audere, self.majora = wire_audere_power_multipliers()
+
+    def test_audere_has_fatigue_collapse_immune(self):
+        prop_names = list(self.audere.properties.values_list("name", flat=True))
+        self.assertIn("fatigue_collapse_immune", prop_names)
+
+    def test_audere_majora_has_fatigue_collapse_immune(self):
+        prop_names = list(self.majora.properties.values_list("name", flat=True))
+        self.assertIn("fatigue_collapse_immune", prop_names)
