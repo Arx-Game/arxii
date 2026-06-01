@@ -382,6 +382,7 @@
 
 ### Area
 **Foreign Keys:**
+  - building_profile -> buildings.Building [OneToOne] (nullable)
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
 **Pointed to by:**
@@ -390,6 +391,9 @@
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
+  - default_permits_offered <- npc_services.PermitOfferDetails
+  - building_permits_valid_in <- buildings.BuildingPermitDetails
+  - construction_projects <- buildings.BuildingConstructionDetails
   - rooms <- evennia_extensions.RoomProfile
 
 ### AreaClosure
@@ -405,6 +409,61 @@
 - `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' — Get or create the RoomProfile for a room ObjectDB instance.`
 - `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
 - `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
+
+
+## world.buildings
+
+### BuildingKind
+**Pointed to by:**
+  - allowed_in_wards <- areas.Area
+  - offered_by <- npc_services.PermitOfferDetails
+  - buildings <- buildings.Building
+  - permits <- buildings.BuildingPermitDetails
+
+### MaterialLoreEffect
+**Foreign Keys:**
+  - template -> items.ItemTemplate [FK]
+
+### Building
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+  - kind -> buildings.BuildingKind [FK]
+  - constructed_by_persona -> scenes.Persona [FK] (nullable)
+  - source_project -> projects.Project [FK] (nullable)
+**Pointed to by:**
+  - materials_used <- buildings.BuildingMaterial
+
+### BuildingMaterial
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - item_template -> items.ItemTemplate [FK]
+  - quality_tier -> items.QualityTier [FK] (nullable)
+  - contributed_by_persona -> scenes.Persona [FK] (nullable)
+
+### BuildingPermitDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - holder_persona -> scenes.Persona [FK]
+  - building_kind -> buildings.BuildingKind [FK]
+  - issued_by_role -> npc_services.NPCRole [FK] (nullable)
+  - consumed_by_persona -> scenes.Persona [FK] (nullable)
+**Pointed to by:**
+  - construction_projects <- buildings.BuildingConstructionDetails
+
+### BuildingConstructionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - permit_details -> buildings.BuildingPermitDetails [FK]
+  - ward -> areas.Area [FK]
+  - constructed_by_persona -> scenes.Persona [FK]
+
+### Service Functions
+- `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
+- `complete_building_construction(project: 'Project') -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
+- `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
+- `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
+- `validate_permit_site(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int') -> 'ValidationResult' — Validate a permit can be used at this site for this size.`
 
 
 ## world.character_creation
@@ -955,7 +1014,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1433,6 +1492,8 @@
 **Foreign Keys:**
   - motif_resonance -> magic.MotifResonance [FK]
   - facet -> magic.Facet [FK]
+
+### LevelPowerConfig
 
 ### Reincarnation
 **Foreign Keys:**
@@ -2024,6 +2085,7 @@
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - offers <- npc_services.NPCServiceOffer
+  - permits_issued <- buildings.BuildingPermitDetails
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -2041,6 +2103,7 @@
 ### PermitOfferDetails
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - building_kind -> buildings.BuildingKind [FK] (nullable)
 
 ### Service Functions
 - `available_offers(session: 'InteractionSession') -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
@@ -2048,7 +2111,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `persona_for_character(character: 'ObjectDB') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
@@ -2259,11 +2322,13 @@
 
 ### Project
 **Foreign Keys:**
+  - building_construction_details -> buildings.BuildingConstructionDetails [OneToOne] (nullable)
   - owner_persona -> scenes.Persona [FK]
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - contributions <- projects.Contribution
+  - resulting_building <- buildings.Building
 
 ### Contribution
 **Foreign Keys:**
@@ -2571,6 +2636,11 @@
   - npc_standings <- npc_services.NPCStanding
   - standings_held_by <- npc_services.NPCStanding
   - offer_cooldowns <- npc_services.OfferCooldown
+  - buildings_constructed <- buildings.Building
+  - materials_contributed <- buildings.BuildingMaterial
+  - held_building_permits <- buildings.BuildingPermitDetails
+  - permits_consumed <- buildings.BuildingPermitDetails
+  - construction_projects_led <- buildings.BuildingConstructionDetails
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -2707,13 +2777,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x762238d33f90>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7a3880500360>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x762238d33f90>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7a3880500360>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

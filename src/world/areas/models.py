@@ -3,6 +3,7 @@ from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.areas.constants import AreaLevel
+from world.buildings.constants import PermitEligibility
 
 
 class Area(SharedMemoryModel):
@@ -25,6 +26,25 @@ class Area(SharedMemoryModel):
         related_name="areas",
     )
     description = models.TextField(blank=True)
+
+    # Ward-level permit configuration. Only meaningful at level WARD;
+    # other levels keep the defaults and ignore them. The buildings app
+    # reads these to gate construction.
+    permit_eligibility = models.CharField(
+        max_length=32,
+        choices=PermitEligibility.choices,
+        default=PermitEligibility.OPEN,
+    )
+    permit_cost_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        default=1,
+    )
+    allowed_building_kinds = models.ManyToManyField(
+        "buildings.BuildingKind",
+        related_name="allowed_in_wards",
+        blank=True,
+    )
 
     class Meta:
         verbose_name = "Area"

@@ -283,7 +283,7 @@ def _resolve_min_npc_standing(
 # specific template name.
 HAS_ITEM_PERSONA_HOLDER_DISPATCH: dict[str, tuple[str, str]] = {
     # template.name -> (reverse-relation name, persona FK field name)
-    # "building_permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
+    "building_permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
 }
 
 
@@ -490,11 +490,7 @@ LEAF_RESOLVERS: LeafRegistry = {
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
     "min_npc_standing": _resolve_min_npc_standing,
-    # has_item is implemented but not registered yet — Plan 3 (#668) lands
-    # both the BuildingPermitDetails.holder_persona FK AND the matching
-    # dispatch entry in HAS_ITEM_PERSONA_HOLDER_DISPATCH, then registers
-    # the leaf here. Registering it now would mean every call raises
-    # NotImplementedError until that lands.
+    "has_item": _resolve_has_item,
     "is_member_of_org": _resolve_is_member_of_org,
     "min_org_reputation": _resolve_min_org_reputation,
     "min_society_standing": _resolve_min_society_standing,

@@ -24,16 +24,28 @@ class EffectHandlerRegistryTests(TestCase):
         self.assertIn(OfferKind.PERMIT.value, OFFER_EFFECT_HANDLERS)
 
     def test_dispatch_permit_returns_structured_result(self) -> None:
-        # Stub handler — Plan 3 replaces the body. Plan 2 verifies dispatch end-to-end.
+        # Plan 3 replaced the stub with the real issue_permit handler from
+        # world.buildings.services. The dispatch contract is the same
+        # (returns EffectResult); the body now creates a real BuildingPermit
+        # ItemInstance + BuildingPermitDetails row. We seed the prereqs
+        # (template + BuildingKind) and verify the dispatch still works.
+        from world.buildings.factories import BuildingKindFactory
+        from world.buildings.seeds import ensure_building_permit_template
+
+        ensure_building_permit_template()
+        kind = BuildingKindFactory(name="effect-test-kind")
         offer = NPCServiceOfferFactory(kind=OfferKind.PERMIT, label="permit-offer-1")
-        PermitOfferDetailsFactory(offer=offer)
-        persona = PersonaFactory()
+        PermitOfferDetailsFactory(offer=offer, building_kind=kind)
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        character = CharacterFactory()
+        persona = CharacterSheetFactory(character=character).primary_persona
         result = dispatch_offer_effect(offer, persona)
         self.assertIsInstance(result, EffectResult)
         self.assertEqual(result.kind, OfferKind.PERMIT)
-        self.assertEqual(result.object_label, "permit-offer-1")
         self.assertEqual(result.payload["holder_persona_pk"], persona.pk)
-        self.assertEqual(result.payload["offer_pk"], offer.pk)
+        self.assertIn("permit_pk", result.payload)
 
     def test_dispatch_unregistered_kind_raises(self) -> None:
         # Bypass the OfferKind enum validation to construct a truly unwired

@@ -5,6 +5,7 @@ from __future__ import annotations
 from actions.base import Action
 from actions.definitions.communication import PoseAction, SayAction, WhisperAction
 from actions.definitions.items import (
+    ActivatePermitAction,
     EquipAction,
     PutInAction,
     TakeOutAction,
@@ -36,6 +37,7 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     PutInAction(),
     TakeOutAction(),
+    ActivatePermitAction(),
     ApplyOutfitAction(),
     UndressAction(),
     TraverseExitAction(),
