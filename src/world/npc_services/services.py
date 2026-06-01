@@ -1,111 +1,94 @@
 """Service functions for the unified NPC service framework.
 
-- Persona resolution helpers bridge legacy ObjectDB-keyed call paths
-  (mission ``accept_mission``) to the new persona-keyed NPCStanding.
-- ``upsert_standing_cooldown`` is the shared cooldown-upsert mission code
-  uses.
-- ``start_interaction`` / ``resolve_offer`` / ``end_interaction`` make up
-  the in-memory interaction state machine. State is ephemeral — lives in
-  the dataclass instance for the duration of one interaction and is never
-  persisted. Durable side effects go to ``NPCStanding`` on close and to
-  the effect handler's downstream object on each final-action grant.
+- ``persona_for_character`` resolves a PC's primary persona — used by the
+  HTTP wiring (start_interaction) to compute persona from the request's
+  puppeted character.
+- ``start_interaction`` / ``available_offers`` / ``resolve_offer`` /
+  ``end_interaction`` make up the in-memory interaction state machine.
+  State is ephemeral — lives in the dataclass instance for the duration
+  of one interaction and is never persisted. Durable side effects:
+  ``NPCStanding`` affection on close, ``OfferCooldown`` row on final
+  grants whose offer carries a non-null cooldown, the effect handler's
+  downstream object on each grant.
+
+Standing (affection) and cooldown are deliberately orthogonal — cooldown
+lives on :class:`OfferCooldown` (per-(offer, persona)) so it works for
+every offer kind, not only NPC-rooted ones.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 
-from world.missions.predicates import CharacterPredicateContext, evaluate
+from world.checks.services import perform_check
 from world.npc_services.constants import DrawMode
 from world.npc_services.effects import EffectResult, dispatch_offer_effect
-from world.npc_services.models import NPCRole, NPCServiceOffer, NPCStanding
+from world.npc_services.models import (
+    NPCRole,
+    NPCServiceOffer,
+    NPCStanding,
+    OfferCooldown,
+)
+from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
-    from datetime import timedelta
-
     from evennia.objects.models import ObjectDB
 
-    from world.missions.models import MissionGiver
     from world.scenes.models import Persona
 
+logger = logging.getLogger(__name__)
 
-def resolve_npc_persona_for_giver(giver: MissionGiver) -> Persona | None:
-    """Return the NPC persona for a mission giver, or None if not resolvable.
 
-    Only ``NPC``-kind givers can have a persona — ``ROOM_TRIGGER`` and
-    ``ENVIRONMENTAL_DETAIL`` givers point at non-Character ObjectDBs and so
-    have no persona. Returns None in those cases plus any case where the
-    target ObjectDB is missing, has no character sheet, or has no PRIMARY
-    persona row.
+class MissingPrimaryPersonaError(LookupError):
+    """A played Character is missing a CharacterSheet or PRIMARY persona.
+
+    Per ``character_sheets/CLAUDE.md`` every played character has a
+    CharacterSheet with a PRIMARY persona — that's a load-bearing repo
+    invariant. Hitting this exception means something upstream broke that
+    invariant (character_creation didn't finalize, test scaffolding
+    skipped sheet setup, etc.) and we fail loud rather than silently
+    bypass gates that depend on the persona.
     """
-    from world.missions.constants import GiverKind  # noqa: PLC0415
-    from world.scenes.models import Persona  # noqa: PLC0415
 
-    if giver.giver_kind != GiverKind.NPC or giver.target_id is None:
-        return None
-    sheet = getattr(giver.target, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+    def __init__(self, character: ObjectDB) -> None:
+        super().__init__(
+            f"Character {character!r} has no PRIMARY persona — required invariant "
+            "(see character_sheets/CLAUDE.md). Check character_creation finalize "
+            "or test setup."
+        )
+        self.character = character
+
+
+def persona_for_character(character: ObjectDB) -> Persona:
+    """Return the PC's PRIMARY persona; raise loud on missing sheet/persona.
+
+    A played character without a sheet or PRIMARY persona is a programmer
+    error per ``character_sheets/CLAUDE.md``; we surface that loudly rather
+    than silently bypassing any gate that needs the persona (cooldown,
+    standing, item ownership, etc.).
+    """
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne, may legitimately be absent on non-Character ObjectDB
     if sheet is None:
-        return None
+        raise MissingPrimaryPersonaError(character)
     try:
         return sheet.primary_persona
-    except Persona.DoesNotExist:
-        return None
-
-
-def resolve_persona_for_character(character: ObjectDB) -> Persona | None:
-    """Return the PC's primary persona for an Evennia Character ObjectDB.
-
-    Returns None for non-Character objects (no ``sheet_data`` reverse FK) or
-    Character objects without a CharacterSheet or PRIMARY persona row.
-
-    NPCStanding is keyed on personas, not Evennia ObjectDB rows. This helper
-    bridges legacy ObjectDB-keyed call paths (mission ``accept_mission``,
-    etc.) until they migrate to passing personas directly.
-    """
-    from world.scenes.models import Persona  # noqa: PLC0415
-
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
-    if sheet is None:
-        return None
-    try:
-        return sheet.primary_persona
-    except Persona.DoesNotExist:
-        return None
-
-
-@transaction.atomic
-def upsert_standing_cooldown(
-    *,
-    persona: Persona,
-    npc_persona: Persona,
-    cooldown: timedelta,
-) -> NPCStanding:
-    """Upsert an NPCStanding row, setting ``available_at = now + cooldown``.
-
-    Affection is left untouched (defaults to 0 on first creation; preserved
-    on subsequent upserts). Used by mission ``accept_mission`` to throttle
-    re-acceptance from the same NPC by the same PC persona.
-    """
-    standing, _created = NPCStanding.objects.update_or_create(
-        persona=persona,
-        npc_persona=npc_persona,
-        defaults={"available_at": timezone.now() + cooldown},
-    )
-    return standing
+    except Exception as exc:
+        raise MissingPrimaryPersonaError(character) from exc
 
 
 # ---------------------------------------------------------------------------
 # Interaction state machine — ephemeral per-interaction state.
 #
 # Lives in the player's session for the duration of one interaction. NOT
-# persisted. Carries: starting rapport (role default + standing affection for
-# class 2-4 NPCs), the offers currently surfaced, optional pending-check
-# state. On end_interaction the standing row is updated for class 2-4 NPCs
-# (the persistent affection movement) and the session is discarded.
+# persisted. Carries: starting rapport (role default + standing affection
+# for class 2-4 NPCs), the offers currently surfaced. On end_interaction
+# the standing row is updated for class 2-4 NPCs (the persistent affection
+# movement) and the session is discarded.
 #
 # Visibility and selectability collapse into one predicate (the offer's
 # ``eligibility_rule``) — if the predicate fails, the offer isn't surfaced.
@@ -119,9 +102,9 @@ class InteractionSession:
     """Ephemeral state for one in-progress NPC interaction.
 
     Created by ``start_interaction``; mutated by ``resolve_offer`` and
-    ``end_interaction``. Never persisted — survives only as long as the
-    caller holds a reference. The downstream side effects (effect handler
-    output, NPCStanding update) are persistent.
+    ``end_interaction``. Never persisted directly — the HTTP wiring
+    serializes a tiny state dict to ``request.session`` and rehydrates
+    per call.
     """
 
     role: NPCRole
@@ -129,7 +112,7 @@ class InteractionSession:
     npc_persona: Persona | None
     """The NPC's persona, or None for class-1 nameless functionaries."""
     character: ObjectDB
-    """The PC's Evennia Character — needed to construct the predicate context."""
+    """The PC's Evennia Character — needed for the predicate context."""
     current_rapport: int
     closed: bool = False
     results: list[EffectResult] = field(default_factory=list)
@@ -167,35 +150,90 @@ def start_interaction(
     )
 
 
+def _is_offer_eligible(
+    offer: NPCServiceOffer,
+    *,
+    persona: Persona,
+    character: ObjectDB,
+    current_rapport: int,
+    now: object | None = None,
+) -> bool:
+    """Single-offer eligibility check.
+
+    Drives both ``available_offers`` (filtering) and ``resolve_offer``
+    (single-offer re-verify). Keeping the check here means there's one
+    source of truth, and ``resolve_offer`` doesn't have to re-run the
+    whole queryset to verify one offer.
+    """
+    if offer.rapport_requirement > current_rapport:
+        return False
+    if offer.draw_mode != DrawMode.MENU:
+        # POOL is reserved for mission migration #686 — log so authors
+        # who try to use it before then get a signal instead of silent
+        # absence. Conservative skip for Plan 2.
+        logger.warning(
+            "NPCServiceOffer %s skipped: draw_mode=%s not yet handled (see #686).",
+            offer.pk,
+            offer.draw_mode,
+        )
+        return False
+    now = now or timezone.now()
+    if offer.cooldown is not None:
+        if OfferCooldown.objects.filter(
+            offer=offer, persona=persona, available_at__gt=now
+        ).exists():
+            return False
+    ctx = CharacterPredicateContext(character, presented_persona=persona)
+    return evaluate(offer.eligibility_rule or {}, ctx)
+
+
 def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
     """Return offers the PC can currently see/select, in stable order.
 
-    Filtered by:
-      * ``rapport_requirement <= session.current_rapport``
-      * ``eligibility_rule`` evaluates True against a PredicateContext
-        built from ``session.character`` + ``session.persona``
-
-    Draw mode is honoured at the data layer — MENU offers are always
-    listed when eligible; POOL offers (future mission migration; #686)
-    will sample from the matching pool. Plan 2 only exercises MENU.
+    Filtered by ``_is_offer_eligible`` (rapport gate + draw_mode + active
+    cooldown + eligibility predicate). ``select_related("role")`` so the
+    role doesn't get re-fetched per row when callers walk the result.
     """
     if session.closed:
         return []
-    ctx = CharacterPredicateContext(session.character, presented_persona=session.persona)
-    queryset = NPCServiceOffer.objects.filter(role=session.role).order_by("pk")
-    eligible: list[NPCServiceOffer] = []
-    for offer in queryset:
-        if offer.rapport_requirement > session.current_rapport:
-            continue
-        if offer.draw_mode != DrawMode.MENU:
-            # POOL handling is deferred to #686; for Plan 2 we don't surface
-            # POOL offers from a MENU-mode interaction. Leaving the offer
-            # out is the conservative default.
-            continue
-        if not evaluate(offer.eligibility_rule or {}, ctx):
-            continue
-        eligible.append(offer)
-    return eligible
+    now = timezone.now()
+    queryset = (
+        NPCServiceOffer.objects.select_related("role").filter(role=session.role).order_by("pk")
+    )
+    return [
+        offer
+        for offer in queryset
+        if _is_offer_eligible(
+            offer,
+            persona=session.persona,
+            character=session.character,
+            current_rapport=session.current_rapport,
+            now=now,
+        )
+    ]
+
+
+def _apply_check(
+    offer: NPCServiceOffer,
+    *,
+    character: ObjectDB,
+) -> tuple[int, bool]:
+    """Roll the offer's check (if any) and return (delta, succeeded).
+
+    Returns ``(rapport_delta_success, True)`` when no ``check_type`` is
+    set (the action succeeds unconditionally) or when the check rolls
+    a positive success level; ``(rapport_delta_failure, False)`` otherwise.
+    """
+    if offer.check_type_id is None:
+        return offer.rapport_delta_success, True
+    result = perform_check(
+        character,
+        offer.check_type,
+        target_difficulty=offer.check_difficulty,
+    )
+    succeeded = bool(result.outcome and result.outcome.success_level > 0)
+    delta = offer.rapport_delta_success if succeeded else offer.rapport_delta_failure
+    return delta, succeeded
 
 
 @transaction.atomic
@@ -205,16 +243,16 @@ def resolve_offer(
 ) -> EffectResult:
     """Grant ``offer`` in ``session`` — dispatch its effect, update rapport.
 
-    For final offers (``is_final=True``) the session closes after the
-    effect is dispatched; subsequent ``available_offers`` returns []. For
-    non-final offers the rapport adjusts by ``rapport_delta_success`` and
-    the session stays open for the next interaction step.
+    Final actions (``is_final=True``) dispatch the effect handler, write an
+    ``OfferCooldown`` row when the offer has a cooldown set, and close the
+    session. The effect IS the payoff — rapport is not adjusted on final
+    actions. Non-final actions roll the offer's ``check_type`` if set (or
+    treat as auto-success otherwise) and apply ``rapport_delta_success`` /
+    ``rapport_delta_failure`` accordingly; session stays open.
 
-    Re-checks eligibility at grant time so a stale UI can't grant an
+    Re-verifies eligibility at grant time so a stale UI can't grant an
     offer the PC no longer qualifies for. Raises ``ValueError`` if the
-    offer isn't currently eligible (the UI should never present an
-    ineligible offer — surfacing the error catches authoring or
-    client-side bugs loudly).
+    offer isn't currently eligible.
     """
     if session.closed:
         msg = "Cannot resolve an offer on a closed interaction session."
@@ -224,27 +262,47 @@ def resolve_offer(
             f"Offer {offer.pk} belongs to role {offer.role_id}, not session role {session.role.pk}."
         )
         raise ValueError(msg)
-    if offer not in available_offers(session):
+    if not _is_offer_eligible(
+        offer,
+        persona=session.persona,
+        character=session.character,
+        current_rapport=session.current_rapport,
+    ):
         msg = f"Offer {offer.pk} ({offer.label!r}) is not currently eligible for this session."
         raise ValueError(msg)
+
+    if offer.is_final:
+        result = dispatch_offer_effect(offer, session.persona)
+        session.results.append(result)
+        if offer.cooldown is not None:
+            OfferCooldown.objects.update_or_create(
+                offer=offer,
+                persona=session.persona,
+                defaults={"available_at": timezone.now() + offer.cooldown},
+            )
+        end_interaction(session)
+        return result
+
+    # Non-final: roll check (if configured), apply delta, leave session open.
+    delta, _succeeded = _apply_check(offer, character=session.character)
+    session.current_rapport += delta
     result = dispatch_offer_effect(offer, session.persona)
     session.results.append(result)
-    if offer.is_final:
-        session.current_rapport += offer.rapport_delta_success
-        end_interaction(session)
-    else:
-        session.current_rapport += offer.rapport_delta_success
     return result
 
 
+@transaction.atomic
 def end_interaction(session: InteractionSession) -> None:
     """Close the session and persist final affection for class 2-4 NPCs.
 
     ``start_interaction`` seeded ``current_rapport`` with
     ``role.default_rapport_starting_value + existing_affection``. The new
-    durable affection is therefore ``current_rapport - role default`` — we
-    overwrite ``NPCStanding.affection`` with that value (not accumulate).
-    No-op for class-1 (``npc_persona is None``).
+    durable affection is therefore ``current_rapport - role default`` —
+    overwritten on ``NPCStanding`` (not accumulated). No-op for class-1
+    (``npc_persona is None``).
+
+    Uses ``update_or_create`` inside the atomic so concurrent close paths
+    can't race a stale row in.
     """
     if session.closed:
         return
@@ -252,11 +310,8 @@ def end_interaction(session: InteractionSession) -> None:
     if session.npc_persona is None:
         return
     new_affection = session.current_rapport - session.role.default_rapport_starting_value
-    standing, _ = NPCStanding.objects.get_or_create(
+    NPCStanding.objects.update_or_create(
         persona=session.persona,
         npc_persona=session.npc_persona,
         defaults={"affection": new_affection},
     )
-    if standing.affection != new_affection:
-        standing.affection = new_affection
-        standing.save(update_fields=["affection", "last_changed_at"])

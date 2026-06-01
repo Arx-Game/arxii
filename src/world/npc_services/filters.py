@@ -2,7 +2,7 @@
 
 import django_filters
 
-from world.npc_services.models import NPCRole, NPCServiceOffer, NPCStanding
+from world.npc_services.models import NPCRole, NPCServiceOffer, NPCStanding, OfferCooldown
 
 
 class NPCStandingFilterSet(django_filters.FilterSet):
@@ -32,4 +32,13 @@ class NPCServiceOfferFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = NPCServiceOffer
+        fields: list[str] = []
+
+
+class OfferCooldownFilterSet(django_filters.FilterSet):
+    offer = django_filters.NumberFilter(field_name="offer_id")
+    persona = django_filters.NumberFilter(field_name="persona_id")
+
+    class Meta:
+        model = OfferCooldown
         fields: list[str] = []

@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from evennia.objects.models import ObjectDB
 
-from world.missions.types import LeafRegistry, LeafResolver, PredicateContext, ResolverContext
+from world.predicates.types import LeafRegistry, LeafResolver, PredicateContext, ResolverContext
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
@@ -267,6 +267,26 @@ def _resolve_min_npc_standing(
     return standing >= min_affection
 
 
+# Per-template dispatch for `has_item`: maps `ItemTemplate.name` →
+# (reverse-relation name on `ItemInstance`, persona FK field name on that
+# details model). Plan 3 (#668) wires "building_permit"; other IC item
+# templates register here as they land.
+#
+# Empty until at least one template is wired. Until then, `has_item` is
+# NOT in `LEAF_RESOLVERS` — registering it would create a leaf that
+# always raises, which is a worse failure mode than not exposing it.
+# Plan 3 adds both the dispatch entry and the registry entry in one PR.
+#
+# Name-keyed (rather than kind-keyed) because `ItemTemplate` has no
+# discriminator column — `is_consumable` / `is_container` / etc. are
+# orthogonal flags. Each persona-scoped IC item type lives behind a
+# specific template name.
+HAS_ITEM_PERSONA_HOLDER_DISPATCH: dict[str, tuple[str, str]] = {
+    # template.name -> (reverse-relation name, persona FK field name)
+    # "building_permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
+}
+
+
 def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
     """True if the PC's presented persona holds an item of this template.
 
@@ -274,36 +294,34 @@ def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
     titles, favor tokens) must be tied to the persona that earned them —
     different personas of the same account must not share them. The
     storage parent (``ItemInstance.owner = AccountDB``) is bypassed for
-    IC entitlement; resolution dispatches on template kind to the
+    IC entitlement; resolution dispatches on template name to the
     per-kind details model's ``holder_persona`` FK (e.g.,
     ``BuildingPermitDetails.holder_persona``).
 
     No presented persona → False (fail-closed for TEMPORARY masks).
-    Template kinds without a persona-scoped details model wired up are
-    not gateable by this leaf — the dispatcher raises rather than
-    silently falling back to account-scoped lookup. Broader audit:
-    #684.
+    Unknown template id → False. Templates without a persona-scoped
+    details model wired up raise ``NotImplementedError`` so authors get
+    a loud signal instead of silent False — silent False is the exact
+    mistake this resolver exists to prevent (it would invisibly gate
+    access). Broader ``ItemInstance.owner`` audit: #684.
     """
     from world.items.models import ItemInstance, ItemTemplate  # noqa: PLC0415
 
     if ctx.presented_persona is None:
         return False
-    template = ItemTemplate.objects.filter(pk=template_id).first()
-    if template is None:
+    # Pull only the name to decide dispatch — bail on unwired templates
+    # before paying for the full ItemTemplate row.
+    name = ItemTemplate.objects.filter(pk=template_id).values_list("name", flat=True).first()
+    if name is None:
         return False
-    # Per-kind dispatch on template kind → reverse-FK to a persona-scoped
-    # details model. PERMIT is the only kind wired today (Plan 3 / #668);
-    # other IC item kinds register their (kind, reverse_relation_name,
-    # persona_field_name) entries here as they land.
-    persona_holder_dispatch: dict[str, tuple[str, str]] = {
-        # template.kind value -> (reverse-relation name, persona FK field)
-        # "permit": ("building_permit_details", "holder_persona"),  # Plan 3 (#668)
-    }
-    kind = getattr(template, "kind", None)  # noqa: GETATTR_LITERAL — ItemTemplate may not have `kind` on all kinds (Plan 3 adds it for PERMIT)
-    if kind not in persona_holder_dispatch:
-        # Unwired kind — fail closed rather than account-fallback.
-        return False
-    relation, persona_field = persona_holder_dispatch[kind]
+    if name not in HAS_ITEM_PERSONA_HOLDER_DISPATCH:
+        msg = (
+            f"has_item: template {name!r} has no persona-scoped details model "
+            "wired in HAS_ITEM_PERSONA_HOLDER_DISPATCH. Register the template's "
+            "(relation, persona_field) pair before gating offers on it."
+        )
+        raise NotImplementedError(msg)
+    relation, persona_field = HAS_ITEM_PERSONA_HOLDER_DISPATCH[name]
     filter_kwargs = {
         f"{relation}__{persona_field}": ctx.presented_persona,
         "template_id": template_id,
@@ -472,7 +490,11 @@ LEAF_RESOLVERS: LeafRegistry = {
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
     "min_npc_standing": _resolve_min_npc_standing,
-    "has_item": _resolve_has_item,
+    # has_item is implemented but not registered yet — Plan 3 (#668) lands
+    # both the BuildingPermitDetails.holder_persona FK AND the matching
+    # dispatch entry in HAS_ITEM_PERSONA_HOLDER_DISPATCH, then registers
+    # the leaf here. Registering it now would mean every call raises
+    # NotImplementedError until that lands.
     "is_member_of_org": _resolve_is_member_of_org,
     "min_org_reputation": _resolve_min_org_reputation,
     "min_society_standing": _resolve_min_society_standing,

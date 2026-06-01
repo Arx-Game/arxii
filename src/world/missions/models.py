@@ -1213,6 +1213,44 @@ class MissionGiverOffering(SharedMemoryModel):
         return f"{self.giver} → {self.template}"
 
 
+class MissionGiverCooldown(SharedMemoryModel):
+    """Per-(giver, character) cooldown for re-accepting missions from a giver.
+
+    Written by :func:`world.missions.services.run.accept_mission` to
+    ``now + template.cooldown``. :func:`world.missions.services.availability`
+    excludes the giver's templates while a row with ``available_at > now``
+    exists for this character. Independent of NPCStanding — works for
+    every giver kind (NPC, ROOM_TRIGGER, ENVIRONMENTAL_DETAIL).
+
+    Mission migration onto NPCServiceOffer (#686) will collapse this into
+    :class:`world.npc_services.models.OfferCooldown`; for now the mission
+    system keeps its own giver-keyed cooldown table.
+    """
+
+    giver = models.ForeignKey(
+        MissionGiver,
+        on_delete=models.CASCADE,
+        related_name="cooldowns",
+    )
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    available_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["giver", "character"],
+                name="unique_missiongivercooldown_giver_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d %H:%M}"
+
+
 class MissionDeedRewardLine(SharedMemoryModel):
     """One persisted structured reward line for a :class:`MissionDeedRecord`.
 

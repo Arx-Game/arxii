@@ -955,7 +955,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1937,11 +1937,17 @@
   - org -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - offerings <- missions.MissionGiverOffering
+  - cooldowns <- missions.MissionGiverCooldown
 
 ### MissionGiverOffering
 **Foreign Keys:**
   - giver -> missions.MissionGiver [FK]
   - template -> missions.MissionTemplate [FK]
+
+### MissionGiverCooldown
+**Foreign Keys:**
+  - giver -> missions.MissionGiver [FK]
+  - character -> objects.ObjectDB [FK]
 
 ### MissionDeedRewardLine
 **Foreign Keys:**
@@ -2023,6 +2029,14 @@
 **Foreign Keys:**
   - permit_offer_details -> npc_services.PermitOfferDetails [OneToOne] (nullable)
   - role -> npc_services.NPCRole [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+**Pointed to by:**
+  - cooldowns <- npc_services.OfferCooldown
+
+### OfferCooldown
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [FK]
+  - persona -> scenes.Persona [FK]
 
 ### PermitOfferDetails
 **Foreign Keys:**
@@ -2034,12 +2048,11 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76afe67a9550>) — Return an object to identify dataclass fields.`
-- `resolve_npc_persona_for_giver(giver: 'MissionGiver') -> 'Persona | None' — Return the NPC persona for a mission giver, or None if not resolvable.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x76223ca6d550>) — Return an object to identify dataclass fields.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `persona_for_character(character: 'ObjectDB') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
-- `resolve_persona_for_character(character: 'ObjectDB') -> 'Persona | None' — Return the PC's primary persona for an Evennia Character ObjectDB.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'ObjectDB', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
-- `upsert_standing_cooldown(*, persona: 'Persona', npc_persona: 'Persona', cooldown: 'timedelta') -> 'NPCStanding' — Upsert an NPCStanding row, setting ``available_at = now + cooldown``.`
 
 
 ## world.progression
@@ -2557,6 +2570,7 @@
   - project_contributions <- projects.Contribution
   - npc_standings <- npc_services.NPCStanding
   - standings_held_by <- npc_services.NPCStanding
+  - offer_cooldowns <- npc_services.OfferCooldown
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -2693,13 +2707,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x76afe2a67eb0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x762238d33f90>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x76afe2a67eb0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x762238d33f90>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

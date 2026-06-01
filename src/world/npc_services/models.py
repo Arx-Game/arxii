@@ -25,9 +25,11 @@ from world.npc_services.constants import DrawMode, OfferKind
 class NPCStanding(SharedMemoryModel):
     """Per-(PC persona, NPC persona) durable disposition.
 
-    Used by every kind of NPC service to gate offers on standing/affection
-    and to enforce per-NPC cooldowns where applicable. Class-1 nameless
-    functionary interactions do NOT create rows; class-2+ named NPCs do.
+    Used by every kind of NPC service to gate offers on standing /
+    affection. Class-1 nameless functionary interactions do NOT create
+    rows; class-2+ named NPCs do. Standing and cooldown are deliberately
+    orthogonal — cooldown lives on :class:`OfferCooldown` (per-offer per-
+    persona) so it works for every offer kind, not just NPC-rooted ones.
     """
 
     persona = models.ForeignKey(
@@ -49,15 +51,6 @@ class NPCStanding(SharedMemoryModel):
             "`min_npc_standing` reads this. Negative values mean disliked. "
             "Movement mechanic (flirt/seduce/cultivation checks) is adjacent "
             "gameplay work that mutates this value; the model just carries it."
-        ),
-    )
-    available_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Cooldown gate (mission accept sets this; non-mission consumers "
-            "leave null). availability filters exclude rows with "
-            "`available_at > now`."
         ),
     )
     last_interaction_summary = models.TextField(
@@ -201,9 +194,83 @@ class NPCServiceOffer(SharedMemoryModel):
         default=0,
         help_text="Rapport delta on failure of a non-final check-based action.",
     )
+    cooldown = models.DurationField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Per-(offer, persona) throttle applied after a final-action grant. "
+            "When set, `OfferCooldown.available_at = now + cooldown` blocks "
+            "re-selection until it elapses. Null = no cooldown."
+        ),
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Optional: if set, non-final actions roll `perform_check` against "
+            "this check type and `check_difficulty`. Success → "
+            "`rapport_delta_success`; failure → `rapport_delta_failure`. "
+            "Final actions ignore this — the effect IS the payoff."
+        ),
+    )
+    check_difficulty = models.IntegerField(
+        default=0,
+        help_text=(
+            "Target difficulty passed to `perform_check` when `check_type` is "
+            "set. Meaningless when `check_type` is null."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "label"],
+                name="unique_offer_role_label",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.role.name}: {self.label} [{self.kind}]"
+
+
+class OfferCooldown(SharedMemoryModel):
+    """Per-(offer, persona) cooldown row.
+
+    Written by ``services.resolve_offer`` when a final-action grant
+    consumes an offer whose ``cooldown`` is set. ``services.available_offers``
+    filters offers whose cooldown row has ``available_at > now``.
+
+    Persona-keyed because every PC who can take an offer has a persona;
+    cooldown is meaningfully per-PC-per-offer.
+    """
+
+    offer = models.ForeignKey(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="cooldowns",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="offer_cooldowns",
+    )
+    available_at = models.DateTimeField(
+        help_text="Earliest time `persona` can select this offer again.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["offer", "persona"],
+                name="unique_offercooldown_offer_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.offer} cooldown for {self.persona} until {self.available_at:%Y-%m-%d %H:%M}"
 
 
 class PermitOfferDetails(SharedMemoryModel):

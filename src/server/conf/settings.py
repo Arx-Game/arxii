@@ -89,6 +89,7 @@ INSTALLED_APPS += [
     "world.combat.apps.CombatConfig",
     "world.gm.apps.GmConfig",
     "world.narrative.apps.NarrativeConfig",
+    "world.predicates.apps.PredicatesConfig",
     "world.missions.apps.MissionsConfig",
     "world.projects.apps.ProjectsConfig",
     "world.npc_services.apps.NPCServicesConfig",

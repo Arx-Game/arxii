@@ -35,6 +35,7 @@ TARGET_APPS = [
     "world.missions",
     "world.narrative",
     "world.npc_services",
+    "world.predicates",
     "world.progression",
     "world.projects",
     "world.realms",

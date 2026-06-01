@@ -367,16 +367,38 @@ register as additional kinds.
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`
   → `end_interaction(session)` (persists new affection for class-2+ NPCs).
-- **Predicate engine reuse:** `world.missions.predicates` (shared utility, will be relocated
-  to a neutral app once #686 lands). `min_npc_standing` and persona-scoped `has_item` leaves
-  live there.
+- **Predicate engine reuse:** `world.predicates` (shared utility — see entry below).
+  `min_npc_standing` and persona-scoped `has_item` leaves live there.
 - **Seeding:** `ensure_builders_guild_clerk_role()` in `world.npc_services.seeds` —
   idempotent get_or_create; NOT a committed fixture (per #683).
 - **API:** `/api/npc-services/standings/`, `/api/npc-services/roles/`, `/api/npc-services/offers/`,
-  `/api/npc-services/permit-details/` — staff CRUD (IsAuthenticated + IsAdminUser).
-- **Cross-app dependencies:** `world.missions.predicates` (engine), `world.scenes.Persona`,
-  `world.items.ItemInstance`, `world.societies.Organization`, `core.mixins`.
+  `/api/npc-services/cooldowns/`, `/api/npc-services/permit-details/` — staff CRUD.
+  `/api/npc-services/interactions/{start,resolve,end}/` — player-facing interaction state machine
+  (session-backed; one active interaction per Django session).
+- **Cross-app dependencies:** `world.predicates` (engine), `world.scenes.Persona`,
+  `world.items.ItemInstance`, `world.societies.Organization`, `world.checks` (perform_check
+  for non-final check-based actions), `core.mixins`.
 - **Source:** `src/world/npc_services/`
+
+### Predicates (shared rule engine)
+Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
+(`MissionTemplate.availability_rule`, `MissionOption.rule_json`), npc_services
+(`NPCServiceOffer.eligibility_rule`), distinctions (`DistinctionPrerequisite.rule_json`).
+
+- **Module:** `src/world/predicates/predicates.py` (no models — pure Python)
+- **Key entry points:** `evaluate(rule: dict, ctx: PredicateContext) -> bool`,
+  `CharacterPredicateContext(character, presented_persona=None)` (concrete context),
+  `LEAF_RESOLVERS: dict[str, Callable]` (registered leaf names)
+- **Leaves shipped:** `has_distinction`, `has_achievement`, `has_condition`, `has_capability`,
+  `has_thread`, `min_thread_level`, `min_trait`, `has_skill`, `min_character_level`,
+  `has_codex_entry`, `has_resonance`, `min_npc_standing`, `is_member_of_org`,
+  `min_org_reputation`, `min_society_standing`. `has_item` exists in code but isn't
+  registered yet — Plan 3 (#668) wires the PERMIT dispatch entry alongside its details
+  model in a single PR.
+- **Extension:** add a leaf by writing `_resolve_*(ctx, **params) -> bool` and registering
+  it in `LEAF_RESOLVERS`. Persona-aware resolvers read `ctx.presented_persona`; sheet-keyed
+  resolvers walk `ctx.sheet`; legacy ObjectDB-keyed resolvers walk `ctx.character`.
+- **Source:** `src/world/predicates/`
 
 ### Projects (delayed multi-tick endeavors)
 Project framework: kind-discriminated long-running endeavors with contributions and

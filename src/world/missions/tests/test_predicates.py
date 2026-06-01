@@ -9,8 +9,8 @@ of any descriptor model. No database is touched here, so plain
 
 import unittest
 
-from world.missions.predicates import evaluate
-from world.missions.types import PredicateContext
+from world.predicates.predicates import evaluate
+from world.predicates.types import PredicateContext
 
 
 class _StubContext:

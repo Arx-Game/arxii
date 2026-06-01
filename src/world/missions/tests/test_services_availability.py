@@ -21,13 +21,13 @@ from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionFactory,
 )
-from world.missions.constants import AccessTier, ArcScope, GiverKind
+from world.missions.constants import AccessTier, ArcScope
 from world.missions.factories import (
+    MissionGiverCooldownFactory,
     MissionGiverFactory,
     MissionTemplateFactory,
 )
 from world.missions.services.availability import offer_missions
-from world.npc_services.factories import NPCStandingFactory
 from world.societies.factories import OrganizationFactory
 from world.stories.factories import EraFactory
 from world.stories.models import EraStatus
@@ -63,27 +63,22 @@ class OfferMissionsFilterTests(TestCase):
         self.assertNotIn(inactive, result)
 
     def test_cooldown_excludes_template(self) -> None:
-        # Persona-keyed cooldown needs both sides to resolve to a Persona —
-        # an NPC-kind giver with a Character target that has a CharacterSheet
-        # (which auto-creates a PRIMARY Persona via post_generation).
-        npc_target = CharacterFactory()
-        CharacterSheetFactory(character=npc_target)
-        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, target=npc_target)
+        giver = MissionGiverFactory()
         cooled = MissionTemplateFactory(name="cooled-t")
         fresh = MissionTemplateFactory(name="fresh-t")
         giver.templates.add(cooled, fresh)
         character = _make_character_with_level(level=1)
 
-        NPCStandingFactory(
-            persona=character.sheet_data.primary_persona,
-            npc_persona=npc_target.sheet_data.primary_persona,
+        MissionGiverCooldownFactory(
+            giver=giver,
+            character=character,
             available_at=timezone.now() + timedelta(days=1),
         )
 
         result = offer_missions(giver, character, count=10)
 
-        # Cooldown is per-(PC persona, NPC persona), so the entire pool
-        # surfaced via this giver is gated for this character.
+        # Cooldown is per-(giver, character), so the entire pool from
+        # this giver is gated for this character.
         self.assertEqual(result, [])
 
     def test_predicate_filters_out(self) -> None:

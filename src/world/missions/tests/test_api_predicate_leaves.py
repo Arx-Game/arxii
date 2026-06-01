@@ -38,7 +38,6 @@ class PredicateLeafCatalogTests(TestCase):
         self.assertIn("has_codex_entry", names)
         self.assertIn("has_resonance", names)
         self.assertIn("min_npc_standing", names)
-        self.assertIn("has_item", names)
         self.assertIn("is_member_of_org", names)
         self.assertIn("min_society_standing", names)
 

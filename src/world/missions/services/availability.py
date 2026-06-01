@@ -26,12 +26,8 @@ from django.utils import timezone
 from core_management.permissions import is_staff_observer
 from world.checks.outcome_utils import select_weighted
 from world.missions.constants import AccessTier, ArcScope
-from world.missions.predicates import CharacterPredicateContext, evaluate
-from world.npc_services.models import NPCStanding
-from world.npc_services.services import (
-    resolve_npc_persona_for_giver,
-    resolve_persona_for_character,
-)
+from world.missions.models import MissionGiverCooldown
+from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.stories.models import Era
 
 if TYPE_CHECKING:
@@ -131,22 +127,17 @@ def _eligible_templates(  # noqa: PLR0913 — kwargs split to keep callsites rea
     """
     now = timezone.now()
     qs = giver.templates.filter(is_active=True)
-    # Per-NPC cooldown: NPCStanding lives in world.npc_services and is
-    # keyed on (pc persona, npc persona). Resolve both sides; if either
-    # has no persona (ROOM_TRIGGER/ENVIRONMENTAL giver, character without
-    # sheet, NPC without PRIMARY persona) the cooldown can't be tracked —
-    # behaviour matches the pre-NPC-persona era where non-NPC givers had
-    # no standing rows at all.
-    pc_persona = resolve_persona_for_character(character)
-    npc_persona = resolve_npc_persona_for_giver(giver)
-    if pc_persona is not None and npc_persona is not None:
-        cooldown_active = NPCStanding.objects.filter(
-            persona=pc_persona,
-            npc_persona=npc_persona,
-            available_at__gt=now,
-        ).exists()
-        if cooldown_active:
-            return []  # entire pool on cooldown for this PC↔NPC pair
+    # Per-(giver, character) cooldown — works for every giver kind.
+    # When a current MissionGiverCooldown row exists for this pair, the
+    # entire pool surfaced via this giver is gated. Behaviour matches
+    # pre-refactor: cooldown was always per-(giver, character), keyed on
+    # the giver itself rather than its target NPC's persona.
+    if MissionGiverCooldown.objects.filter(
+        giver=giver,
+        character=character,
+        available_at__gt=now,
+    ).exists():
+        return []
     if not is_staff_observer(character):
         qs = qs.exclude(access_tier=AccessTier.STAFF_ONLY)
     # DESIGN: a staff character testing a STAFF_ONLY template will pass

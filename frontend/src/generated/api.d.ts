@@ -7774,6 +7774,125 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/npc-services/cooldowns/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    get: operations['npc_services_cooldowns_list'];
+    put?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    post: operations['npc_services_cooldowns_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/cooldowns/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    get: operations['npc_services_cooldowns_retrieve'];
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    put: operations['npc_services_cooldowns_update'];
+    post?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    delete: operations['npc_services_cooldowns_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for per-(offer, persona) cooldown rows. */
+    patch: operations['npc_services_cooldowns_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/interactions/end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/interactions/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/interactions/start/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     *
+     *     One active interaction per Django session — calling ``start`` while a
+     *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
+     *     the current in-flight session; both return 404 if none exists.
+     *
+     *     The PC's persona is resolved from the request user's puppeted
+     *     character via :func:`persona_for_character` (raises loud on missing
+     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     */
+    post: operations['npc_services_interactions_start_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/npc-services/offers/': {
     parameters: {
       query?: never;
@@ -13803,6 +13922,14 @@ export interface components {
        */
       visibility?: components['schemas']['VisibilityF91Enum'];
     };
+    /** @description One eligible offer in the interaction state response. */
+    InteractionOffer: {
+      id: number;
+      label: string;
+      kind: string;
+      is_final: boolean;
+      rapport_requirement: number;
+    };
     InteractionReaction: {
       readonly id: number;
       /** @description The interaction being reacted to */
@@ -13820,6 +13947,24 @@ export interface components {
       readonly id: number;
       readonly persona_name: string;
       readonly persona_id: number;
+    };
+    /** @description POST /api/npc-services/interactions/resolve/ body. */
+    InteractionResolveRequestRequest: {
+      offer_id: number;
+    };
+    /** @description POST /api/npc-services/interactions/start/ body. */
+    InteractionStartRequestRequest: {
+      role_id: number;
+      /** @description Optional — pass for class-2+ named NPCs whose standing should be loaded and persisted. Omit / null for class-1 nameless functionaries. */
+      npc_persona_id?: number | null;
+    };
+    /** @description Response shape for start/resolve — current session state. */
+    InteractionState: {
+      role_id: number;
+      current_rapport: number;
+      closed: boolean;
+      available_offers: components['schemas']['InteractionOffer'][];
+      last_result_message?: string;
     };
     /** @description Serializer for InteractionType lookup records. */
     InteractionType: {
@@ -14693,6 +14838,12 @@ export interface components {
       rapport_delta_success?: number;
       /** @description Rapport delta on failure of a non-final check-based action. */
       rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
     };
     /**
      * @description * `permit` - Permit
@@ -14726,14 +14877,18 @@ export interface components {
       rapport_delta_success?: number;
       /** @description Rapport delta on failure of a non-final check-based action. */
       rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
     };
     /**
-     * @description Staff CRUD for per-(PC persona, NPC persona) standing rows.
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
      *
-     *     Normally written by mission ``accept_mission`` (cooldown side) and
-     *     future flirt/seduce/cultivation checks (affection side). CRUD here
-     *     is for staff overrides — clear a cooldown, bump or penalize
-     *     affection, set an interaction summary.
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
      */
     NPCStanding: {
       readonly id: number;
@@ -14743,23 +14898,16 @@ export interface components {
       npc_persona: number;
       /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
       affection?: number;
-      /**
-       * Format: date-time
-       * @description Cooldown gate (mission accept sets this; non-mission consumers leave null). availability filters exclude rows with `available_at > now`.
-       */
-      available_at?: string | null;
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
       /** Format: date-time */
       readonly last_changed_at: string;
     };
     /**
-     * @description Staff CRUD for per-(PC persona, NPC persona) standing rows.
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
      *
-     *     Normally written by mission ``accept_mission`` (cooldown side) and
-     *     future flirt/seduce/cultivation checks (affection side). CRUD here
-     *     is for staff overrides — clear a cooldown, bump or penalize
-     *     affection, set an interaction summary.
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
      */
     NPCStandingRequest: {
       /** @description The PC's persona that holds this standing. */
@@ -14768,11 +14916,6 @@ export interface components {
       npc_persona: number;
       /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
       affection?: number;
-      /**
-       * Format: date-time
-       * @description Cooldown gate (mission accept sets this; non-mission consumers leave null). availability filters exclude rows with `available_at > now`.
-       */
-      available_at?: string | null;
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
     };
@@ -14829,6 +14972,37 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    OfferCooldown: {
+      readonly id: number;
+      offer: number;
+      persona: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at: string;
+    };
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    OfferCooldownRequest: {
+      offer: number;
+      persona: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at: string;
+    };
     /**
      * @description Read serializer for combat opponents.
      *
@@ -15714,6 +15888,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NarrativeMessageDelivery'][];
+    };
+    PaginatedOfferCooldownList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OfferCooldown'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
@@ -16989,14 +17178,18 @@ export interface components {
       rapport_delta_success?: number;
       /** @description Rapport delta on failure of a non-final check-based action. */
       rapport_delta_failure?: number;
+      /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
+      cooldown?: string | null;
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      check_type?: number | null;
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      check_difficulty?: number;
     };
     /**
-     * @description Staff CRUD for per-(PC persona, NPC persona) standing rows.
+     * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
      *
-     *     Normally written by mission ``accept_mission`` (cooldown side) and
-     *     future flirt/seduce/cultivation checks (affection side). CRUD here
-     *     is for staff overrides — clear a cooldown, bump or penalize
-     *     affection, set an interaction summary.
+     *     Standing carries affection + interaction summary only — cooldown
+     *     lives on OfferCooldown so it works for every offer kind.
      */
     PatchedNPCStandingRequest: {
       /** @description The PC's persona that holds this standing. */
@@ -17005,13 +17198,23 @@ export interface components {
       npc_persona?: number;
       /** @description Per-persona-pair standing / affection. Predicate gate `min_npc_standing` reads this. Negative values mean disliked. Movement mechanic (flirt/seduce/cultivation checks) is adjacent gameplay work that mutates this value; the model just carries it. */
       affection?: number;
-      /**
-       * Format: date-time
-       * @description Cooldown gate (mission accept sets this; non-mission consumers leave null). availability filters exclude rows with `available_at > now`.
-       */
-      available_at?: string | null;
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
+    };
+    /**
+     * @description Staff CRUD for per-(offer, persona) cooldown rows.
+     *
+     *     Written by `resolve_offer` on final-action grants; staff can clear
+     *     or extend by editing `available_at` directly.
+     */
+    PatchedOfferCooldownRequest: {
+      offer?: number;
+      persona?: number;
+      /**
+       * Format: date-time
+       * @description Earliest time `persona` can select this offer again.
+       */
+      available_at?: string;
     };
     /**
      * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
@@ -31238,6 +31441,243 @@ export interface operations {
     responses: {
       /** @description No response body */
       204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_cooldowns_list: {
+    parameters: {
+      query?: {
+        offer?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOfferCooldownList'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferCooldownRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferCooldownRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_cooldowns_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_cooldowns_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer cooldown. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedOfferCooldownRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferCooldown'];
+        };
+      };
+    };
+  };
+  npc_services_interactions_end_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description No interaction in progress. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_interactions_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionResolveRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description Offer not eligible / session closed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No interaction in progress / offer not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_interactions_start_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionStartRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionState'];
+        };
+      };
+      /** @description An interaction is already in flight. */
+      409: {
         headers: {
           [name: string]: unknown;
         };

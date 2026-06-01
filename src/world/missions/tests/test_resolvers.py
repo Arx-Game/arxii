@@ -35,8 +35,8 @@ from world.conditions.factories import (
 )
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory, ThreadFactory
-from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.npc_services.factories import NPCStandingFactory
+from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.roster.factories import RosterEntryFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory

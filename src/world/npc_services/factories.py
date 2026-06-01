@@ -11,16 +11,16 @@ from world.npc_services.models import (
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
+    OfferCooldown,
     PermitOfferDetails,
 )
 
 
 class NPCStandingFactory(DjangoModelFactory):
-    """Per-(PC persona, NPC persona) standing row.
+    """Per-(PC persona, NPC persona) affection row.
 
-    Defaults to an already-elapsed cooldown and zero affection so the row
-    exists without acting as a gate. Tests exercising the cooldown or
-    affection sides override ``available_at=`` / ``affection=`` explicitly.
+    Standing is just affection now — cooldown moved to ``OfferCooldown``.
+    Tests exercising the affection side pass ``affection=`` explicitly.
     """
 
     class Meta:
@@ -28,7 +28,6 @@ class NPCStandingFactory(DjangoModelFactory):
 
     persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     npc_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
-    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
     affection = 0
 
 
@@ -57,6 +56,25 @@ class NPCServiceOfferFactory(DjangoModelFactory):
     is_final = True
     rapport_delta_success = 0
     rapport_delta_failure = 0
+    cooldown = None
+    check_type = None
+    check_difficulty = 0
+
+
+class OfferCooldownFactory(DjangoModelFactory):
+    """Per-(offer, persona) cooldown row.
+
+    Default ``available_at`` is 1 second in the past so the row exists
+    without gating. Tests exercising an active cooldown override
+    ``available_at`` with a future datetime.
+    """
+
+    class Meta:
+        model = OfferCooldown
+
+    offer = factory.SubFactory(NPCServiceOfferFactory)
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
 
 
 class PermitOfferDetailsFactory(DjangoModelFactory):

@@ -1,14 +1,12 @@
 """API tests for the NPCStanding staff CRUD viewset.
 
 Relocated + reshaped from the old `world.missions` standing API tests —
-the model is now per-(PC persona, NPC persona) rather than per-(giver,
-character).
+the model is now per-(PC persona, NPC persona) and only carries
+affection / interaction-summary. Cooldown lives on `OfferCooldown`
+(see test_api_offer_cooldowns.py).
 """
 
-from datetime import timedelta
-
 from django.test import TestCase
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -51,14 +49,6 @@ class NPCStandingViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
 
-    def test_patch_clears_cooldown(self) -> None:
-        response = self.client.patch(
-            f"{self.URL}{self.standing.pk}/",
-            {"available_at": timezone.now().isoformat()},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
     def test_patch_adjusts_affection(self) -> None:
         response = self.client.patch(
             f"{self.URL}{self.standing.pk}/",
@@ -75,7 +65,6 @@ class NPCStandingViewSetTests(TestCase):
             {
                 "persona": other_pc.pk,
                 "npc_persona": self.npc_persona.pk,
-                "available_at": (timezone.now() + timedelta(days=1)).isoformat(),
                 "affection": 0,
             },
             format="json",

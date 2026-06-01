@@ -52,7 +52,6 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
-from world.missions.predicates import LEAF_RESOLVERS
 from world.missions.serializers import (
     MissionCategorySerializer,
     MissionGiverOfferingSerializer,
@@ -66,7 +65,8 @@ from world.missions.serializers import (
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
 )
-from world.missions.types import LeafResolver
+from world.predicates.predicates import LEAF_RESOLVERS
+from world.predicates.types import LeafResolver
 
 
 class MissionStudioPagination(PageNumberPagination):
