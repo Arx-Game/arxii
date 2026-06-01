@@ -509,6 +509,11 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
             modifier_target=target,
             defaults={"value": delta},
         )
+    from world.mechanics.factories import FatigueCollapseImmunePropertyFactory
+
+    fatigue_immune_prop = FatigueCollapseImmunePropertyFactory()
+    audere.properties.add(fatigue_immune_prop)
+    majora.properties.add(fatigue_immune_prop)
     return audere, majora
 
 
