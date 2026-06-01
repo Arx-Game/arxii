@@ -20,6 +20,8 @@ vi.mock('@/magic/api', async (importOriginal) => {
   return {
     ...actual,
     previewPull: vi.fn(),
+    getThreads: vi.fn().mockResolvedValue({ count: 0, next: null, previous: null, results: [] }),
+    getCharacterResonances: vi.fn().mockResolvedValue([]),
   };
 });
 
