@@ -10,6 +10,8 @@ import type { PullPreviewResponse, Thread } from '../../../types';
 
 vi.mock('@/magic/api', () => ({
   previewPull: vi.fn(),
+  getThreads: vi.fn().mockResolvedValue({ count: 0, next: null, previous: null, results: [] }),
+  getCharacterResonances: vi.fn().mockResolvedValue([]),
 }));
 
 import * as magicApi from '@/magic/api';

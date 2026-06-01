@@ -23,6 +23,8 @@ vi.mock('@/magic/queries', () => ({
   useThread: vi.fn(),
   useThreadHubSummary: vi.fn(),
   useCharacterResonances: vi.fn(),
+  useThreads: vi.fn().mockReturnValue({ data: { results: [] } }),
+  useCommitPull: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
   usePatchThreadNarrative: vi.fn(),
   useRetireThread: vi.fn(),
   useImbueThread: vi.fn(),
@@ -94,6 +96,10 @@ const makeSummary = (overrides: Partial<ThreadHubSummary> = {}): ThreadHubSummar
   near_xp_lock_thread_ids: [],
   blocked_thread_ids: [],
   weaving_eligibility: {},
+  weavable_traits: [],
+  weavable_techniques: [],
+  room_property_ids: [],
+  weavable_relationship_track_ids: [],
   ...overrides,
 });
 

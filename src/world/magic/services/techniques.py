@@ -35,7 +35,7 @@ from world.mechanics.constants import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from typing import Any
 
     from evennia.objects.models import ObjectDB
@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.magic.models import Technique
+    from world.magic.services.power_terms import ApplicableThread
     from world.mechanics.models import ModifierTarget
 
 
@@ -66,15 +67,15 @@ def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
 def _get_power_targets() -> list[ModifierTarget]:
     """Look up all 'power'-category ModifierTargets in a single query.
 
-    Returns global (target_resonance is None) and resonance-scoped power targets.
-    Caller filters scoped targets by the technique's resonances.
+    Returns all power targets (global, resonance-scoped, and damage-type-scoped).
+    Caller filters by the technique's resonances and damage types.
     """
     from world.mechanics.constants import POWER_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
     return list(
         ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME).select_related(
-            "category", "target_resonance"
+            "category", "target_resonance", "target_damage_type"
         )
     )
 
@@ -174,9 +175,13 @@ def _derive_power(
     channeled_intensity: int,
     technique: Technique | None,
     character: ObjectDB | None,
+    applicable_threads: Sequence[ApplicableThread] | None = None,
 ) -> int:
     """Derive effective power. NEVER stored — recomputed each cast.
 
+    Two accumulation passes feed the final result:
+
+    **Pass 1 — CharacterModifier / condition modifiers:**
     Each matched power-category target contributes both its CharacterModifier rows
     (#634) and its active-condition effects (#636), summed together. Targets named
     ``power_multiplier`` contribute a percent-delta applied multiplicatively to
@@ -184,14 +189,27 @@ def _derive_power(
 
         flat   = Σ (additive power contributions)
         delta  = Σ (power_multiplier percent-delta contributions)   # 0 when none
-        power  = max(0, round(channeled_intensity * (100 + delta) / 100) + flat)
+        scaled = round(channeled_intensity * (100 + delta) / 100)
 
-    Matched = the global power target (no resonance scope) plus any resonance-scoped
-    power target whose resonance is one of the technique's gift resonances. Power-scoped
-    contributions raise landed effect only; channeled intensity (anima/mishap/Soulfray)
-    is untouched by construction. Damage-type scoping deferred to #653.
+    **Pass 2 — power term providers (#637):**
+    Each registered provider in ``services.power_terms`` receives a
+    ``PowerTermContext`` and returns a flat int. Providers own their own config
+    and return 0 when unconfigured (opt-in per term)::
+
+        power = max(0, scaled + flat + Σ provider(ctx))
+
+    A target is matched when it passes both scope gates (AND semantics; null = global):
+    - Resonance scope: target_resonance is None, or matches a technique gift resonance.
+    - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
+    Untyped damage profiles (damage_type=None) never count as a damage-type match.
+    Power-scoped contributions raise landed effect only; channeled intensity
+    (anima/mishap/Soulfray) is untouched by construction.
     """
     from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+    from world.magic.services.power_terms import (  # noqa: PLC0415
+        PowerTermContext,
+        get_power_term_providers,
+    )
     from world.mechanics.constants import POWER_MULTIPLIER_TARGET_NAME  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
@@ -202,16 +220,27 @@ def _derive_power(
         return max(0, channeled_intensity)
 
     technique_resonance_ids: set[int] = set()
+    technique_damage_type_ids: set[int] = set()
     if technique is not None:
         technique_resonance_ids = {r.id for r in technique.gift.resonances.all()}
+        technique_damage_type_ids = {
+            p.damage_type_id
+            for p in technique.damage_profiles.all()
+            if p.damage_type_id is not None
+        }
 
     flat = 0
     multiplier_delta = 0
     for target in _get_power_targets():
-        if (
+        resonance_matches = (
             target.target_resonance_id is None
             or target.target_resonance_id in technique_resonance_ids
-        ):
+        )
+        damage_type_matches = (
+            target.target_damage_type_id is None
+            or target.target_damage_type_id in technique_damage_type_ids
+        )
+        if resonance_matches and damage_type_matches:
             contribution = get_modifier_total(sheet, target) + get_condition_modifier_total(
                 sheet, target
             )
@@ -221,7 +250,15 @@ def _derive_power(
                 flat += contribution
 
     scaled = round(channeled_intensity * (100 + multiplier_delta) / 100)
-    return max(0, scaled + flat)
+
+    ctx = PowerTermContext(
+        sheet=sheet,
+        technique=technique,
+        applicable_threads=applicable_threads or [],
+    )
+    term_total = sum(provider(ctx) for provider in get_power_term_providers())
+
+    return max(0, scaled + flat + term_total)
 
 
 def get_runtime_technique_stats(

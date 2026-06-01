@@ -1,0 +1,45 @@
+name: Project board sync
+
+# Moves issues across the org Project (#1 "Arx II") lifecycle lanes:
+#   * Status (Backlog / In progress / Done / Cancelled) -- event-driven.
+#   * Stage  (Spec design / Spec review / Implementation / In review) -- a
+#     swimlane field that follows our status:* / spec:* labels.
+# All board writes go through tools/project_board_sync.py, authenticated with the
+# PROJECT_PAT secret. The default GITHUB_TOKEN CANNOT write org-level Projects v2,
+# which is why a PAT is required. If PROJECT_PAT is absent (e.g. a fork PR, or the
+# secret isn't set yet) the script exits 0 and the check stays green.
+#
+# Full design + the one-time manual setup (PROJECT_PAT secret, the Cancelled
+# Status option, swimlane grouping): docs/project-board-automation.md
+#
+# SUPPLY CHAIN: third-party actions are pinned to a full commit SHA (a mutable
+# tag like @v4 could be repointed at malicious code). The trailing `# vX.Y.Z` is
+# the human-readable version Dependabot bumps; only the SHA is authoritative.
+
+on:
+  issues:
+    types: [opened, assigned, unassigned, labeled, unlabeled, closed, reopened]
+  pull_request:
+    types: [opened, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize per issue/PR so concurrent events don't race on the same card.
+  group: project-sync-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Sync the board (stdlib python; no pip install)
+        env:
+          # PROJECT_PAT: fine-grained PAT with org Projects R/W + repo Issues R/W.
+          GITHUB_TOKEN: ${{ secrets.PROJECT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PROJECT_NUMBER: "1"
+        run: python3 tools/project_board_sync.py

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
-from actions.constants import TargetKind
+from actions.constants import ActionCategory, TargetKind
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
@@ -52,6 +52,7 @@ class SayAction(Action):
     name: str = "Say"
     icon: str = "chat"
     category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
     intent_event: str | None = "before_say"
@@ -100,6 +101,7 @@ class PoseAction(Action):
     name: str = "Pose"
     icon: str = "theater"
     category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
     intent_event: str | None = "before_pose"
@@ -153,6 +155,7 @@ class EmitAction(Action):
     name: str = "Emit"
     icon: str = "scroll"
     category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
     intent_event: str | None = "before_emit"
@@ -196,6 +199,7 @@ class WhisperAction(Action):
     name: str = "Whisper"
     icon: str = "whisper"
     category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.SINGLE
     target_kind: TargetKind | None = TargetKind.PERSONA
     target_filters: TargetFilters | None = _WHISPER_TARGET_FILTERS

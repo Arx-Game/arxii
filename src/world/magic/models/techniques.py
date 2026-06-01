@@ -464,18 +464,16 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
     def calculate_value(
         self,
         *,
-        effective_intensity: int | None = None,
+        effective_power: int | None = None,
     ) -> int:
         """Calculate effective Capability value.
 
-        effective_intensity: when provided (e.g., from combat where pull
-        bumps may apply), uses that aggregate. When None (out-of-combat
-        challenges or no combat context), falls back to self.technique.intensity.
+        effective_power: when provided (e.g., from combat where pull bumps
+        may apply), uses that aggregate. When None (out-of-combat challenges
+        or no combat context), falls back to self.technique.intensity.
         """
-        intensity = (
-            effective_intensity if effective_intensity is not None else self.technique.intensity
-        )
-        return int(self.base_value + (self.intensity_multiplier * Decimal(intensity)))
+        power = effective_power if effective_power is not None else self.technique.intensity
+        return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
 
 
 class TechniqueCapabilityRequirement(SharedMemoryModel):
@@ -572,17 +570,31 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
         return f"{self.outcome}: {sign}{self.modifier_value} to resilience"
 
 
+def _scale_by_power_and_sl(  # noqa: PLR0913
+    base: int,
+    multiplier: Decimal,
+    effective_power: int,
+    per_extra_sl: int,
+    success_level: int,
+    minimum_success_level: int,
+) -> int:
+    """Shared scaling formula: base + floor(multiplier * power) + per_sl * max(0, sl - min_sl)."""
+    power_contribution = int(multiplier * effective_power)
+    sl_above = max(0, success_level - minimum_success_level)
+    return base + power_contribution + per_extra_sl * sl_above
+
+
 class TechniqueAppliedCondition(SharedMemoryModel):
     """Authored row binding a Technique to a ConditionTemplate with formula-based
     severity / duration scaling. One Technique may have many of these.
 
     Severity formula:
-        base_severity + floor(severity_intensity_multiplier * effective_intensity)
+        base_severity + floor(severity_intensity_multiplier * effective_power)
             + severity_per_extra_sl * max(0, success_level - minimum_success_level)
 
     Duration formula (falls back to condition.default_duration_value when base_duration_rounds
     is None):
-        base + floor(duration_intensity_multiplier * effective_intensity)
+        base + floor(duration_intensity_multiplier * effective_power)
             + duration_per_extra_sl * max(0, success_level - minimum_success_level)
     """
 
@@ -614,7 +626,7 @@ class TechniqueAppliedCondition(SharedMemoryModel):
         max_digits=5,
         decimal_places=2,
         default=Decimal(0),
-        help_text="Multiplied by effective_intensity and added to severity.",
+        help_text="Multiplied by effective_power and added to severity.",
     )
     severity_per_extra_sl = models.PositiveIntegerField(
         default=0,
@@ -632,7 +644,7 @@ class TechniqueAppliedCondition(SharedMemoryModel):
         max_digits=5,
         decimal_places=2,
         default=Decimal(0),
-        help_text="Multiplied by effective_intensity and added to duration.",
+        help_text="Multiplied by effective_power and added to duration.",
     )
     duration_per_extra_sl = models.PositiveIntegerField(
         default=0,
@@ -660,29 +672,37 @@ class TechniqueAppliedCondition(SharedMemoryModel):
     def compute_severity(
         self,
         *,
-        effective_intensity: int,
+        effective_power: int,
         success_level: int,
     ) -> int:
-        """Return the severity to apply at the given intensity and success level."""
-        intensity_contribution = int(self.severity_intensity_multiplier * effective_intensity)
-        sl_above = max(0, success_level - self.minimum_success_level)
-        sl_contribution = self.severity_per_extra_sl * sl_above
-        return self.base_severity + intensity_contribution + sl_contribution
+        """Return the severity to apply at the given power and success level."""
+        return _scale_by_power_and_sl(
+            self.base_severity,
+            self.severity_intensity_multiplier,
+            effective_power,
+            self.severity_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
 
     def compute_duration_rounds(
         self,
         *,
-        effective_intensity: int,
+        effective_power: int,
         success_level: int,
     ) -> int | None:
         """Return the duration in rounds, falling back to condition.default_duration_value."""
         base = self.base_duration_rounds
         if base is None:
             base = self.condition.default_duration_value
-        intensity_contribution = int(self.duration_intensity_multiplier * effective_intensity)
-        sl_above = max(0, success_level - self.minimum_success_level)
-        sl_contribution = self.duration_per_extra_sl * sl_above
-        return base + intensity_contribution + sl_contribution
+        return _scale_by_power_and_sl(
+            base,
+            self.duration_intensity_multiplier,
+            effective_power,
+            self.duration_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
 
 
 class TechniqueDamageProfile(SharedMemoryModel):
@@ -738,13 +758,15 @@ class TechniqueDamageProfile(SharedMemoryModel):
     def compute_damage_budget(
         self,
         *,
-        effective_intensity: int,
+        effective_power: int,
         success_level: int,
     ) -> int:
         """Per-formula damage value before SL multiplier and soak."""
-        intensity_contribution = int(
-            self.damage_intensity_multiplier * effective_intensity,
+        return _scale_by_power_and_sl(
+            self.base_damage,
+            self.damage_intensity_multiplier,
+            effective_power,
+            self.damage_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
         )
-        sl_above = max(0, success_level - self.minimum_success_level)
-        sl_contribution = self.damage_per_extra_sl * sl_above
-        return self.base_damage + intensity_contribution + sl_contribution
