@@ -5,7 +5,7 @@
  * - Debounced preview call (250ms) via api.previewPull on every tier change
  * - Shows cost (resonance + anima), affordability flag, capped_intensity warning
  * - Lists resolved_effects with kind/scaled_value/inactive_reason
- * - [Pull Now (RP)] button is disabled (Task 18 ships ThreadPullDialog)
+ * - [Pull Now (RP)] button opens ThreadPullDialog in ephemeral mode (always-in-action anchors)
  *
  * Always-in-action (non-combat) anchor kinds: if a thread's anchor is NOT in
  * this set, the pull button is disabled with a tooltip.
@@ -203,7 +203,7 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
           disabled={!isAlwaysInAction}
           data-testid="pull-now-button"
           title={!isAlwaysInAction ? 'Requires combat context' : undefined}
-          onClick={() => isAlwaysInAction && setPullDialogOpen(true)}
+          onClick={() => setPullDialogOpen(true)}
         >
           Pull Now (RP)
         </Button>

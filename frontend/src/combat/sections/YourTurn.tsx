@@ -228,9 +228,10 @@ export function YourTurn({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pullDialogOpen, setPullDialogOpen] = useState(false);
 
-  // Reset submitted when round advances.
+  // Reset submitted and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
+    setPullDialogOpen(false);
   }, [roundNumber]);
 
   // ---------------------------------------------------------------------------
