@@ -408,6 +408,21 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.magic.services.sanctum_cron import sanctum_resonance_generation_tick
+
+    register_task(
+        CronDefinition(
+            task_key="sanctum.resonance_generation_tick",
+            callable=sanctum_resonance_generation_tick,
+            interval=timedelta(hours=24),
+            description=(
+                "Pay per-day Sanctum resonance income to woven weavers. Reads "
+                "effective_value(room, resonance) for the cascade-summed pool "
+                "× LEVEL_MULTIPLIERS[level-1] × K. Plan 4 §F."
+            ),
+        )
+    )
+
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
     # journals, relationships, and AP regen.

@@ -73,7 +73,7 @@ jobs:
               web web.admin web.api
               integration_tests.pipeline integration_tests.game_content
               core_management commands typeclasses behaviors
-              evennia_extensions world.realms world.species world.projects world.npc_services world.predicates world.buildings
+              evennia_extensions world.realms world.species world.projects world.npc_services world.predicates world.buildings world.room_features
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
