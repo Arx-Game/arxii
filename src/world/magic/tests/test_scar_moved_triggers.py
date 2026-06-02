@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from flows.constants import EventName
+from world.conditions.factories import ConditionTemplateFactory
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
@@ -97,3 +98,41 @@ class RoomDominantAffinityTest(ResonanceCacheIsolationMixin, TestCase):
             "value": "Celestial",
         }
         self.assertFalse(evaluate_filter(filter_spec, payload, self_ref=None))
+
+
+class ApplyConditionByNameTest(TestCase):
+    """apply_condition_by_name looks up a ConditionTemplate by name and applies it."""
+
+    def setUp(self):
+        from dataclasses import dataclass
+
+        self.template = ConditionTemplateFactory(name="test_escalation_526")
+        self.character = CharacterFactory()
+
+        @dataclass
+        class StubPayload:
+            character: object
+
+        self.payload = StubPayload(character=self.character)
+
+    def test_applies_named_condition_to_payload_character(self):
+        """apply_condition_by_name applies the condition to payload.character."""
+        from world.conditions.models import ConditionInstance
+        from world.conditions.services import apply_condition_by_name
+
+        apply_condition_by_name(payload=self.payload, condition_name="test_escalation_526")
+
+        count = ConditionInstance.objects.filter(
+            target=self.character,
+            condition=self.template,
+        ).count()
+        self.assertEqual(count, 1, "Expected one ConditionInstance after apply_condition_by_name")
+
+    def test_silently_no_ops_when_condition_not_found(self):
+        """apply_condition_by_name does nothing when the condition name doesn't exist."""
+        from world.conditions.models import ConditionInstance
+        from world.conditions.services import apply_condition_by_name
+
+        apply_condition_by_name(payload=self.payload, condition_name="nonexistent_526")
+
+        self.assertEqual(ConditionInstance.objects.filter(target=self.character).count(), 0)
