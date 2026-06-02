@@ -9,6 +9,7 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from flows.constants import EventName
 from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.services import apply_condition
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
@@ -136,3 +137,70 @@ class ApplyConditionByNameTest(TestCase):
         apply_condition_by_name(payload=self.payload, condition_name="nonexistent_526")
 
         self.assertEqual(ConditionInstance.objects.filter(target=self.character).count(), 0)
+
+
+class WireScarEscalationTriggerTest(TestCase):
+    """wire_scar_escalation_trigger links a MOVED TriggerDefinition to a scar template."""
+
+    def test_trigger_definition_in_reactive_triggers(self):
+        """After wiring, the scar template has a MOVED TriggerDefinition in reactive_triggers."""
+        from flows.constants import EventName
+        from world.magic.factories import wire_scar_escalation_trigger
+
+        scar_template = ConditionTemplateFactory(name="abyssal_scar_526")
+        escalation_template = ConditionTemplateFactory(name="hallowed_agony_526")
+
+        wire_scar_escalation_trigger(
+            scar_template=scar_template,
+            escalation_template=escalation_template,
+            hostile_affinity_name="Celestial",
+        )
+
+        trigger_defs = list(scar_template.reactive_triggers.all())
+        self.assertEqual(len(trigger_defs), 1)
+        td = trigger_defs[0]
+        self.assertEqual(td.event_name, EventName.MOVED)
+        self.assertEqual(
+            td.base_filter_condition,
+            {"path": "destination.dominant_affinity.name", "op": "==", "value": "Celestial"},
+        )
+
+    def test_wiring_is_idempotent(self):
+        """Calling wire_scar_escalation_trigger twice doesn't duplicate rows."""
+        from world.magic.factories import wire_scar_escalation_trigger
+
+        scar_template = ConditionTemplateFactory(name="abyssal_scar_526b")
+        escalation_template = ConditionTemplateFactory(name="hallowed_agony_526b")
+
+        wire_scar_escalation_trigger(
+            scar_template=scar_template,
+            escalation_template=escalation_template,
+            hostile_affinity_name="Celestial",
+        )
+        wire_scar_escalation_trigger(
+            scar_template=scar_template,
+            escalation_template=escalation_template,
+            hostile_affinity_name="Celestial",
+        )
+
+        self.assertEqual(scar_template.reactive_triggers.count(), 1)
+
+    def test_trigger_installed_when_condition_applied(self):
+        """Applying the scar condition auto-installs a Trigger row on the character."""
+        from flows.models.triggers import Trigger
+        from world.magic.factories import wire_scar_escalation_trigger
+
+        scar_template = ConditionTemplateFactory(name="abyssal_scar_526c")
+        escalation_template = ConditionTemplateFactory(name="hallowed_agony_526c")
+        wire_scar_escalation_trigger(
+            scar_template=scar_template,
+            escalation_template=escalation_template,
+            hostile_affinity_name="Celestial",
+        )
+
+        character = CharacterFactory()
+        apply_condition(target=character, condition=scar_template)
+
+        installed = Trigger.objects.filter(obj=character)
+        self.assertEqual(installed.count(), 1)
+        self.assertEqual(installed.first().trigger_definition.event_name, "moved")
