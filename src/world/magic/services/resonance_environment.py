@@ -152,6 +152,18 @@ def _dominant_place_affinity(room: DefaultObject, resonances: list[Resonance]) -
     return candidates[0][1]
 
 
+def get_room_dominant_affinity(room: DefaultObject) -> Affinity | None:
+    """Return the dominant cascade affinity for a room, or None if inert.
+
+    Wraps ``_get_room_resonances`` + ``_dominant_place_affinity`` as a public
+    entry point for callers outside this module (e.g. ``Room.dominant_affinity``).
+    Returns None when the room has no RoomProfile, no tagged resonances, or
+    all effective values are zero.
+    """
+    resonances = _get_room_resonances(room)
+    return _dominant_place_affinity(room, resonances)
+
+
 def _place_magnitude(
     room: DefaultObject,
     place_affinity: Affinity,

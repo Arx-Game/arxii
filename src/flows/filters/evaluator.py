@@ -117,6 +117,10 @@ def _resolve_value(raw: Any, *, self_ref: Any) -> Any:
 def _walk_dotted(obj: Any, dotted: str) -> Any:
     current = obj
     for part in dotted.split("."):
+        if current is None:
+            # None propagates (optional-chaining semantics): None.anything → None.
+            # The subsequent comparison (e.g. None == "Celestial") evaluates False.
+            return None
         result = getattr(current, part, SENTINEL)  # noqa: GETATTR_LITERAL — dynamic filter DSL path traversal
         if result is SENTINEL:
             msg = f"Cannot resolve '{part}' on {type(current).__name__} (full path: {dotted})"
