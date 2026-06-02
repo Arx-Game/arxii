@@ -276,9 +276,11 @@ class OfferCooldown(SharedMemoryModel):
 class PermitOfferDetails(SharedMemoryModel):
     """Per-kind details for `NPCServiceOffer` rows of kind=PERMIT.
 
-    Stub for Plan 2's framework wiring; Plan 3 (#668) fills in the
-    permit-specific fields (which ItemTemplate to issue, default
-    `approved_wards`, default `max_scope`, etc.).
+    Filled in Plan 3 (#668). Defines which BuildingKind this offer
+    authorizes, which wards the issued permit defaults to, and the size
+    cap. The PERMIT effect handler in ``effects.py`` reads these fields
+    to construct the BuildingPermit ItemInstance + BuildingPermitDetails
+    row at grant time.
     """
 
     offer = models.OneToOneField(
@@ -286,6 +288,41 @@ class PermitOfferDetails(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="permit_offer_details",
         help_text="The NPCServiceOffer row this details model decorates.",
+    )
+    building_kind = models.ForeignKey(
+        "buildings.BuildingKind",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="offered_by",
+        help_text=(
+            "Which BuildingKind this offer issues permits for. Required "
+            "for kind=PERMIT offers in Plan 3 (nullable in the schema so "
+            "existing rows can migrate; runtime issuance asserts non-null)."
+        ),
+    )
+    default_approved_wards = models.ManyToManyField(
+        "areas.Area",
+        related_name="default_permits_offered",
+        blank=True,
+        help_text=(
+            "Default set of wards the issued permit is valid in. Snapshotted "
+            "onto BuildingPermitDetails.approved_wards at issuance time."
+        ),
+    )
+    default_max_target_size = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Default cap on ``target_size`` for buildings constructed under "
+            "permits from this offer."
+        ),
+    )
+    permit_cost_currency = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Currency cost of the permit (approval fee — distinct from "
+            "construction cost). Charged to the PC's account at grant time."
+        ),
     )
 
     def __str__(self) -> str:

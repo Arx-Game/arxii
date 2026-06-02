@@ -77,10 +77,15 @@ class StartInteractionTests(TestCase):
 
 class ResolveOfferTests(TestCase):
     def setUp(self) -> None:
+        from world.buildings.factories import BuildingKindFactory
+        from world.buildings.seeds import ensure_building_permit_template
+
+        ensure_building_permit_template()
+        kind = BuildingKindFactory(name="api-test-kind")
         self.account, self.character = _pc()
         self.role = NPCRoleFactory(name="role-resolve")
         self.offer = NPCServiceOfferFactory(role=self.role, label="permit", is_final=True)
-        PermitOfferDetailsFactory(offer=self.offer)
+        PermitOfferDetailsFactory(offer=self.offer, building_kind=kind)
         self.client = APIClient()
         self.client.force_authenticate(self.account)
 
@@ -91,7 +96,7 @@ class ResolveOfferTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertTrue(response.data["closed"])
         self.assertEqual(response.data["available_offers"], [])
-        self.assertIn("Permit", response.data["last_result_message"])
+        self.assertIn("permit", response.data["last_result_message"].lower())
 
     def test_resolve_without_in_flight_returns_404(self) -> None:
         with _patch_puppet(self.character):

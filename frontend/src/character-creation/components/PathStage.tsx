@@ -294,7 +294,7 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   ]);
 
   // Debounced save to backend
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveToBackend = useCallback(
     (newSkillValues: Record<number, number>, newSpecValues: Record<number, number>) => {

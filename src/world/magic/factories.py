@@ -76,7 +76,10 @@ from world.magic.models import (
 from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
-from world.mechanics.factories import PowerMultiplierTargetFactory
+from world.mechanics.factories import (
+    FatigueCollapseImmunePropertyFactory,
+    PowerMultiplierTargetFactory,
+)
 from world.roster.factories import RosterEntryFactory
 from world.traits.factories import TraitFactory
 
@@ -509,6 +512,9 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
             modifier_target=target,
             defaults={"value": delta},
         )
+    fatigue_immune_prop = FatigueCollapseImmunePropertyFactory()
+    audere.properties.add(fatigue_immune_prop)
+    majora.properties.add(fatigue_immune_prop)
     return audere, majora
 
 

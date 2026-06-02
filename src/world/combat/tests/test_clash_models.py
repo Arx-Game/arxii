@@ -532,6 +532,16 @@ class ClashFactoriesTests(TestCase):
         contrib.full_clean()
 
 
+class StrainConfigTests(TestCase):
+    def test_strain_config_fatigue_ratio_defaults(self):
+        """StrainConfig singleton has correct default fatigue ratio fields."""
+        from world.combat.factories import StrainConfigFactory
+
+        cfg = StrainConfigFactory()
+        self.assertEqual(cfg.base_anima_fatigue_ratio, 25)
+        self.assertEqual(cfg.strain_anima_fatigue_ratio, 50)
+
+
 class ThreatPoolEntryClashValidationTests(TestCase):
     """Tests for ThreatPoolEntry.clean() clash-field coupling validation."""
 

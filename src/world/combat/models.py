@@ -1061,6 +1061,21 @@ class StrainConfig(SharedMemoryModel):
         default=1,
         help_text="Minimum modifier contribution any anima unit can produce.",
     )
+    base_anima_fatigue_ratio = models.PositiveIntegerField(
+        default=25,
+        help_text=(
+            "Percentage of non-strain anima spent that converts to fatigue "
+            "(e.g. 25 = 25% = 0.25×). 0 = no fatigue from base casts."
+        ),
+    )
+    strain_anima_fatigue_ratio = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Percentage of strain_commitment anima that converts to fatigue "
+            "(e.g. 50 = 50% = 0.50×). Set higher than base_anima_fatigue_ratio "
+            "to make pushing harder proportionally more tiring."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
