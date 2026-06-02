@@ -204,6 +204,11 @@ def _apply_pending_increments(
         # F() arithmetic so a concurrent absorb resetting the field to 0
         # can't be clobbered by a stale in-memory snapshot.
         SanctumPendingPayout.objects.filter(pk=payout.pk).update(**{field: F(field) + actual})
+        # SharedMemoryModel keeps the bulk_created instance in its identity
+        # map; the `.update()` bypasses ORM save() so the cached row's
+        # ``pending_*`` value stays stale until refresh. Refresh so subsequent
+        # ``objects.get(...)`` calls return the new value, not the cache.
+        payout.refresh_from_db(fields=[field, "updated_at"])
         accrued_count += 1
     return accrued_count
 
