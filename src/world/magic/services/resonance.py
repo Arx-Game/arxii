@@ -139,7 +139,7 @@ def grant_resonance(  # noqa: PLR0913
     return cr
 
 
-def _validate_grant_source_shape(  # noqa: PLR0913 — paralleling grant_resonance's typed kwargs
+def _validate_grant_source_shape(  # noqa: PLR0913
     source: str,
     *,
     room_profile: RoomProfile | None,
