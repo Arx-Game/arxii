@@ -39,7 +39,7 @@ class IsRitualAuthorOrStaff(BasePermission):
             return True
         if request.user.is_staff:
             return True
-        author_id = getattr(obj, "author_account_id", None)  # noqa: GETATTR_LITERAL — duck-typed obj may not have the attr
+        author_id = getattr(obj, "author_account_id", None)  # noqa: GETATTR_LITERAL
         if author_id is None:
             return False  # staff-authored ritual — non-staff cannot mutate
         return author_id == request.user.id

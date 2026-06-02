@@ -108,7 +108,7 @@ def maybe_create_session_request(progress: AnyStoryProgress) -> SessionRequest |
     )
 
 
-def create_event_from_session_request(  # noqa: PLR0913 — event scheduling requires all scheduling fields
+def create_event_from_session_request(  # noqa: PLR0913
     *,
     session_request: SessionRequest,
     name: str,

@@ -334,9 +334,9 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
             ),
         ]
     )
-    def test_opposed_matrix(  # noqa: PLR0913 — parametrized test; one arg per scenario column
+    def test_opposed_matrix(  # noqa: PLR0913
         self,
-        test_id: str,  # noqa: ARG002 — used by parameterized for method name generation
+        test_id: str,  # noqa: ARG002
         intensity: str,
         outcome_name: str,
         expected_condition: str,

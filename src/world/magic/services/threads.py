@@ -94,7 +94,7 @@ def _current_path_stage(character_sheet: CharacterSheet) -> int:
     return int(history.path.stage)
 
 
-def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per TargetKind, hard to collapse further
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -267,7 +267,7 @@ def _has_weaving_unlock(
             )
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
-            track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track
+            track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL
             return base.filter(unlock__unlock_track=track).exists()
         case TargetKind.FACET:
             # Single global FACET unlock — no per-facet variant; any FACET-kind unlock suffices.
@@ -276,7 +276,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are distinct, cannot collapse
+def weave_thread(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,

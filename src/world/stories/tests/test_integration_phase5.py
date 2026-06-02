@@ -62,7 +62,7 @@ from world.stories.services.tables import (
 class Phase5EndToEndTests(EvenniaTestCase):
     """Full-system walkthrough of the Phase 5 feature surface."""
 
-    def test_phase5_end_to_end_scenario(self) -> None:  # noqa: PLR0915 — single E2E walkthrough
+    def test_phase5_end_to_end_scenario(self) -> None:  # noqa: PLR0915
         # ====================================================================
         # Step 1: Staff creates Era 1 (UPCOMING → ACTIVE via advance_era)
         # ====================================================================

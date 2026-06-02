@@ -107,7 +107,7 @@ class EventViewSet(ModelViewSet):
                 ),
                 to_attr="invitations_cached",
             ),
-            "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
+            "modification",  # noqa: PREFETCH_STRING
         )
 
     def get_queryset(self) -> QuerySet[Event]:

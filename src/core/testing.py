@@ -85,7 +85,7 @@ def _flush_sharedmemorymodel_caches() -> None:
         # Abstract subclasses or those without a concrete ``__dbclass__``
         # may not implement ``flush_instance_cache`` cleanly; skip them
         # rather than fail the entire teardown.
-        flusher = getattr(cls, "flush_instance_cache", None)  # noqa: GETATTR_LITERAL — querying dynamic attr presence on heterogeneous SharedMemoryModel subclasses
+        flusher = getattr(cls, "flush_instance_cache", None)  # noqa: GETATTR_LITERAL
         if flusher is not None:
             with contextlib.suppress(AttributeError, TypeError):
                 flusher()  # force=False — match Evennia's signal behavior

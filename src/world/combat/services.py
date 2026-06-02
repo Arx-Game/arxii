@@ -137,7 +137,7 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
     return False
 
 
-def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM — character identity, consistent with the fatigue analogue above
+def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
     """Return True if the character has any active condition granting death_deferred."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
@@ -1161,7 +1161,7 @@ def apply_damage_to_opponent(
     )
 
 
-def apply_damage_to_participant(  # noqa: PLR0913 — public API; kwargs are part of the v1 contract
+def apply_damage_to_participant(  # noqa: PLR0913
     participant: CombatParticipant,
     damage: int,
     *,
@@ -1465,7 +1465,7 @@ def _prefetch_clash_state(
         - ``active_window_condition_template_ids``: set of ``ConditionTemplate``
           PKs that are active on at least one opponent ObjectDB.
     """
-    from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
+    from world.combat.constants import ClashStatus  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
     # Include both ACTIVE and RESOLVED clashes: the window combo is available
@@ -1518,7 +1518,7 @@ def _combo_passes_clash_prereqs(
     return True
 
 
-def detect_available_combos(  # noqa: C901 — sequential pipeline of independent eligibility checks; splitting further would harm readability
+def detect_available_combos(  # noqa: C901
     encounter: CombatEncounter,
     round_number: int,
 ) -> list[AvailableCombo]:
@@ -2277,7 +2277,7 @@ def _resolve_declared_challenges(
 def _resolve_clashes(
     encounter: CombatEncounter,
     round_number: int,
-    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],  # noqa: ARG001 — reserved for future initiative-ordering; v1 uses Clash.pk order (see TODO below)
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],  # noqa: ARG001
 ) -> list[ClashRoundResult]:
     """Post-pass: detect clash opportunities, then drive one round per active Clash.
 
@@ -2324,11 +2324,11 @@ def _resolve_clashes(
         A list of ``ClashRoundResult`` objects, one per Clash that was driven
         this round.  May be empty when no Clashes are active.
     """
-    from world.combat.clash import (  # noqa: PLC0415 — local import avoids circular dependency
+    from world.combat.clash import (  # noqa: PLC0415
         detect_clash_opportunities,
         run_clash_round,
     )
-    from world.combat.constants import ClashStatus  # noqa: PLC0415 — local import avoids circular
+    from world.combat.constants import ClashStatus  # noqa: PLC0415
 
     # 1. Detect new opportunities this round (creates Clash rows).
     detect_clash_opportunities(encounter=encounter, round_number=round_number)
@@ -2565,7 +2565,7 @@ def resolve_round(
     # advance_bleed_out rolls the stage resist check, advances on failure, and
     # marks life_state=DEAD at the terminal stage (closing the old divergence
     # where combat wrote status=DEAD but not life_state).
-    from world.conditions.constants import (  # noqa: PLC0415 — combat→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         BLEED_OUT_CONDITION_NAME,
     )
     from world.vitals.services import advance_bleed_out  # noqa: PLC0415
@@ -2630,7 +2630,7 @@ def resolve_round(
 
 def get_strain_config() -> StrainConfig:
     """Get-or-create the StrainConfig singleton (pk=1)."""
-    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+    from world.combat.models import (  # noqa: PLC0415
         StrainConfig,
     )
 
@@ -2640,7 +2640,7 @@ def get_strain_config() -> StrainConfig:
 
 def get_clash_config() -> ClashConfig:
     """Get-or-create the ClashConfig singleton (pk=1)."""
-    from world.combat.models import (  # noqa: PLC0415 — lazy import avoids circular dependency with models.py
+    from world.combat.models import (  # noqa: PLC0415
         ClashConfig,
     )
 

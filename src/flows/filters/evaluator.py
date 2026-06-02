@@ -35,7 +35,7 @@ OP_HAS_PROPERTY = "has_property"
 OP_SHARES_COVENANT = "shares_covenant"
 
 # Filter DSL self-reference token and dotted prefix
-SELF_TOKEN = "self"  # noqa: S105 — DSL token, not a credential
+SELF_TOKEN = "self"  # noqa: S105
 SELF_PREFIX = "self."
 
 
@@ -121,7 +121,7 @@ def _walk_dotted(obj: Any, dotted: str) -> Any:
             # None propagates (optional-chaining semantics): None.anything → None.
             # The subsequent comparison (e.g. None == "Celestial") evaluates False.
             return None
-        result = getattr(current, part, SENTINEL)  # noqa: GETATTR_LITERAL — dynamic filter DSL path traversal
+        result = getattr(current, part, SENTINEL)  # noqa: GETATTR_LITERAL
         if result is SENTINEL:
             msg = f"Cannot resolve '{part}' on {type(current).__name__} (full path: {dotted})"
             raise FilterPathError(msg)

@@ -49,7 +49,7 @@ class Phase3EndToEndTests(EvenniaTestCase):
     """Full-system walkthrough: offline mutation → login catch-up → advance →
     cascade → narrative fan-out → offline queue → next login delivers."""
 
-    def test_phase3_end_to_end_scenario(self) -> None:  # noqa: PLR0915 — single E2E walkthrough
+    def test_phase3_end_to_end_scenario(self) -> None:  # noqa: PLR0915
         # ---- Arrange: Crucible with stories across all three scopes. ----
         crucible_sheet = CharacterSheetFactory()
         crucible_persona = PersonaFactory(character_sheet=crucible_sheet)

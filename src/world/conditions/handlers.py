@@ -206,7 +206,7 @@ class ConditionTemplateReactiveHandler:
 
     @cached_property
     def _stat_rules_by_event(self) -> dict[str, list[ConditionStatRule]]:
-        from world.achievements.models import ConditionStatRule  # noqa: PLC0415 — cross-app cycle
+        from world.achievements.models import ConditionStatRule  # noqa: PLC0415
 
         rules_by_event: dict[str, list[ConditionStatRule]] = defaultdict(list)
         rules = ConditionStatRule.objects.filter(

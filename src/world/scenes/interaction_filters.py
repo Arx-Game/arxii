@@ -23,7 +23,7 @@ class InteractionFilter(django_filters.FilterSet):
     def filter_without_pose_link(
         self,
         queryset: QuerySet[Interaction],
-        name: str,  # noqa: ARG002 — django-filter signature requires this argument
+        name: str,  # noqa: ARG002
         value: bool,
     ) -> QuerySet[Interaction]:
         """When true, exclude ACTION interactions already linked to a POSE."""

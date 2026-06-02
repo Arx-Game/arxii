@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 
 
 @transaction.atomic
-def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerous; grouped for readability
+def grant_resonance(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     amount: int,
@@ -191,7 +191,7 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
 
 
 @transaction.atomic
-def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy loop, complexity is inherent
+def spend_resonance_for_imbuing(  # noqa: C901
     character_sheet: CharacterSheet,
     thread: Thread,
     amount: int,
@@ -522,8 +522,8 @@ def _persist_combat_pull(  # noqa: PLR0913
 
     encounter = ctx.combat_encounter
     participant = ctx.participant
-    assert encounter is not None  # noqa: S101 — caller branched on this
-    assert participant is not None  # noqa: S101 — paired with encounter
+    assert encounter is not None  # noqa: S101
+    assert participant is not None  # noqa: S101
     pull = CombatPull.objects.create(
         participant=participant,
         encounter=encounter,
@@ -551,7 +551,7 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901, PLR0912 — sequential guards + combat/ephemeral branches, complexity is inherent
+def spend_resonance_for_pull(  # noqa: C901, PLR0912
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,

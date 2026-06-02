@@ -91,7 +91,7 @@ if TYPE_CHECKING:
 SECONDS_PER_ROUND = 6
 
 
-def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
     """Invalidate the target's cached conditions handler.
 
     ``conditions`` is installed as a ``cached_property`` on ``ObjectParent``
@@ -114,7 +114,7 @@ def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB
 
 
 def get_active_conditions(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,
     category: "ConditionCategory | None" = None,
     condition: ConditionTemplate | None = None,
@@ -155,7 +155,7 @@ def get_active_conditions(
 
 
 def has_condition(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
@@ -177,7 +177,7 @@ def has_condition(
 
 
 def get_condition_instance(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
@@ -202,7 +202,7 @@ def get_condition_instance(
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
 
-    target: "ObjectDB"  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB"  # noqa: OBJECTDB_PARAM
     severity: int = 1
     duration_rounds: int | None = None
     stack_count: int = 1
@@ -241,7 +241,7 @@ class _BulkConditionContext:
 
 
 def _build_bulk_context(
-    targets: list["ObjectDB"],  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    targets: list["ObjectDB"],  # noqa: OBJECTDB_PARAM
     templates: list[ConditionTemplate],
 ) -> _BulkConditionContext:
     """Batch-fetch all data needed for applying conditions to multiple targets.
@@ -452,7 +452,7 @@ def _create_instance_from_context(
 
 
 def _apply_single(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     template: ConditionTemplate,
     params: _ApplyConditionParams,
     ctx: _BulkConditionContext,
@@ -566,12 +566,12 @@ def _handle_refresh(
 
 @transaction.atomic
 def apply_condition(  # noqa: PLR0913
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     *,
     severity: int = 1,
     duration_rounds: int | None = None,
-    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM — source_character covers NPC + PC ObjectDB cases; narrowing is broader Phase 3 work
+    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
     source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> ApplyConditionResult:
@@ -665,7 +665,7 @@ def apply_condition_by_name(*, payload: object, condition_name: str) -> None:
 def bulk_apply_conditions(
     applications: list[BulkConditionApplication],
     *,
-    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM — source_character covers NPC + PC ObjectDB cases; narrowing is broader Phase 3 work
+    source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
     source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> list[ApplyConditionResult]:
@@ -753,7 +753,7 @@ def bulk_apply_conditions(
 
 
 def _install_reactive_side_effects(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     instance: ConditionInstance,
 ) -> None:
@@ -803,7 +803,7 @@ def _install_reactive_side_effects(
 
 
 def _notify_stories_condition_applied(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     instance: ConditionInstance,
 ) -> None:
     """Route condition-applied events to the stories reactivity module.
@@ -823,7 +823,7 @@ def _notify_stories_condition_applied(
 
 
 def _notify_stories_condition_expired(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
 ) -> None:
     """Route condition-removed events to the stories reactivity module.
@@ -844,7 +844,7 @@ def _notify_stories_condition_expired(
 
 @transaction.atomic
 def remove_condition(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     *,
     remove_all_stacks: bool = True,
@@ -909,7 +909,7 @@ def remove_condition(
 
 
 def _resolve_deferred_death_on_expiry(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: "ConditionTemplate",
 ) -> None:
     """Emit CHARACTER_KILLED if the expiring condition was deferring a pending death.
@@ -951,7 +951,7 @@ def _resolve_deferred_death_on_expiry(
 
 @transaction.atomic
 def remove_conditions_by_category(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     category: "ConditionCategory",
 ) -> list[ConditionTemplate]:
     """
@@ -1006,7 +1006,7 @@ def _should_remove_existing(
 
 @transaction.atomic
 def process_damage_interactions(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     damage_type: DamageType,
 ) -> DamageInteractionResult:
     """
@@ -1359,7 +1359,7 @@ def get_resistance_modifier(
 
 
 @transaction.atomic
-def process_round_start(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+def process_round_start(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM
     """
     Process start-of-round effects for all conditions on a target.
 
@@ -1375,7 +1375,7 @@ def process_round_start(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTD
 
 
 @transaction.atomic
-def process_round_end(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+def process_round_end(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM
     """
     Process end-of-round effects for all conditions on a target.
 
@@ -1398,7 +1398,7 @@ def process_round_end(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_
 
 
 @transaction.atomic
-def process_action_tick(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+def process_action_tick(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTDB_PARAM
     """
     Process on-action damage for conditions (when target takes an action).
 
@@ -1414,7 +1414,7 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTD
 
 
 def _process_round_tick(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     timing: DamageTickTiming,
 ) -> RoundTickResult:
     """
@@ -1458,7 +1458,7 @@ def _process_round_tick(
 
 
 def _process_duration_and_progression(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     result: RoundTickResult,
 ) -> None:
     """
@@ -1513,7 +1513,7 @@ def _get_next_stage(instance: ConditionInstance) -> ConditionStage | None:
 
 
 def suppress_condition(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
     *,
     duration_rounds: int | None = None,
@@ -1544,7 +1544,7 @@ def suppress_condition(
 
 
 def unsuppress_condition(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: ConditionTemplate,
 ) -> bool:
     """
@@ -1569,7 +1569,7 @@ def unsuppress_condition(
 
 
 def clear_all_conditions(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,
     only_negative: bool = False,
     only_category: "ConditionCategory | None" = None,
@@ -1927,7 +1927,7 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
 
 
 def _resolve_character_sheet_for_target(
-    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — input IS ObjectDB by design; this helper resolves ObjectDB→CharacterSheet
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
 ) -> "CharacterSheet | None":
     """Walk an ObjectDB target back to its CharacterSheet, or None.
 

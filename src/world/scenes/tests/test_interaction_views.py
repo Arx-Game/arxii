@@ -228,7 +228,7 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_with_explicit_action_link_ids_skips_auto_link(self) -> None:
         """When action_link_ids is provided, only those links are created (no auto-link)."""
         action_a = self._make_action(offset_seconds=1)
-        action_b = self._make_action(offset_seconds=2)  # noqa: F841 — present but not supplied
+        action_b = self._make_action(offset_seconds=2)  # noqa: F841
 
         response = self.client.post(
             self.url,

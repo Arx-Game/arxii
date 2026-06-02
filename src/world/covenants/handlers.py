@@ -157,7 +157,7 @@ def can_engage_durance_membership(membership: CharacterCovenantRole) -> bool:
     self_sheet = membership.character_sheet
     target_covenant = membership.covenant
     for obj in location.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne accessor absent on non-Character objects; runtime duck-typing with default is intentional
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None or sheet == self_sheet:
             continue
         if sheet.character.covenant_roles.currently_held_role_in(target_covenant) is not None:

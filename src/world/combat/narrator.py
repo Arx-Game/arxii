@@ -29,7 +29,7 @@ def get_or_create_narrator_persona() -> Persona:
             existing.save(update_fields=["is_system"])
         return existing
 
-    from world.character_sheets.services import (  # noqa: PLC0415 — avoid import cycle
+    from world.character_sheets.services import (  # noqa: PLC0415
         create_character_with_sheet,
     )
 

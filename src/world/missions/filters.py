@@ -63,7 +63,7 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
     @staticmethod
     def filter_level_band_contains(
         queryset: QuerySet[MissionTemplate],
-        name: str,  # noqa: ARG004 — FilterSet method signature requires it
+        name: str,  # noqa: ARG004
         value: int,
     ) -> QuerySet[MissionTemplate]:
         """Match templates whose [min, max] band contains the given level."""

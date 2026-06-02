@@ -143,7 +143,7 @@ class ObjectParent:
         if looker is not None and not self.at_examined(looker):
             return ""
         base = super().return_appearance(looker, **kwargs)  # type: ignore[misc]
-        sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL — set by at_examined on same object
+        sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL
         if sections:
             return base + "\n" + "\n".join(sections)
         return base

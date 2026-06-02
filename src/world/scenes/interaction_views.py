@@ -123,7 +123,7 @@ class InteractionViewSet(
         if not persona_ids:
             # No personas: show only public interactions (with time bound for pruning)
             default_since = timezone.now() - timedelta(days=90)
-            since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET — partition pruning before FilterSet applies
+            since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET
             time_bound = (
                 {"timestamp__gte": since_filter}
                 if since_filter
@@ -153,7 +153,7 @@ class InteractionViewSet(
         # subquery scans all monthly partitions. The 'since' filter param
         # overrides this when provided by the frontend.
         default_since = timezone.now() - timedelta(days=90)
-        since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET — partition pruning before FilterSet applies
+        since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET
         if since_filter:
             # Frontend provided an explicit time bound — use it for pruning
             time_bound = {"timestamp__gte": since_filter}

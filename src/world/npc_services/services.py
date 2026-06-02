@@ -96,7 +96,7 @@ def persona_for_character(character: ObjectDB) -> Persona:
     than silently bypassing any gate that needs the persona (cooldown,
     standing, item ownership, etc.).
     """
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne, may legitimately be absent on non-Character ObjectDB
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is None:
         raise MissingPrimaryPersonaError(character)
     try:
@@ -229,7 +229,7 @@ def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
     queryset = (
         NPCServiceOffer.objects.select_related("role", "permit_offer_details__building_kind")
         .prefetch_related(
-            "permit_offer_details__default_approved_wards",  # noqa: PREFETCH_STRING — PermitOfferDetails is a SharedMemoryModel; Prefetch(to_attr=...) would leak the per-request M2M list across requests via the identity map (feedback_prefetch_to_attr_leaks)
+            "permit_offer_details__default_approved_wards",  # noqa: PREFETCH_STRING
         )
         .filter(role=session.role)
         .order_by("pk")
