@@ -122,8 +122,13 @@ class RitualSeedTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-def _setup_personal_sanctification_room(*, resonance=None):
-    """Build a room owned by a persona; returns (room_profile, owner_persona, resonance)."""
+def _setup_personal_sanctification_room(*, resonance=None, owner_in_room=True):
+    """Build a room owned by a persona; returns (room_profile, owner_persona, resonance).
+
+    By default the owner's character is positioned in the room so the
+    physical-presence check passes. Pass ``owner_in_room=False`` to
+    exercise the negative path.
+    """
     from evennia_extensions.factories import RoomProfileFactory
     from world.room_features.seeds import ensure_sanctum_kind
     from world.scenes.factories import PersonaFactory
@@ -140,6 +145,10 @@ def _setup_personal_sanctification_room(*, resonance=None):
         holder_persona=owner,
         holder_organization=None,
     )
+    if owner_in_room:
+        character = owner.character_sheet.character
+        character.db_location = room_profile.objectdb
+        character.save(update_fields=["db_location"])
     return room_profile, owner, resonance
 
 
@@ -198,7 +207,7 @@ class PerformSanctificationTests(TestCase):
 
         room1, owner, resonance = _setup_personal_sanctification_room()
         perform_sanctification(room1, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL)
-        # Setup a second room owned by the same persona
+        # Setup a second room owned by the same persona; move character there too.
         room2 = RoomProfileFactory()
         LocationOwnershipFactory(
             parent_type=LocationParentType.ROOM,
@@ -208,6 +217,9 @@ class PerformSanctificationTests(TestCase):
             holder_persona=owner,
             holder_organization=None,
         )
+        character = owner.character_sheet.character
+        character.db_location = room2.objectdb
+        character.save(update_fields=["db_location"])
         with self.assertRaises(SanctificationFounderHasPersonalSanctumError):
             perform_sanctification(
                 room2, owner, ResonanceFactory(), owner_mode=SanctumOwnerMode.PERSONAL
@@ -240,6 +252,11 @@ class AbsorbSanctumPoolTests(TestCase):
             holder_persona=owner,
             holder_organization=None,
         )
+        # Place the character in the room first — perform_sanctification's
+        # physical-presence check fires before any other validation.
+        character = owner.character_sheet.character
+        character.db_location = room_profile.objectdb
+        character.save(update_fields=["db_location"])
         result = perform_sanctification(
             room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
         )
@@ -258,11 +275,10 @@ class AbsorbSanctumPoolTests(TestCase):
             pending_weaving=pending_weaving,
             pending_owner_bonus=pending_owner_bonus,
         )
-        # Position the character in/out of the Sanctum's room
-        weaver_persona.character_sheet.character.location = (
-            room_profile.objectdb if weaver_in_room else None
-        )
-        weaver_persona.character_sheet.character.save(update_fields=["db_location"])
+        # Now reposition for the absorb-time check (this is the relevant
+        # location for the absorb test).
+        character.db_location = room_profile.objectdb if weaver_in_room else None
+        character.save(update_fields=["db_location"])
         return sanctum, weaver_persona, thread
 
     def test_absorb_drains_pool_and_creates_grants(self) -> None:

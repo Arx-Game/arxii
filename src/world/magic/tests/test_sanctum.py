@@ -239,11 +239,15 @@ class ThreadSanctumSlotUniquenessTests(TestCase):
 
 
 class ResonanceGrantSanctumAttributionTests(TestCase):
-    def test_sanctum_weaving_grant_requires_sanctum_details(self) -> None:
+    def test_grant_resonance_sanctum_weaving_requires_sanctum_details_kwarg(self) -> None:
+        """The CheckConstraint was loosened to allow NULL source_sanctum_details
+        post-Dissolution (cascade-SET_NULL). Service-level validation in
+        grant_resonance is the entry-time gate — verify it still fires.
+        """
         sheet = CharacterSheetFactory()
         resonance = ResonanceFactory()
-        with self.assertRaises(IntegrityError):
-            ResonanceGrant.objects.create(
+        with self.assertRaises(ValueError):
+            grant_resonance(
                 character_sheet=sheet,
                 resonance=resonance,
                 amount=10,
