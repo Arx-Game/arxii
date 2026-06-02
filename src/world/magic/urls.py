@@ -99,6 +99,11 @@ router.register(
     basename="resonance-grant",
 )
 
+# Plan 4 §F — Sanctum (Subsystem F) surface
+from world.magic.views_sanctum import SanctumViewSet  # noqa: E402
+
+router.register("sanctums", SanctumViewSet, basename="sanctum")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
