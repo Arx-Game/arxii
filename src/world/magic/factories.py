@@ -77,6 +77,7 @@ from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
 from world.mechanics.factories import (
+    DeathDeferredPropertyFactory,
     FatigueCollapseImmunePropertyFactory,
     PowerMultiplierTargetFactory,
 )
@@ -515,6 +516,9 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
     fatigue_immune_prop = FatigueCollapseImmunePropertyFactory()
     audere.properties.add(fatigue_immune_prop)
     majora.properties.add(fatigue_immune_prop)
+    death_deferred_prop = DeathDeferredPropertyFactory()
+    audere.properties.add(death_deferred_prop)
+    majora.properties.add(death_deferred_prop)
     return audere, majora
 
 
