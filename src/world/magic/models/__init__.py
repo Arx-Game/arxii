@@ -96,8 +96,8 @@ from world.magic.models.rituals import (
 )
 from world.magic.models.sanctum import (
     SanctumDetails,
-    SanctumInstallParams,
     SanctumOwnerMode,
+    SanctumPendingPayout,
 )
 from world.magic.models.sessions import (
     RitualSession,
@@ -219,8 +219,8 @@ __all__ = [
     "RitualSessionReference",
     # sanctum (Plan 4 Subsystem F)
     "SanctumDetails",
-    "SanctumInstallParams",
     "SanctumOwnerMode",
+    "SanctumPendingPayout",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
     # soul tether (Spec B §14.1, §15.1)

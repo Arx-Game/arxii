@@ -4,12 +4,14 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.room_features.constants import (
+    RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
 )
 from world.room_features.models import (
     RoomFeatureInstance,
     RoomFeatureKind,
+    RoomFeatureKindInstallRitual,
     RoomFeatureKindOwnerType,
     RoomFeatureProgressionDetails,
 )
@@ -24,6 +26,17 @@ class RoomFeatureKindFactory(DjangoModelFactory):
     description = ""
     max_level = 5
     service_strategy = RoomFeatureServiceStrategy.SANCTUM
+    install_mechanism = RoomFeatureInstallMechanism.RITUAL
+
+
+class RoomFeatureKindInstallRitualFactory(DjangoModelFactory):
+    class Meta:
+        model = RoomFeatureKindInstallRitual
+        django_get_or_create = ("feature_kind", "ritual")
+
+    feature_kind = factory.SubFactory(RoomFeatureKindFactory)
+    ritual = factory.SubFactory("world.magic.factories.RitualFactory")
+    variant_label = ""
 
 
 class RoomFeatureKindOwnerTypeFactory(DjangoModelFactory):

@@ -15,6 +15,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.room_features.constants import (
+    RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
 )
@@ -66,6 +67,17 @@ class RoomFeatureKind(SharedMemoryModel):
             "means any building kind is allowed."
         ),
     )
+    install_mechanism = models.CharField(
+        max_length=10,
+        choices=RoomFeatureInstallMechanism.choices,
+        default=RoomFeatureInstallMechanism.PROJECT,
+        help_text=(
+            "How a level-1 install of this kind is triggered. Magical features "
+            "(Sanctum, Wardstone, …) use RITUAL; physical features (Granary, "
+            "Cannon Deck, …) use PROJECT. Upgrades (L1→L2+) are always Project-"
+            "driven regardless. Plan 4 §E."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -78,6 +90,50 @@ class RoomFeatureKind(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class RoomFeatureKindInstallRitual(SharedMemoryModel):
+    """Per-(kind, variant) install ritual row for ``install_mechanism=RITUAL`` kinds.
+
+    A single feature kind can advertise multiple install ritual variants:
+    Sanctum has two — Ritual of Thine Own Sanctum (Personal) and Ritual of
+    Blood Covenant Sanctification (Covenant). Future kinds with a single
+    install ritual ship with one row and an empty ``variant_label``.
+    """
+
+    feature_kind = models.ForeignKey(
+        RoomFeatureKind,
+        on_delete=models.CASCADE,
+        related_name="install_rituals",
+    )
+    ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.PROTECT,
+        related_name="installs_room_features",
+    )
+    variant_label = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text=(
+            "Disambiguation label when a kind has multiple install ritual "
+            "variants (Sanctum: 'Personal' / 'Covenant'). Empty for kinds "
+            "with one install ritual."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["feature_kind", "ritual"],
+                name="room_feature_kind_install_ritual_unique",
+            ),
+        ]
+        ordering = ["feature_kind", "variant_label"]
+
+    def __str__(self) -> str:
+        label = f" ({self.variant_label})" if self.variant_label else ""
+        return f"{self.feature_kind.name} ← {self.ritual_id}{label}"
 
 
 class RoomFeatureKindOwnerType(SharedMemoryModel):

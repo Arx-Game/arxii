@@ -22,6 +22,23 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     CANNON_DECK = "CANNON_DECK", "Cannon Deck"
 
 
+class RoomFeatureInstallMechanism(models.TextChoices):
+    """How a feature kind's L1 install is triggered (Plan 4 §E, revised 2026-06-03).
+
+    Magical features (Sanctum, future Wardstone, future Sigil-circle)
+    install via a perform-time **ritual** — one actor, witchy, components
+    consumed at performance. Physical features (Granary, Cannon Deck,
+    Forge, Barracks) install via a **project** — collaborative, accumulated,
+    multi-contributor.
+
+    Upgrades (L1 → L2+) are ALWAYS Project-driven regardless of install
+    mechanism; this field only selects the L1 install path.
+    """
+
+    RITUAL = "RITUAL", "Ritual (magical, immediate)"
+    PROJECT = "PROJECT", "Project (physical, collaborative)"
+
+
 class RoomFeatureOwnerType(models.TextChoices):
     """Coarse owner-type constraint values for ``RoomFeatureKind``.
 

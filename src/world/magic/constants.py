@@ -155,6 +155,11 @@ class GainSource(models.TextChoices):
     SANCTUM_WEAVING = "SANCTUM_WEAVING", "Sanctum weaving payout"
     SANCTUM_OWNER_BONUS = "SANCTUM_OWNER_BONUS", "Sanctum owner/member bonus"
     PROJECT_CONTRIBUTION = "PROJECT_CONTRIBUTION", "Project contribution payout"
+    # Plan 4 — recovered resonance from a Ritual of Dissolution (tiered by check outcome)
+    SANCTUM_DISSOLUTION_RECOVERY = (
+        "SANCTUM_DISSOLUTION_RECOVERY",
+        "Sanctum dissolution recovery",
+    )
 
 
 # FACET anchor cap tuning (Spec D §6.1)

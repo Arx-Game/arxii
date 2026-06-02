@@ -182,6 +182,10 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.ROOM_RESIDENCE: lambda **kw: (kw["room_profile"], "room_profile"),
     GainSource.SANCTUM_WEAVING: lambda **kw: (kw["sanctum_details"], "sanctum_details"),
     GainSource.SANCTUM_OWNER_BONUS: lambda **kw: (kw["sanctum_details"], "sanctum_details"),
+    GainSource.SANCTUM_DISSOLUTION_RECOVERY: lambda **kw: (
+        kw["sanctum_details"],
+        "sanctum_details",
+    ),
     GainSource.PROJECT_CONTRIBUTION: lambda **kw: (kw["project"], "project"),
 }
 

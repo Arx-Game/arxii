@@ -10,18 +10,21 @@ from django.test import TestCase
 from world.projects.constants import ProjectKind
 from world.projects.factories import ProjectFactory
 from world.room_features.constants import (
+    RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
 )
 from world.room_features.factories import (
     RoomFeatureInstanceFactory,
     RoomFeatureKindFactory,
+    RoomFeatureKindInstallRitualFactory,
     RoomFeatureKindOwnerTypeFactory,
     RoomFeatureProgressionDetailsFactory,
 )
 from world.room_features.models import (
     RoomFeatureInstance,
     RoomFeatureKind,
+    RoomFeatureKindInstallRitual,
     RoomFeatureKindOwnerType,
 )
 from world.room_features.seeds import SANCTUM_KIND_NAME, ensure_sanctum_kind
@@ -147,6 +150,7 @@ class SanctumSeedTests(TestCase):
         self.assertEqual(kind1.pk, kind2.pk)
         self.assertEqual(kind1.name, SANCTUM_KIND_NAME)
         self.assertEqual(kind1.max_level, 5)
+        self.assertEqual(kind1.install_mechanism, RoomFeatureInstallMechanism.RITUAL)
         owner_types = set(kind1.required_building_owner_types.values_list("owner_type", flat=True))
         self.assertEqual(
             owner_types,
@@ -155,3 +159,35 @@ class SanctumSeedTests(TestCase):
                 RoomFeatureOwnerType.ORGANIZATION_COVENANT,
             },
         )
+
+
+class RoomFeatureKindInstallRitualTests(TestCase):
+    def test_install_ritual_link_persists(self) -> None:
+        link = RoomFeatureKindInstallRitualFactory(variant_label="Personal")
+        fetched = RoomFeatureKindInstallRitual.objects.get(pk=link.pk)
+        self.assertEqual(fetched.variant_label, "Personal")
+        self.assertEqual(fetched.feature_kind.install_mechanism, RoomFeatureInstallMechanism.RITUAL)
+
+    def test_unique_per_kind_ritual(self) -> None:
+        link = RoomFeatureKindInstallRitualFactory()
+        with self.assertRaises(IntegrityError):
+            RoomFeatureKindInstallRitual.objects.create(
+                feature_kind=link.feature_kind,
+                ritual=link.ritual,
+                variant_label="Duplicate",
+            )
+
+    def test_kind_can_have_multiple_variants(self) -> None:
+        from world.magic.factories import RitualFactory
+
+        kind = RoomFeatureKindFactory()
+        ritual_a = RitualFactory()
+        ritual_b = RitualFactory()
+        RoomFeatureKindInstallRitualFactory(
+            feature_kind=kind, ritual=ritual_a, variant_label="Personal"
+        )
+        RoomFeatureKindInstallRitualFactory(
+            feature_kind=kind, ritual=ritual_b, variant_label="Covenant"
+        )
+        variants = set(kind.install_rituals.values_list("variant_label", flat=True))
+        self.assertEqual(variants, {"Personal", "Covenant"})

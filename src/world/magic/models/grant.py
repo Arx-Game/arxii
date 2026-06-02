@@ -30,7 +30,7 @@ class ResonanceGrant(SharedMemoryModel):
     )
     amount = models.PositiveIntegerField()
     source = models.CharField(
-        max_length=24,
+        max_length=32,
         choices=GainSource.choices,
         help_text="Discriminator. Identifies which source_* FK is populated.",
     )
@@ -212,6 +212,24 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_project__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
+            ),
+            # SANCTUM_DISSOLUTION_RECOVERY (Plan 4 §F revised 2026-06-03):
+            # exactly source_sanctum_details populated, attribution to the
+            # Sanctum being dissolved (recovered at tiered fractions per
+            # the check outcome of the Dissolution ritual).
+            models.CheckConstraint(
+                name="res_grant_sanctum_dissolution_recovery_shape",
+                check=(
+                    Q(source="SANCTUM_DISSOLUTION_RECOVERY")
+                    & Q(source_sanctum_details__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_project__isnull=True)
+                )
+                | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
             # PROJECT_CONTRIBUTION (Plan 1+): exactly source_project populated
             models.CheckConstraint(
