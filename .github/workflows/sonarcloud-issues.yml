@@ -1,0 +1,67 @@
+name: SonarCloud → GitHub Issues
+
+on:
+  workflow_dispatch:
+    inputs:
+      high_limit:
+        description: "Max new HIGH issues to create (0 = unlimited, default 50)"
+        default: "50"
+        type: string
+      triage_rule:
+        description: "[Triage] Rule key — leave blank to skip triage (e.g. python:S2068)"
+        required: false
+        type: string
+      triage_path:
+        description: "[Triage] File path glob (e.g. */tests/*)"
+        required: false
+        type: string
+      triage_transition:
+        description: "[Triage] Transition to apply"
+        default: "falsepositive"
+        type: choice
+        options: [falsepositive, wontfix]
+      triage_dry_run:
+        description: "[Triage] Dry run — print only, no API calls"
+        default: true
+        type: boolean
+  schedule:
+    - cron: "0 9 * * 1"  # Weekly Monday 09:00 UTC
+
+jobs:
+  sync:
+    name: Sync findings → GitHub issues
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+      - name: Sync
+        run: python tools/sonarcloud_sync.py --high-limit ${{ inputs.high_limit || '50' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  triage:
+    name: Bulk-triage SonarCloud issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.triage_rule != ''
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+      - name: Triage
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          TRIAGE_RULE: ${{ inputs.triage_rule }}
+          TRIAGE_PATH: ${{ inputs.triage_path }}
+          TRIAGE_TRANSITION: ${{ inputs.triage_transition }}
+          TRIAGE_DRY_RUN: ${{ inputs.triage_dry_run }}
+        run: |
+          python tools/sonarcloud_triage.py \
+            --rule "$TRIAGE_RULE" \
+            --path "$TRIAGE_PATH" \
+            --transition "$TRIAGE_TRANSITION" \
+            $([ "$TRIAGE_DRY_RUN" = "true" ] && echo "--dry-run")
