@@ -163,6 +163,77 @@ def _place_magnitude(
     )
 
 
+def _all_place_affinity_magnitudes(
+    room: DefaultObject,
+    resonances: list[Resonance],
+) -> dict[Affinity, int]:
+    """Sum effective_value per distinct Affinity across all cascade resonances.
+
+    Used by the enriched formula to weight contributions from every place affinity,
+    not only the dominant one. Affinities whose total is zero are excluded.
+    """
+    sums: dict[int, tuple[Affinity, int]] = {}
+    for r in resonances:
+        aff = r.affinity
+        val = effective_value(room, resonance=r)
+        if aff.pk not in sums:
+            sums[aff.pk] = (aff, 0)
+        aff_obj, current = sums[aff.pk]
+        sums[aff.pk] = (aff_obj, current + val)
+    return {aff_obj: total for aff_obj, total in sums.values() if total > 0}
+
+
+def _working_affinities_for_raw(
+    technique: Technique | None,
+    working_affinity: Affinity,
+) -> list[Affinity]:
+    """Return the ordered list of working affinities for the enriched raw sum.
+
+    Cast-time: all distinct affinities from the gift's resonances, preserving
+    encounter order (the caller's loop is deterministic).
+    Presence-time: just the single dominant aura affinity.
+    """
+    if technique is None:
+        return [working_affinity]
+    seen: set[int] = set()
+    result: list[Affinity] = []
+    for r in technique.gift.resonances.select_related("affinity").all():
+        if r.affinity.pk not in seen:
+            seen.add(r.affinity.pk)
+            result.append(r.affinity)
+    return result
+
+
+def _enriched_raw(
+    aura: CharacterAura,
+    all_working: list[Affinity],
+    place_magnitudes: dict[Affinity, int],
+    primary_valence: str,
+    config: ResonanceEnvironmentConfig,
+) -> Decimal:
+    """Compute the enriched raw severity by summing all same-valence (G, P) pair contributions.
+
+    For each (working-affinity G, place-affinity P) pair whose AffinityInteraction shares
+    ``primary_valence``:
+        contribution = place_magnitude_P × caster_alignment_G × severity_G→P × base_coefficient
+
+    Technique-resonance opposition weighting: ``all_working`` contains every distinct affinity
+    from the gift's resonances (cast-time) or just the dominant aura affinity (presence-time).
+    Multi-resonance place weighting: ``place_magnitudes`` covers every place affinity, so
+    secondary affinities contribute in proportion to their magnitude and interaction severity.
+    Pairs whose interaction row is absent or has a different valence are skipped.
+    """
+    raw = Decimal(0)
+    for g_aff in all_working:
+        g_alignment = getattr(aura, g_aff.name.lower(), Decimal("0.00")) / Decimal(100)
+        for p_aff, p_mag in place_magnitudes.items():
+            g_p = AffinityInteraction.objects.interaction_for(g_aff, p_aff)
+            if g_p is None or g_p.valence != primary_valence:
+                continue
+            raw += Decimal(p_mag) * g_alignment * g_p.severity_multiplier * config.base_coefficient
+    return raw
+
+
 def _working_affinity_cast_time(
     technique: Technique,
     place_affinity: Affinity,
@@ -307,7 +378,7 @@ def evaluate_resonance_environment(
     # Step 4: place_magnitude = sum of effective_value over place-affinity resonances.
     p_magnitude = _place_magnitude(room, place_affinity, room_resonances)
 
-    # Step 5: caster_alignment = caster.aura.<working_affinity_name_lower> / 100.
+    # Step 5: caster_alignment for the primary working affinity (used in direction, Step 7).
     try:
         aura = caster.aura
     except CharacterAura.DoesNotExist:
@@ -317,14 +388,13 @@ def evaluate_resonance_environment(
     caster_aura_value: Decimal = getattr(aura, aura_field, Decimal("0.00"))
     caster_alignment = caster_aura_value / Decimal(100)
 
-    # Step 6: raw = place_magnitude * caster_alignment * severity * base_coefficient.
+    # Step 6 (enriched): see _enriched_raw for formula details.
+    # Technique-resonance opposition weighting: all distinct gift affinities contribute.
+    # Multi-resonance place weighting: all place affinities contribute, not only dominant.
     config = get_resonance_environment_config()
-    raw = (
-        Decimal(p_magnitude)
-        * caster_alignment
-        * interaction.severity_multiplier
-        * config.base_coefficient
-    )
+    all_working = _working_affinities_for_raw(technique, working_affinity)
+    place_magnitudes = _all_place_affinity_magnitudes(room, room_resonances)
+    raw = _enriched_raw(aura, all_working, place_magnitudes, interaction.valence, config)
 
     # Step 7: direction.
     direction = _compute_direction(interaction, caster_alignment, p_magnitude, config)

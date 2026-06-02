@@ -473,12 +473,20 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
 
         result = evaluate_resonance_environment(caster=caster_obj, room=room, technique=technique)
 
-        # Should choose abyssal (severity 1.0 > 0.3)
+        # Should choose abyssal (severity 1.0 > 0.3) as the primary interaction.
         self.assertEqual(result.source_affinity, abyssal)
         self.assertEqual(result.kind, AffinityInteractionKind.REJECT)
-        # magnitude based on abyssal alignment (70%)
+        # Enriched formula sums both gift-affinity contributions against the celestial place.
+        # (abyssal, celestial): 30 × 0.70 × 1.00 × coeff
+        # (primal, celestial):  30 × 0.20 × 0.30 × coeff  (primal aura=20%)
         cfg = get_resonance_environment_config()
-        expected = round(30 * Decimal("0.70") * Decimal("1.00") * cfg.base_coefficient)
+        expected = round(
+            (
+                Decimal(30) * Decimal("0.70") * Decimal("1.00")
+                + Decimal(30) * Decimal("0.20") * Decimal("0.30")
+            )
+            * cfg.base_coefficient
+        )
         self.assertEqual(result.magnitude, expected)
         # T4: OPPOSED REJECT → interaction is resolved; backfire_difficulty > 0
         self.assertIsNotNone(result.interaction)
@@ -793,3 +801,280 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
         # T4: inert → interaction=None, backfire_difficulty=0
         self.assertIsNone(result.interaction)
         self.assertEqual(result.backfire_difficulty, 0)
+
+
+class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
+    """Technique-resonance opposition weighting: all gift affinities contribute.
+
+    A technique whose gift contains two OPPOSED affinities produces a higher
+    magnitude than the same technique reduced to its worst affinity alone.
+    """
+
+    def test_secondary_gift_affinity_adds_to_magnitude(self) -> None:
+        """Two OPPOSED gift affinities each contribute; sum > single-affinity alone."""
+        caster_obj = CharacterFactory()
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+
+        celestial = AffinityFactory(name="Celestial")
+        primal = AffinityFactory(name="Primal")
+        abyssal = AffinityFactory(name="Abyssal")
+
+        # Place: celestial only
+        celestial_place_res = ResonanceFactory(affinity=celestial, name="CelestialPlaceOW")
+        _set_room_resonance_value(room_profile, celestial_place_res, 30)
+
+        # Abyssal→Celestial: REJECT severity 1.00 (primary / strongest)
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+        # Primal→Celestial: REJECT severity 0.50 (secondary)
+        AffinityInteractionFactory(
+            source_affinity=primal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("0.50"),
+        )
+
+        CharacterAuraFactory(
+            character=caster_obj,
+            celestial=Decimal("10.00"),
+            primal=Decimal("40.00"),
+            abyssal=Decimal("50.00"),
+        )
+
+        # Gift with two resonances: abyssal + primal
+        abyssal_res = ResonanceFactory(affinity=abyssal, name="AbyssalGiftOW")
+        primal_res = ResonanceFactory(affinity=primal, name="PrimalGiftOW")
+        gift = GiftFactory()
+        gift.resonances.add(abyssal_res)
+        gift.resonances.add(primal_res)
+        technique = TechniqueFactory(gift=gift)
+
+        cfg = get_resonance_environment_config()
+        result = evaluate_resonance_environment(caster=caster_obj, room=room, technique=technique)
+
+        # Primary: abyssal (severity 1.00 > 0.50)
+        self.assertEqual(result.source_affinity, abyssal)
+        self.assertEqual(result.kind, AffinityInteractionKind.REJECT)
+
+        # Enriched magnitude: sum of both gift-affinity contributions
+        # (abyssal, celestial): 30 × 0.50 × 1.00 × coeff
+        # (primal,  celestial): 30 × 0.40 × 0.50 × coeff
+        expected = round(
+            (
+                Decimal(30) * Decimal("0.50") * Decimal("1.00")
+                + Decimal(30) * Decimal("0.40") * Decimal("0.50")
+            )
+            * cfg.base_coefficient
+        )
+        self.assertEqual(result.magnitude, expected)
+
+        # Confirm enriched magnitude is greater than the abyssal-alone baseline.
+        abyssal_alone = round(
+            Decimal(30) * Decimal("0.50") * Decimal("1.00") * cfg.base_coefficient
+        )
+        self.assertGreater(result.magnitude, abyssal_alone)
+
+    def test_opposite_valence_gift_affinity_excluded(self) -> None:
+        """An ALIGNED gift-affinity interaction is excluded when primary is OPPOSED.
+
+        Gift has abyssal (OPPOSED vs celestial place) and celestial (ALIGNED vs
+        celestial place). Only the abyssal contribution appears in the magnitude.
+        """
+        caster_obj = CharacterFactory()
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+
+        celestial = AffinityFactory(name="Celestial")
+        abyssal = AffinityFactory(name="Abyssal")
+
+        celestial_place_res = ResonanceFactory(affinity=celestial, name="CelestialPlaceVF")
+        _set_room_resonance_value(room_profile, celestial_place_res, 40)
+
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+        # Celestial→Celestial: ALIGNED — must NOT contribute when primary valence is OPPOSED
+        AffinityInteractionFactory(
+            source_affinity=celestial,
+            environment_affinity=celestial,
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.AMPLIFY,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+
+        CharacterAuraFactory(
+            character=caster_obj,
+            celestial=Decimal("50.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("40.00"),
+        )
+
+        abyssal_res = ResonanceFactory(affinity=abyssal, name="AbyssalGiftVF")
+        celestial_res = ResonanceFactory(affinity=celestial, name="CelestialGiftVF")
+        gift = GiftFactory()
+        gift.resonances.add(abyssal_res)
+        gift.resonances.add(celestial_res)
+        technique = TechniqueFactory(gift=gift)
+
+        cfg = get_resonance_environment_config()
+        result = evaluate_resonance_environment(caster=caster_obj, room=room, technique=technique)
+
+        self.assertEqual(result.valence, ResonanceValence.OPPOSED)
+        self.assertEqual(result.source_affinity, abyssal)
+
+        # Only abyssal contributes (celestial affinity is ALIGNED, different valence)
+        expected = round(Decimal(40) * Decimal("0.40") * Decimal("1.00") * cfg.base_coefficient)
+        self.assertEqual(result.magnitude, expected)
+
+
+class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
+    """Multi-resonance place weighting: secondary place affinities add to magnitude.
+
+    A room with two affinities that both oppose the caster produces a higher
+    magnitude than a room with only the dominant affinity.
+    """
+
+    def test_secondary_place_affinity_adds_to_magnitude(self) -> None:
+        """Two OPPOSED place affinities each contribute; sum > dominant-only alone."""
+        caster_obj = CharacterFactory()
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+
+        celestial = AffinityFactory(name="Celestial")
+        primal = AffinityFactory(name="Primal")
+        abyssal = AffinityFactory(name="Abyssal")
+
+        # Place: celestial dominant (50) + primal secondary (20)
+        celestial_place_res = ResonanceFactory(affinity=celestial, name="CelestialPlaceMR")
+        primal_place_res = ResonanceFactory(affinity=primal, name="PrimalPlaceMR")
+        _set_room_resonance_value(room_profile, celestial_place_res, 50)
+        _set_room_resonance_value(room_profile, primal_place_res, 20)
+
+        # Abyssal→Celestial: REJECT severity 1.00
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+        # Abyssal→Primal: CORRUPT severity 1.00 (also OPPOSED)
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=primal,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.CORRUPT,
+            aggressor=AffinityInteractionAggressor.CASTER,
+            severity_multiplier=Decimal("1.00"),
+        )
+
+        CharacterAuraFactory(
+            character=caster_obj,
+            celestial=Decimal("10.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("80.00"),
+        )
+
+        abyssal_res = ResonanceFactory(affinity=abyssal, name="AbyssalGiftMR")
+        gift = GiftFactory()
+        gift.resonances.add(abyssal_res)
+        technique = TechniqueFactory(gift=gift)
+
+        cfg = get_resonance_environment_config()
+        result = evaluate_resonance_environment(caster=caster_obj, room=room, technique=technique)
+
+        self.assertEqual(result.source_affinity, abyssal)
+        self.assertEqual(result.environment_affinity, celestial)
+
+        # Enriched magnitude: both place affinities contribute (both OPPOSED with abyssal)
+        # (abyssal, celestial): 50 × 0.80 × 1.00 × coeff
+        # (abyssal, primal):    20 × 0.80 × 1.00 × coeff
+        expected = round(
+            (
+                Decimal(50) * Decimal("0.80") * Decimal("1.00")
+                + Decimal(20) * Decimal("0.80") * Decimal("1.00")
+            )
+            * cfg.base_coefficient
+        )
+        self.assertEqual(result.magnitude, expected)
+
+        # Confirm enriched magnitude is greater than celestial-only baseline.
+        dominant_only = round(
+            Decimal(50) * Decimal("0.80") * Decimal("1.00") * cfg.base_coefficient
+        )
+        self.assertGreater(result.magnitude, dominant_only)
+
+    def test_aligned_secondary_place_affinity_excluded_from_opposed_sum(self) -> None:
+        """Secondary place affinity with ALIGNED interaction is excluded from OPPOSED sum.
+
+        Abyssal caster in a mixed Celestial+Abyssal place:
+        - Abyssal→Celestial: OPPOSED REJECT → contributes to raw
+        - Abyssal→Abyssal:   ALIGNED AMPLIFY → excluded (wrong valence)
+        Only the Celestial contribution appears in the final magnitude.
+        """
+        caster_obj = CharacterFactory()
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+
+        celestial = AffinityFactory(name="Celestial")
+        abyssal = AffinityFactory(name="Abyssal")
+
+        celestial_place_res = ResonanceFactory(affinity=celestial, name="CelestialPlaceAE")
+        abyssal_place_res = ResonanceFactory(affinity=abyssal, name="AbyssalPlaceAE")
+        _set_room_resonance_value(room_profile, celestial_place_res, 40)
+        _set_room_resonance_value(room_profile, abyssal_place_res, 30)
+
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=abyssal,
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.AMPLIFY,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+
+        CharacterAuraFactory(
+            character=caster_obj,
+            celestial=Decimal("10.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("80.00"),
+        )
+
+        abyssal_gift_res = ResonanceFactory(affinity=abyssal, name="AbyssalGiftAE")
+        gift = GiftFactory()
+        gift.resonances.add(abyssal_gift_res)
+        technique = TechniqueFactory(gift=gift)
+
+        cfg = get_resonance_environment_config()
+        result = evaluate_resonance_environment(caster=caster_obj, room=room, technique=technique)
+
+        # Primary: OPPOSED (abyssal→celestial wins as working interaction)
+        self.assertEqual(result.valence, ResonanceValence.OPPOSED)
+
+        # Only celestial place affinity contributes to OPPOSED magnitude
+        expected = round(Decimal(40) * Decimal("0.80") * Decimal("1.00") * cfg.base_coefficient)
+        self.assertEqual(result.magnitude, expected)
