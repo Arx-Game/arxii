@@ -82,6 +82,21 @@ class TargetKind(models.TextChoices):
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
+    SANCTUM = "SANCTUM", "Sanctum"
+
+
+class SanctumSlotKind(models.TextChoices):
+    """Per-PC weaving slot rules for SANCTUM-target Threads (Plan 4 §F).
+
+    Each persona has at most one ``PERSONAL_OWN`` Thread (active) and at
+    most one ``COVENANT`` Thread (active). ``HELPER`` Threads are
+    unlimited (only valid on Personal Sanctums; Covenant Sanctums admit
+    only members-as-COVENANT).
+    """
+
+    PERSONAL_OWN = "PERSONAL_OWN", "Personal — own home"
+    COVENANT = "COVENANT", "Covenant — sacred ground"
+    HELPER = "HELPER", "Helper — invited ally on another's personal Sanctum"
 
 
 class EffectKind(models.TextChoices):
@@ -136,6 +151,10 @@ class GainSource(models.TextChoices):
     ROOM_RESIDENCE = "ROOM_RESIDENCE", "Room residence trickle"
     OUTFIT_TRICKLE = "OUTFIT_TRICKLE", "Outfit trickle"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
+    # Plan 4 — Sanctum income + Project contribution attribution
+    SANCTUM_WEAVING = "SANCTUM_WEAVING", "Sanctum weaving payout"
+    SANCTUM_OWNER_BONUS = "SANCTUM_OWNER_BONUS", "Sanctum owner/member bonus"
+    PROJECT_CONTRIBUTION = "PROJECT_CONTRIBUTION", "Project contribution payout"
 
 
 # FACET anchor cap tuning (Spec D §6.1)

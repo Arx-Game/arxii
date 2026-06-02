@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -48,9 +49,11 @@ if TYPE_CHECKING:
     from world.magic.models import (
         PoseEndorsement,
         Resonance as ResonanceModel,
+        SanctumDetails,
         SceneEntryEndorsement,
     )
     from world.magic.types import PullActionContext
+    from world.projects.models import Project
 
 
 # =============================================================================
@@ -70,6 +73,8 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     room_profile: RoomProfile | None = None,
     staff_account: AccountDB | None = None,
     outfit_item_facet: ItemFacet | None = None,
+    sanctum_details: SanctumDetails | None = None,
+    project: Project | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -85,6 +90,8 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         room_profile: Required for ROOM_RESIDENCE source.
         staff_account: Optional for STAFF_GRANT source (nullable by design).
         outfit_item_facet: Required for OUTFIT_TRICKLE source.
+        sanctum_details: Required for SANCTUM_WEAVING / SANCTUM_OWNER_BONUS (Plan 4 §F).
+        project: Required for PROJECT_CONTRIBUTION (Plan 1+).
 
     Returns:
         The updated CharacterResonance instance.
@@ -103,6 +110,8 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         pose_endorsement=pose_endorsement,
         scene_entry_endorsement=scene_entry_endorsement,
         outfit_item_facet=outfit_item_facet,
+        sanctum_details=sanctum_details,
+        project=project,
     )
 
     cr, _ = CharacterResonance.objects.get_or_create(
@@ -124,44 +133,57 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         source_pose_endorsement=pose_endorsement,
         source_scene_entry_endorsement=scene_entry_endorsement,
         outfit_item_facet=outfit_item_facet,
+        source_sanctum_details=sanctum_details,
+        source_project=project,
     )
     return cr
 
 
-def _validate_grant_source_shape(
+def _validate_grant_source_shape(  # noqa: PLR0913 — paralleling grant_resonance's typed kwargs
     source: str,
     *,
     room_profile: RoomProfile | None,
     pose_endorsement: PoseEndorsement | None = None,
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
     outfit_item_facet: ItemFacet | None = None,
+    sanctum_details: SanctumDetails | None = None,
+    project: Project | None = None,
 ) -> None:
-    """Raise ValueError if the source discriminator doesn't match the supplied kwargs."""
-    if source == GainSource.POSE_ENDORSEMENT:
-        if pose_endorsement is None:
-            msg = "POSE_ENDORSEMENT source requires pose_endorsement= kwarg."
-            raise ValueError(msg)
-        return
-    if source == GainSource.SCENE_ENTRY:
-        if scene_entry_endorsement is None:
-            msg = "SCENE_ENTRY source requires scene_entry_endorsement= kwarg."
-            raise ValueError(msg)
-        return
-    if source == GainSource.OUTFIT_TRICKLE:
-        if outfit_item_facet is None:
-            msg = "OUTFIT_TRICKLE source requires outfit_item_facet= kwarg."
-            raise ValueError(msg)
-        return
-    if source == GainSource.ROOM_RESIDENCE:
-        if room_profile is None:
-            msg = "ROOM_RESIDENCE source requires room_profile= kwarg."
+    """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
+
+    Table-driven: ``_SOURCE_REQUIRED_KWARG`` maps each strict source to the
+    (kwarg-value, kwarg-name) pair that must be non-None. ``STAFF_GRANT`` is
+    intentionally absent — its ``staff_account`` is nullable by design.
+    """
+    required = _SOURCE_REQUIRED_KWARG.get(source)
+    if required is not None:
+        value, name = required(
+            room_profile=room_profile,
+            pose_endorsement=pose_endorsement,
+            scene_entry_endorsement=scene_entry_endorsement,
+            outfit_item_facet=outfit_item_facet,
+            sanctum_details=sanctum_details,
+            project=project,
+        )
+        if value is None:
+            msg = f"{source} source requires {name}= kwarg."
             raise ValueError(msg)
         return
     if source == GainSource.STAFF_GRANT:
-        # staff_account nullable by design (e.g. retirement can null it)
         return
     msg = f"Unknown GainSource: {source!r}"
     raise ValueError(msg)
+
+
+_SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
+    GainSource.POSE_ENDORSEMENT: lambda **kw: (kw["pose_endorsement"], "pose_endorsement"),
+    GainSource.SCENE_ENTRY: lambda **kw: (kw["scene_entry_endorsement"], "scene_entry_endorsement"),
+    GainSource.OUTFIT_TRICKLE: lambda **kw: (kw["outfit_item_facet"], "outfit_item_facet"),
+    GainSource.ROOM_RESIDENCE: lambda **kw: (kw["room_profile"], "room_profile"),
+    GainSource.SANCTUM_WEAVING: lambda **kw: (kw["sanctum_details"], "sanctum_details"),
+    GainSource.SANCTUM_OWNER_BONUS: lambda **kw: (kw["sanctum_details"], "sanctum_details"),
+    GainSource.PROJECT_CONTRIBUTION: lambda **kw: (kw["project"], "project"),
+}
 
 
 @transaction.atomic

@@ -73,6 +73,28 @@ class ResonanceGrant(SharedMemoryModel):
         related_name="resonance_grants",
         help_text="Set when source=OUTFIT_TRICKLE; the ItemFacet that produced this trickle.",
     )
+    source_sanctum_details = models.ForeignKey(
+        "magic.SanctumDetails",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resonance_grants",
+        help_text=(
+            "Set when source in (SANCTUM_WEAVING, SANCTUM_OWNER_BONUS); the "
+            "Sanctum whose cron tick paid this grant. Plan 4 §F."
+        ),
+    )
+    source_project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resonance_grants",
+        help_text=(
+            "Set when source=PROJECT_CONTRIBUTION; the Project whose "
+            "resolution paid this contributor's grant. Plan 1+."
+        ),
+    )
 
     class Meta:
         indexes = [
@@ -96,6 +118,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -109,6 +133,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -122,6 +148,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_staff_account__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -135,6 +163,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -148,8 +178,55 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
+            ),
+            # SANCTUM_WEAVING (Plan 4 §F): exactly source_sanctum_details populated
+            models.CheckConstraint(
+                name="res_grant_sanctum_weaving_shape",
+                check=(
+                    Q(source="SANCTUM_WEAVING")
+                    & Q(source_sanctum_details__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_project__isnull=True)
+                )
+                | ~Q(source="SANCTUM_WEAVING"),
+            ),
+            # SANCTUM_OWNER_BONUS (Plan 4 §F): exactly source_sanctum_details populated
+            models.CheckConstraint(
+                name="res_grant_sanctum_owner_bonus_shape",
+                check=(
+                    Q(source="SANCTUM_OWNER_BONUS")
+                    & Q(source_sanctum_details__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_project__isnull=True)
+                )
+                | ~Q(source="SANCTUM_OWNER_BONUS"),
+            ),
+            # PROJECT_CONTRIBUTION (Plan 1+): exactly source_project populated
+            models.CheckConstraint(
+                name="res_grant_project_contribution_shape",
+                check=(
+                    Q(source="PROJECT_CONTRIBUTION")
+                    & Q(source_project__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                )
+                | ~Q(source="PROJECT_CONTRIBUTION"),
             ),
         ]
 
