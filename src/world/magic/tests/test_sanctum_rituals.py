@@ -276,7 +276,9 @@ class WeavingTests(TestCase):
 
 
 class CronTickTests(TestCase):
-    def test_cron_pays_weaver_via_sanctum_weaving_grant(self) -> None:
+    def test_cron_accumulates_into_pending_payout(self) -> None:
+        from world.magic.models import SanctumPendingPayout
+
         resonance = ResonanceFactory()
         sanctum, owner = _personal_sanctum(resonance=resonance, level=2)
         # Seed an ambient resonance row so effective_value() > 0
@@ -297,12 +299,17 @@ class CronTickTests(TestCase):
         result = sanctum_resonance_generation_tick()
 
         self.assertGreaterEqual(result["sanctums_processed"], 1)
-        self.assertGreaterEqual(result["weaver_grants"], 1)
-        grants = ResonanceGrant.objects.filter(
-            character_sheet=owner.character_sheet,
-            source=GainSource.SANCTUM_WEAVING,
+        self.assertGreaterEqual(result["weavers_accrued"], 1)
+        # Cron should NOT have fired grant_resonance — accrue into pending pool.
+        self.assertFalse(
+            ResonanceGrant.objects.filter(
+                character_sheet=owner.character_sheet,
+                source=GainSource.SANCTUM_WEAVING,
+            ).exists()
         )
-        self.assertEqual(grants.count(), 1)
+        payout = SanctumPendingPayout.objects.get(
+            sanctum=sanctum, weaver_character_sheet=owner.character_sheet
+        )
         # Expected income: max(level, 1) × pool × multiplier × K
         # = 5 × 1000 × 1.5 (level 2 multiplier) × 0.01 = 75
         expected = int(
@@ -313,7 +320,8 @@ class CronTickTests(TestCase):
             * LEVEL_MULTIPLIERS[1]
             * K_INCOME_RATE
         )
-        self.assertEqual(grants.first().amount, expected)
+        self.assertEqual(payout.pending_weaving, expected)
+        self.assertEqual(payout.pending_owner_bonus, 0)
 
     def test_cron_skips_sanctum_with_no_threads(self) -> None:
         sanctum, _ = _personal_sanctum()
@@ -327,9 +335,11 @@ class CronTickTests(TestCase):
             source="authored",
         )
         result = sanctum_resonance_generation_tick()
-        self.assertEqual(result["weaver_grants"], 0)
+        self.assertEqual(result["weavers_accrued"], 0)
 
-    def test_owner_bonus_paid_when_multiple_threads(self) -> None:
+    def test_owner_bonus_accrued_when_multiple_threads(self) -> None:
+        from world.magic.models import SanctumPendingPayout
+
         resonance = ResonanceFactory()
         sanctum, owner = _personal_sanctum(resonance=resonance, level=3)
         LocationValueModifier.objects.create(
@@ -353,19 +363,41 @@ class CronTickTests(TestCase):
 
         sanctum_resonance_generation_tick()
 
-        # Owner gets bonus = (other_threads_count = 1) for the helper thread.
-        bonus_grants = ResonanceGrant.objects.filter(
-            character_sheet=owner.character_sheet,
-            source=GainSource.SANCTUM_OWNER_BONUS,
+        # Owner pending row has bonus = 1 (one other thread).
+        owner_payout = SanctumPendingPayout.objects.get(
+            sanctum=sanctum, weaver_character_sheet=owner.character_sheet
         )
-        self.assertEqual(bonus_grants.count(), 1)
-        self.assertEqual(bonus_grants.first().amount, 1)
-        # Helper does NOT get bonus (not the owner).
-        helper_bonus = ResonanceGrant.objects.filter(
-            character_sheet=helper_sheet,
-            source=GainSource.SANCTUM_OWNER_BONUS,
+        self.assertEqual(owner_payout.pending_owner_bonus, 1)
+        # Helper pending row has bonus = 0 (not owner).
+        helper_payout = SanctumPendingPayout.objects.get(
+            sanctum=sanctum, weaver_character_sheet=helper_sheet
         )
-        self.assertEqual(helper_bonus.count(), 0)
+        self.assertEqual(helper_payout.pending_owner_bonus, 0)
+
+    def test_cron_clamps_at_cap(self) -> None:
+        from world.magic.models import SanctumPendingPayout
+        from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP
+
+        resonance = ResonanceFactory()
+        sanctum, owner = _personal_sanctum(resonance=resonance, level=1)
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=sanctum.feature_instance.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            value=100000,  # huge pool — single tick would massively exceed cap
+            change_per_day=0,
+            source="authored",
+        )
+        thread = weave_sanctum_thread(sanctum, owner.character_sheet, SanctumSlotKind.PERSONAL_OWN)
+        thread.level = 10
+        thread.save(update_fields=["level"])
+
+        sanctum_resonance_generation_tick()
+        payout = SanctumPendingPayout.objects.get(
+            sanctum=sanctum, weaver_character_sheet=owner.character_sheet
+        )
+        self.assertEqual(payout.total_pending(), SANCTUM_PENDING_PAYOUT_CAP)
 
 
 class SeedsTests(TestCase):

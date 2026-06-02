@@ -30,9 +30,8 @@ from world.covenants.constants import COVENANT_ORG_TYPE_NAME
 from world.covenants.models import CharacterCovenantRole
 from world.locations.constants import HolderType
 from world.locations.services import effective_owner, effective_value
-from world.magic.constants import GainSource, TargetKind
+from world.magic.constants import TargetKind
 from world.magic.models import SanctumDetails, SanctumOwnerMode, Thread
-from world.magic.services.resonance import grant_resonance
 from world.room_features.constants import RoomFeatureServiceStrategy
 from world.room_features.models import RoomFeatureInstance
 
@@ -53,7 +52,7 @@ def sanctum_resonance_generation_tick() -> dict[str, int]:
     """Pay out resonance income to every weaver of every active Sanctum.
 
     Returns a tiny telemetry dict (``sanctums_processed``,
-    ``weaver_grants``, ``owner_bonus_grants``) so the cron infrastructure
+    ``weavers_accrued``, ``bonus_recipients_accrued``) so the cron infrastructure
     can log the work each tick. Per-Sanctum work is atomic; an exception
     in one Sanctum is logged and isolated so others still pay out.
     """
@@ -69,8 +68,8 @@ def sanctum_resonance_generation_tick() -> dict[str, int]:
     ).filter(feature_kind__service_strategy=RoomFeatureServiceStrategy.SANCTUM)
 
     sanctums_processed = 0
-    weaver_grants = 0
-    owner_bonus_grants = 0
+    weavers_accrued = 0
+    bonus_recipients_accrued = 0
 
     for instance in instances:
         sanctum = getattr(instance, "sanctum_details", None)  # noqa: GETATTR_LITERAL
@@ -85,19 +84,33 @@ def sanctum_resonance_generation_tick() -> dict[str, int]:
             )
             continue
         sanctums_processed += 1
-        weaver_grants += paid
-        owner_bonus_grants += bonus
+        weavers_accrued += paid
+        bonus_recipients_accrued += bonus
 
     return {
         "sanctums_processed": sanctums_processed,
-        "weaver_grants": weaver_grants,
-        "owner_bonus_grants": owner_bonus_grants,
+        "weavers_accrued": weavers_accrued,
+        "bonus_recipients_accrued": bonus_recipients_accrued,
     }
 
 
 @transaction.atomic
 def _payout_for_sanctum(instance: RoomFeatureInstance, sanctum: SanctumDetails) -> tuple[int, int]:
-    """Pay weavers and bonus recipients for one Sanctum. Returns (paid_count, bonus_count)."""
+    """Accumulate per-weaver income into ``SanctumPendingPayout`` rows.
+
+    Plan 4 §F revised 2026-06-03 (well + absorb): the cron tick no longer
+    calls ``grant_resonance`` directly. It grows the per-weaver pending
+    pool, capped at ``SANCTUM_PENDING_PAYOUT_CAP`` total (sum of both
+    pending fields). Weavers drain the pool via
+    ``world.magic.services.sanctum_install.absorb_sanctum_pool`` when
+    they physically visit the Sanctum's room.
+
+    Returns ``(weavers_accrued, bonus_recipients_accrued)`` — the count
+    of weaver rows that received an increment this tick.
+    """
+    from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
+    from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
+
     threads = list(
         Thread.objects.select_related("owner").filter(
             target_sanctum_details=sanctum,
@@ -113,23 +126,26 @@ def _payout_for_sanctum(instance: RoomFeatureInstance, sanctum: SanctumDetails) 
         return 0, 0
 
     level_multiplier = _multiplier_for_level(instance.level)
-    paid = 0
+    weavers_accrued = 0
     for thread in threads:
         strength = max(thread.level, 1)
         income = int(Decimal(strength) * Decimal(pool) * level_multiplier * K_INCOME_RATE)
         if income <= 0:
             continue
-        grant_resonance(
-            character_sheet=thread.owner,
-            resonance=sanctum.resonance_type,
-            amount=income,
-            source=GainSource.SANCTUM_WEAVING,
-            sanctum_details=sanctum,
+        payout, _created = SanctumPendingPayout.objects.get_or_create(
+            sanctum=sanctum,
+            weaver_character_sheet=thread.owner,
         )
-        paid += 1
+        remaining_cap = SANCTUM_PENDING_PAYOUT_CAP - payout.total_pending()
+        if remaining_cap <= 0:
+            continue  # the well is full; ticks no-op until absorbed
+        accrued = min(income, remaining_cap)
+        payout.pending_weaving += accrued
+        payout.save(update_fields=["pending_weaving", "updated_at"])
+        weavers_accrued += 1
 
-    bonus = _pay_owner_bonus(instance, sanctum, threads)
-    return paid, bonus
+    bonus_accrued = _accrue_owner_bonus(instance, sanctum, threads)
+    return weavers_accrued, bonus_accrued
 
 
 def _multiplier_for_level(level: int) -> Decimal:
@@ -141,12 +157,15 @@ def _multiplier_for_level(level: int) -> Decimal:
     return LEVEL_MULTIPLIERS[level - 1]
 
 
-def _pay_owner_bonus(
+def _accrue_owner_bonus(
     instance: RoomFeatureInstance,
     sanctum: SanctumDetails,
     threads: list[Thread],
 ) -> int:
-    """+1 resonance per other thread for owner-or-active-covenant-member weavers."""
+    """+1 per other thread for owner-or-active-covenant-member weavers (into pending pool)."""
+    from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
+    from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
+
     if len(threads) <= 1:
         return 0  # Need at least 2 threads for "other thread" bonus to be positive.
 
@@ -159,13 +178,16 @@ def _pay_owner_bonus(
     for thread in threads:
         if thread.owner_id not in recipient_sheet_ids:
             continue
-        grant_resonance(
-            character_sheet=thread.owner,
-            resonance=sanctum.resonance_type,
-            amount=other_threads_per_recipient,
-            source=GainSource.SANCTUM_OWNER_BONUS,
-            sanctum_details=sanctum,
+        payout, _ = SanctumPendingPayout.objects.get_or_create(
+            sanctum=sanctum,
+            weaver_character_sheet=thread.owner,
         )
+        remaining_cap = SANCTUM_PENDING_PAYOUT_CAP - payout.total_pending()
+        if remaining_cap <= 0:
+            continue
+        accrued = min(other_threads_per_recipient, remaining_cap)
+        payout.pending_owner_bonus += accrued
+        payout.save(update_fields=["pending_owner_bonus", "updated_at"])
         bonus_count += 1
     return bonus_count
 
