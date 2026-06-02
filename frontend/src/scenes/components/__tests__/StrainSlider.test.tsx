@@ -17,12 +17,16 @@ describe('StrainSlider', () => {
     expect(screen.getByText('Effective cost: 5 anima')).toBeInTheDocument();
   });
 
-  it('renders the Soulfray over-pool warning when projected exceeds currentAnima', () => {
+  it('renders an inline over-pool indicator (not a confirm dialog) when projected exceeds currentAnima', () => {
     render(
       <StrainSlider value={4} cap={4} baseEffectiveCost={3} currentAnima={5} onChange={vi.fn()} />
     );
-    // 3 + 4 = 7 > 5 — warning fires
+    // 3 + 4 = 7 > 5 — indicator fires
+    expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Insufficient anima/i)).toBeInTheDocument();
+    // The full Soulfray confirm/cancel dialog belongs at ActionPanel dispatch,
+    // not here. Guard against re-introduction of the dialog inside the slider.
+    expect(screen.queryByRole('button', { name: /cancel|proceed|accept risk/i })).toBeNull();
   });
 
   it('does NOT render the warning when projected fits in currentAnima', () => {

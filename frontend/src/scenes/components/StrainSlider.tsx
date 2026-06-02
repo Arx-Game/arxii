@@ -51,7 +51,7 @@ export function StrainSlider({
       <p className="text-xs text-muted-foreground">Effective cost: {projectedCost} anima</p>
       {overPool && (
         <p
-          role="status"
+          role="alert"
           className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
         >
           <span className="font-semibold">Insufficient anima</span>

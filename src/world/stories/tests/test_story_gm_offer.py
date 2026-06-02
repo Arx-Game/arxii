@@ -78,14 +78,13 @@ class StoryGMOfferUniquePendingConstraintTest(TestCase):
             offered_by_account=account,
             status=StoryGMOfferStatus.PENDING,
         )
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                StoryGMOffer.objects.create(
-                    story=story,
-                    offered_to=gm,
-                    offered_by_account=account,
-                    status=StoryGMOfferStatus.PENDING,
-                )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            StoryGMOffer.objects.create(
+                story=story,
+                offered_to=gm,
+                offered_by_account=account,
+                status=StoryGMOfferStatus.PENDING,
+            )
 
     def test_pending_and_declined_same_pair_is_ok(self):
         """A PENDING and a DECLINED offer for the same (story, GM) pair is allowed."""
