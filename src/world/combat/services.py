@@ -137,6 +137,18 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
     return False
 
 
+def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM — character identity, consistent with the fatigue analogue above
+    """Return True if the character has any active condition granting death_deferred."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+        condition__properties__name="death_deferred",
+    ).exists()
+
+
 # ---------------------------------------------------------------------------
 # CombatTechniqueResolver - Damage and condition resolution for combat techniques
 # ---------------------------------------------------------------------------
@@ -1275,14 +1287,24 @@ def apply_damage_to_participant(  # noqa: PLR0913 — public API; kwargs are par
             )
 
         if death_eligible or force_death:
-            emit_event(
-                EventName.CHARACTER_KILLED,
-                CharacterKilledPayload(
-                    character=character,
-                    source_event=EventName.DAMAGE_PRE_APPLY,
-                ),
-                location=room,
-            )
+            if _character_has_death_deferred(character):
+                from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+                try:
+                    vitals = CharacterVitals.objects.get(character_sheet=character.sheet_data)
+                    vitals.death_deferred_pending = True
+                    vitals.save(update_fields=["death_deferred_pending"])
+                except CharacterVitals.DoesNotExist:
+                    pass
+            else:
+                emit_event(
+                    EventName.CHARACTER_KILLED,
+                    CharacterKilledPayload(
+                        character=character,
+                        source_event=EventName.DAMAGE_PRE_APPLY,
+                    ),
+                    location=room,
+                )
 
     return ParticipantDamageResult(
         damage_dealt=effective_damage,

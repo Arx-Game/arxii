@@ -50,6 +50,13 @@ class CharacterVitals(SharedMemoryModel):
         default=CharacterLifeState.ALIVE,
         help_text="Mortality axis. Consciousness/dying are conditions, not vitals.",
     )
+    death_deferred_pending = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set when CHARACTER_KILLED is suppressed by an active death_deferred condition. "
+            "Cleared and CHARACTER_KILLED is emitted when that condition expires."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.character_sheet} ({self.get_life_state_display()})"
