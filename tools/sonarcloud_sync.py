@@ -5,6 +5,7 @@
 import argparse
 import json
 import subprocess
+import sys
 import urllib.parse
 import urllib.request
 
@@ -38,15 +39,16 @@ def fetch_issues() -> list[dict]:
         )
         with urllib.request.urlopen(f"{SONAR_BASE}/issues/search?{params}") as resp:  # noqa: S310
             data = json.loads(resp.read())
-        issues.extend(data["issues"])
-        if len(issues) >= data["paging"]["total"]:
+        page_issues = data["issues"]
+        issues.extend(page_issues)
+        if len(page_issues) < 500:  # noqa: PLR2004
             break
         page += 1
     return issues
 
 
 def make_title(raw: dict) -> str:
-    tier = severity_tier(raw) or "low"
+    tier = severity_tier(raw) or "unknown"
     rule = raw.get("rule", "unknown")
     msg = raw.get("message", "")[:60]
     fp = file_path(raw.get("component", ""))
@@ -60,7 +62,7 @@ def make_title(raw: dict) -> str:
 def make_body(raw: dict) -> str:
     key = raw["key"]
     rule = raw.get("rule", "")
-    tier = severity_tier(raw) or "low"
+    tier = severity_tier(raw) or "unknown"
     fp = file_path(raw.get("component", ""))
     line = raw.get("line")
     location = f"`{fp}` line {line}" if line else f"`{fp}`"
@@ -113,10 +115,18 @@ def existing_sc_keys() -> set[str]:
         text=True,
         check=True,
     )
-    return parse_sc_keys(result.stdout)
+    keys = parse_sc_keys(result.stdout)
+    if len(json.loads(result.stdout)) >= 2000:  # noqa: PLR2004
+        print(
+            "WARNING: gh issue list returned 2000 issues — deduplication may be incomplete.",
+            file=sys.stderr,
+        )
+    return keys
 
 
 def create_issue(raw: dict) -> None:
+    title = make_title(raw)
+    body = make_body(raw)
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "gh",
@@ -125,15 +135,15 @@ def create_issue(raw: dict) -> None:
             "--repo",
             GH_REPO,
             "--title",
-            make_title(raw),
+            title,
             "--body",
-            make_body(raw),
+            body,
             "--label",
             "sonarcloud",
         ],
         check=True,
     )
-    print(f"  + {make_title(raw)[:90]}")
+    print(f"  + {title[:90]}")
 
 
 def main() -> None:
