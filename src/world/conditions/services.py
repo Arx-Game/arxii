@@ -779,6 +779,7 @@ def _install_reactive_side_effects(
                     trigger_definition=td,
                     obj=target,
                     source_condition=instance,
+                    additional_filter_condition=td.base_filter_condition,
                 )
                 for td in trigger_defs
             ]
