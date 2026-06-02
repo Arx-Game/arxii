@@ -6212,6 +6212,150 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/sanctums/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    get: operations['magic_sanctums_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/{feature_instance_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    get: operations['magic_sanctums_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/{feature_instance_id}/homecoming/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    post: operations['magic_sanctums_homecoming_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/{feature_instance_id}/purging/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    post: operations['magic_sanctums_purging_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/{feature_instance_id}/sever/{thread_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    post: operations['magic_sanctums_sever_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/{feature_instance_id}/weave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    post: operations['magic_sanctums_weave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/scene-entry-endorsements/': {
     parameters: {
       query?: never;
@@ -15156,6 +15300,12 @@ export interface components {
       wardrobe: number;
     };
     /**
+     * @description * `PERSONAL` - Personal (Persona-owned home)
+     *     * `COVENANT` - Covenant (Organization-owned sacred ground)
+     * @enum {string}
+     */
+    OwnerModeEnum: 'PERSONAL' | 'COVENANT';
+    /**
      * @description * `timed` - Timed
      *     * `ready` - Ready
      *     * `manual` - Manual
@@ -17422,6 +17572,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `SANCTUM` - Sanctum
        */
       target_kind?: components['schemas']['TargetKindEnum'];
       target_id?: number;
@@ -18409,6 +18560,9 @@ export interface components {
        *     * `ROOM_RESIDENCE` - Room residence trickle
        *     * `OUTFIT_TRICKLE` - Outfit trickle
        *     * `STAFF_GRANT` - Staff grant
+       *     * `SANCTUM_WEAVING` - Sanctum weaving payout
+       *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
+       *     * `PROJECT_CONTRIBUTION` - Project contribution payout
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -18695,6 +18849,39 @@ export interface components {
     RosterTenureLookup: {
       readonly id: number;
       readonly display_name: string;
+    };
+    /** @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view. */
+    SanctumDetails: {
+      /** @description The room this feature is installed in (one feature per room). */
+      readonly feature_instance_id: number;
+      readonly room_profile_id: number;
+      readonly level: number;
+      /** @description The resonance this Sanctum is consecrated to. Income payouts (via the cron tick) target this type; Ritual of Homecoming rows are created against this type; Ritual of Purging changes it. */
+      readonly resonance_type_id: number;
+      readonly resonance_type_name: string;
+      /**
+       * @description Denormalized from the Building's owner type at install time. Re-synced by the ownership-transfer service when the Building's ownership changes. PERSONAL Sanctums use ``PERSONAL_OWN`` / ``HELPER`` thread slots; COVENANT Sanctums use ``COVENANT`` slots.
+       *
+       *     * `PERSONAL` - Personal (Persona-owned home)
+       *     * `COVENANT` - Covenant (Organization-owned sacred ground)
+       */
+      readonly owner_mode: components['schemas']['OwnerModeEnum'];
+      /**
+       * Format: date-time
+       * @description Set on each successful Homecoming. Soft cooldown + UI display.
+       */
+      readonly last_homecoming_ritual_at: string | null;
+      /**
+       * Format: date-time
+       * @description Set on each successful Purging. UI display + audit.
+       */
+      readonly last_purging_ritual_at: string | null;
+      /**
+       * Format: decimal
+       * @description Homecoming sacrifice that exceeded the per-Sanctum cap (owner Path-level × 10 for Personal). Held in escrow; absorbed by future Homecoming/cron when the cap rises.
+       */
+      readonly pending_sacrifice_overflow: string;
+      readonly homecoming_sum: number;
     };
     SceneActionRequest: {
       readonly id: number;
@@ -19101,6 +19288,9 @@ export interface components {
      *     * `ROOM_RESIDENCE` - Room residence trickle
      *     * `OUTFIT_TRICKLE` - Outfit trickle
      *     * `STAFF_GRANT` - Staff grant
+     *     * `SANCTUM_WEAVING` - Sanctum weaving payout
+     *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
+     *     * `PROJECT_CONTRIBUTION` - Project contribution payout
      * @enum {string}
      */
     SourceEnum:
@@ -19108,7 +19298,10 @@ export interface components {
       | 'SCENE_ENTRY'
       | 'ROOM_RESIDENCE'
       | 'OUTFIT_TRICKLE'
-      | 'STAFF_GRANT';
+      | 'STAFF_GRANT'
+      | 'SANCTUM_WEAVING'
+      | 'SANCTUM_OWNER_BONUS'
+      | 'PROJECT_CONTRIBUTION';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -19548,6 +19741,7 @@ export interface components {
      *     * `RELATIONSHIP_TRACK` - Relationship Track
      *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
      *     * `COVENANT_ROLE` - Covenant Role
+     *     * `SANCTUM` - Sanctum
      * @enum {string}
      */
     TargetKindEnum:
@@ -19557,7 +19751,8 @@ export interface components {
       | 'ROOM'
       | 'RELATIONSHIP_TRACK'
       | 'RELATIONSHIP_CAPSTONE'
-      | 'COVENANT_ROLE';
+      | 'COVENANT_ROLE'
+      | 'SANCTUM';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -19744,6 +19939,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `SANCTUM` - Sanctum
        */
       target_kind: components['schemas']['TargetKindEnum'];
       /** @default  */
@@ -19869,6 +20065,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `SANCTUM` - Sanctum
        */
       target_kind: components['schemas']['TargetKindEnum'];
       target_id: number;
@@ -28447,11 +28644,17 @@ export interface operations {
          *     * `ROOM_RESIDENCE` - Room residence trickle
          *     * `OUTFIT_TRICKLE` - Outfit trickle
          *     * `STAFF_GRANT` - Staff grant
+         *     * `SANCTUM_WEAVING` - Sanctum weaving payout
+         *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
+         *     * `PROJECT_CONTRIBUTION` - Project contribution payout
          */
         source?:
           | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
+          | 'PROJECT_CONTRIBUTION'
           | 'ROOM_RESIDENCE'
+          | 'SANCTUM_OWNER_BONUS'
+          | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
           | 'STAFF_GRANT';
       };
@@ -28795,6 +28998,131 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoomBrief'][];
+        };
+      };
+    };
+  };
+  magic_sanctums_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'][];
+        };
+      };
+    };
+  };
+  magic_sanctums_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_homecoming_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_purging_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_sever_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+        thread_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_weave_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
         };
       };
     };
