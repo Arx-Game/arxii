@@ -18,7 +18,7 @@ from evennia.objects.objects import DefaultCharacter
 from commands.utils import serialize_cmdset
 from flows.constants import EventName
 from flows.emit import emit_event
-from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
+from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
 from typeclasses.mixins import ObjectParent
@@ -290,6 +290,8 @@ class Character(ObjectParent, DefaultCharacter):
 
         Sends updated room state to the frontend after movement.
         Reconciles the presence-tied resonance-alignment buff for the new location.
+        Emits EventName.MOVED so reactive triggers (e.g. scar-gated presence
+        escalation) can respond to character arrival.
         """
         # Call parent method to handle trigger registration
         super().at_post_move(source_location, move_type=move_type, **kwargs)
@@ -301,6 +303,17 @@ class Character(ObjectParent, DefaultCharacter):
         # Guard mirrors at_post_puppet: some Character-typeclass objects have no sheet.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
             refresh_resonance_alignment(character_sheet=self.sheet_data)
+
+        # Emit MOVED for reactive triggers (e.g. scar-gated presence escalation).
+        # Only emit when destination is a real room; no-op if character has no location.
+        if self.location is not None:
+            payload = MovedPayload(
+                character=self,
+                origin=source_location,
+                destination=self.location,
+                exit_used=kwargs.get("exit_used"),
+            )
+            emit_event(EventName.MOVED, payload, location=self.location)
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
