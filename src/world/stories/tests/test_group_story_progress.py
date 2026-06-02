@@ -1,6 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
-from django.test import TransactionTestCase
+from django.db import IntegrityError, transaction
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.gm.factories import GMTableFactory
@@ -60,13 +59,15 @@ class GroupStoryProgressModelTests(EvenniaTestCase):
         self.assertIn("(frontier)", str(progress))
 
 
-class GroupStoryProgressUniqueConstraintTests(TransactionTestCase):
-    """Tests requiring TransactionTestCase to catch DB-level unique violations."""
+class GroupStoryProgressUniqueConstraintTests(EvenniaTestCase):
+    """DB-level unique-violation tests. Atomic savepoint isolates the aborted
+    transaction so the outer TestCase rollback (and parallel runner) survives.
+    """
 
     def test_unique_per_story_per_table(self) -> None:
         """UniqueConstraint prevents duplicate (story, gm_table) pairs."""
         story = StoryFactory(scope=StoryScope.GROUP)
         gm_table = GMTableFactory()
         GroupStoryProgressFactory(story=story, gm_table=gm_table)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             GroupStoryProgressFactory(story=story, gm_table=gm_table)

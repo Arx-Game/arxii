@@ -1,5 +1,5 @@
-from django.db import IntegrityError
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 
 from world.stories.constants import BeatOutcome
 from world.stories.factories import (
@@ -35,17 +35,21 @@ class RequirementTests(TestCase):
         self.assertEqual(req.required_outcome, BeatOutcome.FAILURE)
 
 
-class RequirementUniqueConstraintTests(TransactionTestCase):
+class RequirementUniqueConstraintTests(TestCase):
+    """Atomic savepoint isolates the aborted transaction so the outer TestCase
+    rollback (and parallel runner) survives.
+    """
+
     def test_progression_requirement_unique_per_episode_beat(self):
         episode = EpisodeFactory()
         beat = BeatFactory(episode=episode)
         EpisodeProgressionRequirementFactory(episode=episode, beat=beat)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             EpisodeProgressionRequirementFactory(episode=episode, beat=beat)
 
     def test_transition_required_outcome_unique_per_transition_beat(self):
         transition = TransitionFactory()
         beat = BeatFactory(episode=transition.source_episode)
         TransitionRequiredOutcomeFactory(transition=transition, beat=beat)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             TransitionRequiredOutcomeFactory(transition=transition, beat=beat)
