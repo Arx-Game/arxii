@@ -105,11 +105,15 @@ def _payout_for_sanctum(instance: RoomFeatureInstance, sanctum: SanctumDetails) 
     ``world.magic.services.sanctum_install.absorb_sanctum_pool`` when
     they physically visit the Sanctum's room.
 
-    Returns ``(weavers_accrued, bonus_recipients_accrued)`` — the count
-    of weaver rows that received an increment this tick.
+    Per-Sanctum query budget (post-2026-06-03 review):
+    1× pool, 1× threads.filter, 1× existing-payouts.filter,
+    1× bulk_create(ignore_conflicts), 1× F()-increment .update per
+    new-row or capped-row case. ``select_for_update`` on the payout
+    rows + F() arithmetic close the race window against a concurrent
+    ``absorb_sanctum_pool`` zeroing the pool.
+
+    Returns ``(weavers_accrued, bonus_recipients_accrued)``.
     """
-    from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
-    from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
 
     threads = list(
         Thread.objects.select_related("owner").filter(
@@ -126,26 +130,82 @@ def _payout_for_sanctum(instance: RoomFeatureInstance, sanctum: SanctumDetails) 
         return 0, 0
 
     level_multiplier = _multiplier_for_level(instance.level)
-    weavers_accrued = 0
+
+    # Compute per-thread weaving income in memory first.
+    per_sheet_income: dict[int, int] = {}
     for thread in threads:
         strength = max(thread.level, 1)
         income = int(Decimal(strength) * Decimal(pool) * level_multiplier * K_INCOME_RATE)
         if income <= 0:
             continue
-        payout, _created = SanctumPendingPayout.objects.get_or_create(
-            sanctum=sanctum,
-            weaver_character_sheet=thread.owner,
-        )
-        remaining_cap = SANCTUM_PENDING_PAYOUT_CAP - payout.total_pending()
-        if remaining_cap <= 0:
-            continue  # the well is full; ticks no-op until absorbed
-        accrued = min(income, remaining_cap)
-        payout.pending_weaving += accrued
-        payout.save(update_fields=["pending_weaving", "updated_at"])
-        weavers_accrued += 1
+        per_sheet_income[thread.owner_id] = per_sheet_income.get(thread.owner_id, 0) + income
+    weavers_accrued = _apply_pending_increments(sanctum, per_sheet_income, "pending_weaving")
 
     bonus_accrued = _accrue_owner_bonus(instance, sanctum, threads)
     return weavers_accrued, bonus_accrued
+
+
+def _apply_pending_increments(
+    sanctum: SanctumDetails, per_sheet_amount: dict[int, int], field: str
+) -> int:
+    """Bulk-create missing SanctumPendingPayout rows, then F()-update the field.
+
+    ``field`` is one of ``"pending_weaving"`` / ``"pending_owner_bonus"``.
+    The total (sum of both fields) is capped at
+    ``SANCTUM_PENDING_PAYOUT_CAP``; we clamp the per-row increment to the
+    remaining headroom *before* the F()-update so SQL-side arithmetic
+    doesn't overshoot.
+
+    Returns the number of weaver rows that actually received an
+    increment > 0.
+    """
+    from django.db.models import F  # noqa: PLC0415
+
+    from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
+    from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
+
+    if not per_sheet_amount:
+        return 0
+
+    # Bulk-create any missing rows (race-safe via ignore_conflicts).
+    SanctumPendingPayout.objects.bulk_create(
+        [
+            SanctumPendingPayout(
+                sanctum=sanctum,
+                weaver_character_sheet_id=sheet_id,
+            )
+            for sheet_id in per_sheet_amount
+        ],
+        ignore_conflicts=True,
+    )
+
+    # Lock the rows we're about to mutate; read current pending totals
+    # so we can clamp to the cap without an SQL-side `LEAST(..., cap)`
+    # expression (portable + cheap on small numbers of weavers).
+    existing = {
+        p.weaver_character_sheet_id: p
+        for p in SanctumPendingPayout.objects.select_for_update().filter(
+            sanctum=sanctum,
+            weaver_character_sheet_id__in=per_sheet_amount.keys(),
+        )
+    }
+
+    accrued_count = 0
+    for sheet_id, requested in per_sheet_amount.items():
+        payout = existing.get(sheet_id)
+        if payout is None:
+            continue
+        remaining = SANCTUM_PENDING_PAYOUT_CAP - payout.total_pending()
+        if remaining <= 0:
+            continue  # well is full; tick no-op until absorbed
+        actual = min(requested, remaining)
+        if actual <= 0:
+            continue
+        # F() arithmetic so a concurrent absorb resetting the field to 0
+        # can't be clobbered by a stale in-memory snapshot.
+        SanctumPendingPayout.objects.filter(pk=payout.pk).update(**{field: F(field) + actual})
+        accrued_count += 1
+    return accrued_count
 
 
 def _multiplier_for_level(level: int) -> Decimal:
@@ -163,9 +223,6 @@ def _accrue_owner_bonus(
     threads: list[Thread],
 ) -> int:
     """+1 per other thread for owner-or-active-covenant-member weavers (into pending pool)."""
-    from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
-    from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
-
     if len(threads) <= 1:
         return 0  # Need at least 2 threads for "other thread" bonus to be positive.
 
@@ -174,22 +231,12 @@ def _accrue_owner_bonus(
         return 0
 
     other_threads_per_recipient = len(threads) - 1
-    bonus_count = 0
-    for thread in threads:
-        if thread.owner_id not in recipient_sheet_ids:
-            continue
-        payout, _ = SanctumPendingPayout.objects.get_or_create(
-            sanctum=sanctum,
-            weaver_character_sheet=thread.owner,
-        )
-        remaining_cap = SANCTUM_PENDING_PAYOUT_CAP - payout.total_pending()
-        if remaining_cap <= 0:
-            continue
-        accrued = min(other_threads_per_recipient, remaining_cap)
-        payout.pending_owner_bonus += accrued
-        payout.save(update_fields=["pending_owner_bonus", "updated_at"])
-        bonus_count += 1
-    return bonus_count
+    per_sheet_bonus = {
+        thread.owner_id: other_threads_per_recipient
+        for thread in threads
+        if thread.owner_id in recipient_sheet_ids
+    }
+    return _apply_pending_increments(sanctum, per_sheet_bonus, "pending_owner_bonus")
 
 
 def _bonus_recipient_sheet_ids(

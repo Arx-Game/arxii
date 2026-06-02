@@ -64,6 +64,10 @@ class SanctificationRoomAlreadyHasFeatureError(SanctificationError):
     user_message = "This room already has a feature installed."
 
 
+class SanctificationLeaderNotPresentError(SanctificationError):
+    user_message = "You must be physically in the room to perform Sanctification."
+
+
 class SanctificationFounderHasPersonalSanctumError(SanctificationError):
     user_message = "You already have a Personal Sanctum; dissolve the existing one first."
 
@@ -72,8 +76,8 @@ class DissolutionError(ValueError):
     user_message: str = "This Dissolution cannot be performed."
 
 
-class DissolutionLeaderNotAllowedError(DissolutionError):
-    user_message = "You cannot lead this Dissolution."
+class DissolutionLeaderNotPresentError(DissolutionError):
+    user_message = "You must be physically in the Sanctum's room to attempt Dissolution."
 
 
 class DissolutionCheckTypeMissingError(DissolutionError):
@@ -143,12 +147,18 @@ class SanctificationResult:
 
 @dataclass(frozen=True)
 class DissolutionResult:
-    """Returned by perform_dissolution."""
+    """Returned by perform_dissolution.
+
+    ``is_botch`` reports the outcome tier; the actual consequence content
+    (status effects, magical mishaps) is deferred to #709 alongside the
+    rest of the magical-check authoring. Callers wanting to surface
+    "something bad happened" can read this flag; nothing is applied yet.
+    """
 
     sanctum_id: int
     success_level: int
     recovered_amount: int
-    botch_consequence_applied: bool
+    is_botch: bool
 
 
 @dataclass(frozen=True)
@@ -197,13 +207,32 @@ def perform_sanctification(
 
     _validate_sanctification_leader(ownership, leader_persona, owner_mode)
 
+    # Physical presence — the witch performs Sanctification IN the room.
+    character = leader_persona.character_sheet.character
+    if character.db_location_id != room_profile.objectdb_id:
+        msg = (
+            f"Leader {leader_persona.pk} is not physically in room "
+            f"{room_profile.pk}; cannot perform Sanctification."
+        )
+        raise SanctificationLeaderNotPresentError(msg)
+
     if RoomFeatureInstance.objects.filter(room_profile=room_profile).exists():
         msg = f"Room {room_profile.pk} already has a feature installed."
         raise SanctificationRoomAlreadyHasFeatureError(msg)
 
-    # Defense-in-depth: even though the partial UniqueConstraint catches
-    # this at the DB layer, surface a typed exception with user_message.
     founder_sheet = leader_persona.character_sheet
+    # The partial UniqueConstraint excludes NULL founder rows from its
+    # uniqueness scope. Reject NULL leader.character_sheet explicitly so
+    # we don't quietly create a constraint-bypassing PERSONAL Sanctum.
+    if founder_sheet is None:
+        msg = "Sanctification leader must have a CharacterSheet."
+        raise SanctificationLeaderNotOwnerError(msg)
+
+    # Service-level pre-check + DB partial UniqueConstraint together
+    # close the race window. Two concurrent Sanctifications by the same
+    # character would both see no row on the pre-check, race the create,
+    # and the loser hits the constraint — caught below and re-raised as
+    # the typed exception.
     if (
         owner_mode == SanctumOwnerMode.PERSONAL
         and SanctumDetails.objects.filter(
@@ -217,18 +246,30 @@ def perform_sanctification(
         )
         raise SanctificationFounderHasPersonalSanctumError(msg)
 
+    from django.db import IntegrityError  # noqa: PLC0415
+
     sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
     instance = RoomFeatureInstance.objects.create(
         room_profile=room_profile,
         feature_kind=sanctum_kind,
         level=1,
     )
-    details = SanctumDetails.objects.create(
-        feature_instance=instance,
-        resonance_type=resonance_type,
-        owner_mode=owner_mode,
-        founder_character_sheet=founder_sheet,
-    )
+    try:
+        details = SanctumDetails.objects.create(
+            feature_instance=instance,
+            resonance_type=resonance_type,
+            owner_mode=owner_mode,
+            founder_character_sheet=founder_sheet,
+        )
+    except IntegrityError as exc:
+        # Partial UniqueConstraint race loser path — convert the 500 into
+        # a typed 400. The atomic wrapper rolls back the RoomFeatureInstance
+        # create above.
+        msg = (
+            f"Character sheet {founder_sheet.pk} race-lost the partial "
+            "UniqueConstraint for a Personal Sanctum."
+        )
+        raise SanctificationFounderHasPersonalSanctumError(msg) from exc
     return SanctificationResult(
         sanctum_id=details.pk,
         owner_mode=details.owner_mode,
@@ -289,9 +330,19 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.magic.services.sanctum_lvm import sum_homecoming_value  # noqa: PLC0415
 
-    # Defense — any leader with physical access can attempt Dissolution.
-    # Tighter authorization (e.g., covenant role gates) lands when #708
-    # ships the org-rituals permission framework.
+    # Physical-presence gate — the witch is performing a ritual IN the
+    # Sanctum's room. Mirrors absorb_sanctum_pool. Anyone with access
+    # can attempt; founder vs non-founder difficulty differential (and
+    # #708 tightening for covenant-role gates) lives below in the check
+    # difficulty multiplier, not as a hard authorization gate.
+    sanctum_room = sanctum.feature_instance.room_profile.objectdb
+    character = leader_persona.character_sheet.character
+    if character.db_location_id != sanctum_room.pk:
+        msg = (
+            f"Leader {leader_persona.pk} is not physically in Sanctum room "
+            f"{sanctum_room.pk}; cannot perform Dissolution."
+        )
+        raise DissolutionLeaderNotPresentError(msg)
 
     check_type = CheckType.objects.filter(name=SANCTUM_DISSOLUTION_CHECK_TYPE_NAME).first()
     if check_type is None:
@@ -317,7 +368,7 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
 
     reservoir_before = sum_homecoming_value(sanctum)
     recovered_amount = int(Decimal(reservoir_before) * recovery_fraction)
-    botch_applied = success_level <= DISSOLUTION_SUCCESS_LEVEL_FAIL and recovery_fraction == 0
+    is_botch = success_level <= DISSOLUTION_SUCCESS_LEVEL_FAIL and recovery_fraction == 0
 
     # Tear down: threads, LVM rows, instance + details (cascade).
     _retire_sanctum_threads(sanctum)
@@ -342,7 +393,7 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         sanctum_id=sanctum_pk,
         success_level=success_level,
         recovered_amount=recovered_amount,
-        botch_consequence_applied=botch_applied,
+        is_botch=is_botch,
     )
 
 

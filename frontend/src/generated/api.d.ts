@@ -6284,6 +6284,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/sanctums/{feature_instance_id}/dissolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+     *
+     *     Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
+     *     Service enforces physical presence; tiered check determines
+     *     recovery fraction. Returns the dissolution outcome.
+     */
+    post: operations['magic_sanctums_dissolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/sanctums/{feature_instance_id}/homecoming/': {
     parameters: {
       query?: never;
@@ -6374,6 +6397,31 @@ export interface paths {
      *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
      */
     post: operations['magic_sanctums_weave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/sanctums/install/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Sanctification entry point — `POST /api/magic/sanctums/install/`.
+     *
+     *     Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+     *     Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
+     *     — service does the heavy validation (room ownership, leader
+     *     standing, physical presence, partial-unique race window). Returns
+     *     the new SanctumDetails on success.
+     */
+    post: operations['magic_sanctums_install_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -29101,6 +29149,27 @@ export interface operations {
       };
     };
   };
+  magic_sanctums_dissolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
   magic_sanctums_homecoming_create: {
     parameters: {
       query?: never;
@@ -29172,6 +29241,25 @@ export interface operations {
       path: {
         feature_instance_id: string;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_install_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

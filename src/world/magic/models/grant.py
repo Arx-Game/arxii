@@ -183,12 +183,15 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
-            # SANCTUM_WEAVING (Plan 4 §F): exactly source_sanctum_details populated
+            # SANCTUM_WEAVING (Plan 4 §F): no other source FK is set.
+            # source_sanctum_details is set at creation by grant_resonance's
+            # service-level validation (_SOURCE_REQUIRED_KWARG) but allowed
+            # to NULL post-Dissolution via on_delete=SET_NULL — keeping the
+            # constraint NOT-NULL would brick Dissolution at commit time.
             models.CheckConstraint(
                 name="res_grant_sanctum_weaving_shape",
                 check=(
                     Q(source="SANCTUM_WEAVING")
-                    & Q(source_sanctum_details__isnull=False)
                     & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
@@ -198,12 +201,11 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
-            # SANCTUM_OWNER_BONUS (Plan 4 §F): exactly source_sanctum_details populated
+            # SANCTUM_OWNER_BONUS (Plan 4 §F): same pattern as SANCTUM_WEAVING.
             models.CheckConstraint(
                 name="res_grant_sanctum_owner_bonus_shape",
                 check=(
                     Q(source="SANCTUM_OWNER_BONUS")
-                    & Q(source_sanctum_details__isnull=False)
                     & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
@@ -214,14 +216,12 @@ class ResonanceGrant(SharedMemoryModel):
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
             # SANCTUM_DISSOLUTION_RECOVERY (Plan 4 §F revised 2026-06-03):
-            # exactly source_sanctum_details populated, attribution to the
-            # Sanctum being dissolved (recovered at tiered fractions per
-            # the check outcome of the Dissolution ritual).
+            # source_sanctum_details set at grant creation, then nulled when
+            # the Sanctum's row is dissolved later in the same transaction.
             models.CheckConstraint(
                 name="res_grant_sanctum_dissolution_recovery_shape",
                 check=(
                     Q(source="SANCTUM_DISSOLUTION_RECOVERY")
-                    & Q(source_sanctum_details__isnull=False)
                     & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)

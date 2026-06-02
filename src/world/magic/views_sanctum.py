@@ -26,13 +26,18 @@ from world.magic.models import Resonance, SanctumDetails, Thread
 from world.magic.serializers_sanctum import (
     HomecomingActionSerializer,
     PurgingActionSerializer,
+    SanctifyActionSerializer,
     SanctumDetailsSerializer,
     SanctumThreadSerializer,
     WeaveActionSerializer,
 )
 from world.magic.services.sanctum_install import (
     AbsorbError,
+    DissolutionError,
+    SanctificationError,
     absorb_sanctum_pool,
+    perform_dissolution,
+    perform_sanctification,
 )
 from world.magic.services.sanctum_rituals import (
     HomecomingValidationError,
@@ -86,6 +91,23 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = "feature_instance_id"
     lookup_value_regex = r"\d+"
+
+    def get_serializer_context(self):
+        """Resolve the viewer's CharacterSheet once per request.
+
+        Without this, every serialized row re-fires
+        ``RosterEntry.for_account(...)`` inside
+        ``SanctumDetailsSerializer._viewer_character_sheet``. With this,
+        the serializer reads it from context for free.
+        """
+        ctx = super().get_serializer_context()
+        request = self.request
+        if request is not None and request.user.is_authenticated:
+            from world.roster.models import RosterEntry  # noqa: PLC0415
+
+            entry = RosterEntry.objects.for_account(request.user).first()
+            ctx["viewer_character_sheet"] = entry.character_sheet if entry else None
+        return ctx
 
     def get_queryset(self):
         persona = _active_persona_for_request(self.request)
@@ -179,6 +201,63 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         except SanctumWeavingError as exc:
             return _action_error_response(exc)
         return Response(SanctumThreadSerializer(thread).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="install")
+    def install(self, request):
+        """Sanctification entry point — `POST /api/magic/sanctums/install/`.
+
+        Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+        Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
+        — service does the heavy validation (room ownership, leader
+        standing, physical presence, partial-unique race window). Returns
+        the new SanctumDetails on success.
+        """
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+        serializer = SanctifyActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        persona = _active_persona_for_request(request)
+        room_profile = get_object_or_404(
+            RoomProfile, pk=serializer.validated_data["room_profile_id"]
+        )
+        resonance = get_object_or_404(Resonance, pk=serializer.validated_data["resonance_type_id"])
+        try:
+            result = perform_sanctification(
+                room_profile,
+                persona,
+                resonance,
+                owner_mode=serializer.validated_data["owner_mode"],
+            )
+        except SanctificationError as exc:
+            return _action_error_response(exc)
+        sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
+        return Response(
+            SanctumDetailsSerializer(sanctum, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="dissolve")
+    def dissolve(self, request, feature_instance_id=None):
+        """Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+
+        Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
+        Service enforces physical presence; tiered check determines
+        recovery fraction. Returns the dissolution outcome.
+        """
+        sanctum = self.get_object()
+        persona = _active_persona_for_request(request)
+        try:
+            result = perform_dissolution(sanctum, persona)
+        except DissolutionError as exc:
+            return _action_error_response(exc)
+        return Response(
+            {
+                "sanctum_id": result.sanctum_id,
+                "success_level": result.success_level,
+                "recovered_amount": result.recovered_amount,
+                "is_botch": result.is_botch,
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="absorb")
     def absorb(self, request, feature_instance_id=None):

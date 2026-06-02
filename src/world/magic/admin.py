@@ -504,6 +504,13 @@ class RitualAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     autocomplete_fields = ["flow", "site_property"]
     inlines = [RitualComponentRequirementInline, RitualSceneActionConfigInline]
+    # Dispatch fields (execution_kind / service_function_path / flow)
+    # determine WHICH code runs when a ritual is performed. Exposing them
+    # as editable is an arbitrary-import RCE vector if a staff cookie is
+    # compromised — admin could rewrite the path to point at any sensitive
+    # service function and trigger it via the ritual UI. Manage these
+    # fields via seed code instead.
+    readonly_fields = ["execution_kind", "service_function_path", "flow"]
 
 
 @admin.register(RitualComponentRequirement)

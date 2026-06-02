@@ -108,6 +108,12 @@ class SanctumThreadSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+class SanctifyActionSerializer(serializers.Serializer):
+    room_profile_id = serializers.IntegerField()
+    resonance_type_id = serializers.IntegerField()
+    owner_mode = serializers.ChoiceField(choices=["PERSONAL", "COVENANT"])
+
+
 class HomecomingActionSerializer(serializers.Serializer):
     resonance_sacrificed = serializers.IntegerField(min_value=1)
     narrative_text = serializers.CharField(allow_blank=True, max_length=4000, default="")
