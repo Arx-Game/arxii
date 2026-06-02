@@ -1,14 +1,8 @@
-"""Phase 2a tests for SanctumDetails + Thread SANCTUM extension + ResonanceGrant attribution.
+"""Tests for SanctumDetails + Thread/SANCTUM + ResonanceGrant attribution + Sanctum strategy.
 
-Exercises the new schema-level guarantees:
-
-- SanctumDetails str / OneToOne to RoomFeatureInstance
-- Thread.target_kind=SANCTUM requires target_sanctum_details + slot_kind
-- Thread.slot_kind must be empty for non-SANCTUM targets
-- One active PERSONAL_OWN slot per owner, one active COVENANT slot per owner
-- ResonanceGrant SANCTUM_WEAVING / SANCTUM_OWNER_BONUS / PROJECT_CONTRIBUTION
-  CheckConstraints
-- grant_resonance kwargs + source-shape validation for the new sources
+Exercises the Phase 2 schema-level guarantees and the
+:func:`world.magic.services.sanctum.handle_progression` strategy
+dispatched by the Room Features framework on project resolution.
 """
 
 from __future__ import annotations
@@ -23,14 +17,27 @@ from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.models import (
     ResonanceGrant,
     SanctumDetails,
+    SanctumInstallParams,
     SanctumOwnerMode,
     Thread,
 )
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.sanctum import (
+    SanctumAlreadyInstalledError,
+    SanctumInstallParamsMissingError,
+    SanctumUpgradeKindMismatchError,
+    SanctumUpgradeMissingInstanceError,
+    handle_progression,
+)
+from world.projects.constants import ProjectKind
+from world.projects.factories import ProjectFactory
+from world.room_features.constants import RoomFeatureServiceStrategy
 from world.room_features.factories import (
     RoomFeatureInstanceFactory,
     RoomFeatureKindFactory,
+    RoomFeatureProgressionDetailsFactory,
 )
+from world.room_features.models import RoomFeatureInstance
 
 
 def _sanctum_details(**overrides) -> SanctumDetails:
@@ -246,3 +253,121 @@ class ResonanceGrantSanctumAttributionTests(TestCase):
                 source_room_profile=room_profile,
                 source_sanctum_details=sanctum,
             )
+
+
+def _sanctum_progression(*, target_level: int = 1, resonance=None, owner_mode=None):
+    """Build a RoomFeatureProgressionDetails + SanctumInstallParams pair."""
+    sanctum_kind = RoomFeatureKindFactory(
+        service_strategy=RoomFeatureServiceStrategy.SANCTUM,
+    )
+    project = ProjectFactory(kind=ProjectKind.ROOM_FEATURE_PROGRESSION)
+    progression = RoomFeatureProgressionDetailsFactory(
+        project=project,
+        target_feature_kind=sanctum_kind,
+        target_level=target_level,
+    )
+    SanctumInstallParams.objects.create(
+        progression_details=progression,
+        resonance_type=resonance or ResonanceFactory(),
+        declared_owner_mode=owner_mode or SanctumOwnerMode.PERSONAL,
+    )
+    return progression
+
+
+class HandleProgressionInstallTests(TestCase):
+    def test_install_creates_instance_and_details(self) -> None:
+        resonance = ResonanceFactory()
+        progression = _sanctum_progression(resonance=resonance)
+
+        handle_progression(progression.project, target_level=1)
+
+        instance = RoomFeatureInstance.objects.get(room_profile=progression.target_room_profile)
+        self.assertEqual(instance.level, 1)
+        self.assertEqual(instance.feature_kind, progression.target_feature_kind)
+        details = SanctumDetails.objects.get(feature_instance=instance)
+        self.assertEqual(details.resonance_type, resonance)
+        self.assertEqual(details.owner_mode, SanctumOwnerMode.PERSONAL)
+
+    def test_install_without_install_params_raises(self) -> None:
+        sanctum_kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.SANCTUM,
+        )
+        project = ProjectFactory(kind=ProjectKind.ROOM_FEATURE_PROGRESSION)
+        RoomFeatureProgressionDetailsFactory(
+            project=project,
+            target_feature_kind=sanctum_kind,
+            target_level=1,
+        )
+        with self.assertRaises(SanctumInstallParamsMissingError):
+            handle_progression(project, target_level=1)
+
+    def test_install_into_already_occupied_room_rejected(self) -> None:
+        progression = _sanctum_progression()
+        # Pre-occupy with a Library feature.
+        RoomFeatureInstanceFactory(
+            room_profile=progression.target_room_profile,
+            feature_kind=RoomFeatureKindFactory(
+                service_strategy=RoomFeatureServiceStrategy.LIBRARY,
+                name="Library",
+            ),
+        )
+        with self.assertRaises(SanctumAlreadyInstalledError):
+            handle_progression(progression.project, target_level=1)
+
+
+class HandleProgressionUpgradeTests(TestCase):
+    def test_upgrade_bumps_level_and_timestamp(self) -> None:
+        install_progression = _sanctum_progression(target_level=1)
+        handle_progression(install_progression.project, target_level=1)
+
+        upgrade_project = ProjectFactory(kind=ProjectKind.ROOM_FEATURE_PROGRESSION)
+        upgrade_progression = RoomFeatureProgressionDetailsFactory(
+            project=upgrade_project,
+            target_room_profile=install_progression.target_room_profile,
+            target_feature_kind=install_progression.target_feature_kind,
+            target_level=2,
+        )
+
+        handle_progression(upgrade_progression.project, target_level=2)
+
+        instance = RoomFeatureInstance.objects.get(
+            room_profile=install_progression.target_room_profile
+        )
+        self.assertEqual(instance.level, 2)
+        self.assertIsNotNone(instance.last_upgraded_at)
+
+    def test_upgrade_without_existing_instance_raises(self) -> None:
+        progression = _sanctum_progression(target_level=2)
+        with self.assertRaises(SanctumUpgradeMissingInstanceError):
+            handle_progression(progression.project, target_level=2)
+
+    def test_upgrade_against_wrong_kind_raises(self) -> None:
+        install_progression = _sanctum_progression()
+        # Pre-occupy room with a NON-sanctum feature instead of running install.
+        RoomFeatureInstanceFactory(
+            room_profile=install_progression.target_room_profile,
+            feature_kind=RoomFeatureKindFactory(
+                service_strategy=RoomFeatureServiceStrategy.LIBRARY,
+                name="Library",
+            ),
+        )
+        upgrade_project = ProjectFactory(kind=ProjectKind.ROOM_FEATURE_PROGRESSION)
+        upgrade_progression = RoomFeatureProgressionDetailsFactory(
+            project=upgrade_project,
+            target_room_profile=install_progression.target_room_profile,
+            target_feature_kind=install_progression.target_feature_kind,
+            target_level=2,
+        )
+        with self.assertRaises(SanctumUpgradeKindMismatchError):
+            handle_progression(upgrade_progression.project, target_level=2)
+
+
+class StrategyRegistrationTests(TestCase):
+    def test_strategy_registered_at_ready(self) -> None:
+        from world.room_features.services import ROOM_FEATURE_STRATEGIES
+
+        self.assertIn(RoomFeatureServiceStrategy.SANCTUM, ROOM_FEATURE_STRATEGIES)
+        self.assertIs(
+            ROOM_FEATURE_STRATEGIES[RoomFeatureServiceStrategy.SANCTUM],
+            handle_progression,
+        )

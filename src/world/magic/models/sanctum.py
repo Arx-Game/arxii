@@ -88,3 +88,46 @@ class SanctumDetails(SharedMemoryModel):
     def __str__(self) -> str:
         mode = self.get_owner_mode_display()
         return f"Sanctum#{self.feature_instance_id} ({mode}, {self.resonance_type_id})"
+
+
+class SanctumInstallParams(SharedMemoryModel):
+    """Sanctum-specific install-time parameters captured at Project creation.
+
+    The :class:`world.room_features.models.RoomFeatureProgressionDetails`
+    payload model is **kind-agnostic** — it carries target room, kind, and
+    level only. Per-kind install knobs (Sanctum's chosen resonance type,
+    declared owner mode) live in this sibling payload, OneToOne'd to the
+    progression details row.
+
+    Authored at project-creation time (via the install wizard) and consumed
+    by :func:`world.magic.services.sanctum.handle_progression` at
+    Project resolution. Stays attached to the (resolved) project for audit.
+    """
+
+    progression_details = models.OneToOneField(
+        "room_features.RoomFeatureProgressionDetails",
+        on_delete=models.CASCADE,
+        related_name="sanctum_install_params",
+        primary_key=True,
+    )
+    resonance_type = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="sanctum_install_params",
+        help_text="The resonance type this Sanctum will be consecrated to at install.",
+    )
+    declared_owner_mode = models.CharField(
+        max_length=10,
+        choices=SanctumOwnerMode.choices,
+        help_text=(
+            "The owner-mode the installer declared (PERSONAL vs COVENANT). "
+            "Re-validated against the building's actual owner at install "
+            "resolution — mismatch fails the install."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return (
+            f"SanctumInstallParams#{self.progression_details_id} "
+            f"({self.get_declared_owner_mode_display()})"
+        )
