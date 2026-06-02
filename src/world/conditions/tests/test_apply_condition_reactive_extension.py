@@ -62,6 +62,32 @@ class ApplyConditionInstallsTriggersTests(TestCase):
 
         self.assertEqual(Trigger.objects.filter(obj=sheet.character).count(), 2)
 
+    def test_base_filter_condition_copied_to_installed_trigger(self):
+        """_install_reactive_side_effects copies TriggerDefinition.base_filter_condition
+        to Trigger.additional_filter_condition so emit_event can evaluate it."""
+        condition = ConditionTemplateFactory(name="T10 filter copy test")
+        flow = FlowDefinitionFactory(name="T10 filter copy flow")
+        filter_cond = {"path": "target", "op": "==", "value": "self"}
+        trigger_def = TriggerDefinitionFactory(
+            name="T10 filter copy td",
+            event_name=EventName.TECHNIQUE_CAST,
+            flow_definition=flow,
+            base_filter_condition=filter_cond,
+        )
+        condition.reactive_triggers.add(trigger_def)
+        sheet = CharacterSheetFactory()
+
+        result = apply_condition(target=sheet.character, condition=condition)
+
+        self.assertTrue(result.success)
+        trigger = Trigger.objects.get(obj=sheet.character, trigger_definition=trigger_def)
+        self.assertEqual(
+            trigger.additional_filter_condition,
+            filter_cond,
+            "base_filter_condition must be copied to Trigger.additional_filter_condition"
+            " on auto-install",
+        )
+
 
 class ApplyConditionIncrementsBridgedStatsTests(TestCase):
     def test_stat_rule_fires_on_gained(self):

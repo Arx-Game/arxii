@@ -638,6 +638,29 @@ def apply_condition(  # noqa: PLR0913
     return result
 
 
+def apply_condition_by_name(*, payload: object, condition_name: str) -> None:
+    """Apply a named condition to the character carried by the event payload.
+
+    General-purpose ``CALL_SERVICE_FUNCTION`` target for flow steps that need to
+    apply a condition by name. ``payload`` must have a ``character`` attribute
+    (e.g. ``MovedPayload``). Silently no-ops if the condition name does not
+    exist — allows authored content to reference conditions not yet seeded
+    in a given environment without raising.
+
+    Usage in a FlowStepDefinition::
+
+        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+        variable_name="world.conditions.services.apply_condition_by_name",
+        parameters={"payload": "@payload", "condition_name": "<name>"},
+    """
+    try:
+        template = ConditionTemplate.get_by_name(condition_name)
+    except ConditionTemplate.DoesNotExist:
+        return
+    target = payload.character  # type: ignore[union-attr]
+    apply_condition(target=target, condition=template)
+
+
 @transaction.atomic
 def bulk_apply_conditions(
     applications: list[BulkConditionApplication],
@@ -756,6 +779,7 @@ def _install_reactive_side_effects(
                     trigger_definition=td,
                     obj=target,
                     source_condition=instance,
+                    additional_filter_condition=td.base_filter_condition,
                 )
                 for td in trigger_defs
             ]

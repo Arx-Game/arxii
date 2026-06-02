@@ -1184,11 +1184,11 @@ Cast Disrupted `ConditionTemplate`s.
    `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`). No
    grant is needed: magic-capability is derived from `CharacterAura` presence, which is
    created unconditionally at CG finalization by `finalize_magic_data()`.
-2. **Presence-escalation for scarred characters** — characters with heavy opposing scars
-   harmed on mere *entry* (`MOVED`), not only on cast. This is a genuine per-entity exception
-   → correctly a scar-gated MOVED `TriggerDefinition` via `ConditionTemplate.reactive_triggers`
-   M2M (the legitimate flow/trigger use). `evaluate_resonance_environment(technique=None)`
-   already serves this; the ALIGNED universal presence path added here does not subsume it.
+2. ~~**Presence-escalation for scarred characters**~~ — **DONE (#526).** `EventName.MOVED`
+   emitted from `at_post_move`; `Room.dominant_affinity` property; `apply_condition_by_name`
+   flow-step helper; filter-propagation fix in `_install_reactive_side_effects`. Reference
+   pipeline: `wire_scar_escalation_trigger()` in `world/magic/factories.py`. No scar-specific
+   Python — escalation is pure authored data via `ConditionTemplate.reactive_triggers` M2M.
 3. **Defilement (CASTER_DOMINANT)** *(core magic — Tehom's domain, not brother's)* — when a
    strong opposing caster overpowers a weak place, the caster degrades the place's cascade
    resonance. The primitive already returns `direction=CASTER_DOMINANT`; the cast service
@@ -1211,11 +1211,12 @@ Cast Disrupted `ConditionTemplate`s.
 
 The deferred items above, ordered by recommended sequence with rationale and ownership:
 
-1. **Presence-escalation for scarred characters** *(Tehom/brother; cheap)* — authored scar-
-   gated MOVED trigger + an escalation condition (e.g., "Hallowed Agony on entry"). Reuses
-   `evaluate_resonance_environment(technique=None)` and `ConditionTemplate.reactive_triggers`
-   M2M. The ALIGNED universal presence path already works; this adds the OPPOSED side for
-   heavily-scarred characters.
+1. ~~**Presence-escalation for scarred characters**~~ — **DONE (#526).** General primitives
+   added: `EventName.MOVED` emitted from `at_post_move`; `Room.dominant_affinity` property;
+   `apply_condition_by_name` flow-step helper; filter-propagation fix in
+   `_install_reactive_side_effects`. Reference pipeline: `wire_scar_escalation_trigger()` in
+   `world/magic/factories.py`. No scar-specific Python — escalation is pure authored data via
+   `ConditionTemplate.reactive_triggers` M2M.
 2. **`TECHNIQUE_PRE_CAST` block/modify variant** *(Tehom/core; fundamental)* — a true
    pre-cast intercept that can **block or modify** a working *before* it resolves. This
    is a foundational reactive-layer capability, **not** a nice-to-have: v1's post-resolve
