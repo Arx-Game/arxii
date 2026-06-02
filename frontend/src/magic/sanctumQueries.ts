@@ -56,3 +56,11 @@ export function useSeverSanctumThread(featureInstanceId: number) {
     onSuccess: () => qc.invalidateQueries({ queryKey: sanctumKeys.list() }),
   });
 }
+
+export function useAbsorb(featureInstanceId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.absorbSanctumPool(featureInstanceId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sanctumKeys.list() }),
+  });
+}

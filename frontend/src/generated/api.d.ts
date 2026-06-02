@@ -6260,6 +6260,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/sanctums/{feature_instance_id}/absorb/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Read + action endpoints for the player's Sanctum surface.
+     *
+     *     `list` returns Sanctums the user has standing in (owns or has woven
+     *     into). `retrieve` is gated by the same standing check. POST actions
+     *     delegate to the service layer; service-level exceptions surface as
+     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     */
+    post: operations['magic_sanctums_absorb_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/sanctums/{feature_instance_id}/homecoming/': {
     parameters: {
       query?: never;
@@ -18563,6 +18587,7 @@ export interface components {
        *     * `SANCTUM_WEAVING` - Sanctum weaving payout
        *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
        *     * `PROJECT_CONTRIBUTION` - Project contribution payout
+       *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -18850,7 +18875,13 @@ export interface components {
       readonly id: number;
       readonly display_name: string;
     };
-    /** @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view. */
+    /**
+     * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
+     *
+     *     Pending payout fields are per-(sanctum, viewing-user) — they read
+     *     from a ``SanctumPendingPayout`` row keyed on the request user's
+     *     primary persona's CharacterSheet.
+     */
     SanctumDetails: {
       /** @description The room this feature is installed in (one feature per room). */
       readonly feature_instance_id: number;
@@ -18860,7 +18891,7 @@ export interface components {
       readonly resonance_type_id: number;
       readonly resonance_type_name: string;
       /**
-       * @description Denormalized from the Building's owner type at install time. Re-synced by the ownership-transfer service when the Building's ownership changes. PERSONAL Sanctums use ``PERSONAL_OWN`` / ``HELPER`` thread slots; COVENANT Sanctums use ``COVENANT`` slots.
+       * @description PERSONAL Sanctums use ``PERSONAL_OWN`` / ``HELPER`` thread slots; COVENANT Sanctums use ``COVENANT`` slots. Set at Sanctification by the ritual variant performed.
        *
        *     * `PERSONAL` - Personal (Persona-owned home)
        *     * `COVENANT` - Covenant (Organization-owned sacred ground)
@@ -18882,6 +18913,9 @@ export interface components {
        */
       readonly pending_sacrifice_overflow: string;
       readonly homecoming_sum: number;
+      readonly pending_weaving: number;
+      readonly pending_owner_bonus: number;
+      readonly is_founder: boolean;
     };
     SceneActionRequest: {
       readonly id: number;
@@ -19291,6 +19325,7 @@ export interface components {
      *     * `SANCTUM_WEAVING` - Sanctum weaving payout
      *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
      *     * `PROJECT_CONTRIBUTION` - Project contribution payout
+     *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
      * @enum {string}
      */
     SourceEnum:
@@ -19301,7 +19336,8 @@ export interface components {
       | 'STAFF_GRANT'
       | 'SANCTUM_WEAVING'
       | 'SANCTUM_OWNER_BONUS'
-      | 'PROJECT_CONTRIBUTION';
+      | 'PROJECT_CONTRIBUTION'
+      | 'SANCTUM_DISSOLUTION_RECOVERY';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -28647,12 +28683,14 @@ export interface operations {
          *     * `SANCTUM_WEAVING` - Sanctum weaving payout
          *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
          *     * `PROJECT_CONTRIBUTION` - Project contribution payout
+         *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
          */
         source?:
           | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
           | 'PROJECT_CONTRIBUTION'
           | 'ROOM_RESIDENCE'
+          | 'SANCTUM_DISSOLUTION_RECOVERY'
           | 'SANCTUM_OWNER_BONUS'
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
@@ -29022,6 +29060,27 @@ export interface operations {
     };
   };
   magic_sanctums_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SanctumDetails'];
+        };
+      };
+    };
+  };
+  magic_sanctums_absorb_create: {
     parameters: {
       query?: never;
       header?: never;

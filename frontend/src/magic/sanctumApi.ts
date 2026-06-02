@@ -11,6 +11,7 @@
 import { apiFetch } from '@/evennia_replacements/api';
 
 import type {
+  AbsorbResult,
   HomecomingRequest,
   HomecomingResult,
   PurgingRequest,
@@ -88,6 +89,17 @@ export async function weaveSanctumThread(
     await parseErrorDetail(res, 'Failed to weave Sanctum thread');
   }
   return res.json() as Promise<SanctumThread>;
+}
+
+export async function absorbSanctumPool(featureInstanceId: number): Promise<AbsorbResult> {
+  const res = await apiFetch(`${SANCTUMS_URL}/${featureInstanceId}/absorb/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to absorb from this Sanctum');
+  }
+  return res.json() as Promise<AbsorbResult>;
 }
 
 export async function severSanctumThread(

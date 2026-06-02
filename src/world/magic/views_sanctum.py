@@ -30,6 +30,10 @@ from world.magic.serializers_sanctum import (
     SanctumThreadSerializer,
     WeaveActionSerializer,
 )
+from world.magic.services.sanctum_install import (
+    AbsorbError,
+    absorb_sanctum_pool,
+)
 from world.magic.services.sanctum_rituals import (
     HomecomingValidationError,
     PurgingValidationError,
@@ -175,6 +179,23 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         except SanctumWeavingError as exc:
             return _action_error_response(exc)
         return Response(SanctumThreadSerializer(thread).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="absorb")
+    def absorb(self, request, feature_instance_id=None):
+        sanctum = self.get_object()
+        persona = _active_persona_for_request(request)
+        try:
+            result = absorb_sanctum_pool(sanctum, persona)
+        except AbsorbError as exc:
+            return _action_error_response(exc)
+        return Response(
+            {
+                "sanctum_id": result.sanctum_id,
+                "weaving_drained": result.weaving_drained,
+                "owner_bonus_drained": result.owner_bonus_drained,
+                "total_drained": result.total_drained,
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="sever/(?P<thread_id>[0-9]+)")
     def sever(self, request, feature_instance_id=None, thread_id=None):

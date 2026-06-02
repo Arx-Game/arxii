@@ -21,6 +21,8 @@ import {
 
 import type { SanctumDetails } from '../../sanctumTypes';
 
+import { useAbsorb } from '../../sanctumQueries';
+
 import { HomecomingDialog } from './HomecomingDialog';
 import { WeaveDialog } from './WeaveDialog';
 
@@ -35,9 +37,18 @@ function formatTimestamp(iso: string | null | undefined): string {
   return dt.toLocaleString();
 }
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return 'Failed to absorb from this Sanctum';
+}
+
 export function SanctumCard({ sanctum }: SanctumCardProps) {
   const [homecomingOpen, setHomecomingOpen] = useState(false);
   const [weaveOpen, setWeaveOpen] = useState(false);
+  const absorb = useAbsorb(sanctum.feature_instance_id);
+  const pendingWeaving = sanctum.pending_weaving;
+  const pendingOwnerBonus = sanctum.pending_owner_bonus;
+  const pendingTotal = pendingWeaving + pendingOwnerBonus;
 
   return (
     <Card>
@@ -75,13 +86,42 @@ export function SanctumCard({ sanctum }: SanctumCardProps) {
           <span className="text-muted-foreground">Last Purging</span>
           <span>{formatTimestamp(sanctum.last_purging_ritual_at)}</span>
         </div>
+        {pendingTotal > 0 ? (
+          <div className="mt-2 rounded-md bg-muted/40 p-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Well — your gift</span>
+              <span className="font-medium">{pendingTotal}</span>
+            </div>
+            {pendingOwnerBonus > 0 ? (
+              <div className="text-xs text-muted-foreground">
+                ({pendingWeaving} weaving + {pendingOwnerBonus} bonus)
+              </div>
+            ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Visit the Sanctum room to absorb its gathered resonance.
+            </p>
+          </div>
+        ) : null}
+        {absorb.isError ? (
+          <p className="text-sm text-destructive">{extractErrorMessage(absorb.error)}</p>
+        ) : null}
       </CardContent>
-      <CardFooter className="gap-2">
+      <CardFooter className="flex-wrap gap-2">
         <Button size="sm" onClick={() => setHomecomingOpen(true)}>
           Homecoming
         </Button>
         <Button size="sm" variant="outline" onClick={() => setWeaveOpen(true)}>
           Weave thread
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={pendingTotal === 0 || absorb.isPending}
+          onClick={() => absorb.mutate()}
+        >
+          {absorb.isPending
+            ? 'Absorbing…'
+            : `Absorb${pendingTotal > 0 ? ` (${pendingTotal})` : ''}`}
         </Button>
       </CardFooter>
       <HomecomingDialog sanctum={sanctum} open={homecomingOpen} onOpenChange={setHomecomingOpen} />

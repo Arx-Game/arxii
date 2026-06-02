@@ -41,6 +41,13 @@ export interface WeaveRequest {
   slot_kind: SanctumSlotKind;
 }
 
+export interface AbsorbResult {
+  sanctum_id: number;
+  weaving_drained: number;
+  owner_bonus_drained: number;
+  total_drained: number;
+}
+
 export interface SanctumThread {
   id: number;
   owner: number;

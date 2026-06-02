@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from world.magic.models import SanctumDetails, Thread
+from world.magic.models import SanctumDetails, SanctumPendingPayout, Thread
 from world.magic.services.sanctum_lvm import sum_homecoming_value
 
 
 class SanctumDetailsSerializer(serializers.ModelSerializer):
-    """Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view."""
+    """Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
+
+    Pending payout fields are per-(sanctum, viewing-user) — they read
+    from a ``SanctumPendingPayout`` row keyed on the request user's
+    primary persona's CharacterSheet.
+    """
 
     level = serializers.IntegerField(source="feature_instance.level", read_only=True)
     room_profile_id = serializers.IntegerField(
@@ -17,6 +22,9 @@ class SanctumDetailsSerializer(serializers.ModelSerializer):
     )
     homecoming_sum = serializers.SerializerMethodField()
     resonance_type_name = serializers.CharField(source="resonance_type.name", read_only=True)
+    pending_weaving = serializers.SerializerMethodField()
+    pending_owner_bonus = serializers.SerializerMethodField()
+    is_founder = serializers.SerializerMethodField()
 
     class Meta:
         model = SanctumDetails
@@ -31,11 +39,50 @@ class SanctumDetailsSerializer(serializers.ModelSerializer):
             "last_purging_ritual_at",
             "pending_sacrifice_overflow",
             "homecoming_sum",
+            "pending_weaving",
+            "pending_owner_bonus",
+            "is_founder",
         ]
         read_only_fields = fields
 
     def get_homecoming_sum(self, obj: SanctumDetails) -> int:
         return sum_homecoming_value(obj)
+
+    def _viewer_character_sheet(self):
+        viewer_sheet = self.context.get("viewer_character_sheet")
+        if viewer_sheet is not None:
+            return viewer_sheet
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        entry = RosterEntry.objects.for_account(request.user).first()
+        if entry is None:
+            return None
+        return entry.character_sheet
+
+    def _pending_payout(self, obj: SanctumDetails):
+        sheet = self._viewer_character_sheet()
+        if sheet is None:
+            return None
+        return SanctumPendingPayout.objects.filter(
+            sanctum=obj, weaver_character_sheet=sheet
+        ).first()
+
+    def get_pending_weaving(self, obj: SanctumDetails) -> int:
+        payout = self._pending_payout(obj)
+        return payout.pending_weaving if payout else 0
+
+    def get_pending_owner_bonus(self, obj: SanctumDetails) -> int:
+        payout = self._pending_payout(obj)
+        return payout.pending_owner_bonus if payout else 0
+
+    def get_is_founder(self, obj: SanctumDetails) -> bool:
+        sheet = self._viewer_character_sheet()
+        if sheet is None:
+            return False
+        return obj.founder_character_sheet_id == sheet.pk
 
 
 class SanctumThreadSerializer(serializers.ModelSerializer):
