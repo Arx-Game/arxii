@@ -638,6 +638,29 @@ def apply_condition(  # noqa: PLR0913
     return result
 
 
+def apply_condition_by_name(*, payload: object, condition_name: str) -> None:
+    """Apply a named condition to the character carried by the event payload.
+
+    General-purpose ``CALL_SERVICE_FUNCTION`` target for flow steps that need to
+    apply a condition by name. ``payload`` must have a ``character`` attribute
+    (e.g. ``MovedPayload``). Silently no-ops if the condition name does not
+    exist — allows authored content to reference conditions not yet seeded
+    in a given environment without raising.
+
+    Usage in a FlowStepDefinition::
+
+        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+        variable_name="world.conditions.services.apply_condition_by_name",
+        parameters={"payload": "@payload", "condition_name": "<name>"},
+    """
+    try:
+        template = ConditionTemplate.get_by_name(condition_name)
+    except ConditionTemplate.DoesNotExist:
+        return
+    target = payload.character  # type: ignore[union-attr]
+    apply_condition(target=target, condition=template)
+
+
 @transaction.atomic
 def bulk_apply_conditions(
     applications: list[BulkConditionApplication],
@@ -756,6 +779,7 @@ def _install_reactive_side_effects(
                     trigger_definition=td,
                     obj=target,
                     source_condition=instance,
+                    additional_filter_condition=td.base_filter_condition,
                 )
                 for td in trigger_defs
             ]
@@ -880,7 +904,49 @@ def remove_condition(
             location=target_location,
         )
     _notify_stories_condition_expired(target, condition)
+    _resolve_deferred_death_on_expiry(target, condition)
     return True
+
+
+def _resolve_deferred_death_on_expiry(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM — conditions apply to any typeclassed object (Character/Room/Exit/Item per _invalidate_condition_handler)
+    condition: "ConditionTemplate",
+) -> None:
+    """Emit CHARACTER_KILLED if the expiring condition was deferring a pending death.
+
+    Checks two gates: the removed condition must have carried the 'death_deferred'
+    property, and the target's CharacterVitals.death_deferred_pending must be True
+    (set when CHARACTER_KILLED was suppressed during damage resolution). Both gates
+    must hold to avoid spurious kills on unrelated condition removal.
+    """
+    if not condition.properties.filter(name="death_deferred").exists():
+        return
+
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    try:
+        sheet = target.sheet_data
+        vitals = CharacterVitals.objects.get(character_sheet=sheet)
+    except (CharacterVitals.DoesNotExist, CharacterSheet.DoesNotExist):
+        return
+
+    if not vitals.death_deferred_pending:
+        return
+
+    vitals.death_deferred_pending = False
+    vitals.save(update_fields=["death_deferred_pending"])
+
+    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+    if target_location is not None:
+        from flows.constants import EventName  # noqa: PLC0415
+        from flows.events.payloads import CharacterKilledPayload  # noqa: PLC0415
+
+        emit_event(
+            EventName.CHARACTER_KILLED,
+            CharacterKilledPayload(character=target, source_event=None),
+            location=target_location,
+        )
 
 
 @transaction.atomic

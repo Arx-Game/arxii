@@ -59,6 +59,18 @@ class Room(ObjectParent, DefaultRoom):
         self.ndb.active_scene = value
 
     @property
+    def dominant_affinity(self):
+        """Dominant cascade affinity for this room, or None if inert.
+
+        Computed from the room's cascade resonances. Used by the filter DSL
+        to gate MOVED triggers on room affinity
+        (path: ``destination.dominant_affinity.name``).
+        """
+        from world.magic.services.resonance_environment import get_room_dominant_affinity
+
+        return get_room_dominant_affinity(self)
+
+    @property
     def sentient_contents(self) -> list:
         """Return objects in this room that have active sessions."""
         sentients = []

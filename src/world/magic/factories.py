@@ -77,6 +77,7 @@ from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
 from world.mechanics.factories import (
+    DeathDeferredPropertyFactory,
     FatigueCollapseImmunePropertyFactory,
     PowerMultiplierTargetFactory,
 )
@@ -515,6 +516,9 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
     fatigue_immune_prop = FatigueCollapseImmunePropertyFactory()
     audere.properties.add(fatigue_immune_prop)
     majora.properties.add(fatigue_immune_prop)
+    death_deferred_prop = DeathDeferredPropertyFactory()
+    audere.properties.add(death_deferred_prop)
+    majora.properties.add(death_deferred_prop)
     return audere, majora
 
 
@@ -2135,3 +2139,82 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
             ],
         }
     )
+
+
+# =============================================================================
+# Issue #526: Scar-gated MOVED trigger authored content
+# =============================================================================
+
+
+def _build_scar_escalation_flow(escalation_condition_name: str) -> object:
+    """Build (or reuse) a FlowDefinition that applies a named escalation condition.
+
+    One CALL_SERVICE_FUNCTION step calls
+    ``world.conditions.services.apply_condition_by_name`` with the condition name.
+    Idempotent: get_or_create on flow name; skips step creation if steps already exist.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow_name = f"scar_escalation_{escalation_condition_name}"
+    flow, _ = FlowDefinition.objects.get_or_create(name=flow_name)
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.conditions.services.apply_condition_by_name",
+            parameters={
+                "payload": "@payload",
+                "condition_name": escalation_condition_name,
+            },
+        )
+    return flow
+
+
+def wire_scar_escalation_trigger(
+    scar_template: object,
+    escalation_template: object,
+    *,
+    hostile_affinity_name: str,
+) -> object:
+    """Link a MOVED TriggerDefinition to a scar ConditionTemplate.
+
+    Creates (idempotent):
+    - FlowDefinition: one CALL_SERVICE_FUNCTION step → apply_condition_by_name
+    - TriggerDefinition: event_name=MOVED, filter on destination.dominant_affinity.name
+
+    Adds the TriggerDefinition to ``scar_template.reactive_triggers`` (M2M add is idempotent).
+
+    Args:
+        scar_template: The scar ConditionTemplate that bears the trigger.
+        escalation_template: The ConditionTemplate to apply on entry.
+        hostile_affinity_name: Affinity name that triggers escalation
+            (e.g. ``"Celestial"`` for an Abyssal scar — pair #4 in the 9-cell table).
+
+    Returns:
+        The TriggerDefinition that was created or retrieved.
+    """
+    from flows.constants import EventName
+    from flows.models.triggers import TriggerDefinition
+
+    escalation_name = escalation_template.name  # type: ignore[union-attr]
+    flow = _build_scar_escalation_flow(escalation_name)
+
+    trigger_name = f"scar_moved_{scar_template.name}_{hostile_affinity_name.lower()}"  # type: ignore[union-attr]
+    filter_condition = {
+        "path": "destination.dominant_affinity.name",
+        "op": "==",
+        "value": hostile_affinity_name,
+    }
+    trigger_def, _ = TriggerDefinition.objects.get_or_create(
+        name=trigger_name,
+        defaults={
+            "event_name": EventName.MOVED,
+            "flow_definition": flow,
+            "base_filter_condition": filter_condition,
+        },
+    )
+
+    scar_template.reactive_triggers.add(trigger_def)  # type: ignore[union-attr]
+    return trigger_def

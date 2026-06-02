@@ -208,6 +208,19 @@ class FatigueCollapseImmunePropertyFactory(PropertyFactory):
     description = "Suppresses collapse from fatigue while this condition is active."
 
 
+class DeathDeferredPropertyFactory(PropertyFactory):
+    """Named factory for the 'death_deferred' property tag.
+
+    Applied to condition templates (e.g. Audere, Audere Majora) to defer
+    death while the condition is active. When the condition expires, any
+    pending deferred death resolves.
+    ``django_get_or_create = ("name",)`` is inherited; repeated calls return the same row.
+    """
+
+    name = "death_deferred"
+    description = "Defers death while this condition is active; resolves on condition expiry."
+
+
 class ObjectPropertyFactory(DjangoModelFactory):
     """Factory for creating ObjectProperty instances."""
 

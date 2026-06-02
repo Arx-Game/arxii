@@ -42,7 +42,13 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatOpponentAction
 from world.combat.services import apply_damage_to_participant, resolve_npc_attack
-from world.conditions.factories import ReactiveConditionFactory
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    ReactiveConditionFactory,
+)
+from world.conditions.services import remove_condition
+from world.mechanics.factories import DeathDeferredPropertyFactory
 from world.vitals.models import CharacterVitals
 
 # ---------------------------------------------------------------------------
@@ -459,6 +465,120 @@ class DeathEventTest(TestCase):
             svc_mod.emit_event = original
 
         self.assertFalse(result.death_eligible)
+        self.assertEqual(len(captured), 0)
+
+
+class DeathDeferredTest(TestCase):
+    """CHARACTER_KILLED is suppressed while death_deferred condition is active; fires on removal."""
+
+    def _capturing_emit(self, svc_mod, captured):
+        original = svc_mod.emit_event
+
+        def inner(event_name, payload, **kwargs):
+            if event_name == EventName.CHARACTER_KILLED:
+                captured.append(payload)
+            return original(event_name, payload, **kwargs)
+
+        return original, inner
+
+    def _condition_with_death_deferred(self):
+        prop = DeathDeferredPropertyFactory()
+        template = ConditionTemplateFactory()
+        template.properties.add(prop)
+        return template
+
+    def test_character_killed_suppressed_when_death_deferred_active(self) -> None:
+        participant, _vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        template = self._condition_with_death_deferred()
+        ConditionInstanceFactory(target=character, condition=template)
+        captured: list[CharacterKilledPayload] = []
+
+        import world.combat.services as svc_mod
+
+        original, inner = self._capturing_emit(svc_mod, captured)
+        svc_mod.emit_event = inner
+        try:
+            result = apply_damage_to_participant(participant, 100)
+        finally:
+            svc_mod.emit_event = original
+
+        self.assertTrue(result.death_eligible)
+        # CHARACTER_KILLED suppressed while death_deferred condition is active
+        self.assertEqual(len(captured), 0)
+
+    def test_death_deferred_pending_set_on_suppression(self) -> None:
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        template = self._condition_with_death_deferred()
+        ConditionInstanceFactory(target=character, condition=template)
+
+        import world.combat.services as svc_mod
+
+        original = svc_mod.emit_event
+        svc_mod.emit_event = lambda *a, **kw: original(*a, **kw)
+        try:
+            apply_damage_to_participant(participant, 100)
+        finally:
+            svc_mod.emit_event = original
+
+        vitals.refresh_from_db()
+        # death_deferred_pending must be set so removal can resolve the kill
+        self.assertTrue(vitals.death_deferred_pending)
+
+    def test_character_killed_fires_on_deferred_condition_removal(self) -> None:
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        template = self._condition_with_death_deferred()
+        ConditionInstanceFactory(target=character, condition=template)
+        vitals.death_deferred_pending = True
+        vitals.save()
+        captured: list[CharacterKilledPayload] = []
+
+        import world.conditions.services as cond_mod
+
+        original = cond_mod.emit_event
+
+        def capturing_emit(event_name, payload, **kwargs):
+            if event_name == EventName.CHARACTER_KILLED:
+                captured.append(payload)
+            return original(event_name, payload, **kwargs)
+
+        cond_mod.emit_event = capturing_emit
+        try:
+            remove_condition(character, template)
+        finally:
+            cond_mod.emit_event = original
+
+        # CHARACTER_KILLED fires on expiry; pending flag is cleared
+        self.assertEqual(len(captured), 1)
+        vitals.refresh_from_db()
+        self.assertFalse(vitals.death_deferred_pending)
+
+    def test_no_kill_on_removal_when_not_pending(self) -> None:
+        participant, _vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        template = self._condition_with_death_deferred()
+        ConditionInstanceFactory(target=character, condition=template)
+        # death_deferred_pending stays False (character was healed before condition ended)
+        captured: list[CharacterKilledPayload] = []
+
+        import world.conditions.services as cond_mod
+
+        original = cond_mod.emit_event
+
+        def capturing_emit(event_name, payload, **kwargs):
+            if event_name == EventName.CHARACTER_KILLED:
+                captured.append(payload)
+            return original(event_name, payload, **kwargs)
+
+        cond_mod.emit_event = capturing_emit
+        try:
+            remove_condition(character, template)
+        finally:
+            cond_mod.emit_event = original
+
+        # No pending death → CHARACTER_KILLED must not fire
         self.assertEqual(len(captured), 0)
 
 
