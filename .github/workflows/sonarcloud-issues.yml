@@ -46,6 +46,7 @@ jobs:
   triage:
     name: Bulk-triage SonarCloud issues
     runs-on: ubuntu-latest
+    permissions: {}
     if: github.event_name == 'workflow_dispatch' && inputs.triage_rule != ''
     steps:
       - uses: actions/checkout@v6

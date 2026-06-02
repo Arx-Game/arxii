@@ -55,7 +55,7 @@ def test_make_body_contains_sc_key_marker():
 
 def test_make_body_contains_sonarcloud_link_with_key():
     body = make_body(_raw(key="AY999"))
-    assert "sonarcloud.io" in body
+    assert "https://sonarcloud.io/project/issues" in body
     assert "AY999" in body
 
 
