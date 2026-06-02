@@ -14,9 +14,9 @@ Automatically surface SonarCloud findings as GitHub issues so they can be triage
 Queries the SonarCloud REST API for open issues on `Arx-Game_arxii` and creates corresponding GitHub issues. Idempotent — safe to re-run at any time.
 
 **Priority tiers** (all tiers are still deduplicated; the distinction is batch limiting):
-- **Security** (`VULNERABILITY`, `SECURITY_HOTSPOT`) — not batch-limited; all qualifying new findings created each run
 - **Blockers** — not batch-limited; all qualifying new findings created each run
 - **Highs** — batch-limited; default 50 new issues per run, configurable via `--high-limit` (0 = unlimited)
+- **Security** (`VULNERABILITY`, `SECURITY_HOTSPOT`) — **not synced to public GitHub issues.** SonarCloud is a public project (free-tier limitation); security findings are already visible there and the code is open source. Syncing them to public issues would add no new exposure but would be noisy. GitHub CodeQL (Advanced Security — private even on public repos) runs in parallel and is the authoritative security scanner.
 
 **Skip filters** — issues whose file path matches any of these are never created:
 - `*/tests/*`
@@ -75,7 +75,6 @@ Two jobs in one workflow:
 Create these in the repo before first run (the workflow will not create them):
 - `sonarcloud` — applied to all synced issues
 - `wont-fix` — applied by humans to closed issues that should never be recreated
-- `security` — applied to security-type findings
 
 ## Constants
 
