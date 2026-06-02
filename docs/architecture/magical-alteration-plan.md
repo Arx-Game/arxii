@@ -8,7 +8,7 @@
 
 **Tech Stack:** Django, Evennia SharedMemoryModel, FactoryBoy, Django REST Framework, arx CLI
 
-**Spec:** `docs/superpowers/specs/2026-04-12-scope5-magical-alteration-resolution-design.md`
+**Spec:** `docs/architecture/magical-alteration.md`
 
 **Convention note:** All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`. All imports are absolute. TextChoices live in `constants.py`. Dataclasses live in `types.py`. Service functions accept model instances, not slugs. Test commands use `arx test`. Single migration for all new models.
 

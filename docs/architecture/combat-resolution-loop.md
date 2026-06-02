@@ -4,8 +4,8 @@
 **Status:** Design spec. Implementation in `docs/superpowers/plans/2026-05-25-combat-resolution-loop.md` (gitignored).
 **Branch:** `combat-resolution-loop` (forked off `main` after `db6cc0a4 Unified combat UI` merged).
 **Builds on:**
-- `docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md` (the C-frame combat UI)
-- `docs/superpowers/specs/2026-05-22-clash-design.md` (the clash mechanic)
+- `docs/architecture/unified-combat-ui-design.md` (the C-frame combat UI)
+- `docs/architecture/clash-design.md` (the clash mechanic)
 - `docs/plans/2026-05-23-clash-post-ship-cleanup-notes.md` §4 (the carry-forward
   list this PR resolves)
 

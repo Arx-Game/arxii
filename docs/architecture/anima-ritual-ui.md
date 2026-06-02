@@ -6,7 +6,7 @@
 - `src/world/magic/services/anima.py` — existing `perform_anima_ritual()` service
 - `src/world/scenes/action_models.py` — existing `SceneActionRequest` substrate
 - `src/world/codex/models.py` — pattern reference for knowledge + grant tables
-- `docs/superpowers/specs/2026-05-05-soul-tether-ui-design.md` — generic ritual UI established by prior work
+- `docs/architecture/ritual-ui-pattern.md` — generic ritual UI established by prior work
 
 ---
 

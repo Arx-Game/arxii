@@ -9,8 +9,7 @@ Techniques are the primary magical abilities, powered by intensity and control s
 **Design Docs:**
 - `docs/plans/2026-01-20-magic-system-design.md` (original system design)
 - `docs/plans/2026-03-02-cantrip-technique-alignment.md` (cantrip/technique alignment)
-- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` (Resonance Pivot Spec A — Threads + Currency + Rituals + Mage Scars rename)
-- `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md` (19-phase Spec A implementation plan)
+- `docs/architecture/resonance-threads.md` (Resonance Pivot Spec A — Threads + Currency + Rituals + Mage Scars rename)
 
 ---
 
@@ -202,7 +201,7 @@ now say "Mage Scars."
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 
-**Design:** `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
+**Design:** `docs/architecture/resonance-environment-universal-path.md`
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|

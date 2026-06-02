@@ -464,7 +464,7 @@ damage outcomes, which the new path produces equivalently.
 - `src/world/magic/services/techniques.py:use_technique`
 - `src/world/combat/services.py:_resolve_pc_action`
 - `src/world/magic/tests/test_reactive_integration.py` (cancel-path pattern)
-- `docs/superpowers/specs/2026-04-02-scope4-scene-magic-enhancement-design.md`
+- `docs/architecture/scene-magic-enhancement.md`
   (the social-action wrapper pattern this spec mirrors for combat)
-- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`
+- `docs/architecture/resonance-threads.md`
   §5.8 (FLAT_BONUS routing rule)

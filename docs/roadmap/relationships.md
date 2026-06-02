@@ -49,7 +49,7 @@ Relationships are the heart of the game. A track-based system lets characters de
   the Sineating loop, the `CORRUPTION_ACCRUING` redirect handler, stage-advance dramatic prompts,
   and the stage-3+ rescue ritual. `RelationshipCapstone.is_ritual_capstone` +
   `RelationshipCapstone.ritual` FK also added for capstone-gated ritual dispatch.
-  See `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`.
+  See `docs/architecture/soul-tether.md`.
 - **Pull integration** — Players should be able to spend Resonance on pulls against
   relationship threads during actions where the other party is engaged (§5 of Spec A).
   The underlying pull machinery (`ThreadPullCost`, `ThreadPullEffect`, `CombatPull`)
