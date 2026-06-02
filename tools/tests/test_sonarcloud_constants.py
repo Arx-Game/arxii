@@ -43,6 +43,11 @@ def test_is_skip_path_normal_model_file():
     assert not is_skip_path("Arx-Game_arxii:src/world/roster/models.py")
 
 
+def test_is_skip_path_works_without_project_prefix():
+    assert is_skip_path("src/cli/arx.py")
+    assert not is_skip_path("src/world/magic/services.py")
+
+
 def test_effective_severity_prefers_impact_over_legacy():
     raw = {
         "severity": "MAJOR",

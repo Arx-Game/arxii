@@ -55,6 +55,6 @@ def severity_tier(raw: dict) -> str | None:
 
 def is_security(raw: dict) -> bool:
     """Return True if this is a security-type finding (excluded from public issues)."""
-    if raw.get("type") in ("VULNERABILITY", "SECURITY_HOTSPOT"):
-        return True
-    return any(i.get("softwareQuality") == "SECURITY" for i in raw.get("impacts", []))
+    return raw.get("type") in ("VULNERABILITY", "SECURITY_HOTSPOT") or any(
+        i.get("softwareQuality") == "SECURITY" for i in raw.get("impacts", [])
+    )
