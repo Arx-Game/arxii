@@ -34,7 +34,7 @@ function extractErrorMessage(error: unknown): string {
   return 'Failed to perform Ritual of Homecoming';
 }
 
-export function HomecomingDialog({ sanctum, open, onOpenChange }: HomecomingDialogProps) {
+export function HomecomingDialog({ sanctum, open, onOpenChange }: Readonly<HomecomingDialogProps>) {
   const [sacrifice, setSacrifice] = useState<number>(100);
   const [narrative, setNarrative] = useState<string>('');
   const mutation = useHomecoming(sanctum.feature_instance_id);

@@ -48,7 +48,7 @@ const SLOT_LABELS: Record<SanctumSlotKind, string> = {
   HELPER: 'Helper — invited ally',
 };
 
-export function WeaveDialog({ sanctum, open, onOpenChange }: WeaveDialogProps) {
+export function WeaveDialog({ sanctum, open, onOpenChange }: Readonly<WeaveDialogProps>) {
   const [slotKind, setSlotKind] = useState<SanctumSlotKind>(
     sanctum.owner_mode === 'COVENANT' ? 'COVENANT' : 'PERSONAL_OWN'
   );

@@ -42,13 +42,21 @@ function extractErrorMessage(error: unknown): string {
   return 'Failed to absorb from this Sanctum';
 }
 
-export function SanctumCard({ sanctum }: SanctumCardProps) {
+export function SanctumCard({ sanctum }: Readonly<SanctumCardProps>) {
   const [homecomingOpen, setHomecomingOpen] = useState(false);
   const [weaveOpen, setWeaveOpen] = useState(false);
   const absorb = useAbsorb(sanctum.feature_instance_id);
   const pendingWeaving = sanctum.pending_weaving;
   const pendingOwnerBonus = sanctum.pending_owner_bonus;
   const pendingTotal = pendingWeaving + pendingOwnerBonus;
+  let absorbButtonLabel: string;
+  if (absorb.isPending) {
+    absorbButtonLabel = 'Absorbing…';
+  } else if (pendingTotal > 0) {
+    absorbButtonLabel = `Absorb (${pendingTotal})`;
+  } else {
+    absorbButtonLabel = 'Absorb';
+  }
 
   return (
     <Card>
@@ -119,9 +127,7 @@ export function SanctumCard({ sanctum }: SanctumCardProps) {
           disabled={pendingTotal === 0 || absorb.isPending}
           onClick={() => absorb.mutate()}
         >
-          {absorb.isPending
-            ? 'Absorbing…'
-            : `Absorb${pendingTotal > 0 ? ` (${pendingTotal})` : ''}`}
+          {absorbButtonLabel}
         </Button>
       </CardFooter>
       <HomecomingDialog sanctum={sanctum} open={homecomingOpen} onOpenChange={setHomecomingOpen} />

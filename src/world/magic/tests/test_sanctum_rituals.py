@@ -154,7 +154,7 @@ class HomecomingRitualTests(TestCase):
             narrative_text="A first consecration.",
         )
         self.assertIsInstance(result, HomecomingResult)
-        # gain = 500 // 100 = 5
+        # 500 sacrificed at the 100:1 efficiency ratio yields 5 imbued.
         self.assertEqual(result.base_resonance_added, 5)
         self.assertEqual(result.overflow_escrowed, 0)
         self.assertEqual(result.new_homecoming_sum, 5)

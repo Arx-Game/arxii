@@ -159,7 +159,6 @@ def _apply_pending_increments(
     Returns the number of weaver rows that actually received an
     increment > 0.
     """
-    from django.db.models import F  # noqa: PLC0415
 
     from world.magic.models import SanctumPendingPayout  # noqa: PLC0415
     from world.magic.models.sanctum import SANCTUM_PENDING_PAYOUT_CAP  # noqa: PLC0415
@@ -201,14 +200,13 @@ def _apply_pending_increments(
         actual = min(requested, remaining)
         if actual <= 0:
             continue
-        # F() arithmetic so a concurrent absorb resetting the field to 0
-        # can't be clobbered by a stale in-memory snapshot.
-        SanctumPendingPayout.objects.filter(pk=payout.pk).update(**{field: F(field) + actual})
-        # SharedMemoryModel keeps the bulk_created instance in its identity
-        # map; the `.update()` bypasses ORM save() so the cached row's
-        # ``pending_*`` value stays stale until refresh. Refresh so subsequent
-        # ``objects.get(...)`` calls return the new value, not the cache.
-        payout.refresh_from_db(fields=[field, "updated_at"])
+        # Mutate the locked instance + save. We hold a row-lock via
+        # select_for_update, so this is race-safe against a concurrent
+        # absorb that would have to wait for our transaction. SharedMemoryModel
+        # keeps a single cached instance per PK; mutating that instance
+        # + saving keeps the cache consistent with the DB.
+        setattr(payout, field, getattr(payout, field) + actual)
+        payout.save(update_fields=[field, "updated_at"])
         accrued_count += 1
     return accrued_count
 
