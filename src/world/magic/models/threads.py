@@ -16,6 +16,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
     EffectKind,
+    SanctumSlotKind,
     TargetKind,
     VitalBonusTarget,
 )
@@ -383,6 +384,25 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
     )
+    target_sanctum_details = models.ForeignKey(
+        "magic.SanctumDetails",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=SANCTUM; null otherwise. Plan 4 §F.",
+    )
+    slot_kind = models.CharField(
+        max_length=16,
+        choices=SanctumSlotKind.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Per-PC weaving slot rule. Required for SANCTUM threads, must be "
+            "empty for all other target_kinds. Enforced by CheckConstraint. "
+            "PERSONAL_OWN + COVENANT slots are limited to one active per owner."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -425,6 +445,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -440,6 +461,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -455,6 +477,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -470,6 +493,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -485,6 +509,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -511,6 +536,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
             ),
@@ -535,8 +561,63 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
+            ),
+            # ---- SANCTUM ------------------------------------------------------
+            # Plan 4 §F. SANCTUM threads pay resonance income to woven weavers
+            # via the resonance generation cron tick. Each weaver-character may
+            # have at most one active PERSONAL_OWN thread (their own home) and
+            # one active COVENANT thread (the sacred ground of one covenant they
+            # actively belong to). HELPER threads on other personas' personal
+            # Sanctums are unlimited; non-SANCTUM threads must not set slot_kind.
+            models.UniqueConstraint(
+                fields=["owner"],
+                condition=models.Q(
+                    target_kind=TargetKind.SANCTUM,
+                    slot_kind=SanctumSlotKind.PERSONAL_OWN,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_sanctum_personal_own_active",
+            ),
+            models.UniqueConstraint(
+                fields=["owner"],
+                condition=models.Q(
+                    target_kind=TargetKind.SANCTUM,
+                    slot_kind=SanctumSlotKind.COVENANT,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_sanctum_covenant_active",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "target_sanctum_details"],
+                condition=models.Q(
+                    target_kind=TargetKind.SANCTUM,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_sanctum_owner_target_active",
+            ),
+            models.CheckConstraint(
+                name="thread_sanctum_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.SANCTUM)
+                    | (
+                        models.Q(target_sanctum_details__isnull=False)
+                        & ~models.Q(slot_kind="")
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_slot_kind_only_for_sanctum",
+                check=(models.Q(target_kind=TargetKind.SANCTUM) | models.Q(slot_kind="")),
             ),
         ]
 
@@ -554,6 +635,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.SANCTUM: "target_sanctum_details",
         }
         attr = _kind_to_attr.get(self.target_kind)
         return getattr(self, attr) if attr is not None else None
@@ -574,6 +656,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.SANCTUM: "target_sanctum_details",
         }
         all_target_fields = (
             "target_trait",
@@ -583,6 +666,7 @@ class Thread(SharedMemoryModel):
             "target_relationship_track",
             "target_capstone",
             "target_covenant_role",
+            "target_sanctum_details",
         )
 
         expected_field = kind_to_field.get(self.target_kind)
@@ -607,6 +691,17 @@ class Thread(SharedMemoryModel):
                         ),
                     },
                 )
+
+        # slot_kind: required for SANCTUM, must be empty for all other targets.
+        if self.target_kind == TargetKind.SANCTUM:
+            if not self.slot_kind:
+                raise ValidationError(
+                    {"slot_kind": "SANCTUM target_kind requires slot_kind to be set."},
+                )
+        elif self.slot_kind:
+            raise ValidationError(
+                {"slot_kind": f"slot_kind must be empty for target_kind={self.target_kind}."},
+            )
 
 
 class ThreadLevelUnlock(SharedMemoryModel):

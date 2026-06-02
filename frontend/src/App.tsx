@@ -178,6 +178,12 @@ const ThreadDetailPage = lazy(() =>
   import('@/magic/pages/ThreadDetailPage').then((m) => ({ default: m.ThreadDetailPage }))
 );
 
+const SanctumDashboardPage = lazy(() =>
+  import('@/magic/pages/SanctumDashboardPage').then((m) => ({
+    default: m.SanctumDashboardPage,
+  }))
+);
+
 const WeavingTeachingOffersPage = lazy(() =>
   import('@/magic/pages/WeavingTeachingOffersPage').then((m) => ({
     default: m.WeavingTeachingOffersPage,
@@ -706,6 +712,16 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <ThreadDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/sanctums"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <SanctumDashboardPage />
               </ProtectedRoute>
             </Suspense>
           }

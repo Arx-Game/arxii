@@ -94,6 +94,7 @@ INSTALLED_APPS += [
     "world.projects.apps.ProjectsConfig",
     "world.npc_services.apps.NPCServicesConfig",
     "world.buildings.apps.BuildingsConfig",
+    "world.room_features.apps.RoomFeaturesConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

@@ -122,6 +122,8 @@ resolve_and_add "sentry.io"
 # endpoint that Claude Code reaches.
 resolve_and_add "statsig.com"
 resolve_and_add "pypi.org"
+# SonarCloud — public-project API for fetching code-quality findings on PRs.
+resolve_and_add "sonarcloud.io"
 
 # ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
 echo "Fetching GitHub IP ranges via meta API..."
