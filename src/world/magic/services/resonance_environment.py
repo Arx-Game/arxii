@@ -597,11 +597,18 @@ def resonance_environment_for_cast(
     caster_sheet: CharacterSheet,
     room_profile: RoomProfile,
     technique: Technique | None,
+    effect: ResonanceEnvironmentEffect | None = None,
 ) -> ResonanceEnvironmentCastResult:
     """Apply resonance-environment backfire for OPPOSED casts.
 
     Called from the technique-use orchestrator after accrue_corruption_for_cast.
     Emits no events and runs no flows — this is a direct core-service call.
+
+    When ``effect`` is passed in, the call skips its own
+    ``evaluate_resonance_environment`` (the orchestrator computes it once at
+    Step 10 and feeds the same value into ``defile_place_for_cast`` — saves
+    ~4-5 queries per cast). ``effect=None`` keeps the standalone behaviour
+    for any future caller that doesn't already have the primitive result.
 
     Branch behaviour
     ----------------
@@ -632,7 +639,8 @@ def resonance_environment_for_cast(
     caster = caster_sheet.character
     room = room_profile.objectdb
 
-    effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+    if effect is None:
+        effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
 
     if not _is_opposed_backfire(effect):
         return _INERT_CAST_RESULT

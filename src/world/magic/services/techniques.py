@@ -154,7 +154,10 @@ def _build_resonance_involvements(
     thread_pull_resonance_spent sums CombatPull.resonance_spent for the
     character's active pulls per resonance.
     """
-    resonances = list(technique.gift.resonances.all())
+    # select_related("affinity") so downstream consumers that read
+    # resonance.affinity (e.g., defilement's abyssal filter at #722) don't
+    # hit the DB once per resonance.
+    resonances = list(technique.gift.resonances.select_related("affinity"))
     if not resonances:
         return ()
 
@@ -532,21 +535,32 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         except RoomProfile.DoesNotExist:
             room_profile = None
         if room_profile is not None:
+            # Evaluate the resonance-environment primitive ONCE per cast and
+            # feed it into both consumers — they read the same room state and
+            # the second evaluation is ~4-5 redundant queries (#722).
+            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+            from world.magic.services.resonance_environment import (  # noqa: PLC0415
+                evaluate_resonance_environment,
+            )
+
+            primitive_effect = evaluate_resonance_environment(
+                caster=character, room=caster_room, technique=technique
+            )
             resonance_environment_for_cast(
                 caster_sheet=sheet,
                 room_profile=room_profile,
                 technique=technique,
+                effect=primitive_effect,
             )
             # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
             # degrades it, spreads its taint, and accrues caster->world corruption
             # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
-            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
-
             defile_place_for_cast(
                 caster_sheet=sheet,
                 room_profile=room_profile,
                 technique=technique,
                 technique_result=technique_result,
+                effect=primitive_effect,
             )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---

@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.techniques import Technique
+    from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types.techniques import TechniqueUseResult
 
 #: ``LocationValueModifier.source`` tag for cascade rows mutated by defilement.
@@ -47,18 +48,24 @@ _ABYSSAL = "abyssal"
 
 
 @transaction.atomic
-def defile_place_for_cast(
+def defile_place_for_cast(  # noqa: C901 — +1 branch for the cached-effect bypass (#722); not worth extracting
     *,
     caster_sheet: CharacterSheet,
     room_profile: RoomProfile,
     technique: Technique,
     technique_result: TechniqueUseResult,
+    effect: ResonanceEnvironmentEffect | None = None,
 ) -> None:
     """Apply defilement for a cast, if the caster overpowers an opposed place.
 
     No-op unless the resonance-environment primitive resolves to
     ``CASTER_DOMINANT`` on a ``caster_dominance_defiles`` interaction. Gated by
     ``magical_profile`` (Quiescent casters / NPCs without an aura do nothing).
+
+    When ``effect`` is passed in, the call skips its own
+    ``evaluate_resonance_environment`` — the orchestrator computes it once at
+    Step 10 and feeds the same value here AND into
+    ``resonance_environment_for_cast`` (saves ~4-5 queries per cast).
     """
     aura = magical_profile(caster_sheet)
     if aura is None:
@@ -68,7 +75,8 @@ def defile_place_for_cast(
     caster = caster_sheet.character
     room = room_profile.objectdb
 
-    effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+    if effect is None:
+        effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
     interaction = effect.interaction
     if (
         effect.direction != ResonanceDirection.CASTER_DOMINANT
