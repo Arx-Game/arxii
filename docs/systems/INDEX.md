@@ -462,6 +462,101 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   (`has_item` leaf dispatch).
 - **Source:** `src/world/buildings/`
 
+### Room Features (Plan 4 framework — Subsystem E)
+Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
+`RoomFeatureInstance` decorates a `RoomProfile` and dispatches per-kind logic
+via a strategy enum. The first kind shipped is **SANCTUM** (see Sanctum below);
+future kinds (Library, Training Room, Lab, etc. — #675) plug in by
+registering a service strategy + per-kind details model.
+
+- **Models** (`world.room_features.models`):
+  - `RoomFeatureKind` — open catalog row. Carries `service_strategy`
+    (TextChoices: `SANCTUM`, future kinds), `max_level` (cap on
+    `RoomFeatureInstance.level`), display copy, install-cost knobs.
+  - `RoomFeatureKindInstallRitual` — M2M-shape: which Rituals can install
+    this kind. Lets one kind admit multiple install rites
+    (Sanctification of own home vs. Covenant Sanctification).
+  - `RoomFeatureKindOwnerType` — M2M-shape: which `HolderType` values
+    (PERSONA / ORGANIZATION) may own this kind. Validated at install.
+  - `RoomFeatureInstance` — per-(room, kind) decoration. OneToOne to
+    `RoomProfile`; `level` field mutable via upgrade projects. One
+    instance per room (unique constraint).
+  - `RoomFeatureProgressionDetails` — Project per-kind payload for
+    `ROOM_FEATURE_PROGRESSION` projects (install + upgrade). Carries the
+    `feature_kind` + `target_level` + `existing_instance` (null for
+    install; set for upgrade).
+- **Dispatch:** each `service_strategy` value resolves to a
+  `handle_progression(project, details) -> RoomFeatureInstance` strategy
+  function. SANCTUM strategy lives at
+  `world.magic.services.sanctum.handle_progression`; future kinds
+  register their own.
+- **Tests:** `src/world/room_features/tests/`. SANCTUM install and
+  upgrade are exercised end-to-end via the SanctumDetails layer below.
+- **Source:** `src/world/room_features/`
+
+### Sanctum (Plan 4 §F — first Room Feature kind)
+Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
+generation surface installed via the Ritual of Sanctification. Two
+ownership modes (`SanctumOwnerMode`): `PERSONAL` (persona-owned home)
+and `COVENANT` (covenant-owned sacred ground). Resonance income is
+NOT stored on the Sanctum — it accumulates per-weaver into
+`SanctumPendingPayout` "wells" via the daily cron tick, and weavers
+drain the well by physically visiting and performing an absorb action.
+
+- **Models** (`world.magic.models.sanctum`):
+  - `SanctumDetails` — OneToOne to `RoomFeatureInstance` (the framework
+    decoration), carrying `resonance_type` (FK to `Resonance`),
+    `owner_mode`, optional `founder_character_sheet` (set at
+    Sanctification; null only for seed/historical/test rows), ritual
+    cooldown timestamps, and `pending_sacrifice_overflow` escrow. One
+    PERSONAL Sanctum per founder (partial unique constraint).
+  - `SanctumPendingPayout` — per-(sanctum, weaver) "well" with separate
+    `pending_weaving` + `pending_owner_bonus` totals. Capped at
+    `SANCTUM_PENDING_PAYOUT_CAP = 1000` (sum of both fields); ticks
+    no-op once full. Unique per (sanctum, weaver_character_sheet).
+- **Key functions** (`world.magic.services.sanctum_install`):
+  - `perform_sanctification(room_profile, leader, resonance, *, owner_mode) -> SanctificationResult`
+    — Ritual of Sanctification entry point. Validates physical
+    presence, ownership match, no-existing-feature, founder-cap (1
+    Personal per founder); creates `RoomFeatureInstance` + `SanctumDetails`.
+  - `perform_dissolution(sanctum, leader) -> DissolutionResult` —
+    Ritual of Dissolution. Tiered recovery (BOTCH 0% / FAIL 10% /
+    SUCCESS 50% / CRIT 80%); founder-vs-non-founder difficulty
+    multiplier 2.0×; cascades the Sanctum decoration off the room.
+  - `absorb_sanctum_pool(sanctum, weaver) -> AbsorbResult` — drains
+    the weaver's `SanctumPendingPayout` into `grant_resonance` ledger
+    rows (`SANCTUM_WEAVING` + `SANCTUM_OWNER_BONUS` as separate
+    sources) when the weaver is physically present in the room.
+- **Cron** (`world.magic.services.sanctum_cron`):
+  - `sanctum_resonance_generation_tick()` — daily, registered as
+    `sanctum.resonance_generation_tick`. Walks every SANCTUM
+    `RoomFeatureInstance`; per-Sanctum, computes per-weaver income
+    `max(thread.level, 1) × effective_value(room, resonance) ×
+    LEVEL_MULTIPLIERS[level-1] × K_INCOME_RATE` and bumps the well
+    (capped). Owner / active-covenant-member weavers also accrue +1
+    `pending_owner_bonus` per OTHER thread.
+- **Dormancy gating (#671):** `_sanctum_is_dormant(sanctum, threads)`
+  early-returns from `_payout_for_sanctum` when the Sanctum is
+  Dormant. PERSONAL gates on `founder.is_dormant`; COVENANT gates on
+  `all(t.owner.is_dormant for t in threads)`. Public
+  `world.magic.services.sanctum_state.sanctum_is_dormant(sanctum)`
+  for UI / API callers.
+- **API endpoints** (`world.magic.views_sanctum`):
+  - `POST /api/magic/sanctums/install/` — `perform_sanctification` wrapper.
+  - `POST /api/magic/sanctums/<id>/dissolve/` — `perform_dissolution`.
+  - `POST /api/magic/sanctums/<id>/absorb/` — `absorb_sanctum_pool`.
+  - `GET /api/magic/sanctums/` — list + per-sanctum detail with
+    viewer-context `pending_weaving` / `pending_owner_bonus` / `is_founder`.
+- **Cross-app dependencies:** `world.room_features` (the framework),
+  `world.locations` (`effective_value` / `LocationValueModifier`
+  RESONANCE rows that feed the income pool, `effective_owner` for
+  bonus eligibility), `world.magic.models.Thread` (SANCTUM-targeted
+  threads with `SanctumSlotKind` PERSONAL_OWN / COVENANT / HELPER),
+  `world.character_sheets` (`is_dormant` for #671 gating),
+  `world.covenants` (`CharacterCovenantRole` for covenant-mode bonus).
+- **Source:** `src/world/magic/models/sanctum.py`,
+  `src/world/magic/services/sanctum*.py`.
+
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
