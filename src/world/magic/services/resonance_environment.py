@@ -571,13 +571,24 @@ def _get_endure_hallowed_ground_check_type() -> CheckType:
 
 
 def _is_opposed_backfire(effect: ResonanceEnvironmentEffect) -> bool:
-    """Return True when the effect should trigger the OPPOSED backfire pipeline."""
+    """Return True when the effect should trigger the OPPOSED backfire pipeline.
+
+    Suppressed when defilement fires: a CASTER_DOMINANT caster on a
+    ``caster_dominance_defiles`` interaction overpowers the place and defiles it
+    instead of suffering the reject/repel backfire (e.g. a strong Abyssal caster
+    defiles a Celestial place rather than taking Hallowed Burn). A weak caster
+    (ENVIRONMENT_DOMINANT) still backfires normally.
+    """
     return (
         effect.kind != AffinityInteractionKind.CORRUPT
         and effect.valence == ResonanceValence.OPPOSED
         and effect.kind in (AffinityInteractionKind.REJECT, AffinityInteractionKind.REPEL)
         and effect.interaction is not None
         and effect.interaction.consequence_pool is not None
+        and not (
+            effect.direction == ResonanceDirection.CASTER_DOMINANT
+            and effect.interaction.caster_dominance_defiles
+        )
     )
 
 
