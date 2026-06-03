@@ -40,6 +40,8 @@ from world.magic.factories import (
 from world.magic.services.gain import tag_room_resonance
 from world.magic.services.resonance_environment import (
     ResonanceEnvironmentEffect,
+    _compute_direction,
+    _is_opposed_backfire,
     evaluate_resonance_environment,
     get_resonance_environment_config,
 )
@@ -1078,3 +1080,117 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         # Only celestial place affinity contributes to OPPOSED magnitude
         expected = round(Decimal(40) * Decimal("0.80") * Decimal("1.00") * cfg.base_coefficient)
         self.assertEqual(result.magnitude, expected)
+
+
+class CasterDominanceDefilesDirectionTest(ResonanceCacheIsolationMixin, TestCase):
+    """_compute_direction: caster_dominance_defiles=True enables the strength-split path.
+
+    A REJECT interaction flagged caster_dominance_defiles=True should run the same
+    caster-vs-place strength comparison as CORRUPT, allowing CASTER_DOMINANT when the
+    caster overwhelms the place.  A REJECT interaction with the flag False must always
+    return ENVIRONMENT_DOMINANT regardless of caster strength.
+
+    Uses AffinityInteractionFactory (construction style: factory with explicit kwargs).
+    caster_alignment=Decimal('1.0') → caster_strength = 1.0 * 100 * 0.500 = 50.
+    place_magnitude=10 → diff_caster = 40 > balanced_band(10) → CASTER_DOMINANT when flagged.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.abyssal = AffinityFactory(name="Abyssal")
+        self.celestial = AffinityFactory(name="Celestial")
+        self.cfg = get_resonance_environment_config()
+
+    def test_reject_caster_dominance_defiles_true_strong_caster_is_caster_dominant(self) -> None:
+        """REJECT + caster_dominance_defiles=True + strong caster → CASTER_DOMINANT."""
+        interaction = AffinityInteractionFactory(
+            source_affinity=self.abyssal,
+            environment_affinity=self.celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+            caster_dominance_defiles=True,
+        )
+
+        # caster_alignment=1.0 (100% abyssal), place_magnitude=10
+        # caster_strength = 1.0 * 100 * 0.500 = 50; diff_caster = 40 > balanced_band(10)
+        direction = _compute_direction(
+            interaction=interaction,
+            caster_alignment=Decimal("1.0"),
+            place_magnitude=10,
+            config=self.cfg,
+        )
+
+        self.assertEqual(direction, ResonanceDirection.CASTER_DOMINANT)
+
+    def test_reject_caster_dominance_defiles_false_strong_caster_is_environment_dominant(
+        self,
+    ) -> None:
+        """REJECT + caster_dominance_defiles=False + strong caster → ENVIRONMENT_DOMINANT.
+
+        Without the flag, REJECT never lets the caster dominate regardless of strength.
+        """
+        interaction = AffinityInteractionFactory(
+            source_affinity=self.abyssal,
+            environment_affinity=self.celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+            caster_dominance_defiles=False,
+        )
+
+        direction = _compute_direction(
+            interaction=interaction,
+            caster_alignment=Decimal("1.0"),
+            place_magnitude=10,
+            config=self.cfg,
+        )
+
+        self.assertEqual(direction, ResonanceDirection.ENVIRONMENT_DOMINANT)
+
+
+class OpposedBackfireSuppressionTest(ResonanceCacheIsolationMixin, TestCase):
+    """_is_opposed_backfire is suppressed when defilement fires.
+
+    A flagged REJECT interaction (with a consequence pool) at CASTER_DOMINANT must NOT
+    backfire — the strong caster defiles the place instead of being burned. The same
+    interaction at ENVIRONMENT_DOMINANT (weak caster) still backfires.
+    """
+
+    def _effect(self, *, direction: str) -> ResonanceEnvironmentEffect:
+        from actions.factories import ConsequencePoolFactory
+
+        interaction = AffinityInteractionFactory(
+            source_affinity=AffinityFactory(name="Abyssal"),
+            environment_affinity=AffinityFactory(name="Celestial"),
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+            caster_dominance_defiles=True,
+            consequence_pool=ConsequencePoolFactory(),
+        )
+        return ResonanceEnvironmentEffect(
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            direction=direction,
+            magnitude=20,
+            source_affinity=interaction.source_affinity,
+            environment_affinity=interaction.environment_affinity,
+            interaction=interaction,
+            backfire_difficulty=30,
+        )
+
+    def test_backfire_suppressed_when_caster_dominant_and_flagged(self) -> None:
+        """Flagged REJECT at CASTER_DOMINANT → not a backfire (defilement takes over)."""
+        self.assertFalse(
+            _is_opposed_backfire(self._effect(direction=ResonanceDirection.CASTER_DOMINANT))
+        )
+
+    def test_backfire_active_when_environment_dominant(self) -> None:
+        """Flagged REJECT at ENVIRONMENT_DOMINANT → still backfires (weak caster burns)."""
+        self.assertTrue(
+            _is_opposed_backfire(self._effect(direction=ResonanceDirection.ENVIRONMENT_DOMINANT))
+        )

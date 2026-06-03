@@ -323,18 +323,20 @@ def _compute_direction(
     place_magnitude: int,
     config: ResonanceEnvironmentConfig,
 ) -> str:
-    """Compute direction from interaction aggressor and CORRUPT comparison.
+    """Compute direction from caster strength vs place magnitude.
 
-    For CORRUPT kind: compare caster_strength proxy to place_magnitude.
+    The strength comparison runs when the interaction is flagged
+    ``caster_dominance_defiles`` OR its kind is CORRUPT (the ``OR CORRUPT``
+    preserves pair #8's existing computed direction). In that case:
       caster_strength = caster_alignment * 100 * config.caster_power_scalar
       caster_strength - place_magnitude > balanced_band → CASTER_DOMINANT
       place_magnitude - caster_strength > balanced_band → ENVIRONMENT_DOMINANT
       else → BALANCED
 
-    For non-CORRUPT (AMPLIFY / REJECT / REPEL): ENVIRONMENT_DOMINANT — the
-    environment acts on the working, whether the outcome is a boon or harm.
+    Otherwise (non-flagged AMPLIFY / REJECT / REPEL): ENVIRONMENT_DOMINANT — the
+    environment acts on the working; the caster can never overpower the place.
     """
-    if interaction.kind == AffinityInteractionKind.CORRUPT:
+    if interaction.caster_dominance_defiles or interaction.kind == AffinityInteractionKind.CORRUPT:
         caster_strength = caster_alignment * Decimal(100) * config.caster_power_scalar
         diff_caster = caster_strength - Decimal(place_magnitude)
         diff_env = Decimal(place_magnitude) - caster_strength
@@ -569,13 +571,24 @@ def _get_endure_hallowed_ground_check_type() -> CheckType:
 
 
 def _is_opposed_backfire(effect: ResonanceEnvironmentEffect) -> bool:
-    """Return True when the effect should trigger the OPPOSED backfire pipeline."""
+    """Return True when the effect should trigger the OPPOSED backfire pipeline.
+
+    Suppressed when defilement fires: a CASTER_DOMINANT caster on a
+    ``caster_dominance_defiles`` interaction overpowers the place and defiles it
+    instead of suffering the reject/repel backfire (e.g. a strong Abyssal caster
+    defiles a Celestial place rather than taking Hallowed Burn). A weak caster
+    (ENVIRONMENT_DOMINANT) still backfires normally.
+    """
     return (
         effect.kind != AffinityInteractionKind.CORRUPT
         and effect.valence == ResonanceValence.OPPOSED
         and effect.kind in (AffinityInteractionKind.REJECT, AffinityInteractionKind.REPEL)
         and effect.interaction is not None
         and effect.interaction.consequence_pool is not None
+        and not (
+            effect.direction == ResonanceDirection.CASTER_DOMINANT
+            and effect.interaction.caster_dominance_defiles
+        )
     )
 
 

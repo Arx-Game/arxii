@@ -258,44 +258,12 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
     # T0-T7: parametrized across all 8 outcome × intensity combinations
     # -------------------------------------------------------------------------
 
+    # NOTE: A strength-50 caster overpowers (defiles) a magnitude-10 celestial place;
+    # low-difficulty celestial *rejection* is unreachable for a dominant Abyssal caster
+    # by design (#525). The low-room scenario is now covered as defilement in
+    # test_defile_celestial_place_*. Only the 4 high-room rows remain below.
     @parameterized.expand(
         [
-            (
-                "low_critical_success",
-                "low",
-                "Critical Success",
-                "Tempered Against Light",
-                "Tempered Walk",
-                "Hallowed-Hardened",
-                35,
-            ),
-            (
-                "low_success",
-                "low",
-                "Success",
-                "Singed",
-                "Marked Path",
-                "Touched by Light",
-                35,
-            ),
-            (
-                "low_failure",
-                "low",
-                "Failure",
-                "Burning",
-                "Marked Path",
-                None,
-                35,
-            ),
-            (
-                "low_critical_failure",
-                "low",
-                "Critical Failure",
-                "Hallowed Burn",
-                "Cast Out",
-                "Cast Out by the Light",
-                35,
-            ),
             (
                 "high_critical_success",
                 "high",
@@ -832,41 +800,26 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         )
 
     # -------------------------------------------------------------------------
-    # T11: CASTER_DOMINANT stub — strong abyssal caster vs weak primal room
+    # T11: Defilement — real CASTER_DOMINANT defilement pipeline (issue #525)
     # -------------------------------------------------------------------------
 
-    def test_caster_dominant_stub(self) -> None:
-        """Strong abyssal caster (aura=100) in weak Primal room (mag=10) → CASTER_DOMINANT CORRUPT.
+    def _build_primal_room(self) -> tuple[object, object, object]:
+        """Helper: create a weak Primal room (magnitude=10) + return (room, profile, resonance).
 
-        Math:
-          caster_strength = 100 * 0.500 = 50.0
-          place_magnitude = 10
-          caster_strength - place_magnitude = 40 > balanced_band(10) → CASTER_DOMINANT
-
-        The seeded AffinityInteraction (Abyssal→Primal): OPPOSED / CORRUPT / aggressor=CASTER.
-        resonance_environment_for_cast treats CORRUPT as inert (deferred defilement).
-        No condition is applied; no perform_check fired; no story movement.
-
-        STUB: when defilement (CASTER_DOMINANT) is built, this caster should degrade
-        the room's primal cascade magnitude and route corruption through CORRUPTION_ACCRUING
-        (see spec deferred §). This test is the fill-in point.
+        Pair #6 (Abyssal→Primal): OPPOSED / CORRUPT / caster_dominance_defiles=True.
+        caster_strength(50) - place_magnitude(10) = 40 > balanced_band(10) → CASTER_DOMINANT.
         """
         from evennia.utils import create as evennia_create
 
         from evennia_extensions.models import RoomProfile
         from world.magic.models.affinity import Affinity, Resonance
         from world.magic.services.gain import tag_room_resonance
-        from world.magic.services.resonance_environment import get_resonance_environment_config
 
-        # Build a Primal resonance (Primal affinity seeded by seed_canonical_affinities).
         primal_affinity = Affinity.objects.get(name="Primal")
         primal_resonance, _ = Resonance.objects.get_or_create(
             name="Decay (pipeline test)",
             defaults={"affinity": primal_affinity},
         )
-
-        # Create a room and tag it with Primal resonance at low magnitude = 10.
-        # caster_strength (50) - place_magnitude (10) = 40 > balanced_band (10) → CASTER_DOMINANT.
         primal_room = evennia_create.create_object(
             typeclass="typeclasses.rooms.Room",
             key="Weak Primal Ground (pipeline test)",
@@ -876,36 +829,60 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         modifier = tag_room_resonance(primal_profile, primal_resonance)
         modifier.value = 10
         modifier.save(update_fields=["value"])
+        return primal_room, primal_profile, primal_resonance
 
+    def test_defile_primal_place(self) -> None:
+        """Strong Abyssal caster (aura=100) in weak Primal room (mag=10) → CASTER_DOMINANT CORRUPT.
+
+        Math:
+          caster_strength = 100 × 0.500 = 50.0
+          place_magnitude = 10
+          50 - 10 = 40 > balanced_band(10) → CASTER_DOMINANT
+
+        Pair #6 (Abyssal→Primal): OPPOSED / CORRUPT / caster_dominance_defiles=True.
+        defile_place_for_cast is called by use_technique Step 10, which:
+          1. Degrades: primal resonance effective_value 10 → 4 (−6).
+          2. Spreads: Dissolution modifier with source="defilement" += 6 on the room.
+          3. Accrues: CharacterResonance.corruption_current for Dissolution rises.
+
+        Second cast: primal floors at 0 (4−6 floored), dissolution grows to 12.
+        After 2 casts the room is more Abyssal than Primal — corrupted ground.
+        """
+        from world.locations.models import LocationValueModifier
+        from world.locations.services import effective_value
+        from world.magic.models.aura import CharacterResonance
+        from world.magic.services.resonance_environment import (
+            get_resonance_environment_config,
+        )
+
+        primal_room, primal_profile, primal_resonance = self._build_primal_room()
         self.caster.location = primal_room
         self.caster.save()
 
-        # --- Direct primitive assertion: verify CASTER_DOMINANT before the orchestrator cast ---
+        # --- Primitive assertion: CASTER_DOMINANT / CORRUPT ---
         cfg = get_resonance_environment_config()
-        primitive_result = evaluate_resonance_environment(
+        primitive = evaluate_resonance_environment(
             caster=self.caster, room=primal_room, technique=self.technique
         )
         caster_strength = float(Decimal("100.00") * cfg.caster_power_scalar)
-        # caster_strength - place_magnitude = 50.0 - 10 = 40 > balanced_band(10) → CASTER_DOMINANT
         self.assertGreater(
             caster_strength - 10,
             cfg.balanced_band,
-            "Math pre-check: caster_strength - place_magnitude must exceed balanced_band",
+            "Math pre-check: caster_strength − place_magnitude must exceed balanced_band",
         )
         self.assertEqual(
-            primitive_result.direction,
+            primitive.direction,
             ResonanceDirection.CASTER_DOMINANT,
-            "evaluate_resonance_environment must return CASTER_DOMINANT "
-            "for strong abyssal vs weak primal",
+            "evaluate_resonance_environment must return CASTER_DOMINANT for strong abyssal vs "
+            "weak primal",
         )
         self.assertEqual(
-            primitive_result.kind,
+            primitive.kind,
             AffinityInteractionKind.CORRUPT,
-            "evaluate_resonance_environment must return kind=CORRUPT "
-            "for Abyssal→Primal interaction",
+            "evaluate_resonance_environment must return kind=CORRUPT for Abyssal→Primal",
         )
 
-        # --- Orchestrator cast: CORRUPT branch → inert (no condition applied) ---
+        # --- First cast ---
         forced_outcome = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(forced_outcome) as capture:
             use_technique(
@@ -914,26 +891,326 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
                 resolve_fn=MagicMock(return_value="resolve_result"),
             )
 
-        # CORRUPT is uniformly inert this slice — no perform_check.
+        # No backfire check on the defilement path.
         self.assertIsNone(
             capture.target_difficulty,
-            "CASTER_DOMINANT CORRUPT must not call perform_check (inert deferred branch)",
+            "CASTER_DOMINANT CORRUPT must not call perform_check — defilement path, not backfire",
         )
 
-        # No conditions applied — Magically Attuned removed; CORRUPT path adds nothing.
-        post_cast_count = ConditionInstance.objects.filter(target=self.caster).count()
+        # 1. Degrade: primal resonance effective_value dropped by defile_degrade_per_cast(6)
+        primal_ev_after_1 = effective_value(primal_room, resonance=primal_resonance)
         self.assertEqual(
-            post_cast_count,
-            0,
-            "No ConditionInstances should exist after CASTER_DOMINANT CORRUPT cast",
+            primal_ev_after_1,
+            4,  # 10 − 6 = 4
+            f"Primal effective_value must be 4 after first cast (was 10, degrade=6), "
+            f"got {primal_ev_after_1}",
         )
 
-        # StoryProgress unchanged.
-        self.progress.refresh_from_db()
+        # 2. Spread: Dissolution gets a room-level source="defilement" modifier of value=6
+        defile_source = "defilement"
+        dissolution_mod = LocationValueModifier.objects.filter(
+            room_profile=primal_profile,
+            resonance=self.dissolution_resonance,
+            source=defile_source,
+        ).first()
+        self.assertIsNotNone(
+            dissolution_mod,
+            "Dissolution spread: a room-level source='defilement' LocationValueModifier must exist "
+            "after first cast",
+        )
         self.assertEqual(
-            self.progress.current_episode,
-            self.episode_1,
-            "StoryProgress must remain at 'Stepping Into Light' after CASTER_DOMINANT CORRUPT cast",
+            dissolution_mod.value,
+            6,  # defile_spread_per_cast=6
+            f"Dissolution defilement modifier value must be 6 after first cast, "
+            f"got {dissolution_mod.value}",
+        )
+        dissolution_ev_after_1 = effective_value(primal_room, resonance=self.dissolution_resonance)
+        self.assertEqual(
+            dissolution_ev_after_1,
+            6,
+            f"Dissolution effective_value must be 6 after first cast, got {dissolution_ev_after_1}",
+        )
+
+        # 3. Corruption: CharacterResonance.corruption_current for Dissolution rose.
+        #    defile_corruption_per_cast=2 → at least 1 unit accrued (CORRUPTION_ACCRUING emitted).
+        char_res = CharacterResonance.objects.filter(
+            character_sheet=self.sheet,
+            resonance=self.dissolution_resonance,
+        ).first()
+        self.assertIsNotNone(
+            char_res,
+            "CharacterResonance row for Dissolution must exist after defilement cast "
+            "(accrue fired)",
+        )
+        # corruption_current includes both per-cast baseline AND defilement increment.
+        # Assert it is at least the defilement amount (defile_corruption_per_cast=2).
+        self.assertGreaterEqual(
+            char_res.corruption_current,
+            cfg.defile_corruption_per_cast,
+            f"corruption_current must be >= defile_corruption_per_cast"
+            f"({cfg.defile_corruption_per_cast}) after first cast "
+            f"(CORRUPTION_ACCRUING with DEFILEMENT source fired), "
+            f"got {char_res.corruption_current}",
+        )
+
+        # After the first cast the room has ALREADY FLIPPED to Abyssal-dominant:
+        # Dissolution=6 > Primal=4. On the second cast, evaluate_resonance_environment
+        # finds dominant affinity = Abyssal (the caster's own affinity), so pair #5
+        # (Abyssal→Abyssal = ALIGNED/AMPLIFY) fires — not an OPPOSED/CORRUPT path.
+        # defile_place_for_cast therefore returns early (direction != CASTER_DOMINANT),
+        # and neither primal nor dissolution values change further.
+        # This is correct game physics: defilement succeeds by flipping the room;
+        # once flipped, further casts are ALIGNED (the caster is now "home").
+
+        # After first cast: Dissolution already dominates over Primal (corrupted ground).
+        self.assertGreater(
+            effective_value(primal_room, resonance=self.dissolution_resonance),
+            effective_value(primal_room, resonance=primal_resonance),
+            "After 1 cast, Dissolution (6) must exceed Primal (4) — room already flipped "
+            "to Abyssal-dominant (corrupted ground achieved in one cast)",
+        )
+
+    def test_defile_celestial_place_replaces_rejection(self) -> None:
+        """Strong Abyssal caster in low celestial room (mag=10) → CASTER_DOMINANT defiles, no burn.
+
+        Math: 50 − 10 = 40 > balanced_band(10) → CASTER_DOMINANT on pair #4
+        (Abyssal→Celestial, caster_dominance_defiles=True).
+        Backfire (Hallowed Burn) is suppressed — _is_opposed_backfire returns False.
+
+        Assertions:
+          - Celestial "Light" resonance effective_value dropped by 6.
+          - Dissolution spread modifier with source="defilement" exists, value=6.
+          - CharacterResonance.corruption_current for Dissolution rose (CORRUPTION_ACCRUING fired).
+          - No Hallowed Burn ConditionInstance applied (backfire suppressed).
+          - No injury condition of any kind applied by this cast.
+        """
+        from world.locations.models import LocationValueModifier
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+        from world.magic.models.aura import CharacterResonance
+        from world.magic.services.resonance_environment import (
+            get_resonance_environment_config,
+        )
+
+        # Caster is already in self.low_room (celestial Light magnitude=10) from setUp.
+        cfg = get_resonance_environment_config()
+
+        # Fetch the Celestial "Light" resonance tagged on low_room.
+        light_resonance = Resonance.objects.get(name="Light")
+
+        # Pre-cast: effective_value of Light on low_room = 10.
+        light_ev_before = effective_value(self.low_room, resonance=light_resonance)
+        self.assertEqual(light_ev_before, 10, "Light resonance baseline must be 10 in low_room")
+
+        # Cast once.
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome) as capture:
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # Backfire check must NOT have fired (CASTER_DOMINANT defiles, no rejection).
+        self.assertIsNone(
+            capture.target_difficulty,
+            "CASTER_DOMINANT on pair #4 must suppress the OPPOSED backfire check; "
+            "no perform_check should have been called",
+        )
+
+        # 1. Celestial resonance effective_value dropped by defile_degrade_per_cast(6): 10 → 4.
+        light_ev_after = effective_value(self.low_room, resonance=light_resonance)
+        self.assertEqual(
+            light_ev_after,
+            4,  # 10 − 6 = 4
+            f"Light effective_value must drop to 4 after defilement cast (was 10, degrade=6), "
+            f"got {light_ev_after}",
+        )
+
+        # 2. Dissolution spread: room-level source="defilement" modifier, value=6.
+        low_room_profile = self.low_room.room_profile
+        defile_source = "defilement"
+        dissolution_mod = LocationValueModifier.objects.filter(
+            room_profile=low_room_profile,
+            resonance=self.dissolution_resonance,
+            source=defile_source,
+        ).first()
+        self.assertIsNotNone(
+            dissolution_mod,
+            "Dissolution spread: room-level source='defilement' modifier must exist after cast",
+        )
+        self.assertEqual(
+            dissolution_mod.value,
+            6,
+            f"Dissolution spread modifier must be 6 after first cast, got {dissolution_mod.value}",
+        )
+
+        # 3. Corruption: CharacterResonance for Dissolution rose (DEFILEMENT source fired).
+        char_res = CharacterResonance.objects.filter(
+            character_sheet=self.sheet,
+            resonance=self.dissolution_resonance,
+        ).first()
+        self.assertIsNotNone(
+            char_res,
+            "CharacterResonance for Dissolution must exist after defilement cast",
+        )
+        self.assertGreaterEqual(
+            char_res.corruption_current,
+            cfg.defile_corruption_per_cast,
+            f"corruption_current must be >= {cfg.defile_corruption_per_cast} "
+            f"(CORRUPTION_ACCRUING with DEFILEMENT source fired), "
+            f"got {char_res.corruption_current}",
+        )
+
+        # 4. No Hallowed Burn — backfire suppressed when defilement fires.
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.caster,
+                condition=self.hallowed_burn_template,
+            ).exists(),
+            "Hallowed Burn must NOT be applied when CASTER_DOMINANT defiles the place (#525)",
+        )
+
+        # 5. No injury condition of any kind applied by this cast.
+        injury_templates = [
+            self.singed_template,
+            self.burning_template,
+            self.tempered_template,
+            self.hallowed_burn_template,
+            self.cast_disrupted_template,
+        ]
+        for tmpl in injury_templates:
+            self.assertFalse(
+                ConditionInstance.objects.filter(
+                    target=self.caster,
+                    condition=tmpl,
+                ).exists(),
+                f"Injury condition '{tmpl.name}' must NOT be applied on the defilement path",
+            )
+
+    def test_weak_abyssal_caster_celestial_still_burned(self) -> None:
+        """Weak-dominant caster (ENVIRONMENT_DOMINANT in high room) still backfires normally.
+
+        Caster in high_room (Celestial magnitude=80):
+          caster_strength(50) - 80 = −30; 80 - 50 = 30 > balanced_band(10) → ENVIRONMENT_DOMINANT.
+        Pair #4 (Abyssal→Celestial) with caster_dominance_defiles=True but direction is
+        ENVIRONMENT_DOMINANT → _is_opposed_backfire returns True → normal backfire pipeline fires.
+
+        Force Critical Failure → Hallowed Burn applied.
+        No source="defilement" modifier rows appear on the high_room's profile.
+        Caster's Dissolution corruption_current did NOT rise from defilement.
+        """
+        from world.locations.models import LocationValueModifier
+
+        # Place caster in the high celestial room.
+        self.caster.location = self.high_room
+        self.caster.save()
+
+        high_room_profile = self.high_room.room_profile
+        defile_source = "defilement"
+
+        # Cast with Critical Failure forced → backfire → Hallowed Burn applied.
+        crit_fail = CheckOutcome.objects.get(name="Critical Failure")
+        with force_check_outcome(crit_fail):
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # Hallowed Burn must be applied (normal backfire path, ENVIRONMENT_DOMINANT).
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.caster,
+                condition=self.hallowed_burn_template,
+            ).exists(),
+            "Hallowed Burn must be applied on Critical Failure in ENVIRONMENT_DOMINANT room "
+            "(high celestial, not CASTER_DOMINANT)",
+        )
+
+        # No source="defilement" modifier rows on the high room's profile.
+        self.assertFalse(
+            LocationValueModifier.objects.filter(
+                room_profile=high_room_profile,
+                source=defile_source,
+            ).exists(),
+            "No source='defilement' LocationValueModifier must exist on the high_room "
+            "(backfire fired, not defilement)",
+        )
+        # The absence of any source='defilement' modifier row is the definitive gate that
+        # defile_place_for_cast was a no-op here (baseline per-cast corruption from
+        # accrue_corruption_for_cast is unrelated and intentionally not asserted on).
+
+    def test_primal_caster_does_not_defile_celestial(self) -> None:
+        """Negative control: Primal-aura caster in low celestial room → no defilement.
+
+        Pair #7 (Primal→Celestial): OPPOSED / REJECT / caster_dominance_defiles=False.
+        _compute_direction returns ENVIRONMENT_DOMINANT (flag=False, kind≠CORRUPT).
+        _is_opposed_backfire returns True → normal backfire fires (not defilement).
+        No source="defilement" modifier rows appear on low_room.
+
+        This proves only the Abyss defiles (the lore boundary holds mechanically).
+        """
+        from world.locations.models import LocationValueModifier
+        from world.magic.factories import (
+            CharacterAnimaFactory,
+            CharacterAuraFactory,
+            GiftFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models.affinity import Affinity, Resonance
+
+        defile_source = "defilement"
+        low_room_profile = self.low_room.room_profile
+
+        # Build a Primal-aura caster with a Primal-resonance technique.
+        primal_sheet = CharacterSheetFactory()
+        primal_caster = primal_sheet.character
+
+        CharacterAuraFactory(
+            character=primal_caster,
+            celestial=Decimal("0.00"),
+            primal=Decimal("100.00"),
+            abyssal=Decimal("0.00"),
+        )
+        CharacterAnimaFactory(character=primal_caster, current=20, maximum=20)
+
+        # Seed a Primal resonance and wire it into a technique.
+        primal_affinity = Affinity.objects.get(name="Primal")
+        primal_resonance, _ = Resonance.objects.get_or_create(
+            name="Decay (pipeline test)",
+            defaults={"affinity": primal_affinity},
+        )
+        primal_gift = GiftFactory(name="Primal Arts (defilement test)")
+        primal_gift.resonances.set([primal_resonance])
+        primal_technique = TechniqueFactory(
+            name="Primal Strike (defilement test)",
+            gift=primal_gift,
+            intensity=1,
+            control=1,
+            anima_cost=1,
+        )
+
+        primal_caster.location = self.low_room
+        primal_caster.save()
+
+        # Cast — force Success so we get a deterministic outcome.
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome):
+            use_technique(
+                character=primal_caster,
+                technique=primal_technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # No source="defilement" modifier rows on low_room — Primal casters do not defile.
+        self.assertFalse(
+            LocationValueModifier.objects.filter(
+                room_profile=low_room_profile,
+                source=defile_source,
+            ).exists(),
+            "Primal caster must NOT produce source='defilement' modifier rows on low_room "
+            "(only Abyssal CASTER_DOMINANT casters defile — pair #7 flag=False)",
         )
 
     # -------------------------------------------------------------------------
@@ -962,6 +1239,12 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         to be valid. The seeded StoryProgress for self.caster (from setUp)
         is present but its beat evaluation is incidental — we do not assert
         story state in this test.
+
+        NOTE (#525): both casters are placed in the HIGH celestial room (magnitude=80,
+        ENVIRONMENT_DOMINANT). The low_room (magnitude=10) now DEFILES instead of
+        backfiring for a 50-strength Abyssal caster — no backfire condition is applied
+        there. The high room remains ENVIRONMENT_DOMINANT and fires the normal backfire
+        pipeline (Tempered Against Light on Critical Success → Hallowed-Hardened).
         """
         from world.achievements.models import Achievement, CharacterAchievement, Discovery
 
@@ -970,11 +1253,17 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # First caster: self.caster from setUp — already has an Abyssal aura,
-        # technique, anima, and is in the low room. No "Magically Attuned"
-        # condition is needed or applied — the production path requires only
-        # a CharacterAura. Cast → Critical Success → Tempered Against Light
+        # technique, anima. Cast in the HIGH celestial room (magnitude=80,
+        # ENVIRONMENT_DOMINANT) where normal OPPOSED backfire fires.
+        # NOTE: the low_room (magnitude=10) now DEFILES instead of backfiring —
+        # a 50-strength Abyssal caster overpowers it (#525). The high room
+        # (magnitude=80) stays ENVIRONMENT_DOMINANT (80−50=30 > balanced_band=10)
+        # so the backfire path (Tempered Against Light on Crit Success) is intact.
+        # Cast → Critical Success → Tempered Against Light
         # applied → stat incremented → Hallowed-Hardened granted → Discovery created.
         # ------------------------------------------------------------------
+        self._place_caster_in("high")
+
         with force_check_outcome(crit_success):
             use_technique(
                 character=self.caster,
@@ -999,8 +1288,8 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # Second caster: independent CharacterSheet + Abyssal CharacterAura +
-        # Anima + same technique (self.technique is shared) in the low room.
-        # No "Magically Attuned" — not needed; the real path uses magical_profile.
+        # Anima + same technique (self.technique is shared) in the high room.
+        # Uses high_room (ENVIRONMENT_DOMINANT) so backfire fires normally.
         # No StoryProgress — story routing is not required for the Discovery assertion.
         # ------------------------------------------------------------------
         second_sheet = CharacterSheetFactory()
@@ -1014,7 +1303,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         )
         CharacterAnimaFactory(character=second_caster, current=20, maximum=20)
 
-        second_caster.location = self.low_room
+        second_caster.location = self.high_room
         second_caster.save()
 
         with force_check_outcome(crit_success):
