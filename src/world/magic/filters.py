@@ -158,7 +158,7 @@ class RitualSessionFilterSet(django_filters.FilterSet):
         self, queryset: QuerySet[RitualSession], name: str, value: str
     ) -> QuerySet[RitualSession]:
         """Filter to sessions where the requesting user is an invited participant."""
-        if value.lower() != "me":  # noqa: STRING_LITERAL — filter sentinel value
+        if value.lower() != "me":  # noqa: STRING_LITERAL
             return queryset
         sheet_ids = self._my_sheet_ids()
         if not sheet_ids:
@@ -169,7 +169,7 @@ class RitualSessionFilterSet(django_filters.FilterSet):
         self, queryset: QuerySet[RitualSession], name: str, value: str
     ) -> QuerySet[RitualSession]:
         """Filter to sessions where the requesting user is the initiator."""
-        if value.lower() != "me":  # noqa: STRING_LITERAL — filter sentinel value
+        if value.lower() != "me":  # noqa: STRING_LITERAL
             return queryset
         sheet_ids = self._my_sheet_ids()
         if not sheet_ids:

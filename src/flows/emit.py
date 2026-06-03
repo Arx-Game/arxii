@@ -110,9 +110,9 @@ def _dispatch_usage_limit(trigger: Any, event_name: str) -> int | None:
 
 def _execute_flow(trigger: Any, payload: Any, stack: FlowStack) -> None:
     """Execute ``trigger``'s flow definition on ``stack``."""
-    from flows.flow_execution import FlowExecution  # noqa: PLC0415 — Evennia startup
-    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415 — same reason
-    from flows.trigger_handler import DispatchResult  # noqa: PLC0415 — same reason
+    from flows.flow_execution import FlowExecution  # noqa: PLC0415
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+    from flows.trigger_handler import DispatchResult  # noqa: PLC0415
 
     flow_def = trigger.trigger_definition.flow_definition
     context = SceneDataManager()

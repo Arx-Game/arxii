@@ -141,7 +141,7 @@ def accept_soul_tether(  # noqa: PLR0913
     sinner_role: SoulTetherRoleEnum,
     resonance: Resonance,
     writeup: str,
-    ritual_components: list[Any],  # noqa: ARG001 — consumed by caller; validated pre-call
+    ritual_components: list[Any],  # noqa: ARG001
 ) -> RelationshipCapstone:
     """Form a Soul Tether bond (Spec B §12.4).
 
@@ -338,7 +338,7 @@ def _sinner_has_other_active_tethers(
 
 def dissolve_soul_tether(
     relationship_id: int,
-    initiator_sheet: CharacterSheet,  # noqa: ARG001 — reserved for initiator-validation in future
+    initiator_sheet: CharacterSheet,  # noqa: ARG001
 ) -> None:
     """Dissolve a Soul Tether — MVP stub (Spec B §13).
 
@@ -464,7 +464,7 @@ def _get_sinner_tether_thread(
     resonance: Resonance,
 ) -> Thread | None:
     """Return the Sinner's RELATIONSHIP_CAPSTONE Thread for this bond + resonance, or None."""
-    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+    from world.magic.models import Thread  # noqa: PLC0415
 
     capstone = relationship.capstones.filter(
         relationship=relationship,
@@ -483,7 +483,7 @@ def _get_sinner_tether_thread(
 
 def _compute_per_scene_sineating_cap(
     sinner_thread: Thread | None,
-    relationship: CharacterRelationship,  # noqa: ARG001 — used for future formula tuning
+    relationship: CharacterRelationship,  # noqa: ARG001
 ) -> int:
     """Compute how many units can be Sineated in one scene.
 
@@ -997,7 +997,7 @@ def perform_soul_tether_rescue(
     sineater_sheet: CharacterSheet,
     sinner_sheet: CharacterSheet,
     resonance: Resonance,
-    components: list[Any],  # noqa: ARG001 — consumed by caller; validated pre-call
+    components: list[Any],  # noqa: ARG001
     scene: Any = None,
 ) -> RescueOutcome:
     """Perform a stage-3+ rescue ritual (Spec B §9.4).
@@ -1286,7 +1286,7 @@ def _get_sineater_thread_level(
     Returns:
         Thread.level (int) or 0 if no matching Thread exists.
     """
-    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+    from world.magic.models import Thread  # noqa: PLC0415
 
     # The Sineater's capstone is on the Sineater→Sinner relationship direction.
     # We look for a RELATIONSHIP_CAPSTONE Thread owned by the Sineater pointing
@@ -1352,7 +1352,7 @@ def _get_sinner_tether_threads_for_resonance(
     Returns:
         List of Thread instances (may be empty).
     """
-    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+    from world.magic.models import Thread  # noqa: PLC0415
 
     return list(
         Thread.objects.filter(
@@ -1392,7 +1392,7 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
     Args:
         payload: CorruptionAccruingPayload (mutable dataclass).
     """
-    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+    from world.magic.models import Thread  # noqa: PLC0415
 
     # Recursion guard: overflow accrual from this handler must not re-enter.
     if payload.redirect_origin is not None:

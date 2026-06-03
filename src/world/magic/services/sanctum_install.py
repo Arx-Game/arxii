@@ -183,7 +183,7 @@ def perform_sanctification(
     resonance_type: Resonance,
     *,
     owner_mode: str,
-    component_items: list | None = None,  # noqa: ARG001 — consumed in #707 when ItemTemplates exist
+    component_items: list | None = None,  # noqa: ARG001
 ) -> SanctificationResult:
     """Create the L1 Sanctum at ``room_profile``. Phase 4.1.
 

@@ -614,7 +614,7 @@ class AlterationResolutionSerializer(serializers.Serializer):
         is_staff = self.context["request"].user.is_staff
 
         # If library template, validate library entry exists and no duplicate
-        library_template = attrs.get("library_template_id")  # noqa: STRING_LITERAL — dict key matches field name
+        library_template = attrs.get("library_template_id")  # noqa: STRING_LITERAL
         if library_template is not None:
             library_errors = validate_alteration_resolution(
                 pending_tier=pending.tier,
@@ -844,7 +844,7 @@ class RitualSceneActionConfigSerializer(serializers.ModelSerializer):
     check_type_name = serializers.SerializerMethodField()
 
     class Meta:
-        from world.magic.models.ritual_scene_action import (  # noqa: PLC0415 — must live in Meta body
+        from world.magic.models.ritual_scene_action import (  # noqa: PLC0415
             RitualSceneActionConfig,
         )
 
@@ -983,7 +983,7 @@ class RitualSceneActionConfigPatchSerializer(serializers.Serializer):
         self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
         self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
 
-        if "target_difficulty" in attrs:  # noqa: STRING_LITERAL — dict key lookup, not an identifier
+        if "target_difficulty" in attrs:  # noqa: STRING_LITERAL
             resolved["target_difficulty"] = attrs["target_difficulty"]
         return resolved
 
@@ -1054,7 +1054,7 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
         Called once per list response — caches the result on ``request`` so that
         N rows do not trigger N tenant-resolution queries.
         """
-        cache_attr = "_cached_viewer_sheets"  # noqa: STRING_LITERAL — private cache slot name
+        cache_attr = "_cached_viewer_sheets"  # noqa: STRING_LITERAL
         if not hasattr(request, cache_attr):
             setattr(
                 request,
@@ -1091,7 +1091,7 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
             learner = sheets[0]
         else:
             # Multi-tenure: require explicit learner_sheet_id query param.
-            requested_pk = request.query_params.get(  # noqa: STRING_LITERAL — query param key
+            requested_pk = request.query_params.get(  # noqa: STRING_LITERAL
                 "learner_sheet_id"
             )
             if requested_pk is None:
@@ -1119,7 +1119,7 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
         from world.magic.services.auth import _resolve_actor_sheet  # noqa: PLC0415
 
         request = self.context["request"]
-        learner = _resolve_actor_sheet(request, body_key="learner_sheet_id")  # noqa: STRING_LITERAL — body key name
+        learner = _resolve_actor_sheet(request, body_key="learner_sheet_id")  # noqa: STRING_LITERAL
         attrs["learner"] = learner
         return attrs
 
@@ -1918,7 +1918,7 @@ class SineatingPendingOfferSerializer(serializers.ModelSerializer):
     resonance_id = serializers.IntegerField(read_only=True)
 
     class Meta:
-        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+        from world.magic.models.soul_tether import (  # noqa: PLC0415
             SineatingPendingOffer,
         )
 
@@ -1956,7 +1956,7 @@ class PendingStageAdvanceOfferSerializer(serializers.ModelSerializer):
     resonance_id = serializers.IntegerField(read_only=True)
 
     class Meta:
-        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+        from world.magic.models.soul_tether import (  # noqa: PLC0415
             PendingStageAdvanceOffer,
         )
 
@@ -2064,14 +2064,14 @@ class CrossXPLockSerializer(serializers.Serializer):
 # Thread-pull commit (Spec A §5.4 + §7.4)
 # ---------------------------------------------------------------------------
 
-_ERR_COMBAT_CONTEXT_INCOMPLETE = (  # noqa: STRING_LITERAL — module constant
+_ERR_COMBAT_CONTEXT_INCOMPLETE = (  # noqa: STRING_LITERAL
     "combat_encounter_id and combat_participant_id must both be set or both absent."
 )
-_ERR_THREAD_NOT_FOUND_COMMIT = (  # noqa: STRING_LITERAL — module constant
+_ERR_THREAD_NOT_FOUND_COMMIT = (  # noqa: STRING_LITERAL
     "One or more thread_ids not found or not owned by the character."
 )
-_ERR_COMBAT_ENCOUNTER_NOT_FOUND = "Combat encounter not found."  # noqa: STRING_LITERAL — module constant
-_ERR_COMBAT_PARTICIPANT_NOT_FOUND = "Combat participant not found."  # noqa: STRING_LITERAL — module constant
+_ERR_COMBAT_ENCOUNTER_NOT_FOUND = "Combat encounter not found."  # noqa: STRING_LITERAL
+_ERR_COMBAT_PARTICIPANT_NOT_FOUND = "Combat participant not found."  # noqa: STRING_LITERAL
 
 
 class PullActionContextCommitSerializer(serializers.Serializer):

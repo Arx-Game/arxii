@@ -213,7 +213,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """Return ItemFacet rows for ``?item_instance=<pk>``."""
         user = cast(AccountDB, request.user)
-        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        # noqa: USE_FILTERSET
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         if instance_pk is None:
             raise serializers.ValidationError(
@@ -330,7 +330,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """Return ItemInstance rows located on ``?character=<pk>``."""
         user = cast(AccountDB, request.user)
-        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        # noqa: USE_FILTERSET
         character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
         if character_pk is None:
             raise serializers.ValidationError({"character": "This query parameter is required."})
@@ -422,7 +422,7 @@ class EquippedItemViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """Return equipped items for ``?character=<pk>``."""
         user = cast(AccountDB, request.user)
-        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        # noqa: USE_FILTERSET
         character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
         if character_pk is None:
             raise serializers.ValidationError({"character": "This query parameter is required."})
@@ -543,7 +543,7 @@ class OutfitViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """Return outfits saved on ``?character_sheet=<pk>``."""
         user = cast(AccountDB, request.user)
-        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        # noqa: USE_FILTERSET
         sheet_pk = _parse_int_param(request.query_params.get("character_sheet"))  # noqa: USE_FILTERSET
         if sheet_pk is None:
             raise serializers.ValidationError(
@@ -695,7 +695,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """Return OutfitSlot rows for ``?outfit=<pk>``."""
         user = cast(AccountDB, request.user)
-        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        # noqa: USE_FILTERSET
         outfit_pk = _parse_int_param(request.query_params.get("outfit"))  # noqa: USE_FILTERSET
         if outfit_pk is None:
             raise serializers.ValidationError({"outfit": "This query parameter is required."})
@@ -816,7 +816,7 @@ def _fetch_owned_observer(request: Request, user: AccountDB) -> ObjectDB | None:
     so the FilterSet pattern doesn't apply — the ``observer`` parameter
     is a permission-context input, not a filter on a queryset.
     """
-    # noqa: USE_FILTERSET — permission-context param on a computed (non-queryset) view
+    # noqa: USE_FILTERSET
     observer = _fetch_objectdb(request.query_params.get("observer"))  # noqa: USE_FILTERSET
     if observer is None:
         return None
@@ -916,7 +916,7 @@ class VisibleWornItemViewSet(viewsets.ViewSet):
         identity inputs, not queryset filters, so the FilterSet pattern
         doesn't apply.
         """
-        # noqa: USE_FILTERSET — computed view, not queryset filtering
+        # noqa: USE_FILTERSET
         target = _fetch_objectdb(request.query_params.get("character"))  # noqa: USE_FILTERSET
         if target is None:
             return None

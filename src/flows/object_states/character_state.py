@@ -110,7 +110,7 @@ class CharacterState(BaseState):
         # Fatigue — only when a pool already exists (never create one on look).
         # The reverse OneToOne raises an AttributeError subclass when unset, so
         # getattr-with-default reads it without a query-creating get_or_create.
-        fatigue_pool = getattr(sheet, "fatigue", None)  # noqa: GETATTR_LITERAL — reverse OneToOne may be unset
+        fatigue_pool = getattr(sheet, "fatigue", None)  # noqa: GETATTR_LITERAL
         if fatigue_pool is not None:
             zone_order = [
                 FatigueZone.FRESH,

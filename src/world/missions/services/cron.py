@@ -149,7 +149,7 @@ def apply_mission_reward_batch() -> RewardBatchResult:
             _record_failure(row, exc.user_message)
             failed.append(row)
             continue
-        except Exception as exc:  # noqa: BLE001 — cron must not crash on row faults
+        except Exception as exc:  # noqa: BLE001
             _record_failure(row, f"{type(exc).__name__}: {exc}")
             failed.append(row)
             continue

@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 
-def create_pending_alteration(  # noqa: PLR0913 — kw-only snapshot fields are intentional
+def create_pending_alteration(  # noqa: PLR0913
     *,
     character: CharacterSheet,
     tier: int,
@@ -121,7 +121,7 @@ def _alteration_tier_label(value: object) -> str:
         return str(value)
 
 
-def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential validation gates, kw-only args
+def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901
     *,
     pending_tier: int,
     pending_affinity_id: int,
@@ -267,7 +267,7 @@ def get_library_entries(
 
 
 @transaction.atomic
-def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields are intentional
+def resolve_pending_alteration(  # noqa: PLR0913
     *,
     pending: PendingAlteration,
     name: str,
@@ -385,7 +385,7 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
 def reduce_pending_alteration_tier(
     pending: PendingAlteration,
     amount: int,
-    reason: str,  # noqa: ARG001 — accepted for future audit/logging; not yet consumed
+    reason: str,  # noqa: ARG001
 ) -> PendingAlterationTierReduction:
     """Reduce the tier on a PendingAlteration. Distinct from resolve_pending_alteration.
 

@@ -335,7 +335,7 @@ def _emit_level_change_message(covenant: Covenant, new_level: int) -> None:
     # SharedMemoryModel identity map would add no measurable benefit.
     sheets = [
         m.character_sheet
-        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY — cold path, not a hot query loop
+        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
             engaged=True, left_at__isnull=True
         ).select_related("character_sheet")
     ]
@@ -396,7 +396,7 @@ def _co_present_member_count(
     target = membership.covenant
     n = 0
     for obj in room.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne accessor absent on non-Character objects; runtime duck-typing with default is intentional
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None or sheet == self_sheet:
             continue
         if sheet.character.covenant_roles.currently_held_role_in(target) is not None:

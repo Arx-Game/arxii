@@ -5,7 +5,7 @@ from world.scenes.models import Persona
 from world.stories.models import Story, TableBulletinPost, TableBulletinReply
 
 
-def create_bulletin_post(  # noqa: PLR0913 — keyword-only args, acceptable here
+def create_bulletin_post(  # noqa: PLR0913
     *,
     table: GMTable,
     author_persona: Persona,

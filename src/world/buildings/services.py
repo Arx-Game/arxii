@@ -122,7 +122,7 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     from world.items.models import ItemInstance, ItemTemplate, OwnershipEvent  # noqa: PLC0415
     from world.npc_services.effects import EffectResult  # noqa: PLC0415
 
-    details = getattr(offer, "permit_offer_details", None)  # noqa: GETATTR_LITERAL — reverse OneToOne, may be absent if offer is misconfigured
+    details = getattr(offer, "permit_offer_details", None)  # noqa: GETATTR_LITERAL
     if details is None:
         msg = f"NPCServiceOffer {offer.pk} (kind=PERMIT) has no PermitOfferDetails row."
         raise PermitIssuanceError(msg)
@@ -145,7 +145,7 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         owner=persona.character_sheet.character.db_account if _has_account(persona) else None,
         charges=1,
     )
-    persona_name = getattr(persona, "display_ic", None)  # noqa: GETATTR_LITERAL — display_ic is a method on Persona; absent on null guard
+    persona_name = getattr(persona, "display_ic", None)  # noqa: GETATTR_LITERAL
     holder_persona_name = persona_name() if callable(persona_name) else str(persona)
     permit = BuildingPermitDetails.objects.create(
         item_instance=instance,
@@ -236,9 +236,9 @@ def validate_permit_site(
         )
         raise PermitHolderMismatchError(msg)
 
-    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne; absent on non-Room ObjectDB
+    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL
     if room_profile is None:
-        msg = f"Site {getattr(site_room, 'pk', '?')} has no RoomProfile (not a room)."  # noqa: GETATTR_LITERAL — defensive in error message
+        msg = f"Site {getattr(site_room, 'pk', '?')} has no RoomProfile (not a room)."  # noqa: GETATTR_LITERAL
         raise PermitSiteNotOutdoorError(msg)
     if not room_profile.is_outdoor:
         msg = f"Site {site_room.pk} is not an outdoor room."
@@ -281,7 +281,7 @@ def _ward_for_room(site_room) -> Area | None:
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import AreaClosure  # noqa: PLC0415
 
-    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne
+    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL
     site_area = room_profile.area if room_profile else None
     if site_area is None:
         return None
@@ -358,11 +358,11 @@ def activate_permit(
     return project
 
 
-def _spawn_construction_project(  # noqa: PLR0913 — kwargs split for callsite readability
+def _spawn_construction_project(  # noqa: PLR0913
     *,
     permit_details: BuildingPermitDetails,
     ward: Area,
-    site_room,  # noqa: ARG001 — accepted for caller symmetry; details model doesn't store site_room
+    site_room,  # noqa: ARG001
     acting_persona: Persona,
     target_size: int,
     target_grandeur: int,
@@ -413,7 +413,7 @@ def _spawn_construction_project(  # noqa: PLR0913 — kwargs split for callsite 
 @transaction.atomic
 def complete_building_construction(
     project: Project,
-    outcome_tier: object | None = None,  # noqa: ARG001 — projects.KindHandler signature; unused in Plan 3
+    outcome_tier: object | None = None,  # noqa: ARG001
 ) -> Building:
     """Spawn a Building from a completed BUILDING_CONSTRUCTION project.
 

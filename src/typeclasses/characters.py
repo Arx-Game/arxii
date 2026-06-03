@@ -206,7 +206,7 @@ class Character(ObjectParent, DefaultCharacter):
 
         Delegates to the covenant-roles handler; returns empty frozenset if no sheet.
         """
-        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return frozenset()
         return self.covenant_roles.active_covenant_ids()
@@ -229,7 +229,7 @@ class Character(ObjectParent, DefaultCharacter):
         """
         from world.scenes.models import Persona
 
-        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return False
         try:

@@ -479,7 +479,7 @@ class PendingAlterationViewSet(
             .order_by("-pk")
         )
         # Apply OPEN default only when the client has not explicitly requested a status.
-        if "status" not in self.request.query_params:  # noqa: STRING_LITERAL — HTTP param name
+        if "status" not in self.request.query_params:  # noqa: STRING_LITERAL
             qs = qs.filter(status=PendingAlterationStatus.OPEN)
         return qs
 

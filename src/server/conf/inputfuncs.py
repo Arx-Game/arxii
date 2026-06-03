@@ -150,7 +150,7 @@ def _result_from_dispatch(dispatch_result: object) -> "tuple[str | None, dict | 
     return extract_dispatch_message_data(typed_result.detail)
 
 
-def execute_action(session, *args, **kwargs):  # noqa: ARG001 — Evennia inputfunc signature
+def execute_action(session, *args, **kwargs):  # noqa: ARG001
     """Run a registered Action for the session's puppeted character.
 
     This is the unified web entry point for game mutations. Both telnet

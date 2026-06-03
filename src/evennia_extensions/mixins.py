@@ -4,7 +4,7 @@ Provides utilities for managing cached properties and other common patterns.
 """
 
 from functools import (
-    cached_property as functools_cached_property,  # noqa: CACHED_PROPERTY_IMPORT — type-check target alongside Django's cached_property; defensive isinstance handling, never used as a producer
+    cached_property as functools_cached_property,  # noqa: CACHED_PROPERTY_IMPORT
 )
 from typing import ClassVar
 

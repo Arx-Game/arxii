@@ -69,7 +69,7 @@ def _resolve_anima_ritual(
     # Attach a transient payload so the response serializer can include
     # anima_recovery for the initiator without a second DB query.
     anima = CharacterAnima.objects.get(character=initiator_sheet.character)
-    action_request._anima_recovery_payload = {  # noqa: SLF001 — transient attr on request, not a true private member
+    action_request._anima_recovery_payload = {  # noqa: SLF001
         "recovered": ritual_outcome.anima_recovered,
         "soulfray_reduced": ritual_outcome.severity_reduced,
         "new_pool": anima.current,

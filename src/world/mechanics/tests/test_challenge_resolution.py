@@ -586,7 +586,7 @@ class ResolveFullTests(TestCase):
         self,
         mock_check: object,
         mock_select: object,
-        mock_apply: object,  # noqa: ARG002 — required positional param from @patch decorator order
+        mock_apply: object,  # noqa: ARG002
     ) -> None:
         """When approach has action_template, resolution uses the template pipeline."""
         from actions.factories import (

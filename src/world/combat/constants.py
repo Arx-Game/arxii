@@ -10,7 +10,7 @@ from django.db import models
 # Canonical physical/social/mental axis lives in actions.constants;
 # re-exported here for combat-local imports (explicit alias = intentional re-export).
 from actions.constants import (
-    ActionCategory as ActionCategory,  # noqa: PLC0414 — re-export converged canonical enum for combat-local imports
+    ActionCategory as ActionCategory,  # noqa: PLC0414
 )
 
 # ---------------------------------------------------------------------------
