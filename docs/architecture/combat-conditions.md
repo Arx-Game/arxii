@@ -3,7 +3,7 @@
 **Date:** 2026-05-01
 **Status:** Spec — pre-implementation
 **Owner:** brann
-**Predecessor:** `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md`
+**Predecessor:** `docs/architecture/combat-magic-integration.md`
 
 ## Purpose
 
@@ -949,7 +949,7 @@ These are tuning decisions, not architecture:
 
 ## References
 
-- `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md` — predecessor.
+- `docs/architecture/combat-magic-integration.md` — predecessor.
 - `src/world/combat/services.py` — existing `CombatAttackResolver`, `_resolve_pc_action`.
 - `src/world/conditions/services.py` — `bulk_apply_conditions`, `process_round_start`, `process_round_end`.
 - `src/world/magic/services/techniques.py` — `use_technique`, event emission.

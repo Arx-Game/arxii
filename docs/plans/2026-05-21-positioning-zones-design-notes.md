@@ -98,8 +98,8 @@ The brainstorm called this out explicitly: blink, teleport, acrobatic leap, magi
 
 - `docs/roadmap/combat.md` — combat overview, Phase 7 unified action interface, Clash entry under "What's Needed for MVP"
 - `docs/roadmap/magic.md` — magic system overview, Scope 5.5 reactive layer, resonance-environment work
-- `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md` — the recent precedent for "Properties drive behavior, not source names"
-- `docs/superpowers/specs/2026-05-17-unified-player-action-interface-design.md` — `PlayerAction` / `ActionRef` / `get_player_actions` — the seam where zone-aware filtering will plug in
+- `docs/architecture/resonance-environment-universal-path.md` — the recent precedent for "Properties drive behavior, not source names"
+- `docs/architecture/unified-player-action.md` — `PlayerAction` / `ActionRef` / `get_player_actions` — the seam where zone-aware filtering will plug in
 
 ## Action items
 

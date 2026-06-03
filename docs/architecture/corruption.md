@@ -8,7 +8,7 @@ Foundations — DONE), Scope 6 (Soulfray Recovery & Decay — DONE)
 **Blocks:** Resonance Pivot Spec B (Soul Tether + Relational Resilience + Ritual
 Capstones)
 **Related:** `docs/roadmap/magic.md`, `src/world/magic/CLAUDE.md`,
-`docs/superpowers/specs/2026-04-21-magic-scope-6-soulfray-recovery-design.md`
+`docs/architecture/soulfray-recovery.md`
 
 ---
 

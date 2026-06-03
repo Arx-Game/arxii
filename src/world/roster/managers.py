@@ -30,9 +30,19 @@ class RosterEntryQuerySet(models.QuerySet):
             tenures__end_date__isnull=True,
         )
 
-    def exclude_frozen(self) -> RosterEntryQuerySet:
-        """Exclude frozen characters."""
-        return self.filter(frozen=False)
+    def exclude_dormant(self) -> RosterEntryQuerySet:
+        """Exclude characters with any non-ACTIVE/non-ALIVE state (#671).
+
+        Broader than the deprecated ``exclude_frozen()`` — also filters out
+        HIATUS, INACTIVE, CAPTURED, COMA, RETIRED, DEAD. Used by skills and
+        any other consumer that should not progress on dormant characters.
+        """
+        from world.character_sheets.types import ActivityState, LifecycleState  # noqa: PLC0415
+
+        return self.filter(
+            character_sheet__activity_state=ActivityState.ACTIVE,
+            character_sheet__lifecycle_state=LifecycleState.ALIVE,
+        )
 
     def by_roster_type(self, roster_type: str) -> RosterEntryQuerySet:
         """Filter by roster type name."""
@@ -105,8 +115,8 @@ class RosterEntryManager(models.Manager):
     def available_characters(self) -> RosterEntryQuerySet:
         return self.get_queryset().available_characters()
 
-    def exclude_frozen(self) -> RosterEntryQuerySet:
-        return self.get_queryset().exclude_frozen()
+    def exclude_dormant(self) -> RosterEntryQuerySet:
+        return self.get_queryset().exclude_dormant()
 
     def by_roster_type(self, roster_type: str) -> RosterEntryQuerySet:
         return self.get_queryset().by_roster_type(roster_type)

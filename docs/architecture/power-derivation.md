@@ -1,7 +1,7 @@
 # Issue 0 — Pre-cast Power Read-back Design (#524)
 
 **Status:** approved design, pre-implementation.
-**Companion research:** `docs/superpowers/specs/2026-05-30-power-intensity-research-report.md` (landscape + 4 candidate directions) and `...-critique.md`. This spec implements the report's **Issue 0/1** and the leading edge of **Direction C** (unify the two effective-intensity computations into one derived power value).
+**Companion research:** `docs/architecture/power-intensity-research.md` (landscape + 4 candidate directions) and `...-critique.md`. This spec implements the report's **Issue 0/1** and the leading edge of **Direction C** (unify the two effective-intensity computations into one derived power value).
 
 ---
 

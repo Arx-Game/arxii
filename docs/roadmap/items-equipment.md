@@ -32,7 +32,7 @@ The item and equipment system handles everything characters can own, wear, wield
 
 ## Spec D PR1 — Facets, Resonance Regen, Covenant Gear Compatibility (DONE)
 
-**Spec:** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
+**Spec:** `docs/architecture/items-fashion-mantles.md`
 **Branch:** `spec-d-items-fashion-mantles-design`
 
 What shipped:

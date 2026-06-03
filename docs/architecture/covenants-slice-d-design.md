@@ -5,8 +5,8 @@
 **Branch:** `covenants-slice-d-progression`
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; Slice D owns covenant Legend, Story integration, and sub-role authoring per the slice decomposition
-- `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md` — Slice A entity / membership / anchor cap formula this spec composes with
-- `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md` — Slice B lifecycle and engagement infrastructure this spec composes with
+- `docs/architecture/covenants-slice-a.md` — Slice A entity / membership / anchor cap formula this spec composes with
+- `docs/architecture/covenants-slice-b-design.md` — Slice B lifecycle and engagement infrastructure this spec composes with
 - `docs/systems/stories.md` — Story / Episode / Beat / consequence-pool surface this spec extends
 - `docs/systems/progression.md` — XP vs Legend framing; Legend is the right parallel here (XP is the OOC reward currency)
 - `src/world/societies/models.py` — existing `LegendEntry` / `LegendEvent` / `LegendSpread` / materialized-view machinery this spec extends
