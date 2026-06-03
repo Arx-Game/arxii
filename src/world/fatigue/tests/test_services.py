@@ -700,6 +700,19 @@ class ApplyTechniqueFatigueTests(TestCase):
         self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 0)
         self.assertEqual(pool.get_current(ActionCategory.SOCIAL), 1)  # (4*25)//100=1
 
+    def test_strain_exceeds_effective_cost_clamps_base_to_zero(self):
+        """When strain_commitment > effective_anima_cost, base_portion clamps to 0.
+
+        Documents the intentional clamping in apply_technique_fatigue
+        (#624). With effective=4 and strain=6: base_portion = max(4 - 6, 0) = 0,
+        strain_portion = 6 → (0 * 25 + 6 * 50) // 100 = 3. Prevents future
+        formula changes from silently breaking the invariant per #698.
+        """
+        result = apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 4, 6)
+        self.assertEqual(result, 3)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 3)
+
     def test_no_collapse_check_below_overexerted(self):
         """Below OVEREXERTED threshold, no collapse check fires."""
         with patch("world.fatigue.services.attempt_endurance_check") as mock_check:

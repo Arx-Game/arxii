@@ -6,7 +6,7 @@ Task 3.3: ViewSet endpoints — offer, accept, decline, withdraw; permission gat
 """
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -60,8 +60,12 @@ class StoryGMOfferModelTest(TestCase):
         assert offer.responded_at is None
 
 
-class StoryGMOfferUniquePendingConstraintTest(TransactionTestCase):
-    """Partial unique constraint: one PENDING offer per (story, gm) pair."""
+class StoryGMOfferUniquePendingConstraintTest(TestCase):
+    """Partial unique constraint: one PENDING offer per (story, gm) pair.
+
+    Atomic savepoint isolates the aborted transaction so the outer TestCase
+    rollback (and parallel runner) survives.
+    """
 
     def test_two_pending_offers_same_story_same_gm_raises(self):
         """Creating a second PENDING offer for the same (story, GM) pair raises IntegrityError."""
@@ -74,14 +78,13 @@ class StoryGMOfferUniquePendingConstraintTest(TransactionTestCase):
             offered_by_account=account,
             status=StoryGMOfferStatus.PENDING,
         )
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                StoryGMOffer.objects.create(
-                    story=story,
-                    offered_to=gm,
-                    offered_by_account=account,
-                    status=StoryGMOfferStatus.PENDING,
-                )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            StoryGMOffer.objects.create(
+                story=story,
+                offered_to=gm,
+                offered_by_account=account,
+                status=StoryGMOfferStatus.PENDING,
+            )
 
     def test_pending_and_declined_same_pair_is_ok(self):
         """A PENDING and a DECLINED offer for the same (story, GM) pair is allowed."""

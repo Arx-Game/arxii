@@ -1,7 +1,7 @@
 """Tests for AssistantGMClaim model and Beat.agm_eligible flag."""
 
-from django.db import IntegrityError
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 
 from world.gm.factories import GMProfileFactory
 from world.stories.constants import AssistantClaimStatus
@@ -80,8 +80,12 @@ class AssistantGMClaimCreationTests(TestCase):
         self.assertTrue(claim.beat.agm_eligible)
 
 
-class AssistantGMClaimUniqueConstraintTests(TransactionTestCase):
-    """Partial unique constraint: only one REQUESTED or APPROVED claim per (beat, agm)."""
+class AssistantGMClaimUniqueConstraintTests(TestCase):
+    """Partial unique constraint: only one REQUESTED or APPROVED claim per (beat, agm).
+
+    Atomic savepoint isolates the aborted transaction so the outer TestCase
+    rollback (and parallel runner) survives.
+    """
 
     def test_two_requested_claims_for_same_beat_agm_raises(self) -> None:
         gm = GMProfileFactory()
@@ -89,7 +93,7 @@ class AssistantGMClaimUniqueConstraintTests(TransactionTestCase):
         AssistantGMClaim.objects.create(
             beat=beat, assistant_gm=gm, status=AssistantClaimStatus.REQUESTED
         )
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             AssistantGMClaim.objects.create(
                 beat=beat, assistant_gm=gm, status=AssistantClaimStatus.REQUESTED
             )
@@ -104,7 +108,7 @@ class AssistantGMClaimUniqueConstraintTests(TransactionTestCase):
             status=AssistantClaimStatus.APPROVED,
             approved_by=approver,
         )
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             AssistantGMClaim.objects.create(
                 beat=beat,
                 assistant_gm=gm,

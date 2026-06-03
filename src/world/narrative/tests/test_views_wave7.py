@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -342,8 +342,12 @@ class UserStoryMuteCreateTest(APITestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
-class UserStoryMuteDuplicateTest(TransactionTestCase):
-    """Duplicate mute (same account+story) is rejected at the DB constraint level."""
+class UserStoryMuteDuplicateTest(APITestCase):
+    """Duplicate mute (same account+story) is rejected at the DB constraint level.
+
+    Uses APITestCase (transaction-wrapped) so the parallel runner stays stable;
+    the serializer's pre-check intercepts the duplicate before the DB constraint fires.
+    """
 
     def test_duplicate_mute_rejected(self):
         user = AccountFactory()
