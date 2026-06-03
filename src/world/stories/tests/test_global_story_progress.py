@@ -1,6 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
-from django.test import TransactionTestCase
+from django.db import IntegrityError, transaction
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.stories.constants import StoryScope
@@ -41,12 +40,14 @@ class GlobalStoryProgressModelTests(EvenniaTestCase):
         self.assertIn("(frontier)", result)
 
 
-class GlobalStoryProgressUniqueConstraintTests(TransactionTestCase):
-    """Tests requiring TransactionTestCase to catch DB-level unique violations."""
+class GlobalStoryProgressUniqueConstraintTests(EvenniaTestCase):
+    """DB-level unique-violation tests. Atomic savepoint isolates the aborted
+    transaction so the outer TestCase rollback (and parallel runner) survives.
+    """
 
     def test_only_one_per_story(self) -> None:
         """OneToOne on story prevents creating a second GlobalStoryProgress for the same story."""
         story = StoryFactory(scope=StoryScope.GLOBAL)
         GlobalStoryProgressFactory(story=story)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             GlobalStoryProgressFactory(story=story)

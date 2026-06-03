@@ -1,7 +1,7 @@
 """Tests for AssistantGMClaim service functions."""
 
-from django.db import IntegrityError
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import AssistantClaimStatus
@@ -67,14 +67,16 @@ class RequestClaimTests(TestCase):
         self.assertEqual(reloaded.status, AssistantClaimStatus.REQUESTED)
 
 
-class RequestClaimUniqueConstraintTests(TransactionTestCase):
-    """Unique constraint tests for request_claim."""
+class RequestClaimUniqueConstraintTests(TestCase):
+    """Unique constraint tests for request_claim. Atomic savepoint isolates the
+    aborted transaction so the outer TestCase rollback (and parallel runner) survives.
+    """
 
     def test_duplicate_requested_claim_raises_integrity_error(self) -> None:
         beat = BeatFactory(agm_eligible=True)
         agm = GMProfileFactory()
         request_claim(beat=beat, assistant_gm=agm)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             request_claim(beat=beat, assistant_gm=agm)
 
 
