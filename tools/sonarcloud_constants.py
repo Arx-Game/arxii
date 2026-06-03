@@ -1,4 +1,7 @@
+import json
 from pathlib import PurePosixPath
+import urllib.parse
+import urllib.request
 
 SONAR_ORG = "arx-game"
 SONAR_PROJECT = "Arx-Game_arxii"
@@ -58,3 +61,27 @@ def is_security(raw: dict) -> bool:
     return raw.get("type") in ("VULNERABILITY", "SECURITY_HOTSPOT") or any(
         i.get("softwareQuality") == "SECURITY" for i in raw.get("impacts", [])
     )
+
+
+def fetch_issues() -> list[dict]:
+    """Page through SonarCloud public API and return all open issues."""
+    issues: list[dict] = []
+    page = 1
+    while True:
+        params = urllib.parse.urlencode(
+            {
+                "organization": SONAR_ORG,
+                "componentKeys": SONAR_PROJECT,
+                "resolved": "false",
+                "ps": 500,
+                "p": page,
+            }
+        )
+        with urllib.request.urlopen(f"{SONAR_BASE}/issues/search?{params}") as resp:  # noqa: S310
+            data = json.loads(resp.read())
+        page_issues = data["issues"]
+        issues.extend(page_issues)
+        if len(page_issues) < 500:  # noqa: PLR2004
+            break
+        page += 1
+    return issues

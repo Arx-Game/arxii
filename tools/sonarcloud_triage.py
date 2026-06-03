@@ -12,13 +12,12 @@ Example — apply:
 import argparse
 import base64
 import fnmatch
-import json
 import os
 import sys
 import urllib.parse
 import urllib.request
 
-from sonarcloud_constants import SONAR_BASE, SONAR_ORG, SONAR_PROJECT, file_path
+from sonarcloud_constants import SONAR_BASE, fetch_issues, file_path
 
 VALID_TRANSITIONS = ("falsepositive", "wontfix")
 
@@ -46,29 +45,6 @@ def _sonar_headers() -> dict[str, str]:
         "Authorization": f"Basic {credentials}",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-
-
-def _fetch_all_issues() -> list[dict]:
-    issues: list[dict] = []
-    page = 1
-    while True:
-        params = urllib.parse.urlencode(
-            {
-                "organization": SONAR_ORG,
-                "componentKeys": SONAR_PROJECT,
-                "resolved": "false",
-                "ps": 500,
-                "p": page,
-            }
-        )
-        with urllib.request.urlopen(f"{SONAR_BASE}/issues/search?{params}") as resp:  # noqa: S310
-            data = json.loads(resp.read())
-        page_issues = data["issues"]
-        issues.extend(page_issues)
-        if len(page_issues) < 500:  # noqa: PLR2004
-            break
-        page += 1
-    return issues
 
 
 def _do_transition(issue_key: str, transition: str, headers: dict[str, str]) -> None:
@@ -103,7 +79,7 @@ def main() -> None:
         sys.exit(1)
 
     print("Fetching SonarCloud issues...")
-    all_issues = _fetch_all_issues()
+    all_issues = fetch_issues()
     print(f"  {len(all_issues)} open issues")
 
     targets = [

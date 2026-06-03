@@ -6,14 +6,11 @@ import argparse
 import json
 import subprocess
 import sys
-import urllib.parse
-import urllib.request
 
 from sonarcloud_constants import (
     GH_REPO,
-    SONAR_BASE,
-    SONAR_ORG,
     SONAR_PROJECT,
+    fetch_issues,
     file_path,
     is_security,
     is_skip_path,
@@ -21,30 +18,6 @@ from sonarcloud_constants import (
 )
 
 SC_KEY_MARKER = "<!-- sc:"
-
-
-def fetch_issues() -> list[dict]:
-    """Page through SonarCloud API and return all open issues."""
-    issues: list[dict] = []
-    page = 1
-    while True:
-        params = urllib.parse.urlencode(
-            {
-                "organization": SONAR_ORG,
-                "componentKeys": SONAR_PROJECT,
-                "resolved": "false",
-                "ps": 500,
-                "p": page,
-            }
-        )
-        with urllib.request.urlopen(f"{SONAR_BASE}/issues/search?{params}") as resp:  # noqa: S310
-            data = json.loads(resp.read())
-        page_issues = data["issues"]
-        issues.extend(page_issues)
-        if len(page_issues) < 500:  # noqa: PLR2004
-            break
-        page += 1
-    return issues
 
 
 def make_title(raw: dict) -> str:
