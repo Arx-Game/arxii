@@ -230,7 +230,10 @@ def _multiplier_for_level(level: int) -> Decimal:
 def _sanctum_is_dormant(sanctum: SanctumDetails, threads: list[Thread]) -> bool:
     """Return True when the Sanctum should not generate this tick (#671).
 
-    PERSONAL: dormant when ``founder_character_sheet`` is missing or dormant.
+    PERSONAL: dormant when ``founder_character_sheet`` is set AND that founder
+    is dormant. Null founder (pre-Sanctification rows, historical seed data,
+    test fixtures) is treated as "no gate" — production Sanctums always
+    carry a founder.
     COVENANT: dormant when ALL current Sanctum-threaded weavers are dormant.
 
     The ``threads`` argument is already ``select_related("owner")`` from the
@@ -239,7 +242,7 @@ def _sanctum_is_dormant(sanctum: SanctumDetails, threads: list[Thread]) -> bool:
     """
     if sanctum.owner_mode == SanctumOwnerMode.PERSONAL:
         founder = sanctum.founder_character_sheet
-        return founder is None or founder.is_dormant
+        return founder is not None and founder.is_dormant
     return all(t.owner.is_dormant for t in threads)
 
 

@@ -71,10 +71,12 @@ class SanctumIsDormantPersonalTests(TestCase):
         sanctum = _build_sanctum(founder=founder)
         self.assertTrue(_sanctum_is_dormant(sanctum, []))
 
-    def test_null_founder_is_dormant(self):
+    def test_null_founder_is_not_dormant(self):
+        """Null founder passes through — production Sanctums always have one;
+        null is only test fixtures, seed data, or pre-Sanctification rows."""
         sanctum = _build_sanctum(founder=None)
-        self.assertTrue(_sanctum_is_dormant(sanctum, []))
-        self.assertTrue(sanctum_is_dormant(sanctum))
+        self.assertFalse(_sanctum_is_dormant(sanctum, []))
+        self.assertFalse(sanctum_is_dormant(sanctum))
 
 
 class SanctumIsDormantCovenantTests(TestCase):
