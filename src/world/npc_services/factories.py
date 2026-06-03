@@ -8,7 +8,9 @@ from factory.django import DjangoModelFactory
 
 from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.models import (
+    MissionOfferDetails,
     NPCRole,
+    NPCRoleCooldown,
     NPCServiceOffer,
     NPCStanding,
     OfferCooldown,
@@ -82,3 +84,27 @@ class PermitOfferDetailsFactory(DjangoModelFactory):
         model = PermitOfferDetails
 
     offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PERMIT)
+
+
+class NPCRoleCooldownFactory(DjangoModelFactory):
+    """Per-(role, persona) cooldown row (#686). Inactive by default."""
+
+    class Meta:
+        model = NPCRoleCooldown
+
+    role = factory.SubFactory(NPCRoleFactory)
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
+
+
+class MissionOfferDetailsFactory(DjangoModelFactory):
+    """Per-(NPCServiceOffer, MissionTemplate) catalog row for MISSION offers (#686)."""
+
+    class Meta:
+        model = MissionOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.MISSION)
+    mission_template = factory.SubFactory("world.missions.factories.MissionTemplateFactory")
+    weight = None
+    requirements_override = factory.LazyFunction(dict)
+    role_cooldown_duration = None

@@ -241,7 +241,8 @@ def _mission_gates_pass(
     avoid an app-load cycle.
     """
     from world.missions.constants import MissionStatus  # noqa: PLC0415
-    from world.missions.models import MissionInstance, MissionOfferDetails  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+    from world.npc_services.models import MissionOfferDetails  # noqa: PLC0415
 
     # 5a. PC active-NPC-mission cap.
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
@@ -383,7 +384,7 @@ def _weight_for_offer(offer: NPCServiceOffer) -> int:
     disappears from the draw due to a zero/null weight.
     """
     if offer.kind == OfferKind.MISSION.value:
-        from world.missions.models import MissionOfferDetails  # noqa: PLC0415
+        from world.npc_services.models import MissionOfferDetails  # noqa: PLC0415
 
         try:
             details = offer.mission_offer_details
