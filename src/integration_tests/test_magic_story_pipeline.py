@@ -1101,7 +1101,6 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         Caster's Dissolution corruption_current did NOT rise from defilement.
         """
         from world.locations.models import LocationValueModifier
-        from world.magic.models.aura import CharacterResonance
 
         # Place caster in the high celestial room.
         self.caster.location = self.high_room
@@ -1138,19 +1137,9 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
             "No source='defilement' LocationValueModifier must exist on the high_room "
             "(backfire fired, not defilement)",
         )
-
-        # Caster's dissolution corruption_current must not have been raised by defilement.
-        char_res = CharacterResonance.objects.filter(
-            character_sheet=self.sheet,
-            resonance=self.dissolution_resonance,
-        ).first()
-        if char_res is not None:
-            # Per-cast baseline corruption (from accrue_corruption_for_cast) may exist,
-            # but we verify no defilement modifier row exists — which proves defile_place_for_cast
-            # did not fire. The absence of the modifier row is the definitive defilement gate.
-            pass
-        # Definitive gate: no defilement row = defile_place_for_cast was a no-op.
-        # (Already asserted above via LocationValueModifier filter.)
+        # The absence of any source='defilement' modifier row is the definitive gate that
+        # defile_place_for_cast was a no-op here (baseline per-cast corruption from
+        # accrue_corruption_for_cast is unrelated and intentionally not asserted on).
 
     def test_primal_caster_does_not_defile_celestial(self) -> None:
         """Negative control: Primal-aura caster in low celestial room → no defilement.
