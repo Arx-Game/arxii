@@ -423,6 +423,21 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.roster.services.activity import sweep_activity_states
+
+    register_task(
+        CronDefinition(
+            task_key="roster.activity_sweep",
+            callable=sweep_activity_states,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly inactivity-detection sweep (#671). Flips activity_state"
+                " ACTIVE↔INACTIVE based on decay_tier and expires HIATUS when"
+                " activity_state_until has passed."
+            ),
+        )
+    )
+
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
     # journals, relationships, and AP regen.
