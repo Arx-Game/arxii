@@ -253,3 +253,28 @@ class LifecycleState(models.TextChoices):
     COMA = "COMA", "Coma"
     RETIRED = "RETIRED", "Retired"
     DEAD = "DEAD", "Dead"
+
+
+class DecayTier(models.TextChoices):
+    """Graduated inactivity vocabulary returned by CharacterSheet.decay_tier (#671).
+
+    Computed from days-since-last-signal. Returned as a TextChoices value (string)
+    so consumers can ``if sheet.decay_tier == DecayTier.LONG_INACTIVE`` without
+    string-typo risk. Returns None when the character is still within the
+    RECENT_INACTIVE-or-better window.
+    """
+
+    RECENT_INACTIVE = "RECENT_INACTIVE", "Recently inactive (14+ days)"
+    INACTIVE = "INACTIVE", "Inactive (30+ days)"
+    LONG_INACTIVE = "LONG_INACTIVE", "Long inactive (90+ days)"
+    DORMANT = "DORMANT", "Dormant (365+ days)"
+
+
+DECAY_TIER_THRESHOLDS_DAYS = {
+    DecayTier.DORMANT: 365,
+    DecayTier.LONG_INACTIVE: 90,
+    DecayTier.INACTIVE: 30,
+    DecayTier.RECENT_INACTIVE: 14,
+}
+"""Tier → minimum days-since-signal. Walked in descending-threshold order so the
+biggest matching tier wins. Tuneable; the values match the #671 spec."""

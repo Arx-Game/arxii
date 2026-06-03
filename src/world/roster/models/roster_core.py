@@ -124,12 +124,6 @@ class RosterEntry(SharedMemoryModel):
         help_text="When this character last entered the game world",
     )
 
-    # Character status
-    frozen = models.BooleanField(
-        default=False,
-        help_text="Character temporarily frozen (rarely used)",
-    )
-
     # Staff notes
     gm_notes = models.TextField(blank=True)
 

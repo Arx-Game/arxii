@@ -41,8 +41,8 @@ class RosterAdmin(admin.ModelAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ["character_sheet", "roster", "joined_roster", "frozen", "profile_picture"]
-    list_filter = ["roster", "frozen", "joined_roster"]
+    list_display = ["character_sheet", "roster", "joined_roster", "profile_picture"]
+    list_filter = ["roster", "joined_roster"]
     search_fields = ["character_sheet__character__db_key"]
     readonly_fields = ["joined_roster", "created_date", "updated_date"]
 
@@ -52,7 +52,6 @@ class RosterEntryAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Character Info", {"fields": ("character_sheet", "roster", "profile_picture")}),
-        ("Status", {"fields": ("frozen",)}),
         (
             "History",
             {"fields": ("joined_roster", "previous_roster"), "classes": ("collapse",)},

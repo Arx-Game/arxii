@@ -10,6 +10,7 @@ and the evennia_extensions/object_extensions/models.py display name system.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -24,12 +25,18 @@ if TYPE_CHECKING:
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.character_sheets.types import ActivityState, LifecycleState, MaritalStatus
+from world.character_sheets.types import (
+    DECAY_TIER_THRESHOLDS_DAYS,
+    ActivityState,
+    LifecycleState,
+    MaritalStatus,
+)
 
 
 class Heritage(NaturalKeyMixin, SharedMemoryModel):
@@ -332,6 +339,70 @@ class CharacterSheet(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Sheet for {self.character.key}"
+
+    # --- Activity / Lifecycle helpers (#671) -----------------------------
+
+    @property
+    def is_dormant(self) -> bool:
+        """True when any consumer should treat this character as inactive.
+
+        Returns True if ``activity_state != ACTIVE`` (HIATUS, INACTIVE, FROZEN)
+        OR ``lifecycle_state != ALIVE`` (CAPTURED, COMA, RETIRED, DEAD).
+        Two simple column comparisons; safe to call in tight loops.
+        """
+        return (
+            self.activity_state != ActivityState.ACTIVE
+            or self.lifecycle_state != LifecycleState.ALIVE
+        )
+
+    @property
+    def decay_tier(self) -> str | None:
+        """Inactivity tier from days-since-last-signal, or None when fresh.
+
+        Walks the FK chain ``roster_entry -> roster.activity_requirement`` and
+        ``roster_entry -> current_tenure -> player_data.account.last_login``
+        plus ``roster_entry.last_puppeted`` for HIGH-tier rosters. Returns the
+        biggest matching tier (DORMANT > LONG_INACTIVE > INACTIVE >
+        RECENT_INACTIVE) or None when the most recent signal is < 14 days old.
+
+        Callers iterating many sheets should ``prefetch_related``
+        ``roster_entry__tenures__player_data__account`` to amortize the chain.
+        Single calls amortize cheaply via SharedMemoryModel's identity map.
+        """
+        last_signal = self._last_activity_signal_at()
+        if last_signal is None:
+            return None
+        days = (timezone.now() - last_signal).days
+        for tier, threshold in DECAY_TIER_THRESHOLDS_DAYS.items():
+            if days >= threshold:
+                return tier
+        return None
+
+    def _last_activity_signal_at(self) -> datetime | None:
+        """Return the most recent activity signal for this sheet, or None.
+
+        For HIGH-tier rosters: max of Account.last_login and
+        RosterEntry.last_puppeted. For LOW-tier: Account.last_login. For
+        NONE-tier and ROSTERED characters (no current tenure): max of any
+        available signal (so consumers can still read decay_tier even when
+        the cron won't auto-flip activity_state).
+        """
+        entry = getattr(self, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+        if entry is None:
+            return self.created_by.last_login if self.created_by_id else None
+
+        current = entry.current_tenure
+        last_login = current.player_data.account.last_login if current is not None else None
+
+        from world.roster.models.choices import ActivityRequirement  # noqa: PLC0415
+
+        requirement = entry.roster.activity_requirement
+        if requirement == ActivityRequirement.LOW:
+            return last_login
+
+        # HIGH and NONE both fall back to "max of available signals"
+        candidates = [s for s in (last_login, entry.last_puppeted) if s is not None]
+        return max(candidates) if candidates else None
 
     @cached_property
     def stats(self) -> StatHandler:
