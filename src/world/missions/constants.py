@@ -124,13 +124,19 @@ class AccessTier(models.TextChoices):
 class GiverKind(models.TextChoices):
     """How a :class:`~world.missions.models.MissionGiver` reaches the player.
 
-    NPC — abstract giver NPC the player talks to (carries ``npc`` FK);
-    ENVIRONMENTAL_DETAIL — examinable item or detail in a room (carries
-    ``environmental_detail`` FK); ROOM_TRIGGER — entering ``location`` rolls
-    the offer (no extra typed FK; ``location`` itself is the trigger).
+    NPC-mediated givers migrated to ``NPCRole`` + ``NPCServiceOffer`` per
+    #686. ``MissionGiver`` survives for the two trigger-based kinds whose
+    dispatch is different from "player talks to an NPC":
+
+    ROOM_TRIGGER — entering ``target`` (a Room) rolls the offer;
+    ENVIRONMENTAL_DETAIL — examining ``target`` (an item/detail) emits
+    the offer.
+
+    Trigger-based offers will be designed as a follow-up; for now the
+    catalog choices restrict to the two surviving kinds so authoring tools
+    can't accidentally re-introduce the NPC variant.
     """
 
-    NPC = "npc", "NPC"
     ENVIRONMENTAL_DETAIL = "environmental_detail", "Environmental Detail"
     ROOM_TRIGGER = "room_trigger", "Room Trigger"
 

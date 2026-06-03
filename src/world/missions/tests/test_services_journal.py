@@ -16,13 +16,12 @@ from world.classes.factories import CharacterClassFactory, CharacterClassLevelFa
 from world.missions.constants import MissionStatus
 from world.missions.factories import (
     MissionDeedRecordFactory,
-    MissionGiverFactory,
     MissionNodeFactory,
     MissionOptionFactory,
     MissionTemplateFactory,
 )
 from world.missions.services.journal import journal_for
-from world.missions.services.run import accept_mission, share_mission
+from world.missions.services.run import share_mission, staff_assign_mission
 from world.missions.types import JournalDeed, JournalEntry
 
 
@@ -43,14 +42,12 @@ class JournalForTests(TestCase):
     """Returns one JournalEntry per participation, with structured deeds."""
 
     def setUp(self) -> None:
-        self.giver = MissionGiverFactory()
         self.template = MissionTemplateFactory(name="Journal Mission")
         self.entry_node = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
-        self.giver.templates.add(self.template)
         self.holder = _make_character()
 
     def test_holder_sees_their_run(self) -> None:
-        instance = accept_mission(self.giver, self.template, self.holder)
+        instance = staff_assign_mission(self.template, self.holder)
         entries = journal_for(self.holder)
 
         self.assertEqual(len(entries), 1)
@@ -64,7 +61,7 @@ class JournalForTests(TestCase):
         self.assertEqual(entry.deeds, ())
 
     def test_sharee_sees_run_as_non_holder(self) -> None:
-        instance = accept_mission(self.giver, self.template, self.holder)
+        instance = staff_assign_mission(self.template, self.holder)
         sharee = _make_character()
         share_mission(instance, sharee)
 
@@ -74,7 +71,7 @@ class JournalForTests(TestCase):
         self.assertEqual(entries[0].instance_id, instance.pk)
 
     def test_deeds_filtered_to_actor(self) -> None:
-        instance = accept_mission(self.giver, self.template, self.holder)
+        instance = staff_assign_mission(self.template, self.holder)
         sharee = _make_character()
         share_mission(instance, sharee)
 
@@ -101,12 +98,10 @@ class JournalForTests(TestCase):
 
     def test_deterministic_order_by_instance_id(self) -> None:
         # Two missions in order — entries must come back in instance_id order.
-        instance_a = accept_mission(self.giver, self.template, self.holder)
+        instance_a = staff_assign_mission(self.template, self.holder)
         t2 = MissionTemplateFactory(name="Second")
         MissionNodeFactory(template=t2, key="entry", is_entry=True)
-        giver2 = MissionGiverFactory(name="Other Giver")
-        giver2.templates.add(t2)
-        instance_b = accept_mission(giver2, t2, self.holder)
+        instance_b = staff_assign_mission(t2, self.holder)
 
         entries = journal_for(self.holder)
         ids = [e.instance_id for e in entries]
@@ -133,10 +128,8 @@ class JournalForTests(TestCase):
         for i in range(3):
             template = MissionTemplateFactory(name=f"QC Mission {i}")
             entry_node = MissionNodeFactory(template=template, key="entry", is_entry=True)
-            giver = MissionGiverFactory(name=f"QC Giver {i}")
-            giver.templates.add(template)
-            templates.append((giver, template, entry_node))
-            instance = accept_mission(giver, template, self.holder)
+            templates.append((template, entry_node))
+            instance = staff_assign_mission(template, self.holder)
             option = MissionOptionFactory(node=entry_node)
             MissionDeedRecordFactory(
                 instance=instance,

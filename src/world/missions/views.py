@@ -31,8 +31,6 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.missions.filters import (
-    MissionGiverFilterSet,
-    MissionGiverOfferingFilterSet,
     MissionNodeFilterSet,
     MissionOptionFilterSet,
     MissionOptionRouteCandidateFilterSet,
@@ -42,8 +40,6 @@ from world.missions.filters import (
 )
 from world.missions.models import (
     MissionCategory,
-    MissionGiver,
-    MissionGiverOffering,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -54,8 +50,6 @@ from world.missions.models import (
 )
 from world.missions.serializers import (
     MissionCategorySerializer,
-    MissionGiverOfferingSerializer,
-    MissionGiverSerializer,
     MissionInstanceSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
@@ -275,35 +269,6 @@ class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteRewardFilterSet
-
-
-# ---------------------------------------------------------------------------
-# D3 giver-library viewsets — staff CRUD for MissionGiver + its links to
-# templates (MissionGiverOffering). NPCStanding's viewset lives in
-# `world.npc_services.views` since standing is shared across kinds.
-# ---------------------------------------------------------------------------
-
-
-class MissionGiverViewSet(viewsets.ModelViewSet):
-    """Staff CRUD for MissionGiver. clean() validates target typeclass."""
-
-    queryset = MissionGiver.objects.all().order_by("pk")
-    serializer_class = MissionGiverSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    pagination_class = MissionStudioPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = MissionGiverFilterSet
-
-
-class MissionGiverOfferingViewSet(viewsets.ModelViewSet):
-    """Staff CRUD for the giver<->template through-model."""
-
-    queryset = MissionGiverOffering.objects.all().order_by("pk")
-    serializer_class = MissionGiverOfferingSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    pagination_class = MissionStudioPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = MissionGiverOfferingFilterSet
 
 
 class MissionInstanceViewSet(

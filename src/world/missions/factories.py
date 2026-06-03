@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.utils import timezone
 import factory
 from factory.django import DjangoModelFactory
 
@@ -25,8 +24,6 @@ from world.missions.models import (
     MissionDeedRecord,
     MissionDeedRewardLine,
     MissionGiver,
-    MissionGiverCooldown,
-    MissionGiverOffering,
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
@@ -204,12 +201,12 @@ class MissionDeedRecordFactory(DjangoModelFactory):
 
 
 class MissionGiverFactory(DjangoModelFactory):
-    """Factory for MissionGiver.
+    """Factory for MissionGiver (now only ROOM_TRIGGER / ENVIRONMENTAL_DETAIL kinds).
 
-    Defaults to an active, target-less ROOM_TRIGGER-kind giver — a
-    drafty row (passes ``clean()``, fails ``is_publishable``). Tests
-    exercising a specific kind pass ``giver_kind=`` + a matching
-    ``target=`` (whose typeclass clean() validates).
+    NPC-mediated givers migrated to ``NPCRole`` per #686. This factory
+    survives for the two trigger-based kinds (their dispatch design lands
+    with the trigger followup). Defaults to a target-less ROOM_TRIGGER
+    draft (passes ``clean()``, fails ``is_publishable``).
     """
 
     class Meta:
@@ -221,34 +218,6 @@ class MissionGiverFactory(DjangoModelFactory):
     target = None
     org = None
     is_active = True
-
-
-class MissionGiverOfferingFactory(DjangoModelFactory):
-    """Factory for the MissionGiver↔MissionTemplate through-model."""
-
-    class Meta:
-        model = MissionGiverOffering
-
-    giver = factory.SubFactory(MissionGiverFactory)
-    template = factory.SubFactory(MissionTemplateFactory)
-    weight_override = None
-    requirements_override = factory.LazyFunction(dict)
-
-
-class MissionGiverCooldownFactory(DjangoModelFactory):
-    """Factory for per-(giver, character) mission cooldown rows.
-
-    Default ``available_at`` is 1 second in the past so the row exists
-    without acting as a gate. Tests exercising an active cooldown
-    override ``available_at`` with a future datetime.
-    """
-
-    class Meta:
-        model = MissionGiverCooldown
-
-    giver = factory.SubFactory(MissionGiverFactory)
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
 
 
 class MissionDeedRewardLineFactory(DjangoModelFactory):

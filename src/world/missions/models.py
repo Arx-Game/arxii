@@ -1065,16 +1065,6 @@ class MissionGiver(SharedMemoryModel):
         related_name="+",
         help_text="Optional organization this giver fronts for (used by ORG arc-scope).",
     )
-    templates = models.ManyToManyField(
-        MissionTemplate,
-        through="MissionGiverOffering",
-        blank=True,
-        related_name="givers",
-        help_text=(
-            "Authored template draw pool — see services.availability.offer_missions. "
-            "Backed by MissionGiverOffering for per-link odds/requirements overrides."
-        ),
-    )
     is_active = models.BooleanField(default=True)
 
     def clean(self) -> None:
@@ -1089,17 +1079,7 @@ class MissionGiver(SharedMemoryModel):
         from typeclasses.rooms import Room  # noqa: PLC0415
 
         target = self.target
-        if self.giver_kind == GiverKind.NPC:
-            if not target.is_typeclass(Character, exact=False):
-                raise ValidationError(
-                    {
-                        "target": (
-                            f"NPC-kind giver's target must be a Character-typeclass "
-                            f"ObjectDB; got {target.typeclass_path}."
-                        )
-                    }
-                )
-        elif self.giver_kind == GiverKind.ROOM_TRIGGER:
+        if self.giver_kind == GiverKind.ROOM_TRIGGER:
             if not target.is_typeclass(Room, exact=False):
                 raise ValidationError(
                     {
@@ -1153,118 +1133,6 @@ class MissionGiver(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
-
-
-class MissionGiverOffering(SharedMemoryModel):
-    """Per-(giver, template) link with optional offering-time overrides.
-
-    The default draw weight and availability requirements come from the
-    :class:`MissionTemplate` itself. A per-link override lets the same
-    template be offered with different odds or extra gating by a specific
-    giver — e.g. the guildmaster offers the standard 'rescue' template
-    with extra-favourable odds to VIP members.
-    """
-
-    giver = models.ForeignKey(
-        MissionGiver,
-        on_delete=models.CASCADE,
-        related_name="offerings",
-    )
-    template = models.ForeignKey(
-        MissionTemplate,
-        on_delete=models.CASCADE,
-        related_name="offerings",
-    )
-    weight_override = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Optional per-offering draw weight; null = use "
-            "template.base_weight. Must be >= 1 when set — 0 would silently "
-            "disable this offering, which is not the right tool (use the "
-            "template's is_active flag or delete the offering instead)."
-        ),
-    )
-    # SANCTIONED DYNAMIC JSON: same shape as MissionTemplate.availability_rule
-    # — a Phase-0 predicate tree consumed by world.missions.predicates.evaluate.
-    # Empty {} = use the template's own availability_rule only.
-    requirements_override = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text=(
-            "Optional per-offering predicate gate (Phase-0 tree shape). "
-            "STORED BUT UNCONSUMED in Phase B — services.availability "
-            "reads only the template's availability_rule today; Phase D "
-            "wires this override in (semantic: AND-compose with the "
-            "template rule). Empty {} = no per-offering override."
-        ),
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["giver", "template"],
-                name="unique_missiongiveroffering_giver_template",
-            ),
-        ]
-
-    def clean(self) -> None:
-        super().clean()
-        if self.weight_override is not None and self.weight_override < 1:
-            raise ValidationError(
-                {
-                    "weight_override": (
-                        "Must be >= 1; use null to fall back to "
-                        "template.base_weight. 0 would silently disable "
-                        "this offering."
-                    ),
-                }
-            )
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"{self.giver} → {self.template}"
-
-
-class MissionGiverCooldown(SharedMemoryModel):
-    """Per-(giver, character) cooldown for re-accepting missions from a giver.
-
-    Written by :func:`world.missions.services.run.accept_mission` to
-    ``now + template.cooldown``. :func:`world.missions.services.availability`
-    excludes the giver's templates while a row with ``available_at > now``
-    exists for this character. Independent of NPCStanding — works for
-    every giver kind (NPC, ROOM_TRIGGER, ENVIRONMENTAL_DETAIL).
-
-    Mission migration onto NPCServiceOffer (#686) will collapse this into
-    :class:`world.npc_services.models.OfferCooldown`; for now the mission
-    system keeps its own giver-keyed cooldown table.
-    """
-
-    giver = models.ForeignKey(
-        MissionGiver,
-        on_delete=models.CASCADE,
-        related_name="cooldowns",
-    )
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        related_name="+",
-    )
-    available_at = models.DateTimeField()
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["giver", "character"],
-                name="unique_missiongivercooldown_giver_character",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d %H:%M}"
 
 
 class MissionDeedRewardLine(SharedMemoryModel):
