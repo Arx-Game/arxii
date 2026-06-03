@@ -592,16 +592,41 @@ def _is_opposed_backfire(effect: ResonanceEnvironmentEffect) -> bool:
     )
 
 
+def _resolve_effect(
+    effect: ResonanceEnvironmentEffect | None,
+    *,
+    caster: DefaultObject,
+    room: DefaultObject,
+    technique: Technique | None,
+) -> ResonanceEnvironmentEffect:
+    """Return the supplied ``effect`` or evaluate the primitive on demand (#722).
+
+    Hoists the "use cached effect or compute it ourselves" branch out of every
+    consumer so each consumer body stays linear (avoids C901 complexity bumps
+    on the consumer wrappers).
+    """
+    if effect is not None:
+        return effect
+    return evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+
+
 def resonance_environment_for_cast(
     *,
     caster_sheet: CharacterSheet,
     room_profile: RoomProfile,
     technique: Technique | None,
+    effect: ResonanceEnvironmentEffect | None = None,
 ) -> ResonanceEnvironmentCastResult:
     """Apply resonance-environment backfire for OPPOSED casts.
 
     Called from the technique-use orchestrator after accrue_corruption_for_cast.
     Emits no events and runs no flows — this is a direct core-service call.
+
+    When ``effect`` is passed in, the call skips its own
+    ``evaluate_resonance_environment`` (the orchestrator computes it once at
+    Step 10 and feeds the same value into ``defile_place_for_cast`` — saves
+    ~4-5 queries per cast). ``effect=None`` keeps the standalone behaviour
+    for any future caller that doesn't already have the primitive result.
 
     Branch behaviour
     ----------------
@@ -632,7 +657,7 @@ def resonance_environment_for_cast(
     caster = caster_sheet.character
     room = room_profile.objectdb
 
-    effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+    effect = _resolve_effect(effect, caster=caster, room=room, technique=technique)
 
     if not _is_opposed_backfire(effect):
         return _INERT_CAST_RESULT
