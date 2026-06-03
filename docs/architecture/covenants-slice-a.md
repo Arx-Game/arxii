@@ -5,7 +5,7 @@
 **Branch:** TBD (e.g. `covenants-slice-a-entity`)
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; this spec implements the foundational missing skeleton
-- `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md` — Spec D, which shipped the role/gear/Thread integration this spec builds on
+- `docs/architecture/items-fashion-mantles.md` — Spec D, which shipped the role/gear/Thread integration this spec builds on
 - `src/world/covenants/models.py` — `CovenantRole`, `GearArchetypeCompatibility`, `CharacterCovenantRole` (existing)
 - `src/world/magic/services/threads.py:97-141` — `compute_anchor_cap` (the COVENANT_ROLE arm we're un-placeholdering)
 - `src/world/magic/models/threads.py:266-541` — `Thread` + COVENANT_ROLE constraints (the existing role-mastery axis; not modified)

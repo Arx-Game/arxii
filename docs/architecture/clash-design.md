@@ -581,7 +581,7 @@ without `--keepdb` before pushing (integration tests create encounters →
   Soulfray, corruption
 - `docs/plans/2026-05-21-positioning-zones-design-notes.md` — the positioning work
   Clash is deliberately independent of
-- `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
+- `docs/architecture/resonance-environment-universal-path.md`
   — the `AffinityInteraction` matrix Clash reuses
-- `docs/superpowers/specs/2026-05-17-unified-player-action-interface-design.md` —
+- `docs/architecture/unified-player-action.md` —
   the `get_player_actions` / `PlayerAction` seam clash contributions surface through

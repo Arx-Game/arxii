@@ -202,7 +202,7 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
 
 ### Soul Tether (Resonance Pivot Spec B)
 
-**Spec:** `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`
+**Spec:** `docs/architecture/soul-tether.md`
 
 Bond mechanic between two PCs (Sinner + Sineater) that mediates Corruption accrual from
 non-Celestial casting. The Sinner's `RELATIONSHIP_CAPSTONE` Thread carries **the Hollow**
@@ -323,10 +323,9 @@ The following models have been removed and replaced:
 - `docs/plans/2026-01-20-magic-system-design.md` - original system design
 - `docs/plans/2026-03-02-cantrip-technique-alignment.md` - cantrip/technique alignment + spell mechanics
 - `docs/plans/2026-03-04-path-cantrip-filtering-design.md` - path-based cantrip filtering design
-- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
-- `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md` - 19-phase implementation plan for Spec A
-- `docs/superpowers/specs/2026-04-22-resonance-pivot-spec-c-gain-surfaces-design.md` - Resonance Pivot Spec C (Endorsements + Room Aura + Residence Trickle)
-- `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md` - Resonance Pivot Spec B (Soul Tether bond mechanic)
+- `docs/architecture/resonance-threads.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
+- `docs/architecture/resonance-gain.md` - Resonance Pivot Spec C (Endorsements + Room Aura + Residence Trickle)
+- `docs/architecture/soul-tether.md` - Resonance Pivot Spec B (Soul Tether bond mechanic)
 
 ## Key Rules
 

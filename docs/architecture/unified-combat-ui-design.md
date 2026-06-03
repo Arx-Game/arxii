@@ -725,7 +725,7 @@ neither owns the abstraction and either can adopt.
 
 ## §12 — Related work
 
-- **Clash design spec** (`docs/superpowers/specs/2026-05-22-clash-design.md`) —
+- **Clash design spec** (`docs/architecture/clash-design.md`) —
   this UI is the missing frontend for clash.
 - **Clash cleanup notes** (`docs/plans/2026-05-23-clash-post-ship-cleanup-notes.md`)
   — lists this UI work + the dispatch handler this UI depends on.

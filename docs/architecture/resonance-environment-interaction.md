@@ -2,7 +2,7 @@
 
 **Status:** Draft (brainstorm complete 2026-05-15)
 **Owner:** Tehom (magic + core infrastructure)
-**Supersedes the affinity portion of:** `docs/superpowers/specs/2026-05-14-magic-story-pipeline-slice-design.md`
+**Supersedes the affinity portion of:** `docs/architecture/magic-story-pipeline.md`
 **Builds on:** brother's `docs/plans/2026-05-14-room-cascade-resonance-unification.md` (merged as #444)
 
 ## Why this spec exists

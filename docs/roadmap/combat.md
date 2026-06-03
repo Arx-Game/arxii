@@ -21,7 +21,7 @@ contesting magical energy to overpower each other in combat? If not, it is not a
 "clash".
 
 **When the clash-of-wills feature IS built, reuse the resonance-environment work — do
-not reinvent it.** `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`
+not reinvent it.** `docs/architecture/resonance-environment-interaction.md`
 already models directed, asymmetric affinity opposition as authored `AffinityInteraction`
 rows (the RPS cycle: Primal > Celestial > Abyssal > Primal, with per-pair `valence` /
 `kind` / `severity_multiplier`). A combat clash between opposed-affinity casters
@@ -226,7 +226,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 **Phase 4 (complete):** Magic pipeline integration (damage path)
 - Combat-cast techniques route through `use_technique` for damage. Anima deduction, soulfray, mishap rolls, TECHNIQUE_PRE_CAST/CAST events, reactive scar interception, and corruption checks all fire on combat-cast attacks
 - `CombatTechniqueResolver` (frozen dataclass) is the resolve_fn. Active `CombatPull` FLAT_BONUS effects feed offense check `extra_modifiers` per Spec A §5.8
-- See `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md`
+- See `docs/architecture/combat-magic-integration.md`
 
 **Phase 5 (complete):** Non-attack effect routing + CombatOpponent identity refactor
 - **Non-attack techniques apply conditions in combat.** `TechniqueAppliedCondition` through model authors which conditions a technique applies, with formula-based severity and duration scaling: `base + intensity_mult × effective_intensity + per_extra_sl × max(0, SL − min_sl)`. Buff, Defense, Movement, and Debuff techniques are now functional in combat
@@ -240,7 +240,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **TECHNIQUE_AFFECTED fires uniformly** on every target including mooks (lifesteal-style on-affected reactive triggers now work against generic NPCs)
 - **Round-tick wiring.** `process_round_start` / `process_round_end` now called from `begin_declaration_phase` / `resolve_round` for active participants and active opponents — conditions in combat actually decay and DoT-tick
 - **`declare_action` target validation.** XOR check, target-kind alignment with technique authoring (SELF/ALLY interchangeable), damage-only requires opponent target
-- See `docs/superpowers/specs/2026-05-01-combat-magic-non-attack-effects-design.md`
+- See `docs/architecture/combat-conditions.md`
 
 **Phase 6 (complete):** Damage scaling by effective intensity
 - **Per-technique damage authoring.** New `TechniqueDamageProfile` through-model. Same formula shape as `TechniqueAppliedCondition` and `TechniqueCapabilityGrant`: `base_damage + intensity_multiplier × effective_intensity + per_extra_sl × max(0, SL − min_sl)`. Authors knob each row independently.
@@ -253,11 +253,11 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **`TechniqueCapabilityGrant.calculate_value` extension.** Accepts keyword-only `effective_intensity` override for future Challenge-in-combat work where pull bumps should affect Capability values.
 - **`add_opponent` Character-typeclass guard.** `existing_objectdb` must be a Character typeclass instance — raises `TypeError` otherwise. Damage path's `opponent.objectdb.conditions` access can never miss the handler.
 - **`bypass_soak` stays combo-only.** Architectural rule: solo casts never bypass soak. The `TechniqueDamageProfile` model has no `bypass_soak` field; `_apply_damage` never passes `bypass_soak=True`.
-- See `docs/superpowers/specs/2026-05-01-damage-scaling-design.md`
+- See `docs/architecture/damage-scaling.md`
 
 **Phase 7 (complete):** Magic-in-combat fixes + unified player-action interface
 **Branch:** `unified-action-interface`
-**Design spec:** `docs/superpowers/specs/2026-05-17-unified-player-action-interface-design.md`
+**Design spec:** `docs/architecture/unified-player-action.md`
 
 Two deliverables in one branch:
 
@@ -423,8 +423,8 @@ the React frontend.
 
 **Status: SHIPPED**
 **Branch:** `clash-design`
-**Spec:** `docs/superpowers/specs/2026-05-22-clash-design.md`
-**Plan:** `docs/superpowers/plans/2026-05-22-clash.md`
+**Spec:** `docs/architecture/clash-design.md`
+**Plan:** `docs/architecture/clash-implementation-phases.md`
 
 The reserved "clash" mechanic is built. A **Clash** is a multi-round contested
 struggle inside a `CombatEncounter`: PCs pour effort into overpowering — or enduring

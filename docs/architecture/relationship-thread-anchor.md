@@ -4,8 +4,8 @@
 **Status:** Approved (autonomous-mode design conversation; scope refined after investigating existing relationship primitives)
 **Branch:** `relationship-driven-thread-growth`
 **Related:**
-- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` — Spec A (Threads + Currency); origin of the anchor_cap formulas
-- `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md` — Spec B (Soul Tether); existing consumer of `RELATIONSHIP_CAPSTONE` Threads
+- `docs/architecture/resonance-threads.md` — Spec A (Threads + Currency); origin of the anchor_cap formulas
+- `docs/architecture/soul-tether.md` — Spec B (Soul Tether); existing consumer of `RELATIONSHIP_CAPSTONE` Threads
 - `src/world/magic/services/threads.py:97-145` — `compute_anchor_cap` (the function we're modifying)
 - `src/world/relationships/models.py` — `RelationshipTrackProgress`, `RelationshipCapstone`
 

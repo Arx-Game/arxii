@@ -3,8 +3,8 @@
 **Date:** 2026-05-08
 **Status:** Approved (autonomous-mode design conversation)
 **Related:**
-- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` — Thread + currency pivot (the source-of-truth for what these models do)
-- `docs/superpowers/specs/2026-05-07-anima-ritual-ui-design.md` — most recent Ritual surface; established `RitualPerformView`-as-dispatch and per-anchor field renderers
+- `docs/architecture/resonance-threads.md` — Thread + currency pivot (the source-of-truth for what these models do)
+- `docs/architecture/anima-ritual-ui.md` — most recent Ritual surface; established `RitualPerformView`-as-dispatch and per-anchor field renderers
 - `src/world/magic/services/threads.py` — `weave_thread`, `cross_thread_xp_lock`, `accept_thread_weaving_unlock`, imbue prospect helpers
 - `src/world/magic/services/resonance.py` — `spend_resonance_for_imbuing`, `spend_resonance_for_pull`, `preview_resonance_pull`
 - `src/world/magic/views.py` — `ThreadViewSet`, `RitualPerformView`, `ThreadPullPreviewView`, `ThreadWeavingTeachingOfferViewSet`

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-05
 **Status:** Approved (design conversation)
-**Backend spec it complements:** `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`
+**Backend spec it complements:** `docs/architecture/soul-tether.md`
 
 ---
 

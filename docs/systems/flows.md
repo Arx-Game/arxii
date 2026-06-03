@@ -233,5 +233,5 @@ arx test flows.tests.test_reactive_integration world.combat.tests.test_reactive_
 ## See Also
 
 - **Plan:** `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`
-- **Spec:** `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`
+- **Spec:** `docs/architecture/reactive-layer-foundation.md`
 - **Roadmap context:** `docs/roadmap/magic.md` (Scope 5.5)

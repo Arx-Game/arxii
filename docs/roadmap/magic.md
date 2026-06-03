@@ -91,7 +91,7 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 ## What's Needed for MVP
 
 ### Technique Use Flow (Design Spec Complete)
-**Spec:** `docs/superpowers/specs/2026-03-29-technique-use-flow-design.md`
+**Spec:** `docs/architecture/technique-use-pipeline.md`
 
 The core "I use Flame Lance" pipeline, connecting magic to the existing resolution
 infrastructure. Four scopes planned:
@@ -106,7 +106,7 @@ infrastructure. Four scopes planned:
 - `use_technique()` orchestrator wrapping the existing resolution pipeline
 
 **Scope #2 — Runtime Modifiers and Audere (DONE):**
-**Spec:** `docs/superpowers/specs/2026-03-30-scope2-runtime-modifiers-audere-design.md`
+**Spec:** `docs/architecture/runtime-modifiers-audere.md`
 
 What was built:
 - **CharacterEngagement** — first-class model for "what is this character doing that
@@ -140,7 +140,7 @@ Documented for future (hook points built, logic not implemented):
 - Contextual modifier evaluation (Trigger-like system for situational bonuses)
 
 **Scope #3 — Soulfray Progression & Consequence Streams (DONE):**
-**Spec:** `docs/superpowers/specs/2026-03-31-scope3-warp-progression-design.md`
+**Spec:** `docs/architecture/soulfray-progression-design.md`
 
 What was built:
 - **Severity-driven stage advancement** — `ConditionStage.severity_threshold` enables
@@ -189,7 +189,7 @@ What was built:
   visibility), `PendingAlteration` (queued unresolved scars with status lifecycle
   OPEN → RESOLVED / STAFF_CLEARED, scene + triggering-state snapshot), and
   `MagicalAlterationEvent` (immutable provenance audit log). Single migration covers
-  all three. Plan/spec at `docs/superpowers/plans/2026-04-12-scope5-magical-alteration-resolution.md`.
+  all three. Plan/spec at `docs/architecture/magical-alteration-plan.md`.
 - **MAGICAL_SCARS handler rewrite** — `_apply_magical_scars` in
   `src/world/mechanics/effect_handlers.py` no longer applies a placeholder condition.
   It calls `create_pending_alteration()`, which queues a `PendingAlteration` and
@@ -238,8 +238,7 @@ the `magical-scars` branch.
 
 **Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
 
-**Spec:** `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`
-**Plan:** `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md`
+**Spec:** `docs/architecture/resonance-threads.md`
 
 This is the first of a four-spec resonance pivot (A, B, C, D). Spec A
 pivots Resonance from a passive rank to a per-resonance **currency** that
@@ -332,8 +331,7 @@ completion note):
 
 **Resonance Pivot — Spec C (Resonance Gain Surfaces) — DONE:**
 
-**Spec:** `docs/superpowers/specs/2026-04-23-resonance-pivot-spec-c-gain-surfaces-design.md`
-**Plan:** `docs/superpowers/plans/2026-04-23-resonance-pivot-spec-c-gain-surfaces.md`
+**Spec:** `docs/architecture/resonance-gain.md`
 
 Spec C implements the gain surfaces — the authored systems where characters earn resonance
 through IC roleplay (pose endorsements, scene entry, residence trickle, outfit wear).
@@ -395,7 +393,7 @@ Imbuing against ITEM/ROOM currently raises `AnchorCapNotImplemented`).
 
 **Resonance Pivot — Spec D PR1 (Fashion Facets + Covenant Gear) — DONE:**
 
-**Spec:** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
+**Spec:** `docs/architecture/items-fashion-mantles.md`
 **Branch:** `spec-d-items-fashion-mantles-design`
 
 PR1 of four: wires the facet + covenant data layer into the resonance/modifier pipeline.
@@ -465,7 +463,7 @@ calls the existing `apply_damage_to_participant` / `remove_condition`
 service functions.
 
 Plan: `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`.
-Spec: `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`.
+Spec: `docs/architecture/reactive-layer-foundation.md`.
 Key new modules: `flows/trigger_handler.py`, `flows/emit.py`,
 `flows/events/`, `flows/filters/`, `flows/execution/prompts.py`,
 `world/combat/damage_source.py`. 29 integration tests cover damage-source
@@ -491,7 +489,7 @@ drives anima cost, mishap, resonance attribution, and Soulfray (a ward never red
 Power is recomputed each cast via `_derive_power` (`world/magic/services/techniques.py`);
 later issues #634-#639 add modifier/level/thread/aura/Audere terms, the persistent-buff
 surface, Direction-C consolidation, and the Direction-B pipeline. Research +
-candidate-directions report: `docs/superpowers/specs/2026-05-30-power-intensity-research-report.md`.
+candidate-directions report: `docs/architecture/power-intensity-research.md`.
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
@@ -554,7 +552,7 @@ reactions, and any future "something happens when X" feature flows through
 this PR's plumbing.
 
 **Scope #6 — Soulfray Recovery & Decay (DONE):**
-**Spec:** `docs/superpowers/specs/2026-04-21-magic-scope-6-soulfray-recovery-design.md`
+**Spec:** `docs/architecture/soulfray-recovery.md`
 
 What was built:
 - **Generalised condition-level decay** — `ConditionTemplate.passive_decay_per_day`,
@@ -612,7 +610,7 @@ Deferred to later scopes:
 - Character loss deferral during Audere (needs combat/mission lifecycle)
 
 **Scope #7 — Corruption (DONE — branch `scope-7-corruption`):**
-**Spec:** `docs/superpowers/specs/2026-04-25-magic-scope-7-corruption-design.md`
+**Spec:** `docs/architecture/corruption.md`
 
 Foundation for resonance-corruption — the identity-loss risk parallel to
 Soulfray's exhaustion injury. Non-Celestial casting accrues per-resonance
@@ -762,7 +760,7 @@ Per-cast hook follow-up (DONE):
 
 **Resonance Pivot — Spec B (Soul Tether) — DONE:**
 
-**Spec:** `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`
+**Spec:** `docs/architecture/soul-tether.md`
 **Branch:** `spec-b-soul-tether-design`
 
 Soul Tether is a bond mechanic between two PCs that mediates the Corruption risk a Sinner
@@ -1040,7 +1038,7 @@ See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-
   - Teacher display name in `TeachingOfferCard` (currently shows "Teacher #N").
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
 - Fashion-to-resonance integration (requires Items & Crafting systems —
-  designed in `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`,
+  designed in `docs/architecture/items-fashion-mantles.md`,
   implementation phased across 4 PRs)
 - **Style / motif / aura magical-significance axis (post-Spec D, dedicated future spec).**
   Resonance + facets cover *what* a character's magic is about; they don't cover
@@ -1063,8 +1061,8 @@ See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-
 
 **Status: SHIPPED (universal path redesign on branch `resonance-environment-universal-path`)**
 **Specs:**
-- `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md` (original slice — primitive, AffinityInteraction, authored injury conditions)
-- `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md` (universal-path redesign — supersedes the Magically-Attuned subscriber approach)
+- `docs/architecture/resonance-environment-interaction.md` (original slice — primitive, AffinityInteraction, authored injury conditions)
+- `docs/architecture/resonance-environment-universal-path.md` (universal-path redesign — supersedes the Magically-Attuned subscriber approach)
 
 ### Lore
 
@@ -1181,7 +1179,7 @@ Cast Disrupted `ConditionTemplate`s.
 1. **~~"Magically Attuned" production grant~~** — **SUPERSEDED/REMOVED.** This deferred item
    from the 2026-05-15 spec is not implemented as a grant; the entire marker-condition
    approach was replaced by the derived `magical_profile` predicate (see
-   `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`). No
+   `docs/architecture/resonance-environment-universal-path.md`). No
    grant is needed: magic-capability is derived from `CharacterAura` presence, which is
    created unconditionally at CG finalization by `finalize_magic_data()`.
 2. ~~**Presence-escalation for scarred characters**~~ — **DONE (#526).** `EventName.MOVED`

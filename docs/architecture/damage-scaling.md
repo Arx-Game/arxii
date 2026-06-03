@@ -4,8 +4,8 @@
 **Status:** Spec — pre-implementation
 **Owner:** brann
 **Predecessors:**
-- `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md`
-- `docs/superpowers/specs/2026-05-01-combat-magic-non-attack-effects-design.md`
+- `docs/architecture/combat-magic-integration.md`
+- `docs/architecture/combat-conditions.md`
 
 ## Purpose
 
@@ -825,8 +825,8 @@ Single branch. Commits in this order so reviewers can step through:
 
 ## References
 
-- `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md` — predecessor (damage path through use_technique).
-- `docs/superpowers/specs/2026-05-01-combat-magic-non-attack-effects-design.md` — predecessor (TechniqueAppliedCondition, compute_effective_intensity, CombatOpponent → ObjectDB).
+- `docs/architecture/combat-magic-integration.md` — predecessor (damage path through use_technique).
+- `docs/architecture/combat-conditions.md` — predecessor (TechniqueAppliedCondition, compute_effective_intensity, CombatOpponent → ObjectDB).
 - `src/world/magic/models/techniques.py` — Technique, TechniqueCapabilityGrant, TechniqueAppliedCondition.
 - `src/world/conditions/models.py` — DamageType, ConditionResistanceModifier, ConditionInstance.
 - `src/world/combat/services.py` — CombatTechniqueResolver, apply_damage_to_opponent, _resolve_npc_action.

@@ -91,7 +91,7 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Supporting Infrastructure
 - Factories for all new models (actions, mechanics, magic), including `ChallengeInstanceFactory` and `SituationInstanceFactory`
 - Admin registrations with inlines for nested models (actions, mechanics)
-- **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — end-to-end tests across 5 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests, TechniqueUseFlowTests, RuntimeModifierTests) validating the full technique → capability → application → resolution pipeline, including runtime modifier streams and Audere lifecycle. These are designed to grow as new systems come online. Spec: `docs/superpowers/specs/2026-03-28-pipeline-integration-test-design.md`
+- **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — end-to-end tests across 5 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests, TechniqueUseFlowTests, RuntimeModifierTests) validating the full technique → capability → application → resolution pipeline, including runtime modifier streams and Audere lifecycle. These are designed to grow as new systems come online. Spec: `docs/architecture/integration-test-patterns.md`
 - **API endpoint tests** (`world/mechanics/tests/test_api.py`) — 20 tests covering all Phase 6a endpoints, filters, and permission enforcement
 - **Permission tests** (`web/api/tests/test_permissions.py`) — 6 tests for `IsCharacterOwner` permission class
 
@@ -138,7 +138,7 @@ Prerequisites are now data-driven property checks, not code-dispatched callables
 - Frontend display of disabled actions with prerequisite reasons
 - Prerequisite evaluation in scene action path (currently challenge path only)
 
-**Design spec:** `docs/superpowers/specs/2026-03-29-prerequisite-system-design.md`
+**Design spec:** `docs/architecture/prerequisite-evaluation.md`
 
 ### Phase 3: Cooperative Actions
 The CooperativeAction dataclass exists but has no resolution logic.
@@ -199,7 +199,7 @@ provides a unified resolution specification for any data-driven action.
 - **Context pool wiring** — `_run_context_pools()` is implemented but not yet called
   in the pipeline. Needs ObjectProperty query integration.
 
-**Design spec:** `docs/superpowers/specs/2026-03-21-consequence-pools-and-action-templates-design.md`
+**Design spec:** `docs/architecture/action-template-pipeline.md`
 
 ### Phase 5.6: Scene Check Integration — DONE
 Players can use techniques and social actions within scenes, with consent-based
@@ -324,7 +324,7 @@ to support intervention between selection and application.
 - **20 API tests + 6 permission tests** covering all endpoints, permissions,
   filters, and edge cases.
 
-**Design spec:** `docs/superpowers/specs/2026-03-30-phase6-rest-api-design.md`
+**Design spec:** `docs/architecture/mechanics-api.md`
 
 #### Phase 6b: Still needed
 
@@ -456,4 +456,4 @@ The full architecture doc at `docs/architecture/property-capability-action.md` c
 ### Implementation History
 Phase 1 implementation (data models + services) completed on branch `docs/capability-application-architecture`. See `docs/plans/2026-03-15-capability-application-implementation.md` for the original implementation plan.
 
-Phase 5.5 implementation (consequence pools + action templates) completed on branch `feature/consequence-pools-action-templates`. Design spec at `docs/superpowers/specs/2026-03-21-consequence-pools-and-action-templates-design.md`.
+Phase 5.5 implementation (consequence pools + action templates) completed on branch `feature/consequence-pools-action-templates`. Design spec at `docs/architecture/action-template-pipeline.md`.

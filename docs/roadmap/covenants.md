@@ -506,18 +506,18 @@ decision above.
 - **`docs/roadmap/magic.md`** — Resonance Pivot Spec D PR1 documents the
   COVENANT_ROLE Thread anchor and weave gate. (The "Covenants (Post-MVP)"
   section there has been superseded by this file.)
-- **Spec (Slice A):** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
+- **Spec (Slice A):** `docs/architecture/items-fashion-mantles.md`
   — the design that landed the role/gear/Thread integration.
-- **Spec (Slice B):** `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md`
+- **Spec (Slice B):** `docs/architecture/covenants-slice-b-design.md`
   — the design for the RitualSession primitive, Soul Tether BILATERAL retrofit,
   formation/induction wrappers, engagement auto-triggers, and frontend pages.
 
 ## Notes
 
-- The Slice A spec is `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md`
+- The Slice A spec is `docs/architecture/covenants-slice-a.md`
   and the implementation plan is
   `docs/superpowers/plans/2026-05-10-covenants-slice-a-implementation.md`.
-- The Slice B spec is `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md`
+- The Slice B spec is `docs/architecture/covenants-slice-b-design.md`
   and the implementation plan is
   `docs/superpowers/plans/2026-05-10-covenants-slice-b-implementation.md`.
 - The COVENANT_ROLE anchor cap formula now reads from `covenant.level`

@@ -5,8 +5,8 @@
 **Branch:** TBD (e.g. `covenants-slice-b-lifecycle`)
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; Slice B owns "Lifecycle + UI" per the slice decomposition
-- `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md` — Slice A; this spec composes with it
-- `docs/superpowers/specs/2026-05-05-soul-tether-ui-design.md` — UI precedent for "formation IS the ritual"
+- `docs/architecture/covenants-slice-a.md` — Slice A; this spec composes with it
+- `docs/architecture/ritual-ui-pattern.md` — UI precedent for "formation IS the ritual"
 - `src/world/magic/models/rituals.py` — existing `Ritual` + `RitualComponentRequirement` shape this spec extends
 - `src/world/magic/actions.py` — `PerformRitualAction` dispatch path (single-actor; Slice B introduces a session-based path alongside it)
 - `src/world/covenants/services.py` — Slice A services this spec wraps (`create_covenant`, `add_member`, engagement services)
@@ -714,6 +714,6 @@ Run `arx manage makemigrations world.magic world.covenants` once at the end of f
 
 ## Notes
 
-- The Slice A spec is `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md`; the Slice A implementation plan is `docs/superpowers/plans/2026-05-10-covenants-slice-a-implementation.md`.
+- The Slice A spec is `docs/architecture/covenants-slice-a.md`; the Slice A implementation plan is `docs/superpowers/plans/2026-05-10-covenants-slice-a-implementation.md`.
 - The roadmap update accompanying this spec must mark Slice B as in-progress and note the deliberate omission of exit lifecycle (covenants languish — durable design intent for all future slices).
 - The "Arxitecture audit" skill / checklist suggested during brainstorm — a checklist agent that runs over specs/plans for the project's standing architectural rules — is tracked as a follow-up after Slice B ships. Out of scope for this spec.

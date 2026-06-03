@@ -6,7 +6,7 @@
 
 **Architecture:** A `Clash` model (discriminator over four meter shapes) lives in `world/combat`. Each round, PC contributions run through the existing `use_technique` cast pipeline in "clash-commit mode" (a custom `resolve_fn` that captures the `CheckOutcome` instead of applying damage), convert to progress deltas, aggregate, and move a meter; threshold crossings resolve through authored consequence pools. `resolve_round` gains a clash post-pass mirroring the existing `_resolve_declared_challenges` post-pass. The new Strain mechanism is built general but consumed only by Clash in this plan.
 
-**Tech Stack:** Django / Evennia, PostgreSQL, `SharedMemoryModel`, FactoryBoy, DRF. Source spec: `docs/superpowers/specs/2026-05-22-clash-design.md`.
+**Tech Stack:** Django / Evennia, PostgreSQL, `SharedMemoryModel`, FactoryBoy, DRF. Source spec: `docs/architecture/clash-design.md`.
 
 ---
 

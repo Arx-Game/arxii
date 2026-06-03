@@ -5,7 +5,7 @@
 **Supersedes:** the "Bounded slice scope" §1 ("Universal cast subscriber via a
 ubiquitous baseline condition"), the "No infra change to the Trigger model"
 section, and deferred item #3 ("'Magically Attuned' grant mechanism") of
-`docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`.
+`docs/architecture/resonance-environment-interaction.md`.
 Deletes the roadmap's recommended next step #1 ("'Magically Attuned' production
 grant") in `docs/roadmap/magic.md` — it is **removed, not implemented**.
 **Builds on:** the `evaluate_resonance_environment()` primitive (evaluation

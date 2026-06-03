@@ -1,6 +1,6 @@
 # Reactive Layer — Unified Dispatch Redesign
 
-> Supersedes parts of `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`. Applied to branch `design/reactive-layer` before the PR is opened.
+> Supersedes parts of `docs/architecture/reactive-layer-foundation.md`. Applied to branch `design/reactive-layer` before the PR is opened.
 
 ## Why
 
