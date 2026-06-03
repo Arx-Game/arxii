@@ -537,6 +537,17 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
                 room_profile=room_profile,
                 technique=technique,
             )
+            # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
+            # degrades it, spreads its taint, and accrues caster->world corruption
+            # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
+            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+
+            defile_place_for_cast(
+                caster_sheet=sheet,
+                room_profile=room_profile,
+                technique=technique,
+                technique_result=technique_result,
+            )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:
