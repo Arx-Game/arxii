@@ -14,7 +14,10 @@ from flows.events.payloads import (
 )
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
-from world.magic.services.resonance_environment import resonance_environment_for_cast
+from world.magic.services.resonance_environment import (
+    evaluate_resonance_environment,
+    resonance_environment_for_cast,
+)
 from world.magic.services.soulfray import (
     _handle_soulfray_accumulation,
     _resolve_mishap,
@@ -154,10 +157,7 @@ def _build_resonance_involvements(
     thread_pull_resonance_spent sums CombatPull.resonance_spent for the
     character's active pulls per resonance.
     """
-    # select_related("affinity") so downstream consumers that read
-    # resonance.affinity (e.g., defilement's abyssal filter at #722) don't
-    # hit the DB once per resonance.
-    resonances = list(technique.gift.resonances.select_related("affinity"))
+    resonances = list(technique.gift.resonances.all())
     if not resonances:
         return ()
 
@@ -537,11 +537,9 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         if room_profile is not None:
             # Evaluate the resonance-environment primitive ONCE per cast and
             # feed it into both consumers — they read the same room state and
-            # the second evaluation is ~4-5 redundant queries (#722).
+            # re-evaluation costs ~15-21 redundant queries on a cascade-room
+            # cast (#722).
             from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
-            from world.magic.services.resonance_environment import (  # noqa: PLC0415
-                evaluate_resonance_environment,
-            )
 
             primitive_effect = evaluate_resonance_environment(
                 caster=character, room=caster_room, technique=technique

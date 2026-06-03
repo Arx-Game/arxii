@@ -69,6 +69,7 @@ from world.magic.services import use_technique
 from world.magic.services.gain import tag_room_resonance
 from world.magic.services.resonance_environment import (
     clear_resonance_alignment,
+    evaluate_resonance_environment,
     magical_profile,
     refresh_resonance_alignment,
     resonance_environment_for_cast,
@@ -939,6 +940,49 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             ConditionInstance.objects.filter(target=self.character).count(),
             0,
             "No ConditionInstance should be created when room has no RoomProfile",
+        )
+
+    def test_step10_evaluates_resonance_environment_exactly_once(self) -> None:
+        """#722 regression guard: Step 10 must evaluate the primitive ONCE per cast.
+
+        The orchestrator computes ``evaluate_resonance_environment`` and passes
+        the result to BOTH ``resonance_environment_for_cast`` and
+        ``defile_place_for_cast`` via their ``effect=`` kwarg, so both
+        consumers go through ``_resolve_effect`` and short-circuit instead of
+        re-evaluating. A future refactor that re-introduces a second
+        evaluation path (dropping the kwarg, or calling
+        ``evaluate_resonance_environment`` again inside a consumer) would
+        silently undo the #722 perf win — this test pins the call count.
+        """
+        check_result = _make_check_result(self.outcome_failure)
+        with (
+            patch(
+                "world.magic.services.resonance_environment.perform_check",
+                return_value=check_result,
+            ),
+            patch(
+                "world.magic.services.techniques.evaluate_resonance_environment",
+                wraps=evaluate_resonance_environment,
+            ) as evaluate_spy,
+        ):
+            use_technique(
+                character=self.character,
+                technique=self.technique,
+                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+            )
+
+        # The orchestrator (techniques.py Step 10) calls it once, and feeds the
+        # result into both consumers via _resolve_effect. The consumers'
+        # _resolve_effect branch hits the "effect is not None" path and does NOT
+        # re-call.
+        self.assertEqual(
+            evaluate_spy.call_count,
+            1,
+            (
+                "evaluate_resonance_environment should fire exactly once per Step 10 "
+                f"cast (orchestrator only); got {evaluate_spy.call_count}. A consumer "
+                "that re-evaluates would silently undo the #722 perf hoist."
+            ),
         )
 
 

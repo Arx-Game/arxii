@@ -27,7 +27,7 @@ from world.magic.constants import ResonanceDirection
 from world.magic.services.corruption import accrue_corruption
 from world.magic.services.resonance_environment import (
     _get_room_resonances,
-    evaluate_resonance_environment,
+    _resolve_effect,
     get_resonance_environment_config,
     magical_profile,
 )
@@ -48,7 +48,7 @@ _ABYSSAL = "abyssal"
 
 
 @transaction.atomic
-def defile_place_for_cast(  # noqa: C901 — +1 branch for the cached-effect bypass (#722); not worth extracting
+def defile_place_for_cast(
     *,
     caster_sheet: CharacterSheet,
     room_profile: RoomProfile,
@@ -75,8 +75,7 @@ def defile_place_for_cast(  # noqa: C901 — +1 branch for the cached-effect byp
     caster = caster_sheet.character
     room = room_profile.objectdb
 
-    if effect is None:
-        effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+    effect = _resolve_effect(effect, caster=caster, room=room, technique=technique)
     interaction = effect.interaction
     if (
         effect.direction != ResonanceDirection.CASTER_DOMINANT

@@ -592,6 +592,24 @@ def _is_opposed_backfire(effect: ResonanceEnvironmentEffect) -> bool:
     )
 
 
+def _resolve_effect(
+    effect: ResonanceEnvironmentEffect | None,
+    *,
+    caster: DefaultObject,
+    room: DefaultObject,
+    technique: Technique | None,
+) -> ResonanceEnvironmentEffect:
+    """Return the supplied ``effect`` or evaluate the primitive on demand (#722).
+
+    Hoists the "use cached effect or compute it ourselves" branch out of every
+    consumer so each consumer body stays linear (avoids C901 complexity bumps
+    on the consumer wrappers).
+    """
+    if effect is not None:
+        return effect
+    return evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+
+
 def resonance_environment_for_cast(
     *,
     caster_sheet: CharacterSheet,
@@ -639,8 +657,7 @@ def resonance_environment_for_cast(
     caster = caster_sheet.character
     room = room_profile.objectdb
 
-    if effect is None:
-        effect = evaluate_resonance_environment(caster=caster, room=room, technique=technique)
+    effect = _resolve_effect(effect, caster=caster, room=room, technique=technique)
 
     if not _is_opposed_backfire(effect):
         return _INERT_CAST_RESULT
