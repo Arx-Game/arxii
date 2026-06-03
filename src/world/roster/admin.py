@@ -32,9 +32,10 @@ class RosterAdmin(admin.ModelAdmin):
         "description",
         "is_active",
         "allow_applications",
+        "activity_requirement",
         "sort_order",
     ]
-    list_filter = ["is_active", "allow_applications"]
+    list_filter = ["is_active", "allow_applications", "activity_requirement"]
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
 
