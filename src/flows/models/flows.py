@@ -34,7 +34,7 @@ def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
     owner = getattr(flow_execution.flow_stack, "owner", None)  # noqa: GETATTR_LITERAL
     if owner is None:
         return None
-    from evennia.objects.objects import DefaultRoom  # noqa: PLC0415 — Evennia import at runtime
+    from evennia.objects.objects import DefaultRoom  # noqa: PLC0415
 
     if isinstance(owner, DefaultRoom):
         return owner
@@ -437,7 +437,7 @@ class FlowStepDefinition(SharedMemoryModel):
         location via ``emit_event``; if the resulting stack is cancelled
         execution halts.
         """
-        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
+        from flows.emit import emit_event  # noqa: PLC0415
 
         params = self._parameters_mapping()
         event_type = params.get("event_type", self.variable_name)
@@ -466,7 +466,7 @@ class FlowStepDefinition(SharedMemoryModel):
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
         """Emit an event for every item in an iterable via ``emit_event``."""
-        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
+        from flows.emit import emit_event  # noqa: PLC0415
 
         params = self._parameters_mapping()
         iterable_ref = params.get("iterable")
@@ -537,21 +537,21 @@ class FlowStepDefinition(SharedMemoryModel):
         op = params["op"]
         value = params["value"]
 
-        current = getattr(payload, field)  # noqa: GETATTR_LITERAL — payload field by name
-        if op == "set":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+        current = getattr(payload, field)  # noqa: GETATTR_LITERAL
+        if op == "set":  # noqa: STRING_LITERAL
             new_value = value
-        elif op == "multiply":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+        elif op == "multiply":  # noqa: STRING_LITERAL
             new_value = current * value
-        elif op == "add":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+        elif op == "add":  # noqa: STRING_LITERAL
             new_value = current + value
-        elif op == "min":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+        elif op == "min":  # noqa: STRING_LITERAL
             new_value = min(current, value)
-        elif op == "max":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+        elif op == "max":  # noqa: STRING_LITERAL
             new_value = max(current, value)
         else:
             msg = f"Unknown modify_payload op: {op}"
             raise ValueError(msg)
-        setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL — payload field by name
+        setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL
         return flow_execution.get_next_child(self)
 
     def _execute_prompt_player(
@@ -569,8 +569,8 @@ class FlowStepDefinition(SharedMemoryModel):
         ``RUNNING``), it picks up at the correct place.
         """
         params = self._parameters_mapping()
-        account = flow_execution.resolve_flow_reference(params["account"])  # noqa: STRING_LITERAL — parameter key, not a model identifier
-        result_variable = params["result_variable"]  # noqa: STRING_LITERAL — parameter key, not a model identifier
+        account = flow_execution.resolve_flow_reference(params["account"])  # noqa: STRING_LITERAL
+        result_variable = params["result_variable"]  # noqa: STRING_LITERAL
         default_answer = params.get("default_answer")
 
         prompt_key = f"{flow_execution.flow_definition.pk}:{id(flow_execution)}:{self.pk}"

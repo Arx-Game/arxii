@@ -247,7 +247,7 @@ class ActivatePermitAction(Action):
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
-    def execute(  # noqa: PLR0911 — many early-return branches for distinct error messages
+    def execute(  # noqa: PLR0911
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -257,7 +257,7 @@ class ActivatePermitAction(Action):
             PermitValidationError,
             activate_permit,
         )
-        from world.npc_services.services import (  # noqa: PLC0415 — relocates to world.scenes.services when #684 lands
+        from world.npc_services.services import (  # noqa: PLC0415
             persona_for_character,
         )
 
@@ -275,13 +275,13 @@ class ActivatePermitAction(Action):
         item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be activated.")
-        permit_details = getattr(item_instance, "building_permit_details", None)  # noqa: GETATTR_LITERAL — reverse OneToOne may be absent on non-permit items
+        permit_details = getattr(item_instance, "building_permit_details", None)  # noqa: GETATTR_LITERAL
         if permit_details is None:
             return ActionResult(success=False, message="That's not a building permit.")
 
         try:
             persona = persona_for_character(actor)
-        except Exception:  # noqa: BLE001 — MissingPrimaryPersonaError; defensive
+        except Exception:  # noqa: BLE001
             return ActionResult(
                 success=False,
                 message="You don't have a persona to activate this permit with.",

@@ -280,7 +280,7 @@ def _get_sineater_threads_for(
     Returns:
         List of Thread instances (may be empty).
     """
-    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+    from world.magic.models import Thread  # noqa: PLC0415
 
     return list(
         Thread.objects.filter(
@@ -363,7 +363,7 @@ def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
     resonance: Resonance,
     amount: int,
     source: CorruptionSource,
-    technique_use: object = None,  # noqa: ARG001 — forwarded by accrue_corruption_for_cast
+    technique_use: object = None,  # noqa: ARG001
     redirect_origin: CharacterSheet | None = None,
 ) -> CorruptionAccrualResult:
     """Apply ``amount`` corruption to (sheet, resonance), resolve stage atomically.
@@ -555,8 +555,8 @@ def reduce_corruption(
     character_sheet: CharacterSheet,
     resonance: Resonance,
     amount: int,
-    source: CorruptionRecoverySource,  # noqa: ARG001 — part of the API signature for audit trail integration
-    ritual: object = None,  # noqa: ARG001 — reserved for future ritual-source audit rows
+    source: CorruptionRecoverySource,  # noqa: ARG001
+    ritual: object = None,  # noqa: ARG001
     _from_decay: bool = False,
 ) -> CorruptionRecoveryResult:
     """Reduce corruption_current on (sheet, resonance), sync the condition.

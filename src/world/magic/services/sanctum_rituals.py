@@ -22,7 +22,7 @@ from world.covenants.constants import COVENANT_ORG_TYPE_NAME
 from world.covenants.models import CharacterCovenantRole
 from world.locations.constants import HolderType
 from world.locations.services import effective_owner
-from world.magic.constants import GainSource  # noqa: F401 — referenced from docstring
+from world.magic.constants import GainSource  # noqa: F401
 from world.magic.exceptions import ResonanceInsufficient
 from world.magic.models import CharacterResonance, SanctumOwnerMode
 from world.magic.services.sanctum_lvm import (
@@ -208,7 +208,7 @@ def perform_homecoming_ritual(
     sanctum: SanctumDetails,
     leader_persona: Persona,
     resonance_sacrificed: int,
-    narrative_text: str = "",  # noqa: ARG001 — emitted to LegendDeedStory in followup
+    narrative_text: str = "",  # noqa: ARG001
 ) -> HomecomingResult:
     """Sacrifice resonance to grow the Sanctum's Homecoming-source LVM row.
 
@@ -249,7 +249,7 @@ def perform_homecoming_ritual(
 
 
 @transaction.atomic
-def perform_purging_ritual(  # noqa: PLR0913 — retention + cost_multiplier are tuning knobs with defaults
+def perform_purging_ritual(  # noqa: PLR0913
     sanctum: SanctumDetails,
     leader_persona: Persona,
     new_resonance: Resonance,

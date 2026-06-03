@@ -145,6 +145,16 @@ class AffinityInteraction(SharedMemoryModel):
             "(CORRUPT-deferred pairs, or pairings with no authored content yet)."
         ),
     )
+    caster_dominance_defiles = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, a CASTER_DOMINANT caster overpowers the place and DEFILES it "
+            "(degrade place cascade + spread caster resonance + accrue corruption) instead "
+            "of the environment acting. Authored True only for the Abyssal-caster OPPOSED "
+            "pairs (#4 Abyssal->Celestial, #6 Abyssal->Primal). Default False keeps "
+            "non-Abyssal casters from ever overpowering a place."
+        ),
+    )
 
     objects = AffinityInteractionManager()
 
@@ -256,6 +266,24 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
             "Added to backfire_base_difficulty: "
             "difficulty = base + round(magnitude * this). "
             "Default 0.500: magnitude 10 → +5 (total 35); magnitude 80 → +40 (total 70)."
+        ),
+    )
+    defile_degrade_per_cast = models.PositiveIntegerField(
+        default=6,
+        help_text=(
+            "Points removed from the place's opposed resonance per defiling cast "
+            "(effective value floors at 0)."
+        ),
+    )
+    defile_spread_per_cast = models.PositiveIntegerField(
+        default=6,
+        help_text="Points added to the caster's Abyssal resonance on the room per defiling cast.",
+    )
+    defile_corruption_per_cast = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Extra corruption accrued to the caster per defiling cast (atop the baseline "
+            "abyssal-cast accrual), routed through CORRUPTION_ACCRUING."
         ),
     )
 

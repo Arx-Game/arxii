@@ -12,9 +12,8 @@ types. Pre-commit's `files:` filter scopes it to service modules; flows,
 object_states, commands, permissions, and Evennia internals genuinely
 operate on any object and are out of scope by virtue of not being matched.
 
-Use `# noqa: OBJECTDB_PARAM — <justification>` on the same line as the
-annotation to suppress when ObjectDB is genuinely the right type. The
-justification is required per CLAUDE.md's noqa-suppression policy.
+Use `# noqa: OBJECTDB_PARAM` on the same line as the annotation to suppress
+when ObjectDB is genuinely the right type.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ SUPPRESSION_TOKEN = "noqa: objectdb_param"  # noqa: S105
 _OBJECTDB_NAME = "ObjectDB"
 
 
-def _annotation_is_objectdb(node: ast.expr | None) -> bool:  # noqa: PLR0911 — distinct AST cases, splitting would obscure the dispatch
+def _annotation_is_objectdb(node: ast.expr | None) -> bool:  # noqa: PLR0911
     """Return True if the annotation refers to ObjectDB.
 
     Handles:
@@ -84,7 +83,7 @@ class ObjectDBVisitor(ast.NodeVisitor):
         # is kept as a defensive fallback parameter but unused in practice.
         del default_lineno  # quiets unused-arg
         # _annotation_is_objectdb returns False for None, so annotation is not None here.
-        assert annotation is not None  # noqa: S101 — narrowing for type checker; logically guaranteed by the early return above
+        assert annotation is not None  # noqa: S101
         lineno = annotation.lineno
         line_index = max(lineno - 1, 0)
         if line_index < len(self.lines) and _has_suppression(self.lines[line_index]):
@@ -158,7 +157,7 @@ def main(argv: list[str]) -> int:
                 f"{path}:{line}:{column}: OBJECTDB_PARAM "
                 f"Service-layer {label} typed as ObjectDB; use the narrower model "
                 "(CharacterSheet, Persona, RosterEntry, RoomProfile, etc.) or add "
-                "`# noqa: OBJECTDB_PARAM — <justification>` if ObjectDB is "
+                "`# noqa: OBJECTDB_PARAM` if ObjectDB is "
                 "genuinely the right type."
             )
     return 1 if errors_found else 0

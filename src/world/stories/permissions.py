@@ -969,10 +969,10 @@ def classify_story_log_viewer_role(
     - player: user has access to the story (participant, owner, or appropriate scope)
     - no_access: none of the above
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return VIEWER_ROLE_NO_ACCESS
 
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return VIEWER_ROLE_STAFF
 
     # user is authenticated (AbstractBaseUser = AccountDB) — gm_profile is a OneToOne reverse.
@@ -1007,9 +1007,9 @@ def can_view_story_gm_text(user: AbstractBaseUser | AnonymousUser, story: Story)
     Owner membership reads the cached ``Story.owner_account_ids`` set, so no
     owners query is issued per serialization.
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return True
     try:
         gm_profile = user.gm_profile
@@ -1078,9 +1078,9 @@ def _user_can_read_bulletin_post(
     - story=None (table-wide): any active table member
     - story=set (story-scoped): any active StoryParticipation on post.story
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return True
 
     # Lead GM of the table (post.table.gm is the Lead GMProfile).
@@ -1218,9 +1218,9 @@ def _user_can_access_story_notes(
     of the story's primary table. Mirrors the owner/Lead-GM resolution used by
     classify_story_log_viewer_role and IsStoryOwnerOrStaff.
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return True
 
     # Story owner.

@@ -85,7 +85,7 @@ class CombatRoundContext(RoundContext):
 
     def record_declaration(
         self,
-        character: CharacterSheet,  # noqa: ARG002 — ABC contract; participant resolved from self
+        character: CharacterSheet,  # noqa: ARG002
         # player_action: PlayerAction from actions.types
         player_action: Any,
         kwargs: dict[str, Any],

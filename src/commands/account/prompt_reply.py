@@ -34,7 +34,7 @@ class CmdPromptReply(Command):  # ty: ignore[invalid-base]
         args = self.args.strip()
         parts = args.split(None, 1)
 
-        if len(parts) < 2:  # noqa: PLR2004 — comparing against literal 2 is clearer than a named constant here
+        if len(parts) < 2:  # noqa: PLR2004
             self.caller.msg("Usage: @reply <prompt-key> <answer>")
             return
 

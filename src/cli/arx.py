@@ -115,7 +115,7 @@ def shell(command: str | None = SHELL_COMMAND_OPTION) -> None:
 
 
 @app.command(name="test")
-def run_tests(  # noqa: C901 — CLI option parser; complexity is inherent in the per-flag append chain
+def run_tests(  # noqa: C901
     args: list[str] = TEST_ARGS_ARG,
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,

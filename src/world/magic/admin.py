@@ -180,7 +180,7 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 
 
 @admin.action(description="Staff grant resonance to this row")
-def grant_resonance_action(modeladmin, request, queryset):  # type: ignore[no-untyped-def]  # noqa: ARG001 — Django admin action protocol requires this positional arg
+def grant_resonance_action(modeladmin, request, queryset):  # type: ignore[no-untyped-def]  # noqa: ARG001
     """Admin action: grant each selected row 1 resonance via STAFF_GRANT.
 
     Quick form-less grant. For nuanced grants (custom amount / reason) use
@@ -382,10 +382,10 @@ class LevelPowerConfigAdmin(admin.ModelAdmin):
 
     list_display = ("pk", "character_level_bonus", "technique_level_bonus")
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not LevelPowerConfig.objects.exists()
 
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -404,10 +404,10 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not ResonanceGainConfig.objects.exists()
 
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -425,10 +425,10 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not ResonanceEnvironmentConfig.objects.exists()
 
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -626,13 +626,13 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "source_scene_entry_endorsement",
     )
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return False
 
-    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -647,12 +647,12 @@ class PoseEndorsementAdmin(admin.ModelAdmin):
         "settled_at",
     )
     list_filter = ("settled_at",)
-    readonly_fields = tuple(f.name for f in PoseEndorsement._meta.fields)  # noqa: SLF001 — standard Django admin pattern for dynamic readonly_fields from model meta
+    readonly_fields = tuple(f.name for f in PoseEndorsement._meta.fields)  # noqa: SLF001
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return False
 
-    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -667,10 +667,10 @@ class SceneEntryEndorsementAdmin(admin.ModelAdmin):
         "created_at",
         "granted_amount",
     )
-    readonly_fields = tuple(f.name for f in SceneEntryEndorsement._meta.fields)  # noqa: SLF001 — standard Django admin pattern for dynamic readonly_fields from model meta
+    readonly_fields = tuple(f.name for f in SceneEntryEndorsement._meta.fields)  # noqa: SLF001
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return False
 
-    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False

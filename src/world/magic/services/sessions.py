@@ -34,7 +34,7 @@ _FORMATION_MIN_PARTICIPANTS = 2
 """FORMATION rituals require at least this many participants even without explicit bounds."""
 
 
-def draft_session(  # noqa: PLR0913 — kw-only args; each session parameter is distinct
+def draft_session(  # noqa: PLR0913
     *,
     ritual: Ritual,
     initiator: CharacterSheet,
@@ -205,7 +205,7 @@ def fire_session(*, session: RitualSession) -> object:
         # Resolve the dispatched service via importlib:
         module_path, _, fn_name = locked.ritual.service_function_path.rpartition(".")
         module = importlib.import_module(module_path)
-        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL — service path is data
+        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL
         # Call the dispatched service. If it raises, transaction rolls back
         # and the session stays alive for the initiator to retry or cancel.
         result = fn(session=locked)

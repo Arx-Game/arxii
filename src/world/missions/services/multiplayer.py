@@ -159,7 +159,7 @@ def _coinflip_choice(
     a fixed value.
     """
     distinct = _distinct_picked_options(picks)
-    winner = random.choice(distinct)  # noqa: S311 — game randomness, not crypto
+    winner = random.choice(distinct)  # noqa: S311
     actor = _pickers_of(picks, winner)[0]
     return GroupChoice(is_joint=False, option=winner, actor=actor)
 

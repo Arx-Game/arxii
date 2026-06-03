@@ -62,7 +62,7 @@ def _resolve_actor_sheet(
         return sheets[0]
     # Multiple active tenures — explicit sheet required.
     source = request.query_params if from_query else request.data
-    requested_pk = source.get(body_key)  # noqa: STRING_LITERAL — parameterised body/query key
+    requested_pk = source.get(body_key)  # noqa: STRING_LITERAL
     if requested_pk is None:
         raise serializers.ValidationError(
             {body_key: _ERR_ACTOR_SHEET_REQUIRED.format(key=body_key)}
@@ -85,4 +85,4 @@ def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
     Delegates to ``_resolve_actor_sheet`` with ``body_key="endorser_sheet_id"``.
     Kept as a named wrapper for callers using the old name.
     """
-    return _resolve_actor_sheet(request, body_key="endorser_sheet_id")  # noqa: STRING_LITERAL — body key name
+    return _resolve_actor_sheet(request, body_key="endorser_sheet_id")  # noqa: STRING_LITERAL

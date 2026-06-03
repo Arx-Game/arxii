@@ -61,7 +61,7 @@ def _serialize_active_conditions(
     Falls back to ``get_active_conditions`` for callers that build the
     serializer directly (e.g. unit tests).
     """
-    cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=...) cache
+    cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
     if cached is not None:
         instances = [
             inst for inst in cached if can_view_hidden or inst.condition.is_visible_to_others
@@ -261,7 +261,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """
         if not self._can_view_vitals(obj):
             return None
-        from world.vitals.services import (  # noqa: PLC0415 — combat→vitals deferred import
+        from world.vitals.services import (  # noqa: PLC0415
             derive_character_status,
         )
 
@@ -306,7 +306,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
         # Read the prefetched OneToOne (select_related on the viewset queryset)
         # exactly once — no per-category re-query. None when no row exists yet.
-        fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor may be unset
+        fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL
         well_rested = fatigue_pool.well_rested if fatigue_pool else False
         pools: dict[str, dict[str, int]] = {}
         for category in ActionCategory:
@@ -702,7 +702,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Falls back to a direct filter for callers that don't use the viewset
         (e.g. unit tests that call the serializer directly).
         """
-        clashes = getattr(obj, "clashes_cached", None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=...) sets this
+        clashes = getattr(obj, "clashes_cached", None)  # noqa: GETATTR_LITERAL
         if clashes is None:
             clashes = (
                 Clash.objects.filter(
@@ -836,7 +836,7 @@ class DeclareClashContributionSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         """Resolve FKs and enforce clash-state, ownership, and passive-cap rules."""
-        from world.combat.services import get_clash_config  # noqa: PLC0415 — avoids circular import
+        from world.combat.services import get_clash_config  # noqa: PLC0415
 
         participant: CombatParticipant = self.context["participant"]
 

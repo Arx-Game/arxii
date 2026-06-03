@@ -47,7 +47,7 @@ def resolve_challenge(
     character: ObjectDB,
     challenge_instance: ChallengeInstance,
     approach: ChallengeApproach,
-    capability_source: CapabilitySource,  # noqa: ARG001 — used in later tasks
+    capability_source: CapabilitySource,  # noqa: ARG001
 ) -> ChallengeResolutionResult:
     """
     Resolve a character's action against a challenge.

@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.db.models import Sum
 
-from world.locations.constants import KeyType, LocationParentType
 from world.locations.models import LocationValueModifier
+from world.locations.services import upsert_room_resonance_modifier
 
 if TYPE_CHECKING:
     from world.magic.models import Resonance, SanctumDetails
@@ -75,21 +75,12 @@ def apply_homecoming_gain(sanctum: SanctumDetails, gain: int, cap: int) -> tuple
     if applied == 0:
         return 0, overflow
 
-    source = homecoming_source_tag(sanctum)
-    existing = LocationValueModifier.objects.select_for_update().filter(source=source).first()
-    if existing is None:
-        LocationValueModifier.objects.create(
-            parent_type=LocationParentType.ROOM,
-            room_profile=sanctum.feature_instance.room_profile,
-            key_type=KeyType.RESONANCE,
-            resonance=sanctum.resonance_type,
-            value=applied,
-            change_per_day=0,
-            source=source,
-        )
-    else:
-        existing.value += applied
-        existing.save(update_fields=["value"])
+    upsert_room_resonance_modifier(
+        sanctum.feature_instance.room_profile,
+        sanctum.resonance_type,
+        source=homecoming_source_tag(sanctum),
+        delta=applied,
+    )
     return applied, overflow
 
 

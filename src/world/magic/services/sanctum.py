@@ -57,7 +57,7 @@ class SanctumInstallViaProjectError(SanctumProgressionError):
 def handle_progression(
     project: Project,
     target_level: int,
-    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001 — used in Phase 3 for tier modifiers
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
 ) -> None:
     """Run the per-tier outcome of a Sanctum upgrade Project.
 

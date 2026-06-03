@@ -109,7 +109,7 @@ _ERR_NO_OUTCOME_TIERS = "Cannot synthesize an auto-success result: no CheckOutco
 
 
 def build_option_list(
-    instance: MissionInstance,  # noqa: ARG001 — part of the stable engine signature; Phase 4 unions across the instance's participants
+    instance: MissionInstance,  # noqa: ARG001
     node: MissionNode,
     viewer: MissionParticipant,
 ) -> list[PresentedOption]:
@@ -329,7 +329,7 @@ def _finish_terminal(instance: MissionInstance) -> None:
     on_mission_complete_for_beat(instance)
 
 
-def resolve_option(  # noqa: PLR0913 — stable engine signature; 4 positional
+def resolve_option(  # noqa: PLR0913
     # args identify "who-resolves-what-where" and are co-equal, plus the
     # keyword-only ``chosen_approach``/``advance`` toggles. Collapsing them
     # into a dataclass would obscure call sites.

@@ -261,7 +261,7 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
     # currently perform (dead, or any unmet capability requirement). Combat
     # techniques per character are bounded (a handful), so a clear per-technique
     # loop is acceptable for v1 — no batching needed.
-    from world.magic.services.capability_requirements import (  # noqa: PLC0415 — actions→magic deferred import avoids top-level cycle
+    from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
 
@@ -590,7 +590,7 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 # ---------------------------------------------------------------------------
 
 
-_SOCIAL_CATEGORY = "social"  # noqa: STRING_LITERAL — mirrors ActionTemplate.category column, no TextChoices for it yet
+_SOCIAL_CATEGORY = "social"  # noqa: STRING_LITERAL
 
 
 def _scene_actions(character: ObjectDB) -> list[PlayerAction]:

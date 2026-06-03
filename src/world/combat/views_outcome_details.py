@@ -113,9 +113,9 @@ def _viewer_can_see(user: object, encounter: CombatEncounter) -> bool:
     (PCs in the fight) and scene participants (anyone in the scene) also see
     effects. Other users see nothing — the view returns an empty effects list.
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — duck-typing user
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — duck-typing user
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return True
     if encounter.scene is not None and encounter.scene.is_gm(user):
         return True
@@ -169,7 +169,7 @@ class _RoundActionEffects:
             )
         target_ally = self.action.focused_ally_target
         if target_ally is not None:
-            from world.vitals.services import (  # noqa: PLC0415 — combat→vitals deferred import
+            from world.vitals.services import (  # noqa: PLC0415
                 can_act,
                 is_dead,
             )

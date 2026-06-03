@@ -103,7 +103,7 @@ class Covenant(SharedMemoryModel):
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:
-        from world.covenants.handlers import CovenantMembershipHandler  # noqa: PLC0415, I001 — avoids circular import (handlers imports models)
+        from world.covenants.handlers import CovenantMembershipHandler  # noqa: PLC0415
 
         return CovenantMembershipHandler(self)
 

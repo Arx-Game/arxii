@@ -358,7 +358,7 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are intentional; step 10 pushed statement count over threshold
+def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     *,
     character: ObjectDB,
     technique: Technique,
@@ -446,7 +446,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
     if effective_check_result is None:
-        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL — protocol-style introspection
+        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL
         if effective_check_result is None and hasattr(resolution_result, "main_result"):
             main = resolution_result.main_result
             if main is not None and hasattr(main, "check_result"):
@@ -536,6 +536,17 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
                 caster_sheet=sheet,
                 room_profile=room_profile,
                 technique=technique,
+            )
+            # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
+            # degrades it, spreads its taint, and accrues caster->world corruption
+            # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
+            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+
+            defile_place_for_cast(
+                caster_sheet=sheet,
+                room_profile=room_profile,
+                technique=technique,
+                technique_result=technique_result,
             )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---

@@ -61,7 +61,7 @@ def filter_character_loss[T](
     if not getattr(selected, _ATTR_CHARACTER_LOSS, False):
         return selected
 
-    from world.checks.services import get_rollmod  # noqa: PLC0415 — circular import
+    from world.checks.services import get_rollmod  # noqa: PLC0415
 
     rollmod = get_rollmod(character)
     if rollmod <= 0:
