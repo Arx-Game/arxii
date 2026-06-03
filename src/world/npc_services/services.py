@@ -26,10 +26,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.checks.services import perform_check
-from world.npc_services.constants import DrawMode
+from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.effects import EffectResult, dispatch_offer_effect
 from world.npc_services.models import (
     NPCRole,
+    NPCRoleCooldown,
     NPCServiceOffer,
     NPCStanding,
     OfferCooldown,
@@ -188,35 +189,115 @@ def _is_offer_eligible(
     (single-offer re-verify). Keeping the check here means there's one
     source of truth, and ``resolve_offer`` doesn't have to re-run the
     whole queryset to verify one offer.
+
+    Gates layered (#686):
+    1. Role-level: ``offer.role.is_active``.
+    2. Rapport: ``offer.rapport_requirement <= current_rapport``.
+    3. Role-level cooldown: no active ``NPCRoleCooldown`` for (role, persona).
+    4. Offer-level cooldown: no active ``OfferCooldown`` for (offer, persona).
+    5. For MISSION offers only: PC cap, per-(persona × role) one-in-flight,
+       and ``MissionOfferDetails.requirements_override`` predicate (see
+       ``_mission_gates_pass``).
+    6. Offer's own ``eligibility_rule`` predicate.
+
+    POOL draw_mode is now a first-class case: eligibility itself is
+    draw-mode-agnostic; ``available_offers`` applies the POOL sampling
+    on top of the eligible-offer set when ``count`` is provided.
     """
+    if not offer.role.is_active:
+        return False
     if offer.rapport_requirement > current_rapport:
         return False
-    if offer.draw_mode != DrawMode.MENU:
-        # POOL is reserved for mission migration #686 — log so authors
-        # who try to use it before then get a signal instead of silent
-        # absence. Conservative skip for Plan 2.
-        logger.warning(
-            "NPCServiceOffer %s skipped: draw_mode=%s not yet handled (see #686).",
-            offer.pk,
-            offer.draw_mode,
-        )
-        return False
     now = now or timezone.now()
-    if offer.cooldown is not None:
-        if OfferCooldown.objects.filter(
+    if NPCRoleCooldown.objects.filter(
+        role_id=offer.role_id, persona=persona, available_at__gt=now
+    ).exists():
+        return False
+    if (
+        offer.cooldown is not None
+        and OfferCooldown.objects.filter(
             offer=offer, persona=persona, available_at__gt=now
-        ).exists():
-            return False
+        ).exists()
+    ):
+        return False
+    if offer.kind == OfferKind.MISSION.value and not _mission_gates_pass(
+        offer=offer, persona=persona, character=character
+    ):
+        return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
 
 
-def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
+def _mission_gates_pass(
+    *,
+    offer: NPCServiceOffer,
+    persona: Persona,
+    character: ObjectDB,
+) -> bool:
+    """Apply the three MISSION-only gates from ``_is_offer_eligible`` (#686).
+
+    Lives in its own helper so the main ``_is_offer_eligible`` body stays a
+    flat sequence of independent gates. Lazy-imports ``world.missions`` to
+    avoid an app-load cycle.
+    """
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance, MissionOfferDetails  # noqa: PLC0415
+
+    # 5a. PC active-NPC-mission cap.
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is not None:
+        active_npc_count = MissionInstance.objects.filter(
+            participants__character=character,
+            participants__is_contract_holder=True,
+            status=MissionStatus.ACTIVE,
+            source_offer__isnull=False,
+        ).count()
+        if active_npc_count >= sheet.max_active_npc_missions:
+            return False
+
+    # 5b. Per-(persona × role) one-in-flight.
+    persona_active_on_role = MissionInstance.objects.filter(
+        participants__character__sheet_data__personas=persona,
+        participants__is_contract_holder=True,
+        status=MissionStatus.ACTIVE,
+        source_offer__role_id=offer.role_id,
+    ).exists()
+    if persona_active_on_role:
+        return False
+
+    # 5c. MissionOfferDetails.requirements_override predicate.
+    try:
+        details: MissionOfferDetails = offer.mission_offer_details
+    except MissionOfferDetails.DoesNotExist:
+        # MISSION offer with no details row is an authoring error; fail closed.
+        return False
+    if details.requirements_override:
+        ctx = CharacterPredicateContext(character, presented_persona=persona)
+        if not evaluate(details.requirements_override, ctx):
+            return False
+
+    return True
+
+
+def available_offers(
+    session: InteractionSession,
+    *,
+    pool_count: int | None = None,
+) -> list[NPCServiceOffer]:
     """Return offers the PC can currently see/select, in stable order.
 
-    Filtered by ``_is_offer_eligible`` (rapport gate + draw_mode + active
-    cooldown + eligibility predicate). ``select_related("role")`` so the
-    role doesn't get re-fetched per row when callers walk the result.
+    Filtered by ``_is_offer_eligible`` (every gate; see its docstring).
+    ``select_related("role")`` so the role doesn't get re-fetched per row.
+
+    POOL semantics (#686): when ``pool_count`` is ``None`` (the default),
+    all eligible offers are returned regardless of ``draw_mode`` — matches
+    the historical MENU-only behaviour. When ``pool_count`` is provided,
+    every MENU offer is still returned in full, but POOL-mode offers are
+    sampled down to at most ``pool_count`` via a weighted draw without
+    replacement (``_draw_pool_offers``). The mission state machine passes
+    ``pool_count`` derived from the placeholder
+    ``random.randint(1, min(4, eligible_count))`` — see #726 for the
+    standing-/level-/chain-driven policy that replaces the placeholder.
     """
     if session.closed:
         return []
@@ -227,14 +308,18 @@ def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
     # is acceptable given the small per-role offer count). Pre-fetch the
     # M2M default_approved_wards for the same reason.
     queryset = (
-        NPCServiceOffer.objects.select_related("role", "permit_offer_details__building_kind")
+        NPCServiceOffer.objects.select_related(
+            "role",
+            "permit_offer_details__building_kind",
+            "mission_offer_details__mission_template",
+        )
         .prefetch_related(
             "permit_offer_details__default_approved_wards",  # noqa: PREFETCH_STRING
         )
         .filter(role=session.role)
         .order_by("pk")
     )
-    return [
+    eligible = [
         offer
         for offer in queryset
         if _is_offer_eligible(
@@ -245,6 +330,69 @@ def available_offers(session: InteractionSession) -> list[NPCServiceOffer]:
             now=now,
         )
     ]
+
+    if pool_count is None:
+        return eligible
+
+    menu_offers = [o for o in eligible if o.draw_mode == DrawMode.MENU]
+    pool_offers = [o for o in eligible if o.draw_mode == DrawMode.POOL]
+    return menu_offers + _draw_pool_offers(pool_offers, pool_count)
+
+
+@dataclass
+class _WeightedOffer:
+    """Adapter for ``select_weighted``: pairs an offer with its draw weight."""
+
+    offer: NPCServiceOffer
+    weight: int
+
+
+def _draw_pool_offers(offers: list[NPCServiceOffer], count: int) -> list[NPCServiceOffer]:
+    """Weighted draw of up to ``count`` offers from ``offers`` without replacement.
+
+    Weight source is kind-specific (see ``_weight_for_offer``). Per-slot
+    arc-replace logic (``MissionTemplate.percent_replace`` against an
+    active-Era arc pool) is deferred to **#726** along with the
+    standing-/level-/chain-driven count policy — both are part of the
+    same rich-policy follow-up.
+    """
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+
+    if count <= 0 or not offers:
+        return []
+
+    remaining = [_WeightedOffer(offer=o, weight=_weight_for_offer(o)) for o in offers]
+    remaining = [w for w in remaining if w.weight > 0]
+    if not remaining:
+        return []
+
+    drawn: list[NPCServiceOffer] = []
+    while remaining and len(drawn) < count:
+        pick = select_weighted(remaining)
+        drawn.append(pick.offer)
+        remaining.remove(pick)
+    return drawn
+
+
+def _weight_for_offer(offer: NPCServiceOffer) -> int:
+    """Resolve the POOL-draw weight for an offer per its kind (#686).
+
+    MISSION: ``MissionOfferDetails.weight`` falls back to
+    ``MissionTemplate.base_weight``. Other kinds: 1 (no per-kind weight
+    surface today). Always clamped to >= 1 so a row never silently
+    disappears from the draw due to a zero/null weight.
+    """
+    if offer.kind == OfferKind.MISSION.value:
+        from world.missions.models import MissionOfferDetails  # noqa: PLC0415
+
+        try:
+            details = offer.mission_offer_details
+        except MissionOfferDetails.DoesNotExist:
+            return 1
+        if details.weight is not None and details.weight > 0:
+            return details.weight
+        return max(details.mission_template.base_weight, 1)
+    return 1
 
 
 def _apply_check(
