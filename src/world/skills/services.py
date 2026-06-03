@@ -446,7 +446,7 @@ def process_weekly_training() -> dict[int, set[int]]:
     teaching_skill = _get_teaching_skill()
 
     active_characters = (
-        RosterEntry.objects.active_rosters().exclude_frozen().values("character_sheet")
+        RosterEntry.objects.active_rosters().exclude_dormant().values("character_sheet")
     )
     allocations = list(
         TrainingAllocation.objects.filter(
@@ -551,7 +551,7 @@ def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
             character PKs to sets of Skill PKs that were active this week.
     """
     active_characters = (
-        RosterEntry.objects.active_rosters().exclude_frozen().values("character_sheet")
+        RosterEntry.objects.active_rosters().exclude_dormant().values("character_sheet")
     )
     all_skill_values = list(
         CharacterSkillValue.objects.filter(
