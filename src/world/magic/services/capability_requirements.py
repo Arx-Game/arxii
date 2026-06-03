@@ -17,7 +17,7 @@ def technique_performable(character_sheet: CharacterSheet | None, technique: Tec
 
     A None character_sheet (NPC without sheet, etc.) is treated as not-performable.
     """
-    from world.vitals.services import is_dead  # noqa: PLC0415 — vitals↔magic cycle
+    from world.vitals.services import is_dead  # noqa: PLC0415
 
     if character_sheet is None or is_dead(character_sheet):
         return False

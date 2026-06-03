@@ -123,9 +123,9 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int
     Pure function — no DB writes, no I/O.
     """
     level = check_outcome.success_level
-    if level >= 3:  # noqa: PLR2004 — tier breakpoints are design constants, not magic values
+    if level >= 3:  # noqa: PLR2004
         return config.delta_critical_success
-    if level == 2:  # noqa: PLR2004 — tier breakpoints are design constants, not magic values
+    if level == 2:  # noqa: PLR2004
         return config.delta_great_success
     if level == 1:
         return config.delta_success
@@ -136,7 +136,7 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int
     return config.delta_botch
 
 
-def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of the v1 contract
+def commit_to_clash(  # noqa: PLR0913
     *,
     character_sheet: CharacterSheet,
     technique: Technique,
@@ -184,8 +184,8 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
             an unconfirmed result when ``confirm_soulfray_risk=True`` (should
             not happen in v1; indicates a pipeline inconsistency).
     """
-    from world.checks.services import perform_check  # noqa: PLC0415 — local import avoids circular
-    from world.checks.types import CheckResult  # noqa: PLC0415 — local import avoids circular
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.types import CheckResult  # noqa: PLC0415
 
     # 0. Resolve the ObjectDB from the CharacterSheet for the magic pipeline.
     #    CharacterSheet.character is a OneToOneField to ObjectDB (primary_key=True).
@@ -221,7 +221,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
-    def resolve_fn(*, power: int) -> object:  # noqa: ARG001 — clash check is strain-driven, not power-scaled
+    def resolve_fn(*, power: int) -> object:  # noqa: ARG001
         return perform_check(
             objectdb,
             check_type,
@@ -314,7 +314,7 @@ def commit_to_clash(  # noqa: PLR0913 — kw-only API; all params are part of th
     )
 
 
-def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: ARG001 — round_number reserved for future phase-aware modifiers
+def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: ARG001
     """The NPC's per-round contribution to a Clash's meter, in progress units.
 
     Per-flavor behavior:
@@ -821,13 +821,13 @@ def _meter_band_to_check_outcome(*, clash: Clash) -> CheckOutcome:
 
     if ratio >= 1.0:
         target_level = 3
-    elif ratio >= 0.5:  # noqa: PLR2004 — meter-band breakpoints are design constants
+    elif ratio >= 0.5:  # noqa: PLR2004
         target_level = 2
     elif ratio >= 0.0:
         target_level = 1
-    elif ratio >= -0.25:  # noqa: PLR2004 — meter-band breakpoints are design constants
+    elif ratio >= -0.25:  # noqa: PLR2004
         target_level = 0
-    elif ratio >= -0.5:  # noqa: PLR2004 — meter-band breakpoints are design constants
+    elif ratio >= -0.5:  # noqa: PLR2004
         target_level = -1
     else:
         target_level = -2
@@ -871,7 +871,7 @@ def _resolution_to_check_outcome(resolution: ClashResolution) -> CheckOutcome:
 def fire_clash_per_round(
     *,
     clash: Clash,
-    clash_round: ClashRound,  # noqa: ARG001 — reserved for Phase 5 audit hooks; part of v1 contract
+    clash_round: ClashRound,  # noqa: ARG001
 ) -> Consequence | None:
     """Fire the per-round consequence pool, keyed on the current meter band.
 
@@ -903,13 +903,13 @@ def fire_clash_per_round(
         The selected Consequence, or None when there is no pool or no matching
         tier entry.
     """
-    from world.checks.outcome_utils import (  # noqa: PLC0415 — local import avoids circular
+    from world.checks.outcome_utils import (  # noqa: PLC0415
         select_weighted,
     )
-    from world.checks.types import (  # noqa: PLC0415 — local import avoids circular
+    from world.checks.types import (  # noqa: PLC0415
         ResolutionContext,
     )
-    from world.mechanics.effect_handlers import (  # noqa: PLC0415 — local import avoids circular
+    from world.mechanics.effect_handlers import (  # noqa: PLC0415
         apply_all_effects,
     )
 
@@ -1004,13 +1004,13 @@ def resolve_clash(
         A frozen ``ClashResolutionResult`` with the resolved clash, the
         resolution tier, and the consequence applied (if any).
     """
-    from world.checks.outcome_utils import (  # noqa: PLC0415 — local import avoids circular
+    from world.checks.outcome_utils import (  # noqa: PLC0415
         select_weighted,
     )
-    from world.checks.types import (  # noqa: PLC0415 — local import avoids circular
+    from world.checks.types import (  # noqa: PLC0415
         ResolutionContext,
     )
-    from world.mechanics.effect_handlers import (  # noqa: PLC0415 — local import avoids circular
+    from world.mechanics.effect_handlers import (  # noqa: PLC0415
         apply_all_effects,
     )
 
@@ -1118,7 +1118,7 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+    from world.combat.models import (  # noqa: PLC0415
         Clash,
         CombatOpponentAction,
         CombatRoundAction,
@@ -1227,7 +1227,7 @@ def _detect_lock_sustaining(*, encounter: CombatEncounter, round_number: int) ->
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+    from world.combat.models import (  # noqa: PLC0415
         Clash,
         CombatOpponentAction,
         CombatRoundAction,
@@ -1317,7 +1317,7 @@ def _detect_lock_escaping(*, encounter: CombatEncounter, round_number: int) -> l
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+    from world.combat.models import (  # noqa: PLC0415
         Clash,
         CombatOpponentAction,
     )
@@ -1372,7 +1372,7 @@ def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+    from world.combat.models import (  # noqa: PLC0415
         Clash,
         CombatOpponentAction,
     )
@@ -1440,7 +1440,7 @@ def _detect_break(*, encounter: CombatEncounter, round_number: int) -> list[Clas
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415 — local import avoids circular dependency with combat.models
+    from world.combat.models import (  # noqa: PLC0415
         Clash,
         CombatOpponent,
     )

@@ -1187,13 +1187,21 @@ Cast Disrupted `ConditionTemplate`s.
    flow-step helper; filter-propagation fix in `_install_reactive_side_effects`. Reference
    pipeline: `wire_scar_escalation_trigger()` in `world/magic/factories.py`. No scar-specific
    Python — escalation is pure authored data via `ConditionTemplate.reactive_triggers` M2M.
-3. **Defilement (CASTER_DOMINANT)** *(core magic — Tehom's domain, not brother's)* — when a
-   strong opposing caster overpowers a weak place, the caster degrades the place's cascade
-   resonance. The primitive already returns `direction=CASTER_DOMINANT`; the cast service
-   treats CORRUPT as inert at the fill-in point. **Soul-tether integration lever (must be preserved):** defilement's caster→world
-   corruption MUST be emitted through the existing interceptable `CORRUPTION_ACCRUING` event
-   (the one `soul_tether_redirect_handler` already subscribes to) — then a Sinner's Hollow
-   can absorb world-defilement corruption with zero new wiring.
+3. ~~**Defilement (CASTER_DOMINANT)**~~ — **DONE (#525).** A strong Abyssal caster who
+   overpowers an opposed place (Primal #6 or Celestial #4) DEFILES it: degrades the place's
+   dominant opposed cascade resonance (floored at effective 0), spreads the casting
+   technique's Abyssal resonance(s) onto the room (repeated defilement flips the room to
+   Abyssal "corrupted ground"), and accrues extra caster→world corruption via the existing
+   interceptable `CORRUPTION_ACCRUING` event (a Sinner's Hollow absorbs it with zero new
+   wiring). Gated by a data flag `AffinityInteraction.caster_dominance_defiles` (authored
+   True only on #4/#6) so non-Abyssal casters never defile; `_compute_direction` runs the
+   strength split for `flag OR CORRUPT`; the reject/repel backfire is suppressed when
+   defilement fires (a strong Abyssal caster defiles a Celestial place instead of taking
+   Hallowed Burn — a weak caster still burns). Row mutation goes through a shared
+   `upsert_room_resonance_modifier` (Sanctum refactored onto it). Service:
+   `world/magic/services/defilement.py`, fired at `use_technique` Step 10. The same
+   machinery would support a future Celestial→Abyssal "purification" interaction (spreads
+   Celestial, accrues 0 corruption — Celestial's coefficient is already 0).
 4. **Brother's richer formula** — steps 5–7 of the v1 formula are deliberately simple. His
    follow-up enriches the primitive body (technique-resonance opposition weighting,
    multi-resonance place weighting). Call sites, `AffinityInteraction` data,
@@ -1222,12 +1230,12 @@ The deferred items above, ordered by recommended sequence with rationale and own
    simplification, never a substitute for the environment being able to stop or alter a
    cast. Needs cancel / modify-payload semantics in the reactive layer. Sequence as core
    capability work, not "defer until a concrete need."
-3. **Defilement (CASTER_DOMINANT)** *(Tehom/core; medium — magic-physics + soul-tether)*
-   — **our system, not brother's.** When a strong opposing caster overpowers a weak place,
-   the caster degrades the place's cascade resonance. High narrative value; ties into soul
-   tether. Must route caster→world corruption through the existing `CORRUPTION_ACCRUING`
-   event so a Sinner's Hollow absorbs world-defilement (the social-responsibility layer).
-   The `test_caster_dominant_stub` pipeline test is the fill-in point.
+3. ~~**Defilement (CASTER_DOMINANT)**~~ — **DONE (#525).** A strong Abyssal caster overpowering
+   an opposed place (Primal #6 or Celestial #4) degrades its cascade, spreads Abyssal taint
+   (flipping the room to corrupted ground over repeated casts), and routes extra caster→world
+   corruption through `CORRUPTION_ACCRUING` so a Sinner's Hollow absorbs it (the
+   social-responsibility layer). Data-gated by `caster_dominance_defiles`; defile replaces the
+   reject backfire for a dominant caster. See deferred-item #3 above for the full surface.
 4. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
    (technique-resonance opposition weighting, multi-resonance places). v1 is functional;
    do when brother prioritizes. Zero change to call sites / data / authored content. (This

@@ -1,5 +1,5 @@
-from django.db import IntegrityError
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 
 from world.narrative.constants import NarrativeCategory
 from world.narrative.factories import (
@@ -39,11 +39,15 @@ class NarrativeMessageDeliveryTests(TestCase):
         self.assertNotEqual(d1.recipient_character_sheet, d2.recipient_character_sheet)
 
 
-class NarrativeMessageDeliveryUniqueTests(TransactionTestCase):
+class NarrativeMessageDeliveryUniqueTests(TestCase):
+    """Atomic savepoint isolates the aborted transaction so the outer TestCase
+    rollback (and parallel runner) survives.
+    """
+
     def test_unique_per_message_per_recipient(self) -> None:
         msg = NarrativeMessageFactory()
         d1 = NarrativeMessageDeliveryFactory(message=msg)
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             NarrativeMessageDeliveryFactory(
                 message=msg,
                 recipient_character_sheet=d1.recipient_character_sheet,

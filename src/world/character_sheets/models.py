@@ -10,6 +10,7 @@ and the evennia_extensions/object_extensions/models.py display name system.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -24,12 +25,18 @@ if TYPE_CHECKING:
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.character_sheets.types import MaritalStatus
+from world.character_sheets.types import (
+    DECAY_TIER_THRESHOLDS_DAYS,
+    ActivityState,
+    LifecycleState,
+    MaritalStatus,
+)
 
 
 class Heritage(NaturalKeyMixin, SharedMemoryModel):
@@ -276,12 +283,126 @@ class CharacterSheet(SharedMemoryModel):
         help_text="Additional character description",
     )
 
+    # Activity & Lifecycle (#671 — inactivity detection)
+    # Activity is the OOC axis ("is this character being played"); Lifecycle is
+    # the IC axis ("what is their condition in the world"). Orthogonal.
+    activity_state = models.CharField(
+        max_length=8,
+        choices=ActivityState.choices,
+        default=ActivityState.ACTIVE,
+        help_text=(
+            "OOC engagement state. ACTIVE / HIATUS (player-declared, time-bounded)"
+            " / INACTIVE (auto-inferred) / FROZEN (OC swap, 30-day cooldown)."
+        ),
+    )
+    activity_state_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="HIATUS end date OR FROZEN cooldown floor. Null in ACTIVE/INACTIVE.",
+    )
+    lifecycle_state = models.CharField(
+        max_length=8,
+        choices=LifecycleState.choices,
+        default=LifecycleState.ALIVE,
+        help_text=(
+            "IC condition. ALIVE / CAPTURED / COMA / RETIRED / DEAD. Orthogonal to"
+            " activity_state — both must be ALIVE+ACTIVE for the character to count"
+            " as 'present and playing' to consumer systems."
+        ),
+    )
+    lifecycle_state_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When lifecycle_state last changed. Null for default ALIVE.",
+    )
+
+    # OC distinction (#671 — minimal pair; full OC creation flow is a follow-up)
+    is_oc = models.BooleanField(
+        default=False,
+        help_text="True if this character was created by a player as their own OC.",
+    )
+    created_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="characters_created",
+        help_text=(
+            "The account that created this character. Null for grandfathered or"
+            " staff-seeded rows. Survives account deletion via SET_NULL."
+        ),
+    )
+
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
         return f"Sheet for {self.character.key}"
+
+    # --- Activity / Lifecycle helpers (#671) -----------------------------
+
+    @property
+    def is_dormant(self) -> bool:
+        """True when any consumer should treat this character as inactive.
+
+        Returns True if ``activity_state != ACTIVE`` (HIATUS, INACTIVE, FROZEN)
+        OR ``lifecycle_state != ALIVE`` (CAPTURED, COMA, RETIRED, DEAD).
+        Two simple column comparisons; safe to call in tight loops.
+        """
+        return (
+            self.activity_state != ActivityState.ACTIVE
+            or self.lifecycle_state != LifecycleState.ALIVE
+        )
+
+    @property
+    def decay_tier(self) -> str | None:
+        """Inactivity tier from days-since-last-signal, or None when fresh.
+
+        Walks the FK chain ``roster_entry -> roster.activity_requirement`` and
+        ``roster_entry -> current_tenure -> player_data.account.last_login``
+        plus ``roster_entry.last_puppeted`` for HIGH-tier rosters. Returns the
+        biggest matching tier (DORMANT > LONG_INACTIVE > INACTIVE >
+        RECENT_INACTIVE) or None when the most recent signal is < 14 days old.
+
+        Callers iterating many sheets should ``prefetch_related``
+        ``roster_entry__tenures__player_data__account`` to amortize the chain.
+        Single calls amortize cheaply via SharedMemoryModel's identity map.
+        """
+        last_signal = self._last_activity_signal_at()
+        if last_signal is None:
+            return None
+        days = (timezone.now() - last_signal).days
+        for tier, threshold in DECAY_TIER_THRESHOLDS_DAYS.items():
+            if days >= threshold:
+                return tier
+        return None
+
+    def _last_activity_signal_at(self) -> datetime | None:
+        """Return the most recent activity signal for this sheet, or None.
+
+        For HIGH-tier rosters: max of Account.last_login and
+        RosterEntry.last_puppeted. For LOW-tier: Account.last_login. For
+        NONE-tier and ROSTERED characters (no current tenure): max of any
+        available signal (so consumers can still read decay_tier even when
+        the cron won't auto-flip activity_state).
+        """
+        entry = getattr(self, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+        if entry is None:
+            return self.created_by.last_login if self.created_by_id else None
+
+        current = entry.current_tenure
+        last_login = current.player_data.account.last_login if current is not None else None
+
+        from world.roster.models.choices import ActivityRequirement  # noqa: PLC0415
+
+        requirement = entry.roster.activity_requirement
+        if requirement == ActivityRequirement.LOW:
+            return last_login
+
+        # HIGH and NONE both fall back to "max of available signals"
+        candidates = [s for s in (last_login, entry.last_puppeted) if s is not None]
+        return max(candidates) if candidates else None
 
     @cached_property
     def stats(self) -> StatHandler:

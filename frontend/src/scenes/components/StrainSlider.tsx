@@ -1,6 +1,5 @@
 import { Slider } from '@/components/ui/slider';
 import { computeEffectiveCost } from '../lib/computeEffectiveCost';
-import { SoulfrayWarning } from './SoulfrayWarning';
 
 interface StrainSliderProps {
   /** Current strain commitment (extra anima beyond base cost). */
@@ -9,7 +8,7 @@ interface StrainSliderProps {
   cap: number;
   /** Base anima cost before strain is added. */
   baseEffectiveCost: number;
-  /** Caster's current anima pool; if omitted, no over-pool warning is shown. */
+  /** Caster's current anima pool; if omitted, no over-pool indicator is shown. */
   currentAnima?: number;
   /** Called as the player drags the slider. */
   onChange: (value: number) => void;
@@ -19,11 +18,9 @@ interface StrainSliderProps {
  * Slider for committing extra strain on a cast — Phase 7 of the non-clash
  * casting initiative.
  *
- * - Range is 0…cap (step 1).
- * - Renders a small readout: "Effective cost: N anima" using
- *   {@link computeEffectiveCost}.
- * - When `currentAnima` is supplied and the projected cost would exceed it,
- *   a <SoulfrayWarning> is rendered inline as an over-pool warning.
+ * Renders an inline indicator (not a full confirm/cancel dialog) when the
+ * projected cost would exceed the pool — the real Soulfray confirm step lives
+ * at the ActionPanel dispatch boundary, not on the adjustment control.
  */
 export function StrainSlider({
   value,
@@ -31,7 +28,7 @@ export function StrainSlider({
   baseEffectiveCost,
   currentAnima,
   onChange,
-}: StrainSliderProps) {
+}: Readonly<StrainSliderProps>) {
   const projectedCost = computeEffectiveCost(baseEffectiveCost, value);
   const overPool = currentAnima !== undefined && projectedCost > currentAnima;
 
@@ -53,22 +50,16 @@ export function StrainSlider({
       />
       <p className="text-xs text-muted-foreground">Effective cost: {projectedCost} anima</p>
       {overPool && (
-        <SoulfrayWarning
-          warning={{
-            stage_name: 'Insufficient anima',
-            stage_description: `Projected cost (${projectedCost}) exceeds your current pool (${currentAnima ?? 0}).`,
-            has_death_risk: false,
-          }}
-          techniqueName="this cast"
-          animaCost={projectedCost}
-          onConfirm={() => {
-            /* purely informational at the slider level — confirm/cancel happen
-             * at the surrounding ActionPanel */
-          }}
-          onCancel={() => {
-            /* see above */
-          }}
-        />
+        <p
+          role="alert"
+          className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
+        >
+          <span className="font-semibold">Insufficient anima</span>
+          {' — projected '}
+          {projectedCost}
+          {' exceeds pool '}
+          {currentAnima ?? 0}
+        </p>
       )}
     </div>
   );

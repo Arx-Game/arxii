@@ -78,7 +78,7 @@ class ClashContent:
     """
 
     @staticmethod
-    def create_all() -> ClashContentResult:  # noqa: PLR0915 — sequential seed factory; each statement is a get_or_create; splitting into helpers adds indirection without clarity
+    def create_all() -> ClashContentResult:  # noqa: PLR0915
         """Idempotently create the seed content; returns the populated result.
 
         Creates (in dependency order):

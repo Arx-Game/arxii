@@ -30,7 +30,7 @@ class ProjectNotActiveError(ValueError):
 
 
 @transaction.atomic
-def add_contribution(  # noqa: PLR0913 — discriminator-pattern requires per-kind kwargs
+def add_contribution(  # noqa: PLR0913
     *,
     project: Project,
     contributor_persona: Persona,

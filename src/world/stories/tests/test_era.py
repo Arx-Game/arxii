@@ -1,5 +1,5 @@
-from django.db import IntegrityError
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 
 from world.stories.constants import EraStatus
 from world.stories.factories import EraFactory
@@ -43,10 +43,12 @@ class EraModelTests(TestCase):
         self.assertIn("1", str(era))
 
 
-class EraActiveConstraintTests(TransactionTestCase):
-    """Isolated from TestCase so the IntegrityError doesn't corrupt a shared transaction."""
+class EraActiveConstraintTests(TestCase):
+    """Atomic savepoint isolates the aborted transaction so the outer TestCase
+    rollback (and parallel runner) survives.
+    """
 
     def test_only_one_active_era_allowed(self):
         EraFactory(status=EraStatus.ACTIVE, name="era_a")
-        with self.assertRaises(IntegrityError):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
             EraFactory(status=EraStatus.ACTIVE, name="era_b")

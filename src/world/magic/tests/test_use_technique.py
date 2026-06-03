@@ -429,7 +429,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005 — power is future seam
+            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005
             confirm_soulfray_risk=True,
         )
 
@@ -480,7 +480,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005 — power is future seam
+            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005
             confirm_soulfray_risk=True,
         )
 

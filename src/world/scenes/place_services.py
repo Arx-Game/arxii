@@ -46,7 +46,7 @@ def ensure_scene_for_location(
     from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
 
     for obj in room.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is not None:
             evaluate_scene_engagement(character_sheet=sheet, room=room)
 

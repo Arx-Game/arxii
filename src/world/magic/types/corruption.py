@@ -21,6 +21,7 @@ class CorruptionSource(models.TextChoices):
     TECHNIQUE_USE = "TECHNIQUE_USE", "Technique use"
     SPEC_B_REDIRECT = "SPEC_B_REDIRECT", "Soul Tether redirect"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
+    DEFILEMENT = "DEFILEMENT", "World defilement (caster overpowers an opposed place)"
 
 
 class CorruptionRecoverySource(models.TextChoices):

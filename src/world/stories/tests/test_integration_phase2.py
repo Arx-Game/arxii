@@ -82,7 +82,7 @@ from world.stories.types import ConnectionType
 class Phase2FullLoopIntegrationTest(EvenniaTestCase):
     """Keystone integration test walking the full Phase 2 feature surface."""
 
-    def test_phase2_full_loop(self) -> None:  # noqa: PLR0915 — keystone integration test; single method intentional
+    def test_phase2_full_loop(self) -> None:  # noqa: PLR0915
         # ------------------------------------------------------------------ #
         # Arrange: Era, GM infrastructure, characters, GROUP story structure. #
         # ------------------------------------------------------------------ #

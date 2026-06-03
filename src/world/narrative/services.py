@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from world.stories.models import BeatCompletion, EpisodeResolution, Era, Story
 
 
-def send_narrative_message(  # noqa: PLR0913 — all context FKs are independent and kwarg-only
+def send_narrative_message(  # noqa: PLR0913
     *,
     recipients: Iterable[CharacterSheet],
     body: str,
@@ -148,7 +148,7 @@ def broadcast_gemit(
 
         for session in SESSION_HANDLER.get_sessions():
             session.msg(text=(formatted, {}), type="gemit")
-    except Exception:  # noqa: BLE001, S110 — broadcast failure must not raise; record already saved
+    except Exception:  # noqa: BLE001, S110
         pass
     return gemit
 

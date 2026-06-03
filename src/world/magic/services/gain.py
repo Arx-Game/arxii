@@ -122,7 +122,7 @@ ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
 def tag_room_resonance(
     room_profile: RoomProfile,
     resonance: Resonance,
-    set_by: AccountDB | None = None,  # noqa: ARG001 — kept for backwards-compat with old call sites; audit moved into source field
+    set_by: AccountDB | None = None,  # noqa: ARG001
 ) -> LocationValueModifier:
     """Tag a room with a resonance by creating a cascade modifier row.
 
@@ -210,7 +210,7 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
 
 
 @transaction.atomic
-def create_pose_endorsement(  # noqa: C901 — sequential endorsement guards including protagonism lock, complexity is inherent
+def create_pose_endorsement(  # noqa: C901
     endorser_sheet: CharacterSheet,
     interaction: Interaction,
     resonance: Resonance,
@@ -505,7 +505,7 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
                         room_profile=rp,
                     )
                     grants_issued += 1
-            except Exception:  # noqa: BLE001, S112 — log + continue to avoid tick poison
+            except Exception:  # noqa: BLE001, S112
                 # TODO: structured log via Evennia logger.
                 continue
 
@@ -587,7 +587,7 @@ def outfit_trickle_tick() -> int:
         try:
             with transaction.atomic():
                 total_grants += outfit_daily_trickle_for_character(sheet)
-        except Exception:  # noqa: BLE001, S112 — log + continue to avoid tick poison
+        except Exception:  # noqa: BLE001, S112
             # TODO: structured log via Evennia logger.
             continue
 
@@ -625,7 +625,7 @@ def resonance_weekly_settlement_tick() -> ResonanceWeeklySettlementSummary:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
         try:
             result = settle_weekly_pot(sheet)
-        except Exception:  # noqa: BLE001, S112 — isolate per-endorser failures so one bad row doesn't poison the tick
+        except Exception:  # noqa: BLE001, S112
             continue
         if result.endorsements_settled:
             endorsers_settled += 1

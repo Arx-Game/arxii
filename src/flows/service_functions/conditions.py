@@ -30,7 +30,7 @@ def _unwrap_objectdb(obj: ObjectDB) -> ObjectDB:
     Returns:
         The underlying ``ObjectDB``.
     """
-    return getattr(obj, "obj", obj)  # noqa: GETATTR_LITERAL — BaseState.obj holds the raw ObjectDB
+    return getattr(obj, "obj", obj)  # noqa: GETATTR_LITERAL
 
 
 def flow_apply_condition(

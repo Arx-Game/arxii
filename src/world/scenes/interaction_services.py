@@ -40,12 +40,12 @@ def _get_active_scene(location: ObjectDB | None) -> Scene | None:
     if location is None:
         return None
     try:
-        cached: Scene | None = location._active_scene_cache  # noqa: SLF001 — in-memory cache on identity-mapped object
+        cached: Scene | None = location._active_scene_cache  # noqa: SLF001
         return cached
     except AttributeError:
         pass
     scene = Scene.objects.filter(location=location, is_active=True).first()
-    location._active_scene_cache = scene  # noqa: SLF001 — in-memory cache on identity-mapped object
+    location._active_scene_cache = scene  # noqa: SLF001
     return scene
 
 
@@ -55,7 +55,7 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
     Call this when a scene starts or ends.
     """
     with contextlib.suppress(AttributeError):
-        del location._active_scene_cache  # noqa: SLF001 — in-memory cache on identity-mapped object
+        del location._active_scene_cache  # noqa: SLF001
 
 
 def reassign_persona_interactions(
@@ -449,7 +449,7 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
     account_id = _get_account_for_character(character.pk)
     if account_id is None:
         # Character has no account yet — still evaluate covenant engagement (Slice B §4.10)
-        sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+        sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is not None and scene.location is not None:
             from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
 
@@ -458,12 +458,12 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
 
     # Check in-memory cache first
     try:
-        known_ids = scene._participant_account_ids  # noqa: SLF001 — in-memory cache on identity-mapped object
+        known_ids = scene._participant_account_ids  # noqa: SLF001
     except AttributeError:
         known_ids = set(
             SceneParticipation.objects.filter(scene=scene).values_list("account_id", flat=True)
         )
-        scene._participant_account_ids = known_ids  # noqa: SLF001 — in-memory cache on identity-mapped object
+        scene._participant_account_ids = known_ids  # noqa: SLF001
 
     if account_id in known_ids:
         return
@@ -475,7 +475,7 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
     known_ids.add(account_id)
 
     # Auto-engage on scene participation (Slice B §4.10)
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is not None and scene.location is not None:
         from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
 

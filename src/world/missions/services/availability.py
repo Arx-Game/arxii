@@ -101,7 +101,7 @@ def _arc_scope_matches(template: MissionTemplate, giver: MissionGiver) -> bool:
     return False
 
 
-def _eligible_templates(  # noqa: PLR0913 — kwargs split to keep callsites readable
+def _eligible_templates(  # noqa: PLR0913
     giver: MissionGiver,
     character: ObjectDB,
     risk_dial: int,

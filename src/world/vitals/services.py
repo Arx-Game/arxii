@@ -80,13 +80,13 @@ def can_act(character_sheet: CharacterSheet | None) -> bool:
     A dying-but-conscious character keeps awareness → can_act True. An
     Unconscious character has awareness 0 → can_act False.
     """
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         FoundationalCapability,
     )
-    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.models import (  # noqa: PLC0415
         CapabilityType,
     )
-    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.services import (  # noqa: PLC0415
         get_effective_capability_value,
     )
 
@@ -111,10 +111,10 @@ def derive_character_status(character_sheet: CharacterSheet | None) -> str:
     Precedence: dead > dying (active Bleeding-Out condition) > incapacitated
     (cannot act) > alive.
     """
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         BLEED_OUT_CONDITION_NAME,
     )
-    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.models import (  # noqa: PLC0415
         ConditionInstance,
     )
 
@@ -232,7 +232,7 @@ def _knockout_pool() -> ConsequencePool | None:
 
 def _unwrap_consequence(pending: PendingResolution) -> Consequence | None:
     """Unwrap WeightedConsequence; return None for unsaved fallback consequences."""
-    from actions.types import WeightedConsequence  # noqa: PLC0415 — avoid cycle
+    from actions.types import WeightedConsequence  # noqa: PLC0415
 
     c = pending.selected_consequence
     if isinstance(c, WeightedConsequence):
@@ -242,7 +242,7 @@ def _unwrap_consequence(pending: PendingResolution) -> Consequence | None:
 
 def _apply_condition_effects(pending: PendingResolution) -> Iterator[ConsequenceEffect]:
     """Yield APPLY_CONDITION effects (with a condition_template) from the selected consequence."""
-    from world.checks.constants import EffectType  # noqa: PLC0415 — avoid cycle
+    from world.checks.constants import EffectType  # noqa: PLC0415
 
     c = _unwrap_consequence(pending)
     if c is None:
@@ -267,7 +267,7 @@ def _applied_condition_names(pending: PendingResolution) -> set[str]:
 
 def _applied_bleed_out(pending: PendingResolution) -> bool:
     """True if the selected consequence applied the Bleeding-Out condition."""
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         BLEED_OUT_CONDITION_NAME,
     )
 
@@ -276,7 +276,7 @@ def _applied_bleed_out(pending: PendingResolution) -> bool:
 
 def _applied_unconscious(pending: PendingResolution) -> bool:
     """True if the selected consequence applied the Unconscious condition."""
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         UNCONSCIOUS_CONDITION_NAME,
     )
 
@@ -402,7 +402,7 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
     A stage is terminal when no stage with a higher stage_order exists for the
     same ConditionTemplate.
     """
-    from world.conditions.models import ConditionStage  # noqa: PLC0415 — avoids circular import
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
 
     if instance.current_stage is None:
         return False
@@ -441,14 +441,14 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
 
     Returns True if the character died during this call, else False.
     """
-    from world.conditions.constants import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.constants import (  # noqa: PLC0415
         BLEED_OUT_CONDITION_NAME,
     )
-    from world.conditions.models import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.models import (  # noqa: PLC0415
         ConditionStage,
         ConditionTemplate,
     )
-    from world.conditions.services import (  # noqa: PLC0415 — vitals→conditions cross-domain deferred import
+    from world.conditions.services import (  # noqa: PLC0415
         get_active_conditions,
     )
 
@@ -556,7 +556,7 @@ def get_vitals_consequence_config() -> VitalsConsequenceConfig:
     Holds the global knockout pool and the default wound/death pools used when a
     DamageType doesn't specify its own. Configure via the Django admin.
     """
-    from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415 — avoid import cycle
+    from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415
 
     cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
     return cfg
@@ -577,12 +577,12 @@ def resolve_vitals_consequence(
 
     This is the seam Task 5 uses to route knockout/wound/death through pools.
     """
-    from world.checks.consequence_resolution import (  # noqa: PLC0415 — avoid cycle
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
         resolve_pool_consequences,
         select_consequence,
     )
-    from world.checks.types import ResolutionContext  # noqa: PLC0415 — avoid cycle
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
 
     # select_consequence + apply_resolution still operate on ObjectDB; walk
     # back at the boundary. Refactoring the checks layer is Phase 2 follow-up.

@@ -142,7 +142,7 @@ class AnimaRecoverySerializerFieldTests(TestCase):
             )
 
         self.assertIsNotNone(result)
-        payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL — transient attr set by resolver
+        payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL
         self.assertIsNotNone(payload)
         # success budget=6, anima goes from 2 to 8
         self.assertEqual(payload["recovered"], 6)

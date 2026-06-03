@@ -87,7 +87,7 @@ def evaluate_auto_beats(progress: AnyStoryProgress) -> None:
 _GM_MARKED_VALID_OUTCOMES = {BeatOutcome.SUCCESS, BeatOutcome.FAILURE}
 
 
-def record_gm_marked_outcome(  # noqa: PLR0913 — all args are required for scope-aware pool wiring
+def record_gm_marked_outcome(  # noqa: PLR0913
     *,
     progress: AnyStoryProgress,
     beat: Beat,
@@ -337,7 +337,7 @@ def _notify_beat_completion(
     notify_beat_completion(completion, progress)
 
 
-def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era are tightly coupled
+def _evaluate_and_record_beat(  # noqa: PLR0913
     beat: Beat,
     progress: AnyStoryProgress,
     scope: str,

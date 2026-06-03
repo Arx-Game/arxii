@@ -233,7 +233,7 @@ class InteractionViewSet(viewsets.ViewSet):
         """
         try:
             puppet = request.user.puppet
-        except (AttributeError, Exception):  # noqa: BLE001 — typeclass access is non-spec, defensive catch
+        except (AttributeError, Exception):  # noqa: BLE001
             puppet = None
         if puppet is None:
             msg = (

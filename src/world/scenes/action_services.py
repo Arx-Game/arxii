@@ -82,7 +82,7 @@ def _validate_technique_enhancement(
         raise ValidationError(msg)
 
 
-def create_action_request(  # noqa: PLR0913 — keyword-only API, several optional params
+def create_action_request(  # noqa: PLR0913
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -293,7 +293,7 @@ def respond_to_action_request(
     return None
 
 
-def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params are required
+def _resolve_enhanced_action(  # noqa: PLR0913
     *,
     character: ObjectDB,
     technique: Technique,
@@ -328,7 +328,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params 
     technique_result = use_technique(
         character=character,
         technique=technique,
-        resolve_fn=lambda *, power: start_action_resolution(  # noqa: ARG005 — scenes check is difficulty-driven, not power-scaled
+        resolve_fn=lambda *, power: start_action_resolution(  # noqa: ARG005
             character=character,
             template=action_template,
             target_difficulty=difficulty,

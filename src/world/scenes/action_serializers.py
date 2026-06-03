@@ -187,5 +187,5 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
         initiator_account = action_request.initiator_persona.character_sheet.character.db_account
         if initiator_account is None or request.user != initiator_account:
             return None
-        payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL — transient attr set by resolver
+        payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL
         return AnimaRecoverySerializer(payload).data if payload is not None else None
