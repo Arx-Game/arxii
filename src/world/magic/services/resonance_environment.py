@@ -323,18 +323,20 @@ def _compute_direction(
     place_magnitude: int,
     config: ResonanceEnvironmentConfig,
 ) -> str:
-    """Compute direction from interaction aggressor and CORRUPT comparison.
+    """Compute direction from caster strength vs place magnitude.
 
-    For CORRUPT kind: compare caster_strength proxy to place_magnitude.
+    The strength comparison runs when the interaction is flagged
+    ``caster_dominance_defiles`` OR its kind is CORRUPT (the ``OR CORRUPT``
+    preserves pair #8's existing computed direction). In that case:
       caster_strength = caster_alignment * 100 * config.caster_power_scalar
       caster_strength - place_magnitude > balanced_band → CASTER_DOMINANT
       place_magnitude - caster_strength > balanced_band → ENVIRONMENT_DOMINANT
       else → BALANCED
 
-    For non-CORRUPT (AMPLIFY / REJECT / REPEL): ENVIRONMENT_DOMINANT — the
-    environment acts on the working, whether the outcome is a boon or harm.
+    Otherwise (non-flagged AMPLIFY / REJECT / REPEL): ENVIRONMENT_DOMINANT — the
+    environment acts on the working; the caster can never overpower the place.
     """
-    if interaction.kind == AffinityInteractionKind.CORRUPT:
+    if interaction.caster_dominance_defiles or interaction.kind == AffinityInteractionKind.CORRUPT:
         caster_strength = caster_alignment * Decimal(100) * config.caster_power_scalar
         diff_caster = caster_strength - Decimal(place_magnitude)
         diff_env = Decimal(place_magnitude) - caster_strength
