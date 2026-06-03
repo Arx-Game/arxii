@@ -871,6 +871,22 @@ class MissionInstance(SharedMemoryModel):
             "the trigger only)."
         ),
     )
+    # #686: the NPCServiceOffer that produced this instance (via the MISSION
+    # effect handler). Null for legacy / trigger-based / staff-seeded runs.
+    # Used to scope the CharacterSheet.max_active_npc_missions cap to
+    # NPC-mediated runs only.
+    source_offer = models.ForeignKey(
+        "npc_services.NPCServiceOffer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The NPCServiceOffer this run was accepted from (#686). Null for "
+            "trigger-based mission givers (room/item) and legacy seed rows. "
+            "The PC-cap counts only rows with this set."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.template.name} ({self.status})"

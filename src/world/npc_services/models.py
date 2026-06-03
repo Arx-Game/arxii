@@ -118,6 +118,15 @@ class NPCRole(SharedMemoryModel):
             "Builders Guild Organization). Used by org-scoped permission filters."
         ),
     )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=(
+            "Master on/off switch for the role (#686). When False, no offer on "
+            "this role is eligible in available_offers, regardless of per-offer "
+            "state. Staff use this to disable a role without deleting it; "
+            "migrated value from the legacy `MissionGiver.is_active`."
+        ),
+    )
 
     def __str__(self) -> str:
         return self.name
@@ -271,6 +280,116 @@ class OfferCooldown(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.offer} cooldown for {self.persona} until {self.available_at:%Y-%m-%d %H:%M}"
+
+
+class NPCRoleCooldown(SharedMemoryModel):
+    """Per-(role, persona) cooldown row (#686).
+
+    Distinct from ``OfferCooldown`` (per-offer): a role-level cooldown blocks
+    EVERY offer on the role for the persona until ``available_at``. The MISSION
+    effect handler writes both an ``OfferCooldown`` (so the same mission can't
+    be immediately re-rolled by the same persona) AND an ``NPCRoleCooldown``
+    (so OTHER missions on the role are also gated). Other offer kinds
+    (permits, training, favors) typically only write ``OfferCooldown`` — their
+    semantics are per-offer, not per-role.
+
+    The duration is sourced per-offer via ``MissionOfferDetails.role_cooldown_duration``
+    (defaults to ``MissionTemplate.cooldown``).
+    """
+
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.CASCADE,
+        related_name="role_cooldowns",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="role_cooldowns",
+    )
+    available_at = models.DateTimeField(
+        help_text="Earliest time `persona` can take ANY offer on this role again.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "persona"],
+                name="unique_rolecooldown_role_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.role.name} cooldown for {self.persona} until {self.available_at:%Y-%m-%d %H:%M}"
+        )
+
+
+class MissionOfferDetails(SharedMemoryModel):
+    """Per-kind details for `NPCServiceOffer` rows of kind=MISSION (#686).
+
+    Captures the mission-specific knobs that don't fit on the unified
+    ``NPCServiceOffer`` itself: which template this offer wraps, an optional
+    per-offer weight override, an additional eligibility predicate
+    AND-composed with the offer's own ``eligibility_rule``, and the duration
+    written into ``NPCRoleCooldown`` on accept.
+
+    Catalog uniqueness: at most one MissionOfferDetails row per
+    ``(NPCServiceOffer.role, mission_template)`` — a role offers any given
+    template at most once. **This is a catalog-row constraint, NOT a
+    gameplay one-shot.** One template fuels many ``MissionInstance`` rows
+    over time; each acceptance spawns a fresh instance with auto-generated
+    per-instance details.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="mission_offer_details",
+    )
+    mission_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.CASCADE,
+        related_name="offer_details",
+    )
+    weight = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Per-offer weight override for POOL draw. Null falls back to "
+            "MissionTemplate.base_weight."
+        ),
+    )
+    requirements_override = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Predicate JSON AND-composed with MissionTemplate.availability_rule "
+            "and NPCServiceOffer.eligibility_rule at evaluation time. Empty "
+            "dict = no additional gate."
+        ),
+    )
+    role_cooldown_duration = models.DurationField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Duration written into NPCRoleCooldown on accept (blocks OTHER "
+            "missions on the role for this persona). Null falls back to "
+            "MissionTemplate.cooldown."
+        ),
+    )
+
+    class Meta:
+        verbose_name_plural = "Mission offer details"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["offer", "mission_template"],
+                name="unique_mod_offer_template",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"MissionOffer: {self.offer.label} → {self.mission_template_id}"
 
 
 class PermitOfferDetails(SharedMemoryModel):
