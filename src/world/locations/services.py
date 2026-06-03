@@ -912,6 +912,46 @@ def tenancy_history_for(
     return qs.order_by("started_at", "pk")
 
 
+@transaction.atomic
+def upsert_room_resonance_modifier(
+    room_profile: RoomProfile,
+    resonance: Resonance,
+    *,
+    source: str,
+    delta: int,
+) -> LocationValueModifier:
+    """Get-or-create the room-level (room_profile, resonance, source) cascade row and
+    add ``delta`` to its value (signed). Returns the row.
+
+    Mechanic only — callers own any cap/floor policy. Uses select_for_update on the
+    existing row so concurrent mutators serialize; SharedMemoryModel-safe save.
+    """
+    row = (
+        LocationValueModifier.objects.select_for_update()
+        .filter(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            source=source,
+        )
+        .first()
+    )
+    if row is None:
+        return LocationValueModifier.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            value=delta,
+            change_per_day=0,
+            source=source,
+        )
+    row.value += delta
+    row.save(update_fields=["value"])
+    return row
+
+
 def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
     """Delete LocationValueModifier rows whose current_value() has
     decayed to zero.

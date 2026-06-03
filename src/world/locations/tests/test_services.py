@@ -14,7 +14,7 @@ from world.locations.constants import (
     StatKey,
 )
 from world.locations.models import LocationValueModifier, LocationValueOverride
-from world.locations.services import effective_value
+from world.locations.services import effective_value, upsert_room_resonance_modifier
 from world.magic.factories import ResonanceFactory
 
 
@@ -279,4 +279,52 @@ class EffectiveValueResonanceTests(TestCase):
         self.assertEqual(
             effective_value(self.room, stat_key=StatKey.CRIME),
             effective_value(self.room, stat_key=StatKey.CRIME),
+        )
+
+
+class UpsertRoomResonanceModifierTests(TestCase):
+    """Tests for the shared upsert_room_resonance_modifier primitive."""
+
+    def setUp(self) -> None:
+        self.room_profile = RoomProfileFactory()
+        self.resonance = ResonanceFactory()
+
+    def test_create_on_first_call(self) -> None:
+        """A first call creates a row with value == delta."""
+        row = upsert_room_resonance_modifier(
+            self.room_profile, self.resonance, source="test:1", delta=6
+        )
+        self.assertEqual(row.value, 6)
+        self.assertEqual(row.change_per_day, 0)
+        self.assertEqual(row.key_type, KeyType.RESONANCE)
+        self.assertEqual(row.parent_type, LocationParentType.ROOM)
+        self.assertEqual(row.source, "test:1")
+
+    def test_accumulates_on_second_call_same_source(self) -> None:
+        """A second call on the same (room_profile, resonance, source) accumulates."""
+        first = upsert_room_resonance_modifier(
+            self.room_profile, self.resonance, source="test:1", delta=6
+        )
+        second = upsert_room_resonance_modifier(
+            self.room_profile, self.resonance, source="test:1", delta=-4
+        )
+        # Same row (same pk)
+        self.assertEqual(first.pk, second.pk)
+        # Accumulated value: 6 + (-4) = 2
+        self.assertEqual(second.value, 2)
+
+    def test_different_source_creates_distinct_row(self) -> None:
+        """A different source on the same (room_profile, resonance) is a separate row."""
+        row_a = upsert_room_resonance_modifier(
+            self.room_profile, self.resonance, source="test:1", delta=6
+        )
+        row_b = upsert_room_resonance_modifier(
+            self.room_profile, self.resonance, source="test:2", delta=3
+        )
+        self.assertNotEqual(row_a.pk, row_b.pk)
+        self.assertEqual(
+            LocationValueModifier.objects.filter(
+                room_profile=self.room_profile, resonance=self.resonance
+            ).count(),
+            2,
         )
