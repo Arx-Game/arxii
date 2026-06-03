@@ -226,3 +226,30 @@ class Gender(models.TextChoices):
     FEMALE = "female", "Female"
     NON_BINARY = "non_binary", "Non-Binary"
     OTHER = "other", "Other"
+
+
+class ActivityState(models.TextChoices):
+    """OOC engagement state for a CharacterSheet (#671).
+
+    Orthogonal to LifecycleState. Consumer systems treat any non-ACTIVE state
+    as "Dormant" via CharacterSheet.is_dormant.
+    """
+
+    ACTIVE = "ACTIVE", "Active"
+    HIATUS = "HIATUS", "Hiatus (player-declared)"
+    INACTIVE = "INACTIVE", "Inactive (auto-inferred)"
+    FROZEN = "FROZEN", "Frozen (OC swap, time-bounded)"
+
+
+class LifecycleState(models.TextChoices):
+    """IC condition for a CharacterSheet (#671).
+
+    Orthogonal to ActivityState. Consumer systems treat any non-ALIVE state
+    as "Dormant" via CharacterSheet.is_dormant.
+    """
+
+    ALIVE = "ALIVE", "Alive"
+    CAPTURED = "CAPTURED", "Captured / Unknown"
+    COMA = "COMA", "Coma"
+    RETIRED = "RETIRED", "Retired"
+    DEAD = "DEAD", "Dead"

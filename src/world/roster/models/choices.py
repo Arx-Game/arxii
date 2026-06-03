@@ -33,6 +33,20 @@ class RosterType(models.TextChoices):
     FROZEN = "Frozen", "Frozen"
 
 
+class ActivityRequirement(models.TextChoices):
+    """Per-Roster activity bar for inactivity-detection (#671).
+
+    Drives the weekly sweep in world/roster/services/activity.py:
+    HIGH-tier rosters key on Account.last_login PLUS RosterEntry.last_puppeted
+    (any-persona IC action). LOW-tier rosters key on Account.last_login only.
+    NONE-tier rosters never auto-mark characters INACTIVE.
+    """
+
+    HIGH = "HIGH", "High (any-persona IC action required)"
+    LOW = "LOW", "Low (account login sufficient)"
+    NONE = "NONE", "None (never auto-marked inactive)"
+
+
 class ApprovalScope(models.TextChoices):
     """Approval scope choices for staff permissions"""
 

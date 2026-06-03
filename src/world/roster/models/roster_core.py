@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
+from world.roster.models.choices import ActivityRequirement
 
 
 class Roster(NaturalKeyMixin, SharedMemoryModel):
@@ -47,6 +48,16 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
         help_text="Can players apply for characters in this roster?",
     )
     sort_order = models.PositiveIntegerField(default=0, help_text="Display order")
+    activity_requirement = models.CharField(
+        max_length=4,
+        choices=ActivityRequirement.choices,
+        default=ActivityRequirement.NONE,
+        help_text=(
+            "Inactivity bar for characters on this roster (#671). HIGH = needs"
+            " any-persona IC action + account login; LOW = account login only;"
+            " NONE = never auto-marked inactive (OC default)."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

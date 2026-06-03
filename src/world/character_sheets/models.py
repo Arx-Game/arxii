@@ -29,7 +29,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.character_sheets.types import MaritalStatus
+from world.character_sheets.types import ActivityState, LifecycleState, MaritalStatus
 
 
 class Heritage(NaturalKeyMixin, SharedMemoryModel):
@@ -274,6 +274,56 @@ class CharacterSheet(SharedMemoryModel):
     additional_desc = models.TextField(
         blank=True,
         help_text="Additional character description",
+    )
+
+    # Activity & Lifecycle (#671 — inactivity detection)
+    # Activity is the OOC axis ("is this character being played"); Lifecycle is
+    # the IC axis ("what is their condition in the world"). Orthogonal.
+    activity_state = models.CharField(
+        max_length=8,
+        choices=ActivityState.choices,
+        default=ActivityState.ACTIVE,
+        help_text=(
+            "OOC engagement state. ACTIVE / HIATUS (player-declared, time-bounded)"
+            " / INACTIVE (auto-inferred) / FROZEN (OC swap, 30-day cooldown)."
+        ),
+    )
+    activity_state_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="HIATUS end date OR FROZEN cooldown floor. Null in ACTIVE/INACTIVE.",
+    )
+    lifecycle_state = models.CharField(
+        max_length=8,
+        choices=LifecycleState.choices,
+        default=LifecycleState.ALIVE,
+        help_text=(
+            "IC condition. ALIVE / CAPTURED / COMA / RETIRED / DEAD. Orthogonal to"
+            " activity_state — both must be ALIVE+ACTIVE for the character to count"
+            " as 'present and playing' to consumer systems."
+        ),
+    )
+    lifecycle_state_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When lifecycle_state last changed. Null for default ALIVE.",
+    )
+
+    # OC distinction (#671 — minimal pair; full OC creation flow is a follow-up)
+    is_oc = models.BooleanField(
+        default=False,
+        help_text="True if this character was created by a player as their own OC.",
+    )
+    created_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="characters_created",
+        help_text=(
+            "The account that created this character. Null for grandfathered or"
+            " staff-seeded rows. Survives account deletion via SET_NULL."
+        ),
     )
 
     # Timestamps
