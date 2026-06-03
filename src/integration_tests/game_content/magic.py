@@ -1423,17 +1423,19 @@ def seed_canonical_resonances() -> None:
 
 
 # Task RC1 — directed RPS affinity interaction matrix
-# (source_name, env_name, valence, kind, aggressor, severity_multiplier)
-_AFFINITY_INTERACTION_ROWS: list[tuple[str, str, str, str, str, str]] = [
-    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00"),
-    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00"),
-    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30"),
-    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00"),
-    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00"),
-    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00"),
-    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00"),
-    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00"),
-    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00"),
+# (source_name, env_name, valence, kind, aggressor, severity_multiplier, caster_dominance_defiles)
+# caster_dominance_defiles=True ONLY for the Abyssal-caster OPPOSED pairs (#4 Abyssal->Celestial,
+# #6 Abyssal->Primal): a strong-enough Abyssal caster overpowers and defiles those places.
+_AFFINITY_INTERACTION_ROWS: list[tuple[str, str, str, str, str, str, bool]] = [
+    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00", False),
+    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00", False),
+    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30", False),
+    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00", True),
+    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00", False),
+    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00", True),
+    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00", False),
+    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00", False),
+    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00", False),
 ]
 
 
@@ -1443,6 +1445,11 @@ def _seed_affinity_interactions() -> None:
     Depends on seed_canonical_affinities() (Celestial / Primal / Abyssal must exist).
     Idempotent: get_or_create keyed on (source_affinity, environment_affinity).
     Staff edits to valence/kind/aggressor/severity_multiplier are preserved.
+
+    ``caster_dominance_defiles`` is authored lore (not a staff tuning knob), so it is
+    enforced even on pre-existing rows via an explicit set-after-get — this avoids the
+    get_or_create "defaults dropped when the row already exists" gotcha, while leaving
+    the genuinely-tunable fields untouched.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -1453,8 +1460,9 @@ def _seed_affinity_interactions() -> None:
     affinity_cache: dict[str, Affinity] = {
         obj.name: obj for obj in Affinity.objects.filter(name__in=canonical_names)
     }
-    for src_name, env_name, valence, kind, aggressor, mult_str in _AFFINITY_INTERACTION_ROWS:
-        AffinityInteraction.objects.get_or_create(
+    for row in _AFFINITY_INTERACTION_ROWS:
+        src_name, env_name, valence, kind, aggressor, mult_str, defiles = row
+        obj, created = AffinityInteraction.objects.get_or_create(
             source_affinity=affinity_cache[src_name],
             environment_affinity=affinity_cache[env_name],
             defaults={
@@ -1462,8 +1470,12 @@ def _seed_affinity_interactions() -> None:
                 "kind": kind,
                 "aggressor": aggressor,
                 "severity_multiplier": Decimal(mult_str),
+                "caster_dominance_defiles": defiles,
             },
         )
+        if not created and obj.caster_dominance_defiles != defiles:
+            obj.caster_dominance_defiles = defiles
+            obj.save(update_fields=["caster_dominance_defiles"])
 
 
 def _seed_resonance_environment_config() -> None:
