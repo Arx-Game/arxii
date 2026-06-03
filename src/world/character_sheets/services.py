@@ -81,3 +81,66 @@ def create_character_with_sheet(
         persona_type=PersonaType.PRIMARY,
     )
     return character, sheet, primary_persona
+
+
+# --- OC cap enforcement (#671) ---------------------------------------------
+
+# Default cap on simultaneously-active OCs per non-staff account. Tuneable via
+# staff override (TODO: per-account cap field once trust/karma system lands).
+DEFAULT_OC_CAP = 3
+
+
+class OCCapError(Exception):
+    """Raised when an OC creation would exceed the account's active-OC cap."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def count_active_ocs(account: AbstractBaseUser) -> int:
+    """Count OCs an account currently holds against its cap.
+
+    An OC counts when it is:
+      * ``is_oc=True`` AND ``created_by=account``,
+      * on a Roster with ``allow_applications=False`` (still privately held —
+        characters converted to community roster characters no longer count),
+      * ``lifecycle_state=ALIVE``,
+      * NOT ``activity_state=FROZEN`` (frozen frees the slot for swap).
+
+    Two queries: one COUNT(*) on CharacterSheet with the filter, plus the
+    underlying account lookup the caller already did. Cheap.
+    """
+    from world.character_sheets.types import ActivityState, LifecycleState  # noqa: PLC0415
+
+    return (
+        CharacterSheet.objects.filter(
+            is_oc=True,
+            created_by=account,
+            roster_entry__roster__allow_applications=False,
+            lifecycle_state=LifecycleState.ALIVE,
+        )
+        .exclude(activity_state=ActivityState.FROZEN)
+        .count()
+    )
+
+
+def enforce_oc_cap(account: AbstractBaseUser, *, cap: int = DEFAULT_OC_CAP) -> None:
+    """Raise OCCapError if creating another OC would exceed ``cap``.
+
+    Staff accounts bypass the cap entirely. Call this at the head of any
+    OC creation flow — the cap is not enforced at the model level so admin
+    seeds and migrations can run freely.
+    """
+    if account.is_staff:
+        return
+    current = count_active_ocs(account)
+    if current >= cap:
+        msg = f"Account {account.pk} already has {current} active OCs (cap {cap})."
+        raise OCCapError(
+            msg,
+            user_message=(
+                f"You already have {current} active OCs (cap {cap})."
+                " Freeze or retire one before creating another."
+            ),
+        )
