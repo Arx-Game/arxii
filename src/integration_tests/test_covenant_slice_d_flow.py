@@ -58,7 +58,7 @@ class CovenantSliceDFlowIntegrationTest(TestCase):
     promotion.
     """
 
-    def test_full_legend_to_promotion_flow(self) -> None:  # noqa: PLR0915 — intentional: E2E test exercises the entire Slice D pipeline in one method; splitting would fragment the sequential assertion story
+    def test_full_legend_to_promotion_flow(self) -> None:  # noqa: PLR0915
         # ===== Phase 1: Setup =====
         _ensure_active_era()
 

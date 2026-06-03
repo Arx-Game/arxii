@@ -423,7 +423,7 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
 
     rituals: list[Ritual] = getattr(
         account,
-        "cached_scene_action_rituals",  # noqa: GETATTR_LITERAL — to_attr prefetch target; attribute access is not possible here
+        "cached_scene_action_rituals",  # noqa: GETATTR_LITERAL
         None,
     )
     if not rituals:

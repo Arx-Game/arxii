@@ -758,7 +758,7 @@ def is_tenant(persona: Persona, room: DefaultObject) -> bool:
     return tenancies_for(persona, room).exists()
 
 
-def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+def transfer_ownership(  # noqa: PLR0913
     *,
     area: Area | None = None,
     room_profile: RoomProfile | None = None,
@@ -818,7 +818,7 @@ def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
         )
 
 
-def grant_tenancy(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+def grant_tenancy(  # noqa: PLR0913
     *,
     area: Area | None = None,
     room_profile: RoomProfile | None = None,

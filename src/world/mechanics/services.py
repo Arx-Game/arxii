@@ -303,7 +303,7 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     Returns:
         Integer total of all engaged-covenant-role contributions across equipped items.
     """
-    from world.covenants.services import (  # noqa: PLC0415 — PR3 wires covenant callbacks
+    from world.covenants.services import (  # noqa: PLC0415
         is_gear_compatible,
     )
 
@@ -331,17 +331,17 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
 
 
 def role_base_bonus_for_target(
-    role: CovenantRole,  # noqa: ARG001 — placeholder; PR3 wires real computation
-    target: ModifierTarget,  # noqa: ARG001 — placeholder; PR3 wires real computation
-    character_level: int,  # noqa: ARG001 — placeholder; PR3 wires real computation
+    role: CovenantRole,  # noqa: ARG001
+    target: ModifierTarget,  # noqa: ARG001
+    character_level: int,  # noqa: ARG001
 ) -> int:
     """PLACEHOLDER — returns 0 in PR1. PR3 wires authored values."""
     return 0
 
 
 def item_mundane_stat_for_target(
-    item: ItemInstance,  # noqa: ARG001 — placeholder; PR3 wires real computation
-    target: ModifierTarget,  # noqa: ARG001 — placeholder; PR3 wires real computation
+    item: ItemInstance,  # noqa: ARG001
+    target: ModifierTarget,  # noqa: ARG001
 ) -> int:
     """PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat."""
     return 0

@@ -33,14 +33,14 @@ class CheckCapture:
 
 def _consume_forced_outcome() -> CheckOutcome | None:
     """Read and clear the thread-local outcome override. Returns None if none active."""
-    outcome = getattr(_local, "forced_outcome", None)  # noqa: GETATTR_LITERAL — threading.local has no typed attrs; getattr+default is the idiomatic API
+    outcome = getattr(_local, "forced_outcome", None)  # noqa: GETATTR_LITERAL
     _local.forced_outcome = None
     return outcome
 
 
 def _record_capture(*, check_type: CheckType, target_difficulty: int | None) -> None:
     """Write into the active CheckCapture, if any. No-op outside a force context."""
-    capture: CheckCapture | None = getattr(_local, "capture", None)  # noqa: GETATTR_LITERAL — threading.local has no typed attrs; getattr+default is the idiomatic API
+    capture: CheckCapture | None = getattr(_local, "capture", None)  # noqa: GETATTR_LITERAL
     if capture is not None:
         capture.check_type = check_type
         capture.target_difficulty = target_difficulty

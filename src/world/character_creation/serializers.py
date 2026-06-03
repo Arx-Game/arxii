@@ -201,7 +201,7 @@ class TraditionSerializer(serializers.ModelSerializer):
         every caller (no per-request filter), so attaching to the shared
         Tradition instance is safe.
         """
-        cached = getattr(obj, "cached_codex_grants", None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=) populates this attr
+        cached = getattr(obj, "cached_codex_grants", None)  # noqa: GETATTR_LITERAL
         if cached is not None:
             return [grant.entry_id for grant in cached]
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415

@@ -358,7 +358,7 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are intentional; step 10 pushed statement count over threshold
+def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     *,
     character: ObjectDB,
     technique: Technique,
@@ -446,7 +446,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915 — kw-only args are
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
     if effective_check_result is None:
-        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL — protocol-style introspection
+        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL
         if effective_check_result is None and hasattr(resolution_result, "main_result"):
             main = resolution_result.main_result
             if main is not None and hasattr(main, "check_result"):

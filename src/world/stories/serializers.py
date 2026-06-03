@@ -89,7 +89,7 @@ class EraSerializer(serializers.ModelSerializer):
         (``Count("stories_created_in_era")``). Falls back to a direct query only
         when the annotation is absent (e.g. in non-viewset serializer calls).
         """
-        annotated = getattr(obj, "story_count", None)  # noqa: GETATTR_LITERAL — optional annotation, not a fixed model field
+        annotated = getattr(obj, "story_count", None)  # noqa: GETATTR_LITERAL
         if annotated is not None:
             return int(annotated)
         return Story.objects.filter(created_in_era=obj).count()
@@ -1983,7 +1983,7 @@ class TableBulletinPostSerializer(serializers.ModelSerializer):
 
     def get_replies(self, obj: Any) -> list[Any]:
         """Return cached replies (from Prefetch to_attr) or query the DB."""
-        reply_list = getattr(obj, "replies_cached", None)  # noqa: GETATTR_LITERAL — Prefetch to_attr
+        reply_list = getattr(obj, "replies_cached", None)  # noqa: GETATTR_LITERAL
         if reply_list is None:
             reply_list = list(obj.replies.select_related("author_persona").all())
         return TableBulletinReplySerializer(reply_list, many=True).data
@@ -2018,7 +2018,7 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
         if request is None:
             msg = "Request context is required."
             raise serializers.ValidationError(msg)
-        if getattr(request.user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        if getattr(request.user, "is_staff", False):  # noqa: GETATTR_LITERAL
             return table
         try:
             gm_profile = request.user.gm_profile

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from world.classes.models import CharacterClass
 
 
-def spend_xp_on_unlock(  # noqa: C901 — sequential prerequisite guards + XP/unlock logic; complexity is inherent
+def spend_xp_on_unlock(  # noqa: C901
     character: ObjectDB,
     unlock_target: ClassLevelUnlock,
     gm: AccountDB | None = None,
