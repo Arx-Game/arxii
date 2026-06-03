@@ -13,17 +13,10 @@ import {
   copyNode,
   copySubtree,
   copyTemplate,
-  createGiverOffering,
-  createMissionGiver,
   createMissionTemplate,
-  deleteGiverOffering,
-  deleteMissionGiver,
   deleteMissionInstance,
-  getMissionGiver,
   getMissionTemplate,
-  listGiverOfferings,
   listMissionCategories,
-  listMissionGivers,
   listMissionNodes,
   listMissionOptions,
   listMissionRoutes,
@@ -31,8 +24,6 @@ import {
   listPredicateLeaves,
   listRouteCandidates,
   listRouteRewards,
-  patchGiverOffering,
-  patchMissionGiver,
   patchMissionNode,
   patchMissionTemplate,
 } from './api';
@@ -40,8 +31,6 @@ import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './ap
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
   MissionCategory,
-  MissionGiver,
-  MissionGiverOffering,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -70,11 +59,6 @@ export const missionKeys = {
   candidatesFor: (filters: object) => [...missionKeys.candidates(), filters] as const,
   rewards: () => [...missionKeys.all, 'rewards'] as const,
   rewardsFor: (filters: object) => [...missionKeys.rewards(), filters] as const,
-  givers: () => [...missionKeys.all, 'givers'] as const,
-  giverList: (filters: object) => [...missionKeys.givers(), 'list', filters] as const,
-  giverDetail: (id: number) => [...missionKeys.givers(), 'detail', id] as const,
-  offerings: () => [...missionKeys.all, 'offerings'] as const,
-  offeringsFor: (filters: object) => [...missionKeys.offerings(), filters] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
 };
@@ -166,45 +150,6 @@ export function useRouteRewards(
   });
 }
 
-export function useMissionGivers(
-  filters: {
-    org?: number;
-    org_name?: string;
-    giver_kind?: string;
-    is_active?: boolean;
-    name?: string;
-  } = {}
-): UseQueryResult<PaginatedResponse<MissionGiver>> {
-  return useQuery({
-    queryKey: missionKeys.giverList(filters),
-    queryFn: () => listMissionGivers(filters),
-    // No throwOnError: GiverLibraryPage handles isError inline so a list
-    // fetch failure shows a "couldn't load" card rather than crashing to the
-    // global ErrorBoundary. Other drill-down hooks still use throwOnError —
-    // tracked as a follow-up to align them; out of scope for this PR.
-  });
-}
-
-export function useMissionGiver(id: number | undefined): UseQueryResult<MissionGiver> {
-  return useQuery({
-    queryKey: missionKeys.giverDetail(id ?? 0),
-    queryFn: () => getMissionGiver(id as number),
-    enabled: id !== undefined && id !== 0 && Number.isFinite(id),
-  });
-}
-
-export function useGiverOfferings(
-  filters: { giver?: number; template?: number } = {}
-): UseQueryResult<PaginatedResponse<MissionGiverOffering>> {
-  return useQuery({
-    queryKey: missionKeys.offeringsFor(filters),
-    queryFn: () => listGiverOfferings(filters),
-    enabled: Boolean(filters.giver ?? filters.template),
-    // Consumers check isError and render inline so a fetch failure doesn't
-    // nuke the whole drill-down view.
-  });
-}
-
 export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
   return useQuery({
     queryKey: missionKeys.predicateLeaves(),
@@ -284,59 +229,6 @@ export function useDeleteMissionInstance() {
   return useMutation({
     mutationFn: (id: number) => deleteMissionInstance(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.templates() }),
-  });
-}
-
-export function useCreateMissionGiver() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<MissionGiver>) => createMissionGiver(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
-  });
-}
-
-export function usePatchMissionGiver() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: Partial<MissionGiver> }) =>
-      patchMissionGiver(id, body),
-    onSuccess: (_data, { id }) => {
-      qc.invalidateQueries({ queryKey: missionKeys.giverDetail(id) });
-      qc.invalidateQueries({ queryKey: missionKeys.givers() });
-    },
-  });
-}
-
-export function useDeleteMissionGiver() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => deleteMissionGiver(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
-  });
-}
-
-export function useCreateGiverOffering() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<MissionGiverOffering>) => createGiverOffering(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
-  });
-}
-
-export function usePatchGiverOffering() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: Partial<MissionGiverOffering> }) =>
-      patchGiverOffering(id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
-  });
-}
-
-export function useDeleteGiverOffering() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => deleteGiverOffering(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.offerings() }),
   });
 }
 

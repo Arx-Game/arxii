@@ -2,8 +2,8 @@
  * Mission Studio query hook tests.
  *
  * Mocks the api module; verifies hook shape, query-key wiring, and the
- * enabled-on-arg guards (template/giver detail hooks shouldn't fire
- * when slug is undefined; nested filters require a parent id).
+ * enabled-on-arg guards (template detail hooks shouldn't fire when slug
+ * is undefined; nested filters require a parent id).
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,9 +27,6 @@ vi.mock('../api', () => ({
   listMissionRoutes: vi.fn(),
   listRouteCandidates: vi.fn(),
   listRouteRewards: vi.fn(),
-  listMissionGivers: vi.fn(),
-  getMissionGiver: vi.fn(),
-  listGiverOfferings: vi.fn(),
   listPredicateLeaves: vi.fn(),
   patchMissionTemplate: vi.fn(),
   patchMissionNode: vi.fn(),
@@ -38,12 +35,8 @@ vi.mock('../api', () => ({
   copySubtree: vi.fn(),
   assignMission: vi.fn(),
   deleteMissionInstance: vi.fn(),
-  createMissionGiver: vi.fn(),
-  patchMissionGiver: vi.fn(),
-  deleteMissionGiver: vi.fn(),
-  createGiverOffering: vi.fn(),
-  patchGiverOffering: vi.fn(),
-  deleteGiverOffering: vi.fn(),
+  createMissionTemplate: vi.fn(),
+  listMissionCategories: vi.fn(),
 }));
 
 import * as api from '../api';

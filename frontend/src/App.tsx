@@ -50,16 +50,6 @@ const MissionNodePage = lazy(() =>
 const MissionOptionPage = lazy(() =>
   import('@/missions/pages/OptionPage').then((m) => ({ default: m.OptionPage }))
 );
-const GiverLibraryPage = lazy(() =>
-  import('@/missions/pages/GiverLibraryPage').then((m) => ({
-    default: m.GiverLibraryPage,
-  }))
-);
-const GiverEditorPage = lazy(() =>
-  import('@/missions/pages/GiverEditorPage').then((m) => ({
-    default: m.GiverEditorPage,
-  }))
-);
 const CreateMissionPage = lazy(() =>
   import('@/missions/pages/CreateMissionPage').then((m) => ({
     default: m.CreateMissionPage,
@@ -360,26 +350,10 @@ function App() {
             </StaffRoute>
           }
         />
-        <Route
-          path="/staff/missions/givers"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <GiverLibraryPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/givers/:id"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <GiverEditorPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
+        {/* /staff/missions/givers routes removed per #686: NPC-mediated
+            mission-giver editor moved to the npc-services framework
+            (NPCRole + NPCServiceOffer). The npc-services staff editor
+            is a follow-up. */}
         <Route
           path="/staff/applications"
           element={
