@@ -14,7 +14,10 @@ from flows.events.payloads import (
 )
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
-from world.magic.services.resonance_environment import resonance_environment_for_cast
+from world.magic.services.resonance_environment import (
+    evaluate_resonance_environment,
+    resonance_environment_for_cast,
+)
 from world.magic.services.soulfray import (
     _handle_soulfray_accumulation,
     _resolve_mishap,
@@ -532,21 +535,30 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         except RoomProfile.DoesNotExist:
             room_profile = None
         if room_profile is not None:
+            # Evaluate the resonance-environment primitive ONCE per cast and
+            # feed it into both consumers — they read the same room state and
+            # re-evaluation costs ~15-21 redundant queries on a cascade-room
+            # cast (#722).
+            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+
+            primitive_effect = evaluate_resonance_environment(
+                caster=character, room=caster_room, technique=technique
+            )
             resonance_environment_for_cast(
                 caster_sheet=sheet,
                 room_profile=room_profile,
                 technique=technique,
+                effect=primitive_effect,
             )
             # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
             # degrades it, spreads its taint, and accrues caster->world corruption
             # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
-            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
-
             defile_place_for_cast(
                 caster_sheet=sheet,
                 room_profile=room_profile,
                 technique=technique,
                 technique_result=technique_result,
+                effect=primitive_effect,
             )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
