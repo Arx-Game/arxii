@@ -27,6 +27,7 @@ from world.npc_services.filters import (
     OfferCooldownFilterSet,
 )
 from world.npc_services.models import (
+    MissionOfferDetails,
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
@@ -38,6 +39,7 @@ from world.npc_services.serializers import (
     InteractionResolveRequestSerializer,
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
+    MissionOfferDetailsSerializer,
     NPCRoleSerializer,
     NPCServiceOfferSerializer,
     NPCStandingSerializer,
@@ -118,6 +120,23 @@ class PermitOfferDetailsViewSet(viewsets.ModelViewSet):
 
     queryset = PermitOfferDetails.objects.all().order_by("pk")
     serializer_class = PermitOfferDetailsSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+
+
+class MissionOfferDetailsViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+
+    Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+    npc-services Mission Studio editor (#728). ``role`` on the model is
+    denormalized from ``offer.role`` via the model's ``save()`` override
+    (per #686 Phase 6), so the serializer marks it read-only — the FE
+    sets `offer` and the catalog uniqueness `(role, mission_template)`
+    is enforced at the DB level via the auto-mirrored FK.
+    """
+
+    queryset = MissionOfferDetails.objects.all().order_by("pk")
+    serializer_class = MissionOfferDetailsSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = NPCServicesPagination
 

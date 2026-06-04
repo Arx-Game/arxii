@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from world.npc_services.models import (
+    MissionOfferDetails,
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
@@ -84,6 +85,29 @@ class PermitOfferDetailsSerializer(serializers.ModelSerializer):
         model = PermitOfferDetails
         fields = ["id", "offer"]
         read_only_fields = ["id"]
+
+
+class MissionOfferDetailsSerializer(serializers.ModelSerializer):
+    """Staff CRUD for mission-kind offer details (#728).
+
+    ``role`` is denormalized from ``offer.role`` by the model's ``save()``
+    override (per #686 Phase 6) so callers never set it directly — it's
+    read-only here, and the unique-constraint promise on
+    ``(role, mission_template)`` is enforced at the DB level.
+    """
+
+    class Meta:
+        model = MissionOfferDetails
+        fields = [
+            "id",
+            "offer",
+            "role",
+            "mission_template",
+            "weight",
+            "requirements_override",
+            "role_cooldown_duration",
+        ]
+        read_only_fields = ["id", "role"]
 
 
 # ---------------------------------------------------------------------------
