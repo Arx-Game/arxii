@@ -107,7 +107,7 @@ class _OutfitViewSetSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         # Glove template + instance (LEFT_HAND/BASE) — owned by account A.
@@ -126,7 +126,7 @@ class _OutfitViewSetSetupMixin:
         self.glove = ItemInstanceFactory(
             template=self.glove_template,
             game_object=glove_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         # A slotless template (for SlotIncompatible tests) — owned by account A.
@@ -140,7 +140,7 @@ class _OutfitViewSetSetupMixin:
         self.slotless_item = ItemInstanceFactory(
             template=self.slotless_template,
             game_object=slotless_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         self.client = APIClient()
@@ -549,7 +549,7 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         other_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=other_shirt_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         response = self.client.post(
@@ -600,7 +600,7 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         foreign_item = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=foreign_obj,
-            owner=self.account_b,
+            holder_character_sheet=self.sheet_b,
         )
 
         response = self.client.post(

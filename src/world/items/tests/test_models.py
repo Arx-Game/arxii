@@ -275,22 +275,15 @@ class EquippedItemTests(TestCase):
 
 
 class OwnershipEventTests(TestCase):
-    """Tests for OwnershipEvent ledger."""
+    """Tests for OwnershipEvent ledger (#684: CharacterSheet-keyed)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
 
-        cls.account1 = AccountDB.objects.create_user(
-            username="owner1",
-            email="o1@test.com",
-            password="testpass123",
-        )
-        cls.account2 = AccountDB.objects.create_user(
-            username="owner2",
-            email="o2@test.com",
-            password="testpass123",
-        )
+        cls.sheet1 = CharacterSheetFactory(character=CharacterFactory(db_key="owner1"))
+        cls.sheet2 = CharacterSheetFactory(character=CharacterFactory(db_key="owner2"))
 
     def test_creation_event(self) -> None:
         """Can log item creation."""
@@ -298,12 +291,12 @@ class OwnershipEventTests(TestCase):
         event = OwnershipEvent.objects.create(
             item_instance=instance,
             event_type=OwnershipEventType.CREATED,
-            to_account=self.account1,
+            to_character_sheet=self.sheet1,
             notes="Crafted by owner1",
         )
         self.assertEqual(event.event_type, OwnershipEventType.CREATED)
-        self.assertIsNone(event.from_account)
-        self.assertEqual(event.to_account, self.account1)
+        self.assertIsNone(event.from_character_sheet)
+        self.assertEqual(event.to_character_sheet, self.sheet1)
 
     def test_transfer_event(self) -> None:
         """Can log ownership transfer."""
@@ -311,11 +304,11 @@ class OwnershipEventTests(TestCase):
         event = OwnershipEvent.objects.create(
             item_instance=instance,
             event_type=OwnershipEventType.GIVEN,
-            from_account=self.account1,
-            to_account=self.account2,
+            from_character_sheet=self.sheet1,
+            to_character_sheet=self.sheet2,
         )
-        self.assertEqual(event.from_account, self.account1)
-        self.assertEqual(event.to_account, self.account2)
+        self.assertEqual(event.from_character_sheet, self.sheet1)
+        self.assertEqual(event.to_character_sheet, self.sheet2)
 
     def test_ledger_ordering(self) -> None:
         """Events can be ordered newest first with explicit ordering."""
@@ -323,13 +316,13 @@ class OwnershipEventTests(TestCase):
         OwnershipEvent.objects.create(
             item_instance=instance,
             event_type=OwnershipEventType.CREATED,
-            to_account=self.account1,
+            to_character_sheet=self.sheet1,
         )
         OwnershipEvent.objects.create(
             item_instance=instance,
             event_type=OwnershipEventType.GIVEN,
-            from_account=self.account1,
-            to_account=self.account2,
+            from_character_sheet=self.sheet1,
+            to_character_sheet=self.sheet2,
         )
         events = list(OwnershipEvent.objects.filter(item_instance=instance).order_by("-created_at"))
         self.assertEqual(events[0].event_type, OwnershipEventType.GIVEN)

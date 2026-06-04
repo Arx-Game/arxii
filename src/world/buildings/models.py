@@ -318,21 +318,11 @@ class BuildingPermitDetails(SharedMemoryModel):
         related_name="building_permit_details",
         primary_key=True,
     )
-    holder_persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="held_building_permits",
-        help_text=(
-            "IC owner of the permit. Persona-scoped so cross-persona "
-            "leakage is impossible. Frozen at issuance — but the FK is "
-            "SET_NULL on persona deletion so the row survives as an audit "
-            "stub (``holder_persona_name`` snapshots the persona's IC name "
-            "for that survival). Runtime issuance always sets this; the "
-            "null is only reachable via post-issuance persona deletion."
-        ),
-    )
+    # #684: dropped ``holder_persona`` — ownership now lives on
+    # ``ItemInstance.holder_character_sheet`` (the body). ``holder_persona_name``
+    # below is preserved as the issuance-time IC-name snapshot for audit; the
+    # live persona is derived at render time from the holder sheet's primary
+    # persona (or ``ItemInstance.crafter_persona_display`` if set at issuance).
     holder_persona_name = models.CharField(
         max_length=200,
         blank=True,
@@ -395,30 +385,19 @@ class BuildingPermitDetails(SharedMemoryModel):
         ),
     )
 
-    class Meta:
-        indexes = [
-            models.Index(
-                fields=["holder_persona", "consumed_at"],
-                name="bpd_holder_consumed_idx",
-            ),
-        ]
-        constraints = [
-            # One unconsumed permit per (holder, issuing role). Defense-in-
-            # depth against duplicate-dispatch of the PERMIT effect handler
-            # (front-end double-click, flow retry, etc.). Once consumed_at
-            # is set, the row no longer participates in this constraint and
-            # the holder may receive a new permit from the same role.
-            models.UniqueConstraint(
-                fields=["holder_persona", "issued_by_role"],
-                condition=models.Q(consumed_at__isnull=True),
-                name="bpd_one_unconsumed_per_holder_role",
-            ),
-        ]
+    # #684: dropped the (holder_persona, *) index + (holder_persona,
+    # issued_by_role) one-unconsumed-per-holder constraint along with the
+    # field. The dedupe-defence migrates to a per-holder-sheet constraint
+    # once #684 lands its companion BuildingPermitDetails follow-up; until
+    # then the in-flow OfferCooldown gate prevents the front-end
+    # double-click that motivated the original guard.
 
     def __str__(self) -> str:
         used = "consumed" if self.consumed_at else "unconsumed"
-        holder = self.holder_persona or self.holder_persona_name or "<deleted>"
-        return f"BuildingPermit#{self.pk} ({self.building_kind}, {used}, holder={holder})"
+        return (
+            f"BuildingPermit#{self.pk} ({self.building_kind}, {used}, "
+            f"holder={self.holder_persona_name or '<deleted>'})"
+        )
 
 
 class BuildingConstructionDetails(SharedMemoryModel):

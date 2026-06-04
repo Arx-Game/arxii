@@ -108,7 +108,7 @@ class _VisibleWornSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         self.coat_template = ItemTemplateFactory(name="VWVCoat")
@@ -127,7 +127,7 @@ class _VisibleWornSetupMixin:
         self.coat = ItemInstanceFactory(
             template=self.coat_template,
             game_object=coat_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
 
         # Equip both on character A.

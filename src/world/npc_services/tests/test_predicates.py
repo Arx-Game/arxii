@@ -1,49 +1,42 @@
-"""Tests for the persona-scoped `has_item` predicate leaf.
+"""Tests for the body-scoped `has_item` predicate leaf (#684).
 
-`has_item` lives in `world.missions.predicates` (the shared engine) but
-its persona-scoped semantics are owned by the unified NPC service
-framework — tests sit alongside the consumer.
-
-The leaf dispatches on template kind → per-kind details model's
-`holder_persona` FK. Plan 2 ships the dispatcher with an empty kind
-dispatch dict; Plan 3 (#668) wires PERMIT. Until then the leaf isn't
-in `LEAF_RESOLVERS` — we test the resolver function directly.
+`has_item` lives in `world.predicates.predicates` and queries
+``ItemInstance.holder_character_sheet`` directly — ownership is
+body-keyed, not persona-keyed. These tests sit alongside the consumer
+in npc_services.
 """
 
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.predicates.predicates import (
-    CharacterPredicateContext,
-    _resolve_has_item,
-)
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.predicates.predicates import _resolve_has_item
+from world.predicates.types import ResolverContext
 
 
 class HasItemLeafTests(TestCase):
-    """has_item — persona-scoped; fail-closed on missing persona / unknown id; raises on unwired kind."""  # noqa: E501
+    """`has_item` — body-scoped; True iff the acting body holds the template."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.pc_persona = cls.sheet.primary_persona
 
-    def test_no_presented_persona_fails_closed(self) -> None:
-        ctx = CharacterPredicateContext(self.character)  # no presented_persona
-        self.assertFalse(_resolve_has_item(ctx, template_id=1))
-
-    def test_unknown_template_fails_closed(self) -> None:
-        ctx = CharacterPredicateContext(self.character, presented_persona=self.pc_persona)
+    def test_unknown_template_returns_false(self) -> None:
+        ctx = ResolverContext(sheet=self.sheet)
         self.assertFalse(_resolve_has_item(ctx, template_id=999999))
 
-    def test_unwired_template_kind_raises(self) -> None:
-        # Plan 2's dispatch dict is empty. Any real ItemTemplate has an
-        # unwired kind — fail loud rather than silently falling back to
-        # account-scoped owner lookup.
-        from world.items.factories import ItemTemplateFactory
+    def test_body_holds_item_returns_true(self) -> None:
+        template = ItemTemplateFactory(name="has_item-leaf-template-true")
+        ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
+        ctx = ResolverContext(sheet=self.sheet)
+        self.assertTrue(_resolve_has_item(ctx, template_id=template.pk))
 
-        template = ItemTemplateFactory()
-        ctx = CharacterPredicateContext(self.character, presented_persona=self.pc_persona)
-        with self.assertRaises(NotImplementedError):
-            _resolve_has_item(ctx, template_id=template.pk)
+    def test_other_body_holds_item_returns_false(self) -> None:
+        template = ItemTemplateFactory(name="has_item-leaf-template-false")
+        other_character = CharacterFactory(db_key="has_item-other-body")
+        other_sheet = CharacterSheetFactory(character=other_character)
+        ItemInstanceFactory(template=template, holder_character_sheet=other_sheet)
+        ctx = ResolverContext(sheet=self.sheet)
+        self.assertFalse(_resolve_has_item(ctx, template_id=template.pk))

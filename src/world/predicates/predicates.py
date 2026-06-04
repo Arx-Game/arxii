@@ -269,80 +269,20 @@ def _resolve_min_npc_standing(
     return standing >= min_affection
 
 
-# Per-template dispatch for `has_item`: maps `ItemTemplate.name` →
-# (reverse-relation name on `ItemInstance`, persona FK field name on that
-# details model). Plan 3 (#668) wires "building_permit"; other IC item
-# templates register here as they land.
-#
-# Empty until at least one template is wired. Until then, `has_item` is
-# NOT in `LEAF_RESOLVERS` — registering it would create a leaf that
-# always raises, which is a worse failure mode than not exposing it.
-# Plan 3 adds both the dispatch entry and the registry entry in one PR.
-#
-# Name-keyed (rather than kind-keyed) because `ItemTemplate` has no
-# discriminator column — `is_consumable` / `is_container` / etc. are
-# orthogonal flags. Each persona-scoped IC item type lives behind a
-# specific template name.
-# Dispatch shape: template.name -> (reverse-relation, persona FK, active_filter).
-# The optional ``active_filter`` is a path under the reverse relation that the
-# resolver applies to exclude "spent" items — e.g. ``"consumed_at__isnull=True"``
-# for permits where holding a consumed permit shouldn't gate "has_item" True.
-# An empty dict {} means "always count" (the legacy 2-tuple behaviour).
-HAS_ITEM_PERSONA_HOLDER_DISPATCH: dict[str, tuple[str, str, dict[str, object]]] = {
-    # template.name -> (reverse-relation name, persona FK field name, extra filter on the relation)
-    "building_permit": (
-        "building_permit_details",
-        "holder_persona",
-        {"consumed_at__isnull": True},  # consumed permits no longer "owned" for gating
-    ),  # Plan 3 (#668)
-}
-
-
 def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
-    """True if the PC's presented persona holds an item of this template.
+    """True if the acting character's body owns an item of this template (#684).
 
-    Persona-scoped, deliberately. IC-meaningful items (permits, writs,
-    titles, favor tokens) must be tied to the persona that earned them —
-    different personas of the same account must not share them. The
-    storage parent (``ItemInstance.owner = AccountDB``) is bypassed for
-    IC entitlement; resolution dispatches on template name to the
-    per-kind details model's ``holder_persona`` FK (e.g.,
-    ``BuildingPermitDetails.holder_persona``).
-
-    No presented persona → False (fail-closed for TEMPORARY masks).
-    Unknown template id → False. Templates without a persona-scoped
-    details model wired up raise ``NotImplementedError`` so authors get
-    a loud signal instead of silent False — silent False is the exact
-    mistake this resolver exists to prevent (it would invisibly gate
-    access). Broader ``ItemInstance.owner`` audit: #684.
+    Body-scoped, not persona-scoped: ownership lives on
+    ``ItemInstance.holder_character_sheet``. Switching presented personas
+    does not change inventory — the same body still has the same items.
+    Unknown template id → False.
     """
-    from world.items.models import ItemInstance, ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemInstance  # noqa: PLC0415
 
-    if ctx.presented_persona is None:
-        return False
-    # Pull only the name to decide dispatch — bail on unwired templates
-    # before paying for the full ItemTemplate row.
-    name = ItemTemplate.objects.filter(pk=template_id).values_list("name", flat=True).first()
-    if name is None:
-        return False
-    if name not in HAS_ITEM_PERSONA_HOLDER_DISPATCH:
-        msg = (
-            f"has_item: template {name!r} has no persona-scoped details model "
-            "wired in HAS_ITEM_PERSONA_HOLDER_DISPATCH. Register the template's "
-            "(relation, persona_field) pair before gating offers on it."
-        )
-        raise NotImplementedError(msg)
-    relation, persona_field, active_filter = HAS_ITEM_PERSONA_HOLDER_DISPATCH[name]
-    filter_kwargs: dict[str, object] = {
-        f"{relation}__{persona_field}": ctx.presented_persona,
-        "template_id": template_id,
-    }
-    # Each (path, value) in active_filter becomes "<relation>__<path>=<value>"
-    # — e.g. for permits, "building_permit_details__consumed_at__isnull=True"
-    # excludes already-spent permits from the "owned" set.
-    for sub_path, value in active_filter.items():
-        filter_kwargs[f"{relation}__{sub_path}"] = value
-    return ItemInstance.objects.filter(**filter_kwargs).exists()
+    return ItemInstance.objects.filter(
+        holder_character_sheet=ctx.sheet,
+        template_id=template_id,
+    ).exists()
 
 
 def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:

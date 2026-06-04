@@ -74,6 +74,19 @@ def _user_plays_pk(user: AccountDB, pk: int) -> bool:
     return RosterEntry.objects.for_account(user).filter(character_sheet_id=pk).exists()
 
 
+def _user_holds_item(user: AccountDB, item: ItemInstance) -> bool:
+    """True if ``user`` plays the body (CharacterSheet) that holds ``item``.
+
+    Items belong to characters (the body), not accounts; a user holds an
+    item iff they have an active roster tenure on the
+    ``holder_character_sheet``. Returns False for unowned items
+    (holder_character_sheet is null).
+    """
+    if item.holder_character_sheet_id is None:
+        return False
+    return _user_plays_pk(user, item.holder_character_sheet_id)
+
+
 class ItemFacetWritePermission(PlayerOrStaffPermission):
     """Allow attach/remove only if the user owns the item_instance, or is staff."""
 
@@ -85,13 +98,22 @@ class ItemFacetWritePermission(PlayerOrStaffPermission):
                 # If item_instance is absent or unparseable, fall through to True;
                 # the serializer's required-field validation will reject.
                 return True
-            return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
+            # #684: ownership lives on the body (CharacterSheet). An account
+            # may play multiple characters; the permission allows any item
+            # held by a body the user has active roster tenure on.
+            user = cast(AccountDB, request.user)
+            return ItemInstance.objects.filter(
+                pk=instance_pk,
+                holder_character_sheet_id__in=RosterEntry.objects.for_account(user).values(
+                    "character_sheet_id"
+                ),
+            ).exists()
         return True  # DELETE checked at object level
 
     def has_object_permission_for_player(
         self, request: Request, view: APIView, obj: ItemFacet
     ) -> bool:
-        return obj.item_instance.owner_id == request.user.pk
+        return _user_holds_item(cast(AccountDB, request.user), obj.item_instance)
 
 
 class ItemTemplatePagination(PageNumberPagination):
@@ -221,7 +243,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
             )
         try:
             item = (
-                ItemInstance.objects.select_related("owner")
+                ItemInstance.objects.select_related("holder_character_sheet__character")
                 .prefetch_related(
                     Prefetch(
                         "item_facets",
@@ -238,7 +260,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         except ItemInstance.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and item.owner_id != user.pk:
+        if not user.is_staff and not _user_holds_item(user, item):
             raise NotFound
 
         rows = list(item.cached_item_facets)
@@ -257,7 +279,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         try:
             row = ItemFacet.objects.select_related(
                 "item_instance",
-                "item_instance__owner",
+                "item_instance__holder_character_sheet__character",
                 "facet",
                 "attachment_quality_tier",
                 "applied_by_account",
@@ -265,7 +287,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         except ItemFacet.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and row.item_instance.owner_id != user.pk:
+        if not user.is_staff and not _user_holds_item(user, row.item_instance):
             raise NotFound
 
         serializer = ItemFacetReadSerializer(row)

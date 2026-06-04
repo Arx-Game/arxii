@@ -150,7 +150,7 @@ class ItemFacetListQueryCountTests(_OwnedCharacterMixin, TestCase):
         self.instance = ItemInstanceFactory(
             template=template,
             game_object=obj,
-            owner=self.account,
+            holder_character_sheet=self.sheet,
         )
         for i in range(2):
             facet = FacetFactory(name=f"ItemQCFacet{i}")
@@ -163,9 +163,10 @@ class ItemFacetListQueryCountTests(_OwnedCharacterMixin, TestCase):
     def test_warm_list_query_count(self) -> None:
         url = f"/api/items/item-facets/?item_instance={self.instance.pk}"
         self.client.get(url)  # warm-up
-        # 1 session + 1 ItemInstance fetch (prefetch served from cache after
-        # warm-up via the identity map).
-        with self.assertNumQueries(2):
+        # #684: 1 session + 1 ItemInstance fetch (prefetch served from cache
+        # after warm-up via the identity map) + 1 RosterEntry permission
+        # check via _user_holds_item (replaces the old account-equality check).
+        with self.assertNumQueries(3):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

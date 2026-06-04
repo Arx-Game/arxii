@@ -58,6 +58,7 @@ class PickUpTests(TestCase):
         )
         self.character.db_account = self.account
         self.character.save()
+        self.sheet = CharacterSheetFactory(character=self.character)
 
         # Build an ObjectDB for the item, place it in the room, then bind it
         # to a fresh ItemInstance.
@@ -79,19 +80,21 @@ class PickUpTests(TestCase):
         self.assertEqual(self.item.game_object.location, self.character)
 
     def test_pickup_sets_owner_when_unowned(self) -> None:
-        self.item.owner = None
+        self.item.holder_character_sheet = None
         self.item.save()
         pick_up(self.character_state, self.item_state)
         self.item.refresh_from_db()
-        self.assertEqual(self.item.owner, self.account)
+        # #684: pickup sets the holder body (CharacterSheet), not the account.
+        self.assertEqual(self.item.holder_character_sheet, self.sheet)
 
     def test_pickup_does_not_overwrite_existing_owner(self) -> None:
-        other_account = AccountFactory(username="other_owner")
-        self.item.owner = other_account
+        other_character = CharacterFactory(db_key="OtherOwner")
+        other_sheet = CharacterSheetFactory(character=other_character)
+        self.item.holder_character_sheet = other_sheet
         self.item.save()
         pick_up(self.character_state, self.item_state)
         self.item.refresh_from_db()
-        self.assertEqual(self.item.owner, other_account)
+        self.assertEqual(self.item.holder_character_sheet, other_sheet)
 
     def test_pickup_denied_by_can_take_raises(self) -> None:
         with patch.object(ItemState, "can_take", return_value=False):
@@ -287,21 +290,25 @@ class GiveTests(TestCase):
         )
         self.giver.db_account = self.giver_account
         self.giver.save()
+        self.giver_sheet = CharacterSheetFactory(character=self.giver)
         self.recipient = CharacterFactory(
             db_key="GiveTestRecipient",
             location=self.room,
         )
         self.recipient.db_account = self.recipient_account
         self.recipient.save()
+        self.recipient_sheet = CharacterSheetFactory(character=self.recipient)
 
-        # Item starts in the giver's possession, owned by the giver's account.
+        # Item starts in the giver's possession, held by the giver's body.
         item_obj = ObjectDBFactory(
             db_key="GiveTestItemObj",
             db_typeclass_path="typeclasses.objects.Object",
         )
         item_obj.location = self.giver
         item_obj.save()
-        self.item = ItemInstanceFactory(game_object=item_obj, owner=self.giver_account)
+        self.item = ItemInstanceFactory(
+            game_object=item_obj, holder_character_sheet=self.giver_sheet
+        )
 
         ctx = MagicMock()
         self.giver_state = CharacterState(self.giver, context=ctx)
@@ -313,14 +320,15 @@ class GiveTests(TestCase):
         self.item.refresh_from_db()
         self.item.game_object.refresh_from_db()
         self.assertEqual(self.item.game_object.location, self.recipient)
-        self.assertEqual(self.item.owner, self.recipient_account)
+        # #684: holder is the recipient's body, not their account.
+        self.assertEqual(self.item.holder_character_sheet, self.recipient_sheet)
 
     def test_give_writes_ownership_event(self) -> None:
         give(self.giver_state, self.recipient_state, self.item_state)
         event = OwnershipEvent.objects.get(item_instance=self.item)
         self.assertEqual(event.event_type, OwnershipEventType.GIVEN)
-        self.assertEqual(event.from_account, self.giver_account)
-        self.assertEqual(event.to_account, self.recipient_account)
+        self.assertEqual(event.from_character_sheet, self.giver_sheet)
+        self.assertEqual(event.to_character_sheet, self.recipient_sheet)
 
     def test_give_auto_unequips_first(self) -> None:
         EquippedItem.objects.create(

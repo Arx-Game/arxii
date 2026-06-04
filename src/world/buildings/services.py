@@ -140,16 +140,19 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             "is missing — seed it via world.buildings.seeds first."
         )
         raise PermitIssuanceError(msg)
+    # #684: ownership lives on the body (CharacterSheet). The persona is the
+    # IC face the issuer saw at the moment — captured below as a display-only
+    # snapshot. The audit truth is the holder CharacterSheet.
     instance = ItemInstance.objects.create(
         template=template,
-        owner=persona.character_sheet.character.db_account if _has_account(persona) else None,
+        holder_character_sheet=persona.character_sheet,
+        crafter_persona_display=persona,
         charges=1,
     )
     persona_name = getattr(persona, "display_ic", None)  # noqa: GETATTR_LITERAL
     holder_persona_name = persona_name() if callable(persona_name) else str(persona)
     permit = BuildingPermitDetails.objects.create(
         item_instance=instance,
-        holder_persona=persona,
         holder_persona_name=holder_persona_name,
         building_kind=details.building_kind,
         max_target_size=details.default_max_target_size,
@@ -170,23 +173,6 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         message=f"You receive a permit authorizing one {details.building_kind.name}.",
         payload={"permit_pk": permit.pk, "holder_persona_pk": persona.pk},
     )
-
-
-def _has_account(persona: Persona) -> bool:
-    """Best-effort: True when this persona's character has an Account row.
-
-    Test characters created without a played account have no db_account;
-    we want issuance to still work (the permit just won't have an
-    Account-side owner). The IC owner is holder_persona which is
-    required. Narrow except: AttributeError (no sheet/character/account
-    attribute chain) or DoesNotExist on the reverse OneToOne.
-    """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    try:
-        return persona.character_sheet.character.db_account_id is not None
-    except (AttributeError, ObjectDoesNotExist):
-        return False
 
 
 BUILDING_PERMIT_TEMPLATE_NAME = "building_permit"
@@ -229,10 +215,14 @@ def validate_permit_site(
     if permit_details.consumed_at is not None:
         msg = f"Permit {permit_details.pk} was already consumed at {permit_details.consumed_at}."
         raise PermitAlreadyConsumedError(msg)
-    if permit_details.holder_persona_id != acting_persona.pk:
+    # #684: ownership is on the body. The check is "does the acting persona's
+    # body own this permit?" — switching personas mid-flow does NOT pull a
+    # permit out from under a character that already owns it.
+    holder_sheet_id = permit_details.item_instance.holder_character_sheet_id
+    if holder_sheet_id != acting_persona.character_sheet_id:
         msg = (
-            f"Permit {permit_details.pk} is held by persona "
-            f"{permit_details.holder_persona_id}, not {acting_persona.pk}."
+            f"Permit {permit_details.pk} is held by sheet "
+            f"{holder_sheet_id}, not {acting_persona.character_sheet_id}."
         )
         raise PermitHolderMismatchError(msg)
 
@@ -467,7 +457,7 @@ def complete_building_construction(
         project.contributions.filter(kind=ContributionKind.ITEM).select_related(
             "item_instance__template__minimum_quality_tier",
             "item_instance__quality_tier",
-            "item_instance__owner",
+            "item_instance__holder_character_sheet",
             "contributor_persona",
         )
     )
@@ -491,7 +481,7 @@ def complete_building_construction(
         OwnershipEvent(
             item_instance=c.item_instance,
             event_type=OwnershipEventType.CONSUMED,
-            from_account=c.item_instance.owner,
+            from_character_sheet=c.item_instance.holder_character_sheet,
             notes=f"Consumed by building construction (Project {project.pk})",
         )
         for c in contributions

@@ -32,10 +32,11 @@ from world.items.services import equip_item, unequip_item
 def pick_up(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` from its current location into ``character``'s possession.
 
-    If the item is currently unowned (``owner`` is null), ``character``'s
-    account becomes the owner. Pre-existing ownership is preserved. If the
-    item is in an open container in the room, ``contained_in`` is cleared
-    so the item ends up plainly in the character's inventory.
+    If the item is currently unowned (``holder_character_sheet`` is null),
+    ``character``'s body (CharacterSheet) becomes the holder. Pre-existing
+    ownership is preserved. If the item is in an open container in the
+    room, ``contained_in`` is cleared so the item ends up plainly in the
+    character's inventory.
     """
     if not item.can_take(taker=character):
         raise NotReachable
@@ -45,9 +46,9 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     previous_location = item.instance.game_object.location
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
-    if item.instance.owner is None:
-        item.instance.owner = character.obj.account
-        item.instance.save(update_fields=["owner"])
+    if item.instance.holder_character_sheet_id is None:
+        item.instance.holder_character_sheet = character.obj.sheet_data
+        item.instance.save(update_fields=["holder_character_sheet"])
     character.obj.carried_items.invalidate()
     # If the item came from another character (rare), invalidate that too.
     # Rooms/containers don't have ``carried_items`` — only characters do.
@@ -92,29 +93,39 @@ def give(
 ) -> None:
     """Transfer ``item`` from ``giver`` to ``recipient``.
 
-    Writes an ``OwnershipEvent(GIVEN)`` row, transfers ``owner``, and
-    moves the underlying ``ObjectDB`` to the recipient. Auto-unequips
-    if the item is currently equipped.
+    Writes an ``OwnershipEvent(GIVEN)`` row, transfers the holder
+    (CharacterSheet — the body), and moves the underlying ``ObjectDB``
+    to the recipient. Auto-unequips if the item is currently equipped.
+    The OwnershipEvent also snapshots each side's presented persona for
+    IC-narrative purposes; the audit truth is the CharacterSheet pair.
     """
     if not item.can_give(giver=giver, recipient=recipient):
         raise NotInPossession
     if recipient.obj.location != giver.obj.location:
         raise RecipientNotAdjacent
 
-    previous_owner = item.instance.owner
+    previous_holder_sheet = item.instance.holder_character_sheet
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
 
     if not item.instance.game_object.move_to(recipient.obj, quiet=True):
         raise NotReachable
-    item.instance.owner = recipient.obj.account
-    item.instance.save(update_fields=["owner"])
+    recipient_sheet = recipient.obj.sheet_data
+    item.instance.holder_character_sheet = recipient_sheet
+    item.instance.save(update_fields=["holder_character_sheet"])
+    # Snapshot the IC face each side is wearing at the transfer moment.
+    # Null falls back to the sheet's primary_persona at render time.
+    giver_persona = (
+        previous_holder_sheet.primary_persona if previous_holder_sheet is not None else None
+    )
     OwnershipEvent.objects.create(
         item_instance=item.instance,
         event_type=OwnershipEventType.GIVEN,
-        from_account=previous_owner,
-        to_account=recipient.obj.account,
+        from_character_sheet=previous_holder_sheet,
+        to_character_sheet=recipient_sheet,
+        from_persona_display=giver_persona,
+        to_persona_display=recipient_sheet.primary_persona,
     )
     giver.obj.carried_items.invalidate()
     recipient.obj.carried_items.invalidate()
