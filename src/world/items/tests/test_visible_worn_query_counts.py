@@ -115,7 +115,7 @@ class _SharedSetupMixin:
         instance = ItemInstanceFactory(
             template=template,
             game_object=item_obj,
-            owner=self.account_a,
+            holder_character_sheet=self.sheet_a,
         )
         EquippedItem.objects.create(
             character=self.character_a,

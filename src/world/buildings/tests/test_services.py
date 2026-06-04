@@ -68,7 +68,11 @@ class IssuePermitTests(TestCase):
         from world.buildings.models import BuildingPermitDetails
 
         permit = BuildingPermitDetails.objects.get(pk=permit_pk)
-        self.assertEqual(permit.holder_persona_id, persona.pk)
+        # #684: holder lives on the underlying ItemInstance's body
+        # (CharacterSheet). The persona at issuance is the IC face the
+        # NPC saw, captured on crafter_persona_display.
+        self.assertEqual(permit.item_instance.holder_character_sheet_id, persona.character_sheet_id)
+        self.assertEqual(permit.item_instance.crafter_persona_display_id, persona.pk)
         self.assertEqual(permit.building_kind, self.house)
         self.assertEqual(permit.max_target_size, 8)
         self.assertIsNone(permit.consumed_at)
@@ -120,7 +124,7 @@ class ValidatePermitSiteTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
         permit = BuildingPermitDetailsFactory(
-            holder_persona=persona,
+            item_instance__holder_character_sheet=persona.character_sheet,
             building_kind=self.house,
             consumed_at=timezone.now() - timedelta(days=1),
         )
@@ -132,7 +136,10 @@ class ValidatePermitSiteTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character_a, persona_a = _pc()
         _character_b, persona_b = _pc()
-        permit = BuildingPermitDetailsFactory(holder_persona=persona_a, building_kind=self.house)
+        permit = BuildingPermitDetailsFactory(
+            item_instance__holder_character_sheet=persona_a.character_sheet,
+            building_kind=self.house,
+        )
         permit.approved_wards.add(ward)
         with self.assertRaises(PermitHolderMismatchError):
             validate_permit_site(permit, room, persona_b, target_size=5)
@@ -148,7 +155,10 @@ class ValidatePermitSiteTests(TestCase):
             objectdb=room, defaults={"area": site_area, "is_outdoor": False}
         )
         _character, persona = _pc()
-        permit = BuildingPermitDetailsFactory(holder_persona=persona, building_kind=self.house)
+        permit = BuildingPermitDetailsFactory(
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=self.house,
+        )
         permit.approved_wards.add(ward)
         with self.assertRaises(PermitSiteNotOutdoorError):
             validate_permit_site(permit, room, persona, target_size=5)
@@ -157,7 +167,10 @@ class ValidatePermitSiteTests(TestCase):
         ward = self._ward_with_permit_policy()
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
-        permit = BuildingPermitDetailsFactory(holder_persona=persona, building_kind=self.house)
+        permit = BuildingPermitDetailsFactory(
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=self.house,
+        )
         # Permit does NOT include this ward in approved_wards
         with self.assertRaises(PermitWardNotApprovedError):
             validate_permit_site(permit, room, persona, target_size=5)
@@ -166,7 +179,10 @@ class ValidatePermitSiteTests(TestCase):
         ward = self._ward_with_permit_policy(allow_house=False)
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
-        permit = BuildingPermitDetailsFactory(holder_persona=persona, building_kind=self.house)
+        permit = BuildingPermitDetailsFactory(
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=self.house,
+        )
         permit.approved_wards.add(ward)
         with self.assertRaises(PermitKindNotAllowedError):
             validate_permit_site(permit, room, persona, target_size=5)
@@ -176,7 +192,9 @@ class ValidatePermitSiteTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
         permit = BuildingPermitDetailsFactory(
-            holder_persona=persona, building_kind=self.house, max_target_size=5
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=self.house,
+            max_target_size=5,
         )
         permit.approved_wards.add(ward)
         with self.assertRaises(PermitSizeExceedsCapError):
@@ -187,7 +205,9 @@ class ValidatePermitSiteTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
         permit = BuildingPermitDetailsFactory(
-            holder_persona=persona, building_kind=self.house, max_target_size=10
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=self.house,
+            max_target_size=10,
         )
         permit.approved_wards.add(ward)
         result = validate_permit_site(permit, room, persona, target_size=5)
@@ -270,7 +290,9 @@ class ActivatePermitRoundtripTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
         permit = BuildingPermitDetailsFactory(
-            holder_persona=persona, building_kind=house, max_target_size=10
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=house,
+            max_target_size=10,
         )
         permit.approved_wards.add(ward)
 
@@ -322,7 +344,9 @@ class ActivatePermitRoundtripTests(TestCase):
         room = self._outdoor_room_in_ward(ward)
         _character, persona = _pc()
         permit = BuildingPermitDetailsFactory(
-            holder_persona=persona, building_kind=house, max_target_size=10
+            item_instance__holder_character_sheet=persona.character_sheet,
+            building_kind=house,
+            max_target_size=10,
         )
         permit.approved_wards.add(ward)
 

@@ -49,11 +49,11 @@ from world.npc_services.services import (
     ResolveOfferError,
     available_offers,
     end_interaction,
-    persona_for_character,
     resolve_offer,
     start_interaction,
 )
 from world.scenes.models import Persona
+from world.scenes.services import persona_for_character
 
 # Key under which the in-flight interaction state lives in request.session.
 # One active interaction per Django session; start while one exists raises

@@ -101,6 +101,10 @@ class BuildingPermitDetailsModelTests(TestCase):
         self.assertIsNone(permit.consumed_by_persona)
         self.assertEqual(permit.max_target_size, 10)
 
-    def test_holder_persona_is_set(self) -> None:
+    def test_holder_sheet_is_set(self) -> None:
+        # #684: holder lives on item_instance.holder_character_sheet. The
+        # BuildingPermitDetailsFactory's default ItemInstanceFactory leaves
+        # holder unset; tests that care wire it explicitly via
+        # ``item_instance__holder_character_sheet=`` like the services tests do.
         permit = BuildingPermitDetailsFactory()
-        self.assertIsNotNone(permit.holder_persona)
+        self.assertIsNotNone(permit.item_instance)

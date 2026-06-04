@@ -48,26 +48,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class MissingPrimaryPersonaError(LookupError):
-    """A played Character is missing a CharacterSheet or PRIMARY persona.
-
-    Per ``character_sheets/CLAUDE.md`` every played character has a
-    CharacterSheet with a PRIMARY persona — that's a load-bearing repo
-    invariant. Hitting this exception means something upstream broke that
-    invariant (character_creation didn't finalize, test scaffolding
-    skipped sheet setup, etc.) and we fail loud rather than silently
-    bypass gates that depend on the persona.
-    """
-
-    def __init__(self, character: Character) -> None:
-        super().__init__(
-            f"Character {character!r} has no PRIMARY persona — required invariant "
-            "(see character_sheets/CLAUDE.md). Check character_creation finalize "
-            "or test setup."
-        )
-        self.character = character
-
-
 class ResolveOfferError(ValueError):
     """Base class for offer-grant failures.
 
@@ -92,21 +72,10 @@ class OfferNotEligibleError(ResolveOfferError):
     user_message = "That offer is not currently available."
 
 
-def persona_for_character(character: Character) -> Persona:
-    """Return the PC's PRIMARY persona; raise loud on missing sheet/persona.
-
-    A played character without a sheet or PRIMARY persona is a programmer
-    error per ``character_sheets/CLAUDE.md``; we surface that loudly rather
-    than silently bypassing any gate that needs the persona (cooldown,
-    standing, item ownership, etc.).
-    """
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    if sheet is None:
-        raise MissingPrimaryPersonaError(character)
-    try:
-        return sheet.primary_persona
-    except Exception as exc:
-        raise MissingPrimaryPersonaError(character) from exc
+# #684: ``persona_for_character`` + ``MissingPrimaryPersonaError`` moved to
+# ``world.scenes.services`` — the resolver belongs in scenes (general use
+# across NPCStanding, item ownership snapshots, mission flavor, ...) and
+# importers should not depend on the npc_services app for it.
 
 
 # ---------------------------------------------------------------------------

@@ -257,9 +257,7 @@ class ActivatePermitAction(Action):
             PermitValidationError,
             activate_permit,
         )
-        from world.npc_services.services import (  # noqa: PLC0415
-            persona_for_character,
-        )
+        from world.scenes.services import persona_for_character  # noqa: PLC0415
 
         target = kwargs.get("target")
         if target is None:

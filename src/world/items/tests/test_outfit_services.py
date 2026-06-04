@@ -442,7 +442,7 @@ class _OutfitServiceSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
-            owner=self.account,
+            holder_character_sheet=self.sheet,
         )
 
         # Glove template + instance (LEFT_HAND/BASE) — owned by the actor's account.
@@ -461,7 +461,7 @@ class _OutfitServiceSetupMixin:
         self.glove = ItemInstanceFactory(
             template=self.glove_template,
             game_object=glove_obj,
-            owner=self.account,
+            holder_character_sheet=self.sheet,
         )
 
 
@@ -669,7 +669,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
         other_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=other_shirt_obj,
-            owner=self.account,
+            holder_character_sheet=self.sheet,
         )
 
         add_outfit_slot(
@@ -698,11 +698,12 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
         """Item owned by another account → PermissionDenied, no slot row created.
 
         Outfits are configuration. The configuration layer's ownership boundary
-        is account-level (an account building an outfit can only reference
-        items its account owns). Apply-time enforces possession/reach
+        is body-level (a character building an outfit can only reference items
+        its own body holds — #684). Apply-time enforces possession/reach
         separately.
         """
-        other_account = AccountFactory(username="OutfitSvcSlotOtherAccount")
+        other_character = CharacterFactory(db_key="OutfitSvcSlotOtherChar")
+        other_sheet = CharacterSheetFactory(character=other_character)
         foreign_shirt_obj = ObjectDBFactory(
             db_key="OutfitSvcSlotForeignShirtObj",
             db_typeclass_path="typeclasses.objects.Object",
@@ -710,7 +711,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
         foreign_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=foreign_shirt_obj,
-            owner=other_account,
+            holder_character_sheet=other_sheet,
         )
 
         with self.assertRaises(PermissionDenied):

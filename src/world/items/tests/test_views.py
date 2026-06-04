@@ -134,8 +134,14 @@ class ItemFacetViewTests(ItemViewTestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import FacetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
 
         super().setUpTestData()
         cls.quality = QualityTierFactory(name="ItemFacetViewQuality")
@@ -143,17 +149,41 @@ class ItemFacetViewTests(ItemViewTestCase):
         cls.facet_b = FacetFactory(name="ViewFacetB")
         cls.facet_c = FacetFactory(name="ViewFacetC")
 
-        # An account that owns items (used as the authenticated user in most tests).
+        # #684: ownership is body-keyed. Wire each account to a character +
+        # sheet via an active RosterTenure so the permission walk
+        # (RosterEntry.objects.for_account) finds the entry.
         cls.owner = AccountFactory(username="facet_view_owner")
-        # A second account that does NOT own the items.
+        cls.owner_char = CharacterFactory(db_key="facet_view_owner_char")
+        cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
+        owner_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+        RosterTenureFactory(
+            roster_entry=owner_entry,
+            player_data=PlayerDataFactory(account=cls.owner),
+        )
         cls.non_owner = AccountFactory(username="facet_view_nonowner")
+        cls.non_owner_char = CharacterFactory(db_key="facet_view_nonowner_char")
+        cls.non_owner_sheet = CharacterSheetFactory(character=cls.non_owner_char)
+        non_owner_entry = RosterEntryFactory(character_sheet=cls.non_owner_sheet)
+        RosterTenureFactory(
+            roster_entry=non_owner_entry,
+            player_data=PlayerDataFactory(account=cls.non_owner),
+        )
 
         cls.template_cap2 = ItemTemplateFactory(name="FacetView Cap2 Template", facet_capacity=2)
         cls.template_cap1 = ItemTemplateFactory(name="FacetView Cap1 Template", facet_capacity=1)
 
-        cls.item_owner = ItemInstanceFactory(template=cls.template_cap2, owner=cls.owner)
-        cls.item_other = ItemInstanceFactory(template=cls.template_cap2, owner=cls.non_owner)
-        cls.item_cap1 = ItemInstanceFactory(template=cls.template_cap1, owner=cls.owner)
+        cls.item_owner = ItemInstanceFactory(
+            template=cls.template_cap2, holder_character_sheet=cls.owner_sheet
+        )
+        cls.item_other = ItemInstanceFactory(
+            template=cls.template_cap2, holder_character_sheet=cls.non_owner_sheet
+        )
+        cls.item_cap1 = ItemInstanceFactory(
+            template=cls.template_cap1, holder_character_sheet=cls.owner_sheet
+        )
+        # End-of-setup hook: any test that authenticates as cls.owner needs
+        # the items' holder relation primed (the select_related path through
+        # holder_character_sheet→character is used by the permission walk).
 
     def setUp(self) -> None:
         super().setUp()
