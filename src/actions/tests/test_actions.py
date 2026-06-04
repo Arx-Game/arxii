@@ -8,6 +8,7 @@ from actions.definitions.communication import PoseAction, SayAction, WhisperActi
 from actions.definitions.movement import DropAction, GetAction, GiveAction, TraverseExitAction
 from actions.definitions.perception import InventoryAction, LookAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.factories import ItemInstanceFactory
 from world.items.models import EquippedItem, OwnershipEvent
@@ -156,6 +157,7 @@ class GetActionTests(TestCase):
         actor = CharacterFactory(db_key="Alice", location=room)
         actor.db_account = account
         actor.save()
+        actor_sheet = CharacterSheetFactory(character=actor)
 
         item_obj = ObjectDBFactory(db_key="Sword", location=room)
         item_instance = ItemInstanceFactory(game_object=item_obj)
@@ -168,9 +170,9 @@ class GetActionTests(TestCase):
         item_obj.refresh_from_db()
         assert item_obj.location == actor
 
-        # Pick-up sets owner when previously unowned.
+        # #684: Pick-up sets the holder body (CharacterSheet) when previously unowned.
         item_instance.refresh_from_db()
-        assert item_instance.owner == account
+        assert item_instance.holder_character_sheet == actor_sheet
 
     def test_get_without_item_instance_fails_gracefully(self):
         room = ObjectDBFactory(
@@ -244,12 +246,16 @@ class GiveActionTests(TestCase):
         giver = CharacterFactory(db_key="GiveGiver", location=room)
         giver.db_account = giver_account
         giver.save()
+        giver_sheet = CharacterSheetFactory(character=giver)
         recipient = CharacterFactory(db_key="GiveRecipient", location=room)
         recipient.db_account = recipient_account
         recipient.save()
+        recipient_sheet = CharacterSheetFactory(character=recipient)
 
         item_obj = ObjectDBFactory(db_key="GiveItem", location=giver)
-        item_instance = ItemInstanceFactory(game_object=item_obj, owner=giver_account)
+        item_instance = ItemInstanceFactory(
+            game_object=item_obj, holder_character_sheet=giver_sheet
+        )
 
         action = GiveAction()
         with patch.object(room, "msg_contents"), patch.object(recipient, "msg"):
@@ -260,12 +266,13 @@ class GiveActionTests(TestCase):
         assert item_obj.location == recipient
 
         item_instance.refresh_from_db()
-        assert item_instance.owner == recipient_account
+        # #684: holder is the recipient's body, not their account.
+        assert item_instance.holder_character_sheet == recipient_sheet
 
         event = OwnershipEvent.objects.get(item_instance=item_instance)
         assert event.event_type == OwnershipEventType.GIVEN
-        assert event.from_account == giver_account
-        assert event.to_account == recipient_account
+        assert event.from_character_sheet == giver_sheet
+        assert event.to_character_sheet == recipient_sheet
 
     def test_give_without_item_instance_fails_gracefully(self):
         room = ObjectDBFactory(

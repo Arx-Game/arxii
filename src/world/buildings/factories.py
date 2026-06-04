@@ -74,7 +74,6 @@ class BuildingPermitDetailsFactory(DjangoModelFactory):
         model = BuildingPermitDetails
 
     item_instance = factory.SubFactory("world.items.factories.ItemInstanceFactory")
-    holder_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     building_kind = factory.SubFactory(BuildingKindFactory)
     max_target_size = 10
     cost_modifier = 1

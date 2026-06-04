@@ -343,19 +343,41 @@ class ItemInstance(SharedMemoryModel):
         default=False,
         help_text="Whether this item is currently open.",
     )
-    owner = models.ForeignKey(
-        "accounts.AccountDB",
+    # #684: ownership is CharacterSheet-scoped — the body owns the item, not
+    # the account. One inventory per character; personas are a display layer
+    # over the same underlying gear. See docs in the spec on the GitHub issue.
+    holder_character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="owned_items",
+        help_text=(
+            "The CharacterSheet (body) that owns this item. SET_NULL on sheet "
+            "delete so the item survives. Persona display is computed at "
+            "serialization time from holder_character_sheet.primary_persona."
+        ),
     )
-    crafter = models.ForeignKey(
-        "accounts.AccountDB",
+    crafter_character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="crafted_items",
+        help_text="The body that crafted this item.",
+    )
+    crafter_persona_display = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The persona the crafter was presenting as at the forge — the "
+            "maker's mark Bob signed it with. Validated to be a persona of "
+            "crafter_character_sheet. Null falls back to "
+            "crafter_character_sheet.primary_persona at render time."
+        ),
     )
     contained_in = models.ForeignKey(
         "self",
@@ -390,7 +412,7 @@ class ItemInstance(SharedMemoryModel):
     class Meta:
         indexes = [
             models.Index(fields=["template"]),
-            models.Index(fields=["owner"]),
+            models.Index(fields=["holder_character_sheet"]),
         ]
 
     def __str__(self) -> str:
@@ -522,21 +544,46 @@ class OwnershipEvent(SharedMemoryModel):
         max_length=20,
         choices=OwnershipEventType.choices,
     )
-    from_account = models.ForeignKey(
-        "accounts.AccountDB",
+    # #684: audit truth lives at the CharacterSheet (body) level. The
+    # persona_display fields below snapshot how each side appeared IC at
+    # the moment of transfer — narrative layer, never a permission gate.
+    from_character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="items_given_away",
-        help_text="Previous owner (null for creation events).",
+        help_text="Previous holder (null for creation events).",
     )
-    to_account = models.ForeignKey(
-        "accounts.AccountDB",
+    to_character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="items_received",
-        help_text="New owner.",
+        help_text="New holder.",
+    )
+    from_persona_display = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Persona the giver was presenting when the transfer happened. "
+            "IC narrative only — the audit truth is from_character_sheet."
+        ),
+    )
+    to_persona_display = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Persona the receiver was presenting when the transfer happened. "
+            "IC narrative only — the audit truth is to_character_sheet."
+        ),
     )
     notes = models.TextField(
         blank=True,

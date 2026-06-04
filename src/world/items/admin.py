@@ -75,13 +75,26 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "template",
         "quality_tier",
         "quantity",
-        "owner",
-        "crafter",
+        "holder_character_sheet",
+        "crafter_character_sheet",
     ]
     list_filter = ["quality_tier", "template"]
-    list_select_related = ["template", "quality_tier", "owner", "crafter", "image"]
+    list_select_related = [
+        "template",
+        "quality_tier",
+        "holder_character_sheet",
+        "crafter_character_sheet",
+        "crafter_persona_display",
+        "image",
+    ]
     search_fields = ["custom_name", "template__name"]
-    raw_id_fields = ["game_object", "owner", "crafter", "image"]
+    raw_id_fields = [
+        "game_object",
+        "holder_character_sheet",
+        "crafter_character_sheet",
+        "crafter_persona_display",
+        "image",
+    ]
 
 
 @admin.register(EquippedItem)
@@ -102,17 +115,25 @@ class OwnershipEventAdmin(admin.ModelAdmin):
     list_display = [
         "item_instance",
         "event_type",
-        "from_account",
-        "to_account",
+        "from_character_sheet",
+        "to_character_sheet",
         "created_at",
     ]
     list_filter = ["event_type"]
     list_select_related = [
         "item_instance",
-        "from_account",
-        "to_account",
+        "from_character_sheet",
+        "to_character_sheet",
+        "from_persona_display",
+        "to_persona_display",
     ]
-    raw_id_fields = ["item_instance", "from_account", "to_account"]
+    raw_id_fields = [
+        "item_instance",
+        "from_character_sheet",
+        "to_character_sheet",
+        "from_persona_display",
+        "to_persona_display",
+    ]
     readonly_fields = ["created_at"]
 
 
