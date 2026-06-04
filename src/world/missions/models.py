@@ -887,6 +887,24 @@ class MissionInstance(SharedMemoryModel):
             "The PC-cap counts only rows with this set."
         ),
     )
+    # #686 fix: the persona that accepted this run. Drives the per-(persona ×
+    # role) one-in-flight gate in npc_services._mission_gates_pass — a
+    # character's PRIMARY persona on a mission from a role does NOT block its
+    # ESTABLISHED persona from the same role (those are different IC people).
+    # Null for trigger-based / legacy seed rows; SET_NULL on Persona delete so
+    # we keep the run record.
+    accepted_as_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The persona the contract-holder presented when accepting this run "
+            "(#686). Used by the per-(persona × role) one-in-flight gate. Null "
+            "for trigger-based and legacy seed rows (which skip the gate)."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.template.name} ({self.status})"

@@ -37,7 +37,7 @@ CharacterSheet.DoesNotExist loudly rather than silently gate.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
 
@@ -49,10 +49,12 @@ if TYPE_CHECKING:
 
 # Semantic type aliases for predicate-leaf params. The catalog endpoint
 # reads the Annotated metadata to give the frontend builder enough info
-# to render a domain-aware widget (e.g. a giver picker) instead of a
-# bare number input. Keep these wrapping plain primitives so the resolver
-# bodies stay typed in terms of the runtime type.
-GiverId = Annotated[int, "giver_id"]
+# to render a domain-aware widget instead of a bare number input. Keep
+# these wrapping plain primitives so the resolver bodies stay typed in
+# terms of the runtime type. (The legacy ``GiverId`` alias was dropped
+# with the MissionGiver editor surface in #686; no resolver currently
+# declares a domain-aware param, but the scaffolding stays for future
+# additions.)
 
 # Rule-tree schema keys (the sanctioned dynamic-JSON case — these name the
 # structural keys of the AND/OR/NOT tree, not free-form identifiers).

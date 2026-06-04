@@ -81,13 +81,26 @@ class Migration(migrations.Migration):
                         to="npc_services.npcserviceoffer",
                     ),
                 ),
+                (
+                    "role",
+                    models.ForeignKey(
+                        help_text=(
+                            "Denormalized from offer.role to enforce "
+                            "(role, mission_template) catalog uniqueness. "
+                            "Kept in sync via save()."
+                        ),
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="+",
+                        to="npc_services.npcrole",
+                    ),
+                ),
             ],
             options={
                 "verbose_name_plural": "Mission offer details",
                 "constraints": [
                     models.UniqueConstraint(
-                        fields=("offer", "mission_template"),
-                        name="unique_mod_offer_template",
+                        fields=("role", "mission_template"),
+                        name="unique_mod_role_template",
                     )
                 ],
             },

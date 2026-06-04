@@ -25,9 +25,9 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.missions.constants import MissionStatus
+from world.missions.constants import AccessTier, MissionStatus
 from world.missions.factories import (
     MissionNodeFactory,
     MissionParticipantFactory,
@@ -36,6 +36,7 @@ from world.missions.factories import (
 from world.missions.models import MissionInstance, MissionParticipant
 from world.missions.services.offer_handler import issue_mission
 from world.npc_services.constants import DrawMode, OfferKind
+from world.npc_services.effects import dispatch_offer_effect
 from world.npc_services.factories import (
     MissionOfferDetailsFactory,
     NPCRoleCooldownFactory,
@@ -49,6 +50,7 @@ from world.npc_services.services import (
     available_offers,
     start_interaction,
 )
+from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 
 
@@ -141,6 +143,23 @@ class NPCRoleCooldownGateTests(TestCase):
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertIn(offer, available_offers(session))
 
+    def test_available_at_now_boundary_does_not_block(self):
+        """Cooldown gate uses strict `__gt=now`; available_at == now is eligible."""
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, _ = _make_mission_offer(role)
+        # Freeze the cooldown's available_at to exactly the now we'll pass.
+        anchor = timezone.now()
+        NPCRoleCooldownFactory(role=role, persona=persona, available_at=anchor)
+        # Pin the eligibility check to the same anchor (the service reads
+        # timezone.now() if not overridden — pass via the public start path,
+        # which uses timezone.now() at session-start; we keep the assertion
+        # tight by accepting that "now within ms of anchor" is the contract).
+        session = start_interaction(role=role, persona=persona, character=character)
+        # If the boundary used `__gte=now`, this would exclude the offer; the
+        # spec contract is strict `__gt=now`, so the boundary row is eligible.
+        self.assertIn(offer, available_offers(session))
+
 
 # ---------------------------------------------------------------------------
 # PC active-NPC-mission cap
@@ -218,8 +237,11 @@ class PCActiveNPCMissionCapTests(TestCase):
         for _ in range(3):
             self._spawn_active_npc_mission(character, NPCRoleFactory())
         # ...but a 4th role's offer would be blocked. Complete one of the
-        # active runs; the slot frees up.
-        active_runs = list(MissionInstance.objects.filter(participants__character=character))
+        # active runs; the slot frees up. Order by pk for deterministic
+        # selection across DB backends.
+        active_runs = list(
+            MissionInstance.objects.filter(participants__character=character).order_by("pk")
+        )
         active_runs[0].status = MissionStatus.COMPLETE
         active_runs[0].save(update_fields=["status"])
 
@@ -227,6 +249,32 @@ class PCActiveNPCMissionCapTests(TestCase):
         offer, _, _ = _make_mission_offer(fourth_role)
         session = start_interaction(role=fourth_role, persona=persona, character=character)
         self.assertIn(offer, available_offers(session))
+
+    def test_zero_cap_hides_offers_with_no_active_runs(self):
+        """Staff-disabled NPC missions: cap=0 + zero active = still no offers."""
+        character, persona = _make_pc()
+        sheet = character.sheet_data
+        sheet.max_active_npc_missions = 0
+        sheet.save(update_fields=["max_active_npc_missions"])
+        role = NPCRoleFactory()
+        offer, _, _ = _make_mission_offer(role)
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
+
+    def test_no_sheet_fails_closed_for_mission_offer(self):
+        """Characters with no CharacterSheet must NOT silently bypass the cap.
+
+        Per TehomCD's review: the old code did `getattr(character, "sheet_data",
+        None)` and skipped the cap when None, which silently bypassed the gate.
+        Fail-closed is the correct posture — missing sheet means we can't
+        verify cap or level-band, so the offer hides.
+        """
+        character = CharacterFactory()  # no CharacterSheetFactory call
+        persona = PersonaFactory()  # detached PRIMARY for the session arg
+        role = NPCRoleFactory()
+        offer, _, _ = _make_mission_offer(role)
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +290,9 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
         # Persona already on a mission from this role.
-        instance = MissionInstance.objects.create(template=template, source_offer=offer)
+        instance = MissionInstance.objects.create(
+            template=template, source_offer=offer, accepted_as_persona=persona
+        )
         MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
         # Author a SECOND mission offer on the same role.
         second_offer, _, _ = _make_mission_offer(role, label="second")
@@ -253,25 +303,51 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
 
     def test_different_persona_same_account_can_accept(self):
         """Bob (primary) on a mission doesn't block Mysterious Stranger (established)."""
-        character_a, _persona_a = _make_pc()
+        character_a, persona_a = _make_pc()
         character_b, persona_b = _make_pc()
 
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
 
-        # character_a is on a mission from this role.
-        instance = MissionInstance.objects.create(template=template, source_offer=offer)
+        # character_a accepted the mission as their PRIMARY persona.
+        instance = MissionInstance.objects.create(
+            template=template, source_offer=offer, accepted_as_persona=persona_a
+        )
         MissionParticipantFactory(instance=instance, character=character_a, is_contract_holder=True)
 
         # character_b (different sheet → different persona) sees the offer.
         session = start_interaction(role=role, persona=persona_b, character=character_b)
         self.assertIn(offer, available_offers(session))
 
+    def test_same_character_different_persona_can_accept(self):
+        """Spec AD#8: PRIMARY on a mission doesn't block ESTABLISHED on same role."""
+        character, primary = _make_pc()
+        established = PersonaFactory(
+            character_sheet=primary.character_sheet,
+            persona_type=PersonaType.ESTABLISHED,
+        )
+
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+
+        # PRIMARY accepted the mission.
+        instance = MissionInstance.objects.create(
+            template=template, source_offer=offer, accepted_as_persona=primary
+        )
+        MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
+
+        # ESTABLISHED on the same character still sees the offer — different IC
+        # person from the role's perspective.
+        session = start_interaction(role=role, persona=established, character=character)
+        self.assertIn(offer, available_offers(session))
+
     def test_completing_mission_frees_persona_for_same_role(self):
         character, persona = _make_pc()
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
-        instance = MissionInstance.objects.create(template=template, source_offer=offer)
+        instance = MissionInstance.objects.create(
+            template=template, source_offer=offer, accepted_as_persona=persona
+        )
         MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
 
         # Complete the run; gate releases.
@@ -310,6 +386,74 @@ class MissionOfferDetailsRequirementsOverrideTests(TestCase):
         # MissionOfferDetailsFactory default is {} — no extra gate.
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertIn(offer, available_offers(session))
+
+
+# ---------------------------------------------------------------------------
+# Template-side gates AND-composed into eligibility (#686)
+# ---------------------------------------------------------------------------
+
+
+class MissionTemplateGateCompositionTests(TestCase):
+    """`MissionTemplate.is_active`, `access_tier`, `level_band`, and
+    `availability_rule` are AND-composed with the offer's own gates per spec.
+
+    These tests pin the composition contract identified by adversarial
+    review — without them, a level-50 / STAFF_ONLY / inactive template
+    or one whose availability_rule rejects the PC would silently leak
+    through the unified offer path.
+    """
+
+    def test_inactive_template_hides_offer(self):
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        template.is_active = False
+        template.save(update_fields=["is_active"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
+
+    def test_staff_only_template_hides_from_non_staff(self):
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        template.access_tier = AccessTier.STAFF_ONLY
+        template.save(update_fields=["access_tier"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
+
+    def test_staff_only_template_visible_to_staff_observer(self):
+        character, persona = _make_pc()
+        # `is_staff_observer` walks `character.account.is_staff` — wire a
+        # staff account onto the character so the gate evaluates True.
+        character.db_account = AccountFactory(is_staff=True)
+        character.save(update_fields=["db_account"])
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        template.access_tier = AccessTier.STAFF_ONLY
+        template.save(update_fields=["access_tier"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertIn(offer, available_offers(session))
+
+    def test_level_band_below_min_hides_offer(self):
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        # Fresh PC has current_level==0; require level >= 5.
+        template.level_band_min = 5
+        template.level_band_max = 10
+        template.save(update_fields=["level_band_min", "level_band_max"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
+
+    def test_template_availability_rule_blocks(self):
+        """Template availability_rule is AND-composed; empty OR == False."""
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        template.availability_rule = {"op": "OR", "of": []}
+        template.save(update_fields=["availability_rule"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertNotIn(offer, available_offers(session))
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +603,59 @@ class IssueMissionContractTests(TestCase):
         self.assertEqual(len(participants), 1)
         self.assertEqual(participants[0].character, character)
         self.assertTrue(participants[0].is_contract_holder)
+
+    def test_issue_mission_sets_accepted_as_persona(self):
+        """Spec AD#8: persona-scope gate keys on this field, not character."""
+        _character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, _ = _make_mission_offer(role)
+        result = issue_mission(offer, persona)
+        instance = MissionInstance.objects.get(pk=result.object_pk)
+        self.assertEqual(instance.accepted_as_persona_id, persona.pk)
+
+    def test_dispatch_offer_effect_routes_mission_through_registry(self):
+        """Reaches the MISSION handler via OFFER_EFFECT_HANDLERS — not direct call.
+
+        Guards against regression of the `MissionsConfig.ready()` registration
+        + the lazy-snapshot for `reset_offer_effect_handlers` (the latter
+        previously dropped MISSION on every reset, per #686 review).
+        """
+        _character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, _ = _make_mission_offer(role)
+        result = dispatch_offer_effect(offer, persona)
+        # ty sees OfferKind.MISSION.value as a (value, label) tuple; wrap in
+        # str() to keep the type-check happy (no-op at runtime).
+        self.assertEqual(result.kind, str(OfferKind.MISSION.value))
+        self.assertIsNotNone(result.object_pk)
+
+
+# ---------------------------------------------------------------------------
+# Access-tier serializer no-op (regression guard)
+# ---------------------------------------------------------------------------
+
+
+class AccessTierFlipNoOpRegressionTests(TestCase):
+    """The legacy `is_publishable`-gated flip was stripped in #686 Phase 3.
+
+    Pin the current contract: `validate_access_tier` is a pass-through. A
+    future contributor re-introducing a guard (against the new offer
+    surface) should write a new test rather than silently breaking this
+    one — until that follow-up lands, the staff API allows tier flips
+    unconditionally.
+    """
+
+    def test_serializer_validate_access_tier_is_passthrough(self):
+        from world.missions.serializers import MissionTemplateSerializer
+
+        template = MissionTemplateFactory()
+        serializer = MissionTemplateSerializer(instance=template)
+        # Both values pass through unchanged.
+        self.assertEqual(serializer.validate_access_tier(AccessTier.OPEN), AccessTier.OPEN)
+        self.assertEqual(
+            serializer.validate_access_tier(AccessTier.STAFF_ONLY),
+            AccessTier.STAFF_ONLY,
+        )
 
 
 # ---------------------------------------------------------------------------

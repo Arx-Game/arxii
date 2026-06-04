@@ -16,6 +16,7 @@ fields + the real effect handler body.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -347,6 +348,19 @@ class MissionOfferDetails(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="mission_offer_details",
     )
+    # Denormalized mirror of ``offer.role`` so the catalog uniqueness can be
+    # enforced as a native DB constraint on ``(role, mission_template)``. The
+    # save() override below keeps this in sync from ``offer.role`` on every
+    # write; clean() validates it for direct ORM/admin edits.
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=(
+            "Denormalized from offer.role to enforce (role, mission_template) "
+            "catalog uniqueness. Kept in sync via save()."
+        ),
+    )
     mission_template = models.ForeignKey(
         "missions.MissionTemplate",
         on_delete=models.CASCADE,
@@ -382,11 +396,29 @@ class MissionOfferDetails(SharedMemoryModel):
     class Meta:
         verbose_name_plural = "Mission offer details"
         constraints = [
+            # Catalog uniqueness per spec AD#6: a role offers any given
+            # template at most once. Enforced via the denormalized ``role``
+            # FK above; ``save()``/``clean()`` keep that mirror tight.
             models.UniqueConstraint(
-                fields=["offer", "mission_template"],
-                name="unique_mod_offer_template",
+                fields=["role", "mission_template"],
+                name="unique_mod_role_template",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.offer_id is not None and self.role_id != self.offer.role_id:
+            raise ValidationError(
+                {"role": "MissionOfferDetails.role must equal offer.role."},
+            )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if self.offer_id is not None:
+            # Mirror offer.role onto the denormalized field on every write so
+            # the unique-constraint promise holds even when callers forget to
+            # set it explicitly.
+            self.role_id = self.offer.role_id
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"MissionOffer: {self.offer.label} → {self.mission_template_id}"

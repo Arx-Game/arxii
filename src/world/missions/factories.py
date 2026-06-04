@@ -63,8 +63,13 @@ class MissionTemplateFactory(DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Mission {n}")
     summary = factory.Faker("paragraph")
     epilogue = ""
-    level_band_min = 1
-    level_band_max = 5
+    # Factory default differs from any "realistic" level band: 0..99 keeps
+    # the entire test suite surfacing templates to freshly-created PCs
+    # (which have ``CharacterSheet.current_level == 0`` when no class
+    # assignments exist). Tests covering the level-band gate set explicit
+    # values.
+    level_band_min = 0
+    level_band_max = 99
     risk_tier = 1
     base_weight = 1
     created_in_era = None

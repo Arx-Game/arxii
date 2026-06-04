@@ -69,7 +69,11 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     template = details.mission_template
     character = persona.character_sheet.character
 
-    instance = MissionInstance.objects.create(template=template, source_offer=offer)
+    instance = MissionInstance.objects.create(
+        template=template,
+        source_offer=offer,
+        accepted_as_persona=persona,
+    )
     MissionParticipant.objects.create(
         instance=instance,
         character=character,
@@ -77,6 +81,8 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
     enter_node(instance, _entry_node(template))
 
+    # ``template.cooldown`` is NOT NULL at the schema level, so the
+    # ``or`` fallback can never resolve to None; no guard needed.
     cooldown_duration = details.role_cooldown_duration or template.cooldown
     NPCRoleCooldown.objects.update_or_create(
         role=offer.role,
@@ -85,6 +91,7 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
 
     return EffectResult(
+        # ty quirk: see comment in MissionsConfig.ready for the str() wrapper.
         kind=str(OfferKind.MISSION.value),
         object_pk=instance.pk,
         object_label=template.name,

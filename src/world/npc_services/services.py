@@ -25,10 +25,14 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from core_management.permissions import is_staff_observer
 from world.checks.services import perform_check
+from world.missions.constants import AccessTier, MissionStatus
+from world.missions.models import MissionInstance
 from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.effects import EffectResult, dispatch_offer_effect
 from world.npc_services.models import (
+    MissionOfferDetails,
     NPCRole,
     NPCRoleCooldown,
     NPCServiceOffer,
@@ -38,8 +42,7 @@ from world.npc_services.models import (
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
+    from typeclasses.characters import Character
     from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
@@ -56,7 +59,7 @@ class MissingPrimaryPersonaError(LookupError):
     bypass gates that depend on the persona.
     """
 
-    def __init__(self, character: ObjectDB) -> None:
+    def __init__(self, character: Character) -> None:
         super().__init__(
             f"Character {character!r} has no PRIMARY persona — required invariant "
             "(see character_sheets/CLAUDE.md). Check character_creation finalize "
@@ -89,7 +92,7 @@ class OfferNotEligibleError(ResolveOfferError):
     user_message = "That offer is not currently available."
 
 
-def persona_for_character(character: ObjectDB) -> Persona:
+def persona_for_character(character: Character) -> Persona:
     """Return the PC's PRIMARY persona; raise loud on missing sheet/persona.
 
     A played character without a sheet or PRIMARY persona is a programmer
@@ -136,7 +139,7 @@ class InteractionSession:
     persona: Persona
     npc_persona: Persona | None
     """The NPC's persona, or None for class-1 nameless functionaries."""
-    character: ObjectDB
+    character: Character
     """The PC's Evennia Character — needed for the predicate context."""
     current_rapport: int
     closed: bool = False
@@ -147,7 +150,7 @@ def start_interaction(
     *,
     role: NPCRole,
     persona: Persona,
-    character: ObjectDB,
+    character: Character,
     npc_persona: Persona | None = None,
 ) -> InteractionSession:
     """Begin an interaction with an NPC of ``role``.
@@ -175,12 +178,72 @@ def start_interaction(
     )
 
 
-def _is_offer_eligible(
+@dataclass(frozen=True)
+class _EligibilityCache:
+    """Pre-computed role-/PC-scoped query results, hoisted out of the offer loop.
+
+    The eligibility check is run once per offer in ``available_offers`` and
+    again as a single-offer re-verify in ``resolve_offer``. Several gates
+    (role-scope cooldown, PC active-NPC-mission cap, per-(persona × role)
+    one-in-flight) read state that does NOT vary across offers in the same
+    role × persona × character set. Hoisting them into this cache turns
+    ``O(offers × 3)`` queries into ``O(3)``.
+    """
+
+    role_cooldown_active: bool
+    pc_at_npc_cap: bool
+    persona_on_role_active: bool
+
+
+def _build_eligibility_cache(
+    *,
+    role: NPCRole,
+    persona: Persona,
+    character: Character,
+    now: object,
+) -> _EligibilityCache:
+    """Compute the three hoisted gates once per session for ``role``.
+
+    ``pc_at_npc_cap`` fails closed when the character has no CharacterSheet —
+    the PC cap is a load-bearing gate and silently bypassing it (the old
+    behaviour) would let an unfinished/seeded PC pile up unlimited NPC
+    missions. ``persona_on_role_active`` keys on the new
+    ``MissionInstance.accepted_as_persona`` FK so ESTABLISHED personas don't
+    inherit PRIMARY's commitments to the same role (spec AD#8).
+    """
+    role_cooldown_active = NPCRoleCooldown.objects.filter(
+        role_id=role.pk, persona=persona, available_at__gt=now
+    ).exists()
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        pc_at_npc_cap = True
+    else:
+        active_npc_count = MissionInstance.objects.filter(
+            participants__character=character,
+            participants__is_contract_holder=True,
+            status=MissionStatus.ACTIVE,
+            source_offer__isnull=False,
+        ).count()
+        pc_at_npc_cap = active_npc_count >= sheet.max_active_npc_missions
+    persona_on_role_active = MissionInstance.objects.filter(
+        accepted_as_persona=persona,
+        status=MissionStatus.ACTIVE,
+        source_offer__role_id=role.pk,
+    ).exists()
+    return _EligibilityCache(
+        role_cooldown_active=role_cooldown_active,
+        pc_at_npc_cap=pc_at_npc_cap,
+        persona_on_role_active=persona_on_role_active,
+    )
+
+
+def _is_offer_eligible(  # noqa: PLR0913
     offer: NPCServiceOffer,
     *,
     persona: Persona,
-    character: ObjectDB,
+    character: Character,
     current_rapport: int,
+    cache: _EligibilityCache | None = None,
     now: object | None = None,
 ) -> bool:
     """Single-offer eligibility check.
@@ -193,11 +256,13 @@ def _is_offer_eligible(
     Gates layered (#686):
     1. Role-level: ``offer.role.is_active``.
     2. Rapport: ``offer.rapport_requirement <= current_rapport``.
-    3. Role-level cooldown: no active ``NPCRoleCooldown`` for (role, persona).
+    3. Role-level cooldown (cached): no active ``NPCRoleCooldown``.
     4. Offer-level cooldown: no active ``OfferCooldown`` for (offer, persona).
-    5. For MISSION offers only: PC cap, per-(persona × role) one-in-flight,
-       and ``MissionOfferDetails.requirements_override`` predicate (see
-       ``_mission_gates_pass``).
+    5. For MISSION offers only: PC cap (cached), per-(persona × role)
+       one-in-flight (cached), template-level gates (``is_active``,
+       ``access_tier``, ``level_band``), and the AND-composed predicate
+       ``template.availability_rule`` ∧ ``details.requirements_override``
+       (see ``_mission_gates_pass``).
     6. Offer's own ``eligibility_rule`` predicate.
 
     POOL draw_mode is now a first-class case: eligibility itself is
@@ -209,9 +274,14 @@ def _is_offer_eligible(
     if offer.rapport_requirement > current_rapport:
         return False
     now = now or timezone.now()
-    if NPCRoleCooldown.objects.filter(
-        role_id=offer.role_id, persona=persona, available_at__gt=now
-    ).exists():
+    if cache is None:
+        # Single-offer callers (e.g. `resolve_offer`, ad-hoc tests) skip the
+        # ``available_offers`` cache plumbing; we lazy-build the per-call
+        # cache so the eligibility logic stays in one place.
+        cache = _build_eligibility_cache(
+            role=offer.role, persona=persona, character=character, now=now
+        )
+    if cache.role_cooldown_active:
         return False
     if (
         offer.cooldown is not None
@@ -221,62 +291,56 @@ def _is_offer_eligible(
     ):
         return False
     if offer.kind == OfferKind.MISSION.value and not _mission_gates_pass(
-        offer=offer, persona=persona, character=character
+        offer=offer, persona=persona, character=character, cache=cache
     ):
         return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
 
 
-def _mission_gates_pass(
+def _mission_gates_pass(  # noqa: PLR0911
     *,
     offer: NPCServiceOffer,
     persona: Persona,
-    character: ObjectDB,
+    character: Character,
+    cache: _EligibilityCache,
 ) -> bool:
-    """Apply the three MISSION-only gates from ``_is_offer_eligible`` (#686).
+    """Apply the MISSION-only gates from ``_is_offer_eligible`` (#686).
 
-    Lives in its own helper so the main ``_is_offer_eligible`` body stays a
-    flat sequence of independent gates. Lazy-imports ``world.missions`` to
-    avoid an app-load cycle.
+    Ordered cheapest-first: cached PC/role gates → details lookup → template
+    field gates → composed predicate. Template-side gates (``is_active``,
+    ``access_tier``, ``level_band``, ``availability_rule``) are enforced
+    here per spec — eligibility composes ``template.availability_rule`` ∧
+    ``details.requirements_override`` ∧ ``offer.eligibility_rule``.
     """
-    from world.missions.constants import MissionStatus  # noqa: PLC0415
-    from world.missions.models import MissionInstance  # noqa: PLC0415
-    from world.npc_services.models import MissionOfferDetails  # noqa: PLC0415
-
-    # 5a. PC active-NPC-mission cap.
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    if sheet is not None:
-        active_npc_count = MissionInstance.objects.filter(
-            participants__character=character,
-            participants__is_contract_holder=True,
-            status=MissionStatus.ACTIVE,
-            source_offer__isnull=False,
-        ).count()
-        if active_npc_count >= sheet.max_active_npc_missions:
-            return False
-
-    # 5b. Per-(persona × role) one-in-flight.
-    persona_active_on_role = MissionInstance.objects.filter(
-        participants__character__sheet_data__personas=persona,
-        participants__is_contract_holder=True,
-        status=MissionStatus.ACTIVE,
-        source_offer__role_id=offer.role_id,
-    ).exists()
-    if persona_active_on_role:
+    if cache.pc_at_npc_cap:
         return False
-
-    # 5c. MissionOfferDetails.requirements_override predicate.
+    if cache.persona_on_role_active:
+        return False
     try:
         details: MissionOfferDetails = offer.mission_offer_details
     except MissionOfferDetails.DoesNotExist:
         # MISSION offer with no details row is an authoring error; fail closed.
         return False
-    if details.requirements_override:
-        ctx = CharacterPredicateContext(character, presented_persona=persona)
-        if not evaluate(details.requirements_override, ctx):
-            return False
-
+    template = details.mission_template
+    if not template.is_active:
+        return False
+    if template.access_tier == AccessTier.STAFF_ONLY and not is_staff_observer(character):
+        return False
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        # No sheet → no level → can't satisfy the level-band gate. Fail closed
+        # consistently with the PC-cap gate above (cache.pc_at_npc_cap is True
+        # when sheet is None, so we'd never reach here in practice, but make
+        # the local-only path defensive in case the cache is bypassed).
+        return False
+    if not (template.level_band_min <= sheet.current_level <= template.level_band_max):
+        return False
+    ctx = CharacterPredicateContext(character, presented_persona=persona)
+    if template.availability_rule and not evaluate(template.availability_rule, ctx):
+        return False
+    if details.requirements_override and not evaluate(details.requirements_override, ctx):
+        return False
     return True
 
 
@@ -289,6 +353,10 @@ def available_offers(
 
     Filtered by ``_is_offer_eligible`` (every gate; see its docstring).
     ``select_related("role")`` so the role doesn't get re-fetched per row.
+    Role-/PC-scoped gates (NPCRoleCooldown, PC cap, per-(persona × role)
+    one-in-flight) are computed ONCE via ``_build_eligibility_cache`` and
+    passed into every offer's eligibility check — avoids the per-offer
+    N+1 storm flagged by the #686 review.
 
     POOL semantics (#686): when ``pool_count`` is ``None`` (the default),
     all eligible offers are returned regardless of ``draw_mode`` — matches
@@ -303,6 +371,12 @@ def available_offers(
     if session.closed:
         return []
     now = timezone.now()
+    cache = _build_eligibility_cache(
+        role=session.role,
+        persona=session.persona,
+        character=session.character,
+        now=now,
+    )
     # select_related the PERMIT details + its building_kind so issue_permit
     # doesn't pay 2 extra queries per PERMIT offer (mixed-kind roles only
     # pay for unused reverse-OneToOne fetches on non-PERMIT offers, which
@@ -328,6 +402,7 @@ def available_offers(
             persona=session.persona,
             character=session.character,
             current_rapport=session.current_rapport,
+            cache=cache,
             now=now,
         )
     ]
@@ -384,8 +459,6 @@ def _weight_for_offer(offer: NPCServiceOffer) -> int:
     disappears from the draw due to a zero/null weight.
     """
     if offer.kind == OfferKind.MISSION.value:
-        from world.npc_services.models import MissionOfferDetails  # noqa: PLC0415
-
         try:
             details = offer.mission_offer_details
         except MissionOfferDetails.DoesNotExist:
@@ -399,7 +472,7 @@ def _weight_for_offer(offer: NPCServiceOffer) -> int:
 def _apply_check(
     offer: NPCServiceOffer,
     *,
-    character: ObjectDB,
+    character: Character,
 ) -> tuple[int, bool]:
     """Roll the offer's check (if any) and return (delta, succeeded).
 

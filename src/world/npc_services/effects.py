@@ -66,7 +66,7 @@ def _stub_issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult
     """
     message = f"Permit '{offer.label}' would be issued to {persona} (Plan 3 wires real creation)."
     return EffectResult(
-        kind=OfferKind.PERMIT,
+        kind=OfferKind.PERMIT.value,
         object_pk=None,
         object_label=offer.label,
         message=message,
@@ -78,10 +78,13 @@ OFFER_EFFECT_HANDLERS: dict[str, EffectHandler] = {
     OfferKind.PERMIT.value: _stub_issue_permit,
 }
 
-# Save the default handler set so consumer apps can register replacements
-# via :func:`register_offer_effect_handler` and tests can roll back to the
-# Plan 2 baseline via :func:`reset_offer_effect_handlers` for isolation.
-_DEFAULT_HANDLERS: dict[str, EffectHandler] = dict(OFFER_EFFECT_HANDLERS)
+# Lazy snapshot of the "production baseline" handler set. Populated on the
+# first call to ``reset_offer_effect_handlers`` so the snapshot includes
+# every handler registered by an AppConfig.ready() hook (notably the
+# MISSION handler registered by ``MissionsConfig.ready``). If we snapshotted
+# at module import time, ``reset_offer_effect_handlers`` would silently drop
+# MISSION on every test reset — a foot-gun the #686 review surfaced.
+_DEFAULT_HANDLERS: dict[str, EffectHandler] | None = None
 
 
 def register_offer_effect_handler(kind: str, handler: EffectHandler) -> None:
@@ -96,12 +99,17 @@ def register_offer_effect_handler(kind: str, handler: EffectHandler) -> None:
 
 
 def reset_offer_effect_handlers() -> None:
-    """Restore the Plan 2 baseline handler set.
+    """Restore the post-app-ready baseline handler set.
 
-    Test-only escape hatch — production code should never call this.
-    Use in tearDown when a test has registered a custom handler that
-    must not leak to subsequent tests.
+    Test-only escape hatch — production code should never call this. The
+    baseline is snapshotted lazily on the first call to this function, so
+    every handler registered by an ``AppConfig.ready()`` hook (PERMIT,
+    MISSION, ...) is included in the snapshot. Use in tearDown when a test
+    has registered a custom handler that must not leak.
     """
+    global _DEFAULT_HANDLERS  # noqa: PLW0603
+    if _DEFAULT_HANDLERS is None:
+        _DEFAULT_HANDLERS = dict(OFFER_EFFECT_HANDLERS)
     OFFER_EFFECT_HANDLERS.clear()
     OFFER_EFFECT_HANDLERS.update(_DEFAULT_HANDLERS)
 

@@ -49,16 +49,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     cooldown, reward-group rule, active flag, access tier, categories,
     availability rule.
 
-    D4 access-tier flip: PATCHing ``access_tier=open`` runs through
-    ``validate_access_tier`` below — if any attached giver is not
-    ``is_publishable`` (no target FK), the flip is refused with the
-    list of unready givers' names so the Studio can show "needs-work."
+    Access-tier flip is unguarded post-#686 — the legacy
+    ``MissionGiver.is_publishable`` guard was stripped with the
+    giver editor surface; an equivalent guard against the new
+    ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
+    npc-services authoring follow-up.
     """
-
-    # Module-level constants — bare strings as field/error keys would
-    # trip STRING_LITERAL pre-commit.
-    _OPEN_TIER_VALUE = "open"
-    _STAFF_ONLY_TIER_VALUE = "staff_only"
 
     class Meta:
         model = MissionTemplate
