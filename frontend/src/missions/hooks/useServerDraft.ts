@@ -1,8 +1,7 @@
 /**
  * useServerDraft — reactive editor draft against a server-side record.
  *
- * Adversarial review HIGH: every editor (NodePage, OptionPage,
- * GiverEditor, OfferingRow) previously did
+ * Every Mission Studio editor (NodePage, OptionPage, ...) previously did
  * ``useState(() => derive(record))`` once on mount. On React Query
  * refetch (mutation invalidation, window-focus, manual invalidate) the
  * parent received a fresh ``record`` prop but the draft never

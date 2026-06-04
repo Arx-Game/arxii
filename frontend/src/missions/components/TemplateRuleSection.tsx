@@ -1,12 +1,6 @@
 /**
  * TemplateRuleSection — edit the template's availability_rule predicate.
  *
- * Adversarial review HIGH: comments in PredicateBuilder /
- * GiverEditorPage / the test file all said the builder was the editor
- * for the template's availability_rule, but no UI ever instantiated
- * it for templates. The template's primary predicate gate had no
- * authoring surface. This is that surface.
- *
  * Lives inside MissionDetailPanel below the template metadata. Uses
  * the same useServerDraft + validate-before-save + coerce-on-save
  * machinery as OptionPage's visibility_rule editor.
