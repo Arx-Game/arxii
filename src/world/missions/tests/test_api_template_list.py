@@ -17,8 +17,13 @@ from evennia_extensions.factories import AccountFactory
 from world.missions.constants import ArcScope
 from world.missions.factories import (
     MissionCategoryFactory,
-    MissionGiverFactory,
     MissionTemplateFactory,
+)
+from world.npc_services.constants import OfferKind
+from world.npc_services.factories import (
+    MissionOfferDetailsFactory,
+    NPCRoleFactory,
+    NPCServiceOfferFactory,
 )
 from world.societies.factories import OrganizationFactory
 
@@ -98,14 +103,16 @@ class TemplateListFilterTests(TestCase):
         cls.cat_courtly = MissionCategoryFactory(name="courtly")
         cls.cat_heist = MissionCategoryFactory(name="heist")
         cls.org = OrganizationFactory(name="Crime Guild")
-        cls.org_giver = MissionGiverFactory(name="org-giver", org=cls.org)
 
         cls.low_risk = MissionTemplateFactory(name="Low Risk", risk_tier=1, is_active=True)
         cls.low_risk.categories.add(cls.cat_courtly)
 
         cls.high_risk = MissionTemplateFactory(name="High Risk", risk_tier=5, is_active=True)
         cls.high_risk.categories.add(cls.cat_heist)
-        cls.org_giver.templates.add(cls.high_risk)
+        # Wire the high-risk template to the org via the new offer surface.
+        cls.org_role = NPCRoleFactory(name="org-role", faction_affiliation=cls.org)
+        cls.org_offer = NPCServiceOfferFactory(role=cls.org_role, kind=OfferKind.MISSION)
+        MissionOfferDetailsFactory(offer=cls.org_offer, mission_template=cls.high_risk)
 
         cls.inactive = MissionTemplateFactory(name="Inactive", risk_tier=2, is_active=False)
 

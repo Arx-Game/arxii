@@ -14,8 +14,6 @@ import django_filters
 
 from world.missions.constants import AccessTier, ArcScope
 from world.missions.models import (
-    MissionGiver,
-    MissionGiverOffering,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -30,7 +28,8 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
 
     Plan-defined surface: name (substring), level band, area (giver→
     room→Area; deferred — see DESIGN below), category (by name), risk,
-    org (giver's org by name), status (is_active / arc_scope / access_tier).
+    org (mission-offer role's faction by name; #686),
+    status (is_active / arc_scope / access_tier).
     """
 
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
@@ -46,7 +45,9 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
     access_tier = django_filters.ChoiceFilter(field_name="access_tier", choices=AccessTier.choices)
     category = django_filters.CharFilter(field_name="categories__name", lookup_expr="iexact")
     org = django_filters.CharFilter(
-        field_name="givers__org__name", lookup_expr="iexact", distinct=True
+        field_name="offer_details__offer__role__faction_affiliation__name",
+        lookup_expr="iexact",
+        distinct=True,
     )
 
     # DESIGN: the plan calls out an "area" filter (giver → target room →
@@ -156,26 +157,4 @@ class MissionOptionRouteRewardFilterSet(django_filters.FilterSet):
 # ---------------------------------------------------------------------------
 
 
-class MissionGiverFilterSet(django_filters.FilterSet):
-    """Filter MissionGiver rows by org / kind / active / name substring."""
-
-    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
-    giver_kind = django_filters.CharFilter(field_name="giver_kind")
-    org = django_filters.NumberFilter(field_name="org_id")
-    org_name = django_filters.CharFilter(field_name="org__name", lookup_expr="iexact")
-    is_active = django_filters.BooleanFilter(field_name="is_active")
-
-    class Meta:
-        model = MissionGiver
-        fields: list[str] = []
-
-
-class MissionGiverOfferingFilterSet(django_filters.FilterSet):
-    """Filter MissionGiverOffering rows by giver / template."""
-
-    giver = django_filters.NumberFilter(field_name="giver_id")
-    template = django_filters.NumberFilter(field_name="template_id")
-
-    class Meta:
-        model = MissionGiverOffering
-        fields: list[str] = []
+# Mission-giver filters moved to world.npc_services.filters per #686.

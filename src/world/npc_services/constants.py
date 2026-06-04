@@ -7,8 +7,8 @@ class OfferKind(models.TextChoices):
     """Discriminator for the per-kind details model + effect handler."""
 
     PERMIT = "permit", "Permit"
-    # Future kinds register here as plans land. Mission migration adds MISSION
-    # (#686); loans/training/favors/marriage/attunement follow.
+    MISSION = "mission", "Mission"
+    # Future kinds: loans/training/favors/marriage/attunement.
 
 
 class DrawMode(models.TextChoices):

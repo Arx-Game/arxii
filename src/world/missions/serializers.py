@@ -11,8 +11,6 @@ from rest_framework import serializers
 from world.missions.constants import MissionStatus
 from world.missions.models import (
     MissionCategory,
-    MissionGiver,
-    MissionGiverOffering,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -51,16 +49,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     cooldown, reward-group rule, active flag, access tier, categories,
     availability rule.
 
-    D4 access-tier flip: PATCHing ``access_tier=open`` runs through
-    ``validate_access_tier`` below — if any attached giver is not
-    ``is_publishable`` (no target FK), the flip is refused with the
-    list of unready givers' names so the Studio can show "needs-work."
+    Access-tier flip is unguarded post-#686 — the legacy
+    ``MissionGiver.is_publishable`` guard was stripped with the
+    giver editor surface; an equivalent guard against the new
+    ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
+    npc-services authoring follow-up.
     """
-
-    # Module-level constants — bare strings as field/error keys would
-    # trip STRING_LITERAL pre-commit.
-    _OPEN_TIER_VALUE = "open"
-    _STAFF_ONLY_TIER_VALUE = "staff_only"
 
     class Meta:
         model = MissionTemplate
@@ -133,27 +127,15 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_access_tier(self, value: str) -> str:
-        """Guard the flip to OPEN: every attached giver must be publishable.
+        """Access tier flip is unguarded post-#686.
 
-        Only enforces on UPDATE (instance exists). Create flows through
-        unguarded — a brand-new template with no givers can be authored
-        directly as STAFF_ONLY (the model default) and only later flipped
-        to OPEN once givers are wired up.
+        The previous guard checked "every attached MissionGiver must be
+        publishable" via the giver.templates M2M. That M2M dropped with
+        the legacy giver surface. The equivalent guard for the new
+        ``NPCRole`` + ``NPCServiceOffer`` catalog (e.g. "every offer's
+        role must be active") is a follow-up — for now the tier flip is
+        a straight write.
         """
-        if value != self._OPEN_TIER_VALUE:
-            return value
-        instance = self.instance
-        if instance is None:
-            return value  # create — let the model layer accept either tier
-        unready: list[str] = [
-            giver.name for giver in instance.givers.all() if not giver.is_publishable
-        ]
-        if unready:
-            msg = (
-                "Cannot flip to OPEN: the following attached giver(s) are "
-                "not publishable (no target set): " + ", ".join(unready)
-            )
-            raise serializers.ValidationError(msg)
         return value
 
     def create(self, validated_data: dict) -> MissionTemplate:  # type: ignore[override]
@@ -399,133 +381,9 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
         return attrs
 
 
-# ---------------------------------------------------------------------------
-# D3 giver-library serializers — MissionGiver + MissionGiverOffering (the
-# template-link through-model). NPCStanding (the per-(persona, npc_persona)
-# row, formerly MissionGiverStanding) is serialized in
-# `world.npc_services.serializers`.
-# ---------------------------------------------------------------------------
-
-
-class MissionGiverSerializer(serializers.ModelSerializer):
-    """Editor CRUD for MissionGiver rows.
-
-    ``target`` is a generic ObjectDB FK; the model's clean() validates
-    the typeclass against ``giver_kind`` (NPC->Character, ROOM_TRIGGER->
-    Room, ENVIRONMENTAL_DETAIL->non-Character/Room/Exit Object). The
-    serializer passes both through; DRF's ModelSerializer doesn't call
-    clean(), so we proxy it from validate() to surface 400 instead of
-    IntegrityError.
-
-    ``is_publishable`` is the authoring-UI gate (Phase B2/B7 deviation
-    note) — exposed read-only here so the Studio can grey out "publish"
-    when the giver lacks its target.
-    """
-
-    is_publishable = serializers.BooleanField(read_only=True)
-
-    class Meta:
-        model = MissionGiver
-        fields = [
-            "id",
-            "name",
-            "giver_kind",
-            "target",
-            "org",
-            "is_active",
-            "is_publishable",
-        ]
-        read_only_fields = ["id", "is_publishable"]
-        # Suppress DRF's auto-generated UniqueValidator on ``name``.
-        # The create() override calls next_available_name() to resolve
-        # collisions via auto-suffix before the DB write, so a
-        # UniqueValidator firing before create() would block that logic.
-        extra_kwargs = {"name": {"validators": []}}
-
-    # Field key used when proxying clean() errors back to the API client.
-    _TARGET_FIELD = "target"
-
-    def validate_name(self, value: str) -> str:
-        """On UPDATE: reject names already taken by another giver.
-
-        On CREATE: ``create()`` auto-suffixes via ``next_available_name``,
-        so this validator is a no-op. PATCH renames are intentionally
-        strict — see MissionTemplateSerializer.validate_name.
-        """
-        return _validate_name_unique_on_update(
-            self.instance, MissionGiver.objects.all(), value, "giver"
-        )
-
-    def validate(self, attrs: dict) -> dict:
-        # Build the candidate instance and run clean() so typeclass
-        # validation surfaces as a 400 with the field-keyed error.
-        instance = self.instance
-        merged_kind = attrs.get("giver_kind") or (instance.giver_kind if instance else None)
-        merged_target = (
-            attrs.get(self._TARGET_FIELD)
-            if self._TARGET_FIELD in attrs
-            else (instance.target if instance else None)
-        )
-        if merged_target is not None and merged_kind is not None:
-            candidate = MissionGiver(giver_kind=merged_kind, target=merged_target)
-            try:
-                candidate.clean()
-            except DjangoValidationError as exc:
-                # MissionGiver.clean() raises with a field-keyed message_dict;
-                # surface those keys directly rather than stringifying the
-                # exception (which would leak typeclass paths and similar).
-                raise serializers.ValidationError(exc.message_dict) from exc
-        return attrs
-
-    def create(self, validated_data: dict) -> MissionGiver:  # type: ignore[override]
-        from django.db import IntegrityError, transaction  # noqa: PLC0415
-
-        from world.missions.services.naming import next_available_name  # noqa: PLC0415
-
-        original_name = validated_data["name"]
-        validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
-        try:
-            # Wrap in a savepoint so that if the INSERT fails with
-            # IntegrityError, any enclosing @transaction.atomic caller's
-            # transaction is NOT poisoned ("current transaction is aborted").
-            with transaction.atomic():
-                return super().create(validated_data)  # type: ignore[return-value]
-        except IntegrityError:
-            # Concurrent create with the same name beat us between the
-            # next_available_name SELECT and our INSERT. Recompute the
-            # suffix (now seeing the just-committed row) and retry once.
-            validated_data["name"] = next_available_name(original_name, MissionGiver.objects.all())
-            return super().create(validated_data)  # type: ignore[return-value]
-
-
-class MissionGiverOfferingSerializer(serializers.ModelSerializer):
-    """Editor CRUD for the giver<->template through-model.
-
-    ``weight_override`` and ``requirements_override`` are the two
-    per-link knobs; the model's clean() rejects weight_override=0
-    (silent disable trap), which proxies through validate() below.
-    """
-
-    class Meta:
-        model = MissionGiverOffering
-        fields = [
-            "id",
-            "giver",
-            "template",
-            "weight_override",
-            "requirements_override",
-        ]
-        read_only_fields = ["id"]
-
-    def validate(self, attrs: dict) -> dict:
-        weight_override = attrs.get("weight_override")
-        if weight_override == 0:
-            msg = (
-                "weight_override=0 would silently disable this offering at draw time. "
-                "Use null (= fall back to template.base_weight) or any positive integer."
-            )
-            raise serializers.ValidationError({"weight_override": msg})
-        return attrs
+# Mission giver editor surfaces moved to world.npc_services.* per #686.
+# Trigger-based mission givers (ROOM_TRIGGER / ENVIRONMENTAL_DETAIL) still
+# use MissionGiver; their editor will land with the trigger followup.
 
 
 class MissionInstanceSerializer(serializers.ModelSerializer):

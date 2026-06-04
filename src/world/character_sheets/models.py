@@ -333,6 +333,17 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
+    # Mission cap (#686 — applies to NPC-mediated missions only; trigger-based
+    # mission offers from rooms/items explicitly bypass this cap)
+    max_active_npc_missions = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "OOC cap on simultaneously-active NPC-given missions. NPC mission "
+            "givers don't show offers when this PC is at the cap. Trigger-based "
+            "mission offers (rooms, items) ignore the cap. Staff-overridable."
+        ),
+    )
+
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)

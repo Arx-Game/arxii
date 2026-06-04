@@ -1,14 +1,14 @@
 /**
  * isError card tests for the list-style mission pages.
  *
- * `useMissionTemplates` and `useMissionGivers` (per queries.ts) deliberately
- * drop `throwOnError` so their consuming pages handle isError inline rather
- * than crashing to the global ErrorBoundary. This file pins that contract:
- * each list page renders its inline "couldn't load" card when the hook
- * returns isError: true.
+ * `useMissionTemplates` (per queries.ts) deliberately drops `throwOnError`
+ * so MissionBrowserPage handles isError inline rather than crashing to the
+ * global ErrorBoundary. This file pins that contract.
  *
  * Closes #589 item 5 — companion to the PageErrorCards / DrillDownPageErrorCards
  * tests that cover the throwOnError'd detail pages.
+ *
+ * Per #686, the GiverLibraryPage coverage dropped with the page itself.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -17,7 +17,6 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-import { GiverLibraryPage } from '../pages/GiverLibraryPage';
 import { MissionBrowserPage } from '../pages/MissionBrowserPage';
 import * as queries from '../queries';
 
@@ -53,25 +52,6 @@ describe('MissionBrowserPage isError card', () => {
     expect(errorCard).toBeInTheDocument();
     expect(errorCard).toHaveAttribute('role', 'alert');
     expect(errorCard).toHaveTextContent(/couldn't load missions/i);
-    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
-  });
-});
-
-describe('GiverLibraryPage isError card', () => {
-  it('renders the inline "Couldn\'t load givers" card when useMissionGivers errors', () => {
-    vi.spyOn(queries, 'useMissionGivers').mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof queries.useMissionGivers>);
-
-    render(withProviders(<GiverLibraryPage />));
-
-    const errorCard = screen.getByTestId('giver-list-error');
-    expect(errorCard).toBeInTheDocument();
-    expect(errorCard).toHaveAttribute('role', 'alert');
-    expect(errorCard).toHaveTextContent(/couldn't load givers/i);
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 });

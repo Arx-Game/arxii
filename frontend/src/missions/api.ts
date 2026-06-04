@@ -10,8 +10,6 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   MissionCategory,
-  MissionGiver,
-  MissionGiverOffering,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -243,126 +241,9 @@ export async function listRouteRewards(
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
-// Givers (D3)
-// ---------------------------------------------------------------------------
-
-export async function listMissionGivers(
-  filters: {
-    org?: number;
-    org_name?: string;
-    giver_kind?: string;
-    is_active?: boolean;
-    name?: string;
-  } = {}
-): Promise<PaginatedResponse<MissionGiver>> {
-  const res = await apiFetch(`${BASE_URL}/givers/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load givers');
-  return res.json();
-}
-
-export async function getMissionGiver(id: number): Promise<MissionGiver> {
-  const res = await apiFetch(`${BASE_URL}/givers/${id}/`);
-  if (!res.ok) throw new Error(`Failed to load giver ${id}`);
-  return res.json();
-}
-
-export async function listGiverOfferings(
-  filters: {
-    giver?: number;
-    template?: number;
-  } = {}
-): Promise<PaginatedResponse<MissionGiverOffering>> {
-  const res = await apiFetch(`${BASE_URL}/giver-offerings/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load offerings');
-  return res.json();
-}
-
-export async function createMissionGiver(body: Partial<MissionGiver>): Promise<MissionGiver> {
-  const res = await apiFetch(`${BASE_URL}/givers/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof detail === 'object' && detail !== null
-        ? JSON.stringify(detail)
-        : 'Failed to create giver'
-    );
-  }
-  return res.json();
-}
-
-export async function patchMissionGiver(
-  id: number,
-  body: Partial<MissionGiver>
-): Promise<MissionGiver> {
-  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof detail === 'object' && detail !== null
-        ? JSON.stringify(detail)
-        : 'Failed to update giver'
-    );
-  }
-  return res.json();
-}
-
-export async function deleteMissionGiver(id: number): Promise<void> {
-  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete giver');
-}
-
-export async function createGiverOffering(
-  body: Partial<MissionGiverOffering>
-): Promise<MissionGiverOffering> {
-  const res = await apiFetch(`${BASE_URL}/giver-offerings/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof detail === 'object' && detail !== null
-        ? JSON.stringify(detail)
-        : 'Failed to add offering'
-    );
-  }
-  return res.json();
-}
-
-export async function patchGiverOffering(
-  id: number,
-  body: Partial<MissionGiverOffering>
-): Promise<MissionGiverOffering> {
-  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof detail === 'object' && detail !== null
-        ? JSON.stringify(detail)
-        : 'Failed to update offering'
-    );
-  }
-  return res.json();
-}
-
-export async function deleteGiverOffering(id: number): Promise<void> {
-  const res = await apiFetch(`${BASE_URL}/giver-offerings/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to remove offering');
-}
+// NPC-mediated mission-giver editor moved to the npc-services framework
+// per #686 (Phase 3). NPCRole + NPCServiceOffer + MissionOfferDetails now
+// own that surface; a dedicated /api/npc-services/ editor is the follow-up.
 
 // ---------------------------------------------------------------------------
 // Copy actions (D4.2)

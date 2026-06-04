@@ -1,24 +1,22 @@
-"""Tests for the MissionGiver + MissionGiverOffering models.
+"""Tests for the MissionGiver model (post-#686 trigger-only shape).
 
-A ``MissionGiver`` is an abstracted offer point (Room/NPC/detail) bound to
-one Evennia ``target`` whose typeclass matches ``giver_kind``. Characters
-draw available templates from a giver (see ``services.availability``).
-Per-(PC, NPC) cooldown + affection now lives on
-``world.npc_services.models.NPCStanding`` — see that app's tests.
+NPC-mediated mission givers migrated to ``NPCRole`` + ``NPCServiceOffer``
+per #686. This file covers what's left: ``MissionGiver`` for the two
+trigger-based kinds (ROOM_TRIGGER / ENVIRONMENTAL_DETAIL). Their dispatch
+design lands with the trigger followup.
+
+Mission-giver cooldown migrated to ``NPCRoleCooldown``; the offering
+through-model is replaced by ``MissionOfferDetails`` (catalog row on the
+``NPCServiceOffer``).
 """
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.missions.constants import GiverKind
-from world.missions.factories import (
-    MissionGiverFactory,
-    MissionGiverOfferingFactory,
-    MissionTemplateFactory,
-)
-from world.missions.models import MissionGiver, MissionGiverOffering
+from world.missions.factories import MissionGiverFactory
+from world.missions.models import MissionGiver
 from world.societies.factories import OrganizationFactory
 
 
@@ -57,7 +55,6 @@ class MissionGiverModelTests(TestCase):
         self.assertTrue(giver.is_active)
         self.assertIsNone(giver.target)
         self.assertIsNone(giver.org)
-        self.assertEqual(list(giver.templates.all()), [])
 
     def test_giver_with_target_and_org(self) -> None:
         room = _make_room()
@@ -66,15 +63,6 @@ class MissionGiverModelTests(TestCase):
         self.assertEqual(giver.target, room)
         self.assertEqual(giver.org, org)
         self.assertEqual(str(giver), "Guild Hall")
-
-    def test_templates_m2m_reverse_relation(self) -> None:
-        giver = MissionGiverFactory()
-        tmpl_a = MissionTemplateFactory(name="g-tmpl-a")
-        tmpl_b = MissionTemplateFactory(name="g-tmpl-b")
-        giver.templates.add(tmpl_a, tmpl_b)
-        self.assertEqual(set(giver.templates.all()), {tmpl_a, tmpl_b})
-        # reverse: templates -> givers
-        self.assertIn(giver, tmpl_a.givers.all())
 
     def test_inactive_giver(self) -> None:
         giver = MissionGiverFactory(is_active=False)
@@ -119,12 +107,6 @@ class MissionGiverKindTests(TestCase):
         self.assertEqual(giver.giver_kind, GiverKind.ROOM_TRIGGER)
         self.assertIsNone(giver.target)
 
-    def test_npc_kind_with_character_target_round_trips(self) -> None:
-        npc = _make_npc()
-        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, target=npc)
-        self.assertEqual(giver.giver_kind, GiverKind.NPC)
-        self.assertEqual(giver.target, npc)
-
     def test_environmental_detail_kind_with_object_target_round_trips(self) -> None:
         detail = _make_detail()
         giver = MissionGiverFactory(
@@ -141,18 +123,6 @@ class MissionGiverKindTests(TestCase):
         self.assertEqual(giver.target, room)
 
     # ---- negative: wrong typeclass for the chosen kind -------------------
-
-    def test_npc_kind_rejects_room_target(self) -> None:
-        room = _make_room()
-        giver = MissionGiverFactory.build(giver_kind=GiverKind.NPC, target=room)
-        with self.assertRaises(ValidationError):
-            giver.full_clean()
-
-    def test_npc_kind_rejects_plain_object_target(self) -> None:
-        detail = _make_detail()
-        giver = MissionGiverFactory.build(giver_kind=GiverKind.NPC, target=detail)
-        with self.assertRaises(ValidationError):
-            giver.full_clean()
 
     def test_room_trigger_rejects_character_target(self) -> None:
         npc = _make_npc()
@@ -182,71 +152,9 @@ class MissionGiverKindTests(TestCase):
 
     def test_save_enforces_typeclass_invariant(self) -> None:
         # clean() runs on the real factory/create write path (regression I1).
-        room = _make_room()
+        npc = _make_npc()
         with self.assertRaises(ValidationError):
-            MissionGiverFactory(giver_kind=GiverKind.NPC, target=room)
-
-
-class MissionGiverOfferingTests(TestCase):
-    """Through-model: per-(giver, template) optional odds/requirements overrides."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.giver = MissionGiverFactory(name="offering-giver")
-        cls.template = MissionTemplateFactory(name="offering-tmpl")
-
-    def test_offering_round_trips_with_overrides(self) -> None:
-        offering = MissionGiverOfferingFactory(
-            giver=self.giver,
-            template=self.template,
-            weight_override=5,
-            requirements_override={"leaf": "has_distinction", "params": {"slug": "vip"}},
-        )
-        fetched = MissionGiverOffering.objects.get(pk=offering.pk)
-        self.assertEqual(fetched.weight_override, 5)
-        self.assertEqual(fetched.requirements_override["leaf"], "has_distinction")
-
-    def test_offering_defaults_no_overrides(self) -> None:
-        offering = MissionGiverOfferingFactory(giver=self.giver, template=self.template)
-        self.assertIsNone(offering.weight_override)
-        self.assertEqual(offering.requirements_override, {})
-
-    def test_offering_unique_per_giver_template(self) -> None:
-        MissionGiverOfferingFactory(giver=self.giver, template=self.template)
-        with self.assertRaises(IntegrityError):
-            MissionGiverOffering.objects.create(giver=self.giver, template=self.template)
-
-    def test_templates_m2m_uses_through_model(self) -> None:
-        # The M2M's .add() creates MissionGiverOffering rows transparently
-        # because the through-model has no required fields beyond giver+template.
-        self.giver.templates.add(self.template)
-        offerings = list(
-            MissionGiverOffering.objects.filter(giver=self.giver, template=self.template)
-        )
-        self.assertEqual(len(offerings), 1)
-        self.assertIn(self.template, self.giver.templates.all())
-        self.assertIn(self.giver, self.template.givers.all())
-
-    def test_clean_rejects_zero_weight_override(self) -> None:
-        # weight_override=0 would silently disable the offering at draw time
-        # (select_weighted yields nothing for weight 0). clean() forbids it
-        # so authors use null (= fall back to template.base_weight) or >=1.
-        offering = MissionGiverOfferingFactory.build(
-            giver=self.giver,
-            template=self.template,
-            weight_override=0,
-        )
-        with self.assertRaises(ValidationError):
-            offering.full_clean()
-
-    def test_save_enforces_weight_override_invariant(self) -> None:
-        # clean() runs on the real factory/create write path (regression I1).
-        with self.assertRaises(ValidationError):
-            MissionGiverOfferingFactory(
-                giver=self.giver,
-                template=MissionTemplateFactory(name="offering-save-tmpl"),
-                weight_override=0,
-            )
+            MissionGiverFactory(giver_kind=GiverKind.ROOM_TRIGGER, target=npc)
 
 
 class MissionGiverIsPublishableTests(TestCase):
@@ -269,15 +177,6 @@ class MissionGiverIsPublishableTests(TestCase):
         giver = MissionGiverFactory()
         self.assertEqual(giver.giver_kind, GiverKind.ROOM_TRIGGER)
         self.assertIsNone(giver.target)
-        self.assertFalse(giver.is_publishable)
-
-    def test_npc_publishable_when_target_set(self) -> None:
-        npc = _make_npc()
-        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, target=npc)
-        self.assertTrue(giver.is_publishable)
-
-    def test_npc_drafty_when_no_target(self) -> None:
-        giver = MissionGiverFactory(giver_kind=GiverKind.NPC, target=None)
         self.assertFalse(giver.is_publishable)
 
     def test_environmental_detail_publishable_when_target_set(self) -> None:

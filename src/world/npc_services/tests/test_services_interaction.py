@@ -93,8 +93,11 @@ class AvailableOffersTests(TestCase):
         self.assertIn(low, listed)
         self.assertNotIn(high, listed)
 
-    def test_pool_offers_skipped_in_menu_interactions(self) -> None:
-        # Plan 2 ships MENU only; POOL is reserved for mission migration #686.
+    def test_pool_offers_included_when_pool_count_is_none(self) -> None:
+        # #686: POOL offers are now first-class. Without pool_count, every
+        # eligible offer is returned regardless of draw_mode (the legacy
+        # "skip POOL silently" behaviour was wrong — callers that want
+        # sampling pass pool_count, callers that want everything don't).
         character, persona = _pc()
         role = NPCRoleFactory()
         menu_offer = NPCServiceOfferFactory(role=role, label="menu", draw_mode=DrawMode.MENU)
@@ -102,7 +105,26 @@ class AvailableOffersTests(TestCase):
         session = start_interaction(role=role, persona=persona, character=character)
         listed = available_offers(session)
         self.assertIn(menu_offer, listed)
-        self.assertNotIn(pool_offer, listed)
+        self.assertIn(pool_offer, listed)
+
+    def test_pool_offers_sampled_when_pool_count_is_set(self) -> None:
+        # #686: pool_count caps POOL-mode offers via weighted draw without
+        # replacement. MENU offers always come back in full.
+        character, persona = _pc()
+        role = NPCRoleFactory()
+        menu_offer = NPCServiceOfferFactory(role=role, label="menu", draw_mode=DrawMode.MENU)
+        # Author 4 POOL offers; cap to 2.
+        pool_offers = [
+            NPCServiceOfferFactory(role=role, label=f"pool-{i}", draw_mode=DrawMode.POOL)
+            for i in range(4)
+        ]
+        session = start_interaction(role=role, persona=persona, character=character)
+        listed = available_offers(session, pool_count=2)
+        self.assertIn(menu_offer, listed)
+        listed_pool = [o for o in listed if o.draw_mode == DrawMode.POOL]
+        self.assertEqual(len(listed_pool), 2)
+        for sampled in listed_pool:
+            self.assertIn(sampled, pool_offers)
 
     def test_closed_session_returns_no_offers(self) -> None:
         character, persona = _pc()

@@ -5,8 +5,6 @@ from rest_framework.routers import DefaultRouter
 
 from world.missions.views import (
     MissionCategoryViewSet,
-    MissionGiverOfferingViewSet,
-    MissionGiverViewSet,
     MissionInstanceViewSet,
     MissionNodeViewSet,
     MissionOptionRouteCandidateViewSet,
@@ -38,13 +36,8 @@ router.register(
     MissionOptionRouteRewardViewSet,
     basename="mission-option-route-reward",
 )
-# D3 giver library — staff CRUD for the offer-side surface.
-router.register(r"givers", MissionGiverViewSet, basename="mission-giver")
-router.register(
-    r"giver-offerings",
-    MissionGiverOfferingViewSet,
-    basename="mission-giver-offering",
-)
+# D3 giver library moved to /api/npc-services/roles/ +
+# /api/npc-services/offers/?kind=MISSION per #686.
 # D4.3 staff-power instance ops (list/retrieve/destroy only).
 router.register(r"instances", MissionInstanceViewSet, basename="mission-instance")
 # D4 category browse (read-only; drives the category multi-select in Mission Studio).

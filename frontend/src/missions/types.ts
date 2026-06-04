@@ -21,13 +21,10 @@ export type MissionOption = components['schemas']['MissionOption'];
 export type MissionOptionRoute = components['schemas']['MissionOptionRoute'];
 export type MissionOptionRouteCandidate = components['schemas']['MissionOptionRouteCandidate'];
 export type MissionOptionRouteReward = components['schemas']['MissionOptionRouteReward'];
-export type MissionGiver = components['schemas']['MissionGiver'];
-export type MissionGiverOffering = components['schemas']['MissionGiverOffering'];
 export type MissionInstance = components['schemas']['MissionInstance'];
 
 export type AccessTier = components['schemas']['AccessTierEnum'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
-export type GiverKind = components['schemas']['GiverKindEnum'];
 
 /** Filter knobs for the browser page. Subset of D1's MissionTemplateFilterSet. */
 export interface MissionTemplateFilters {

@@ -9,9 +9,10 @@ Public surface:
   * :func:`build_group_option_list`, :func:`select_group_choice`,
     :func:`group_resolve_node`, :func:`contract_holder` (Phase 4) — the
     multi-participant orchestrator (reuses Phase-3 ``resolve_option``).
-  * :func:`offer_missions` (Phase 5a) — front-door availability pipeline.
-  * :func:`accept_mission`, :func:`share_mission` (Phase 5a) — mission-run
-    lifecycle entry points.
+  * :func:`share_mission` (Phase 5a) — adds a non-contract-holder
+    participant. Mission acceptance now flows through the unified
+    NPCServiceOffer framework's MISSION effect handler (`issue_mission`
+    in ``world.missions.services.offer_handler``) per #686.
   * :func:`journal_for` (Phase 5a) — per-character journal read.
   * :func:`emit_terminal_rewards` (Phase 5b.0) — terminal-route reward-line
     emission from authored ``MissionOptionRouteReward`` rows.
@@ -30,7 +31,6 @@ Public surface:
     three deferred product-level questions).
 """
 
-from world.missions.services.availability import offer_missions
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.cron import apply_mission_reward_batch
 from world.missions.services.journal import journal_for
@@ -51,11 +51,10 @@ from world.missions.services.rewards import (
     apply_deed_rewards,
     emit_terminal_rewards,
 )
-from world.missions.services.run import accept_mission, share_mission
+from world.missions.services.run import share_mission, staff_assign_mission
 
 __all__ = [
     "MissionRewardRoutingError",
-    "accept_mission",
     "apply_deed_rewards",
     "apply_mission_reward_batch",
     "build_group_option_list",
@@ -65,10 +64,10 @@ __all__ = [
     "enter_node",
     "group_resolve_node",
     "journal_for",
-    "offer_missions",
     "on_mission_complete_for_beat",
     "resolve_option",
     "select_group_choice",
     "share_mission",
+    "staff_assign_mission",
     "validate_mission_option",
 ]
