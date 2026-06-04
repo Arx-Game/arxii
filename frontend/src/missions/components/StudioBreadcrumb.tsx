@@ -1,5 +1,5 @@
 /**
- * Studio breadcrumb — shared across NodePage / OptionPage / GiverEditor.
+ * Studio breadcrumb — shared across NodePage / OptionPage.
  *
  * Renders a row of links separated by `›` for the drill-down path. The
  * first crumb always links back to the browser; trailing crumbs are

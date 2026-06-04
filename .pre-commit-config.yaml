@@ -62,7 +62,10 @@ repos:
         pass_filenames: true
         types: [python]
         # Phase 1 + 2 scope: vitals + magic capability_requirements +
-        # conditions/services.py. Future PRs expand this regex one app at a
+        # conditions/services.py. Phase 3 expansion (#727 Phase 6): the
+        # npc_services service-function signatures were retyped from
+        # ObjectDB to the Character typeclass, so the module is now in
+        # scope. Future PRs continue to expand this regex one app at a
         # time as their service modules are triaged. See CLAUDE.md "Avoid
         # direct FKs to ObjectDB" for the OBJECTDB_PARAM noqa token and
         # rollout policy.
@@ -71,6 +74,7 @@ repos:
             vitals/services\.py
             |magic/services/capability_requirements\.py
             |conditions/services\.py
+            |npc_services/services\.py
           )$
       - id: check-migrations
         name: Check Django migrations

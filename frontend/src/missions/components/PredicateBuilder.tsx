@@ -14,9 +14,10 @@
  * without this, int-typed leaves (e.g. min_character_level) crash
  * the entire offer_missions pipeline at evaluate time.
  *
- * Used by both the option's visibility_rule (E3 OptionPage), the
+ * Used by the option's visibility_rule (E3 OptionPage) and the
  * template's availability_rule (TemplateRuleSection on the detail
- * panel), and per-offering requirements_override (GiverEditor).
+ * panel). The npc-services Mission Studio editor (#728 followup) will
+ * also reuse it for per-offer requirements_override authoring.
  */
 import { useId } from 'react';
 

@@ -310,6 +310,7 @@
 
 ### RoomProfile
 **Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne] (nullable)
   - objectdb -> objects.ObjectDB [OneToOne]
   - area -> areas.Area [FK] (nullable)
 **Pointed to by:**
@@ -320,6 +321,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - events <- events.Event
+  - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
 
 
 ## flows
@@ -419,6 +421,7 @@
   - offered_by <- npc_services.PermitOfferDetails
   - buildings <- buildings.Building
   - permits <- buildings.BuildingPermitDetails
+  - installable_features <- room_features.RoomFeatureKind
 
 ### MaterialLoreEffect
 **Foreign Keys:**
@@ -429,7 +432,7 @@
   - area -> areas.Area [OneToOne]
   - kind -> buildings.BuildingKind [FK]
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
-  - source_project -> projects.Project [FK] (nullable)
+  - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
   - materials_used <- buildings.BuildingMaterial
 
@@ -443,7 +446,6 @@
 ### BuildingPermitDetails
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
-  - holder_persona -> scenes.Persona [FK]
   - building_kind -> buildings.BuildingKind [FK]
   - issued_by_role -> npc_services.NPCRole [FK] (nullable)
   - consumed_by_persona -> scenes.Persona [FK] (nullable)
@@ -455,11 +457,11 @@
   - project -> projects.Project [OneToOne]
   - permit_details -> buildings.BuildingPermitDetails [FK]
   - ward -> areas.Area [FK]
-  - constructed_by_persona -> scenes.Persona [FK]
+  - constructed_by_persona -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
-- `complete_building_construction(project: 'Project') -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
+- `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
@@ -569,6 +571,7 @@
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
   - tarot_card -> tarot.TarotCard [FK] (nullable)
+  - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
   - characteristic_values <- character_sheets.CharacterSheetValue
   - development_points <- progression.DevelopmentPoints
@@ -590,6 +593,8 @@
   - scene_entry_endorsements_received <- magic.SceneEntryEndorsement
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
+  - founded_sanctums <- magic.SanctumDetails
+  - sanctum_pending_payouts <- magic.SanctumPendingPayout
   - ritualsession_set <- magic.RitualSession
   - ritualsessionparticipant_set <- magic.RitualSessionParticipant
   - sineating_offers_sent <- magic.SineatingPendingOffer
@@ -620,6 +625,10 @@
   - achievements <- achievements.CharacterAchievement
   - owned_instances <- instances.InstancedRoom
   - journal_entries <- journals.JournalEntry
+  - owned_items <- items.ItemInstance
+  - crafted_items <- items.ItemInstance
+  - items_given_away <- items.OwnershipEvent
+  - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - combo_learnings <- combat.ComboLearning
@@ -652,8 +661,10 @@
 
 ### Service Functions
 - `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' — True if the user is the original creator (player_number=1) or staff.`
+- `count_active_ocs(account: 'AbstractBaseUser') -> 'int' — Count OCs an account currently holds against its cap.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `create_object(*args, **kwargs) — Create a new in-game object.`
+- `enforce_oc_cap(account: 'AbstractBaseUser', *, cap: 'int' = 3) -> 'None' — Raise OCCapError if creating another OC would exceed ``cap``.`
 
 
 ## world.checks
@@ -1007,6 +1018,7 @@
 ### Service Functions
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
+- `apply_condition_by_name(*, payload: object, condition_name: str) -> None — Apply a named condition to the character carried by the event payload.`
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int — Remove all conditions from a target.`
@@ -1014,7 +1026,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, default_factory=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x763ba6969550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1173,6 +1185,7 @@
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
 - `tenancy_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationTenancy]' — Return ALL LocationTenancy rows (active and ended) for a`
 - `transfer_ownership(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, to_persona: 'Persona | None' = None, to_organization: 'Organization | None' = None, notes: 'str' = '', transferred_at: 'datetime | None' = None) -> 'LocationOwnership' — Atomically transfer (or claim) ownership of a location.`
+- `upsert_room_resonance_modifier(room_profile: 'RoomProfile', resonance: 'Resonance', *, source: 'str', delta: 'int') -> 'LocationValueModifier' — Get-or-create the room-level (room_profile, resonance, source) cascade row and`
 
 
 ## world.magic
@@ -1211,6 +1224,7 @@
   - resonancegrant_set <- magic.ResonanceGrant
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
+  - sanctums <- magic.SanctumDetails
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
@@ -1433,6 +1447,8 @@
   - source_pose_endorsement -> magic.PoseEndorsement [FK] (nullable)
   - source_scene_entry_endorsement -> magic.SceneEntryEndorsement [FK] (nullable)
   - outfit_item_facet -> items.ItemFacet [FK] (nullable)
+  - source_sanctum_details -> magic.SanctumDetails [FK] (nullable)
+  - source_project -> projects.Project [FK] (nullable)
 
 ### BeginningsRitualGrant
 **Foreign Keys:**
@@ -1542,12 +1558,28 @@
   - requirements <- magic.RitualComponentRequirement
   - ritualsession_set <- magic.RitualSession
   - capstone_events <- relationships.RelationshipCapstone
+  - installs_room_features <- room_features.RoomFeatureKindInstallRitual
 
 ### RitualComponentRequirement
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### SanctumDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+  - resonance_type -> magic.Resonance [FK]
+  - founder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+  - pending_payouts <- magic.SanctumPendingPayout
+  - anchored_threads <- magic.Thread
+
+### SanctumPendingPayout
+**Foreign Keys:**
+  - sanctum -> magic.SanctumDetails [FK]
+  - weaver_character_sheet -> character_sheets.CharacterSheet [FK]
 
 ### RitualSession
 **Foreign Keys:**
@@ -1632,6 +1664,7 @@
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - target_facet -> magic.Facet [FK] (nullable)
   - target_covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
   - treatment_attempts <- conditions.TreatmentAttempt
@@ -1681,7 +1714,7 @@
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -1919,8 +1952,7 @@
 **Pointed to by:**
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
-  - givers <- missions.MissionGiver
-  - offerings <- missions.MissionGiverOffering
+  - offer_details <- npc_services.MissionOfferDetails
 
 ### MissionNode
 **Foreign Keys:**
@@ -1965,6 +1997,8 @@
   - template -> missions.MissionTemplate [FK]
   - current_node -> missions.MissionNode [FK] (nullable)
   - source_beat -> stories.Beat [FK] (nullable)
+  - source_offer -> npc_services.NPCServiceOffer [FK] (nullable)
+  - accepted_as_persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - participants <- missions.MissionParticipant
   - snapshots <- missions.MissionNodeSnapshot
@@ -1996,19 +2030,6 @@
 **Foreign Keys:**
   - target -> objects.ObjectDB [FK] (nullable)
   - org -> societies.Organization [FK] (nullable)
-**Pointed to by:**
-  - offerings <- missions.MissionGiverOffering
-  - cooldowns <- missions.MissionGiverCooldown
-
-### MissionGiverOffering
-**Foreign Keys:**
-  - giver -> missions.MissionGiver [FK]
-  - template -> missions.MissionTemplate [FK]
-
-### MissionGiverCooldown
-**Foreign Keys:**
-  - giver -> missions.MissionGiver [FK]
-  - character -> objects.ObjectDB [FK]
 
 ### MissionDeedRewardLine
 **Foreign Keys:**
@@ -2021,7 +2042,6 @@
   - line -> missions.MissionDeedRewardLine [FK]
 
 ### Service Functions
-- `accept_mission(giver: 'MissionGiver', template: 'MissionTemplate', character: 'ObjectDB') -> 'MissionInstance' — Create a live instance for ``character`` taking ``template`` from ``giver``.`
 - `apply_deed_rewards(deed: 'MissionDeedRecord') -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
 - `build_group_option_list(instance: 'MissionInstance', node: 'MissionNode') -> 'list[PresentedOption]' — Union of every participant's Phase-3 option list at ``node``.`
@@ -2031,11 +2051,11 @@
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' — Record entry into ``node`` and advance the run's position.`
 - `group_resolve_node(instance: 'MissionInstance', node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'list[MissionDeedRecord]' — Resolve a multi-participant ``node`` from each participant's pick.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
-- `offer_missions(giver: 'MissionGiver', character: 'ObjectDB', risk_dial: 'int' = 0, count: 'int' = 5, *, presented_persona: 'Persona | None' = None) -> 'list[MissionTemplate]' — Return up to ``count`` templates the giver offers this character right now.`
 - `on_mission_complete_for_beat(instance: 'MissionInstance') -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger (5b.3 stub-record).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
 - `select_group_choice(node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'GroupChoice' — Resolve contested picks per ``node.conflict_mode``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
+- `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB') -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
 - `validate_mission_option(option: 'MissionOption') -> 'None' — Validate post-save invariants for ``option``.`
 
 
@@ -2085,10 +2105,12 @@
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - offers <- npc_services.NPCServiceOffer
+  - role_cooldowns <- npc_services.NPCRoleCooldown
   - permits_issued <- buildings.BuildingPermitDetails
 
 ### NPCServiceOffer
 **Foreign Keys:**
+  - mission_offer_details -> npc_services.MissionOfferDetails [OneToOne] (nullable)
   - permit_offer_details -> npc_services.PermitOfferDetails [OneToOne] (nullable)
   - role -> npc_services.NPCRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
@@ -2100,22 +2122,33 @@
   - offer -> npc_services.NPCServiceOffer [FK]
   - persona -> scenes.Persona [FK]
 
+### NPCRoleCooldown
+**Foreign Keys:**
+  - role -> npc_services.NPCRole [FK]
+  - persona -> scenes.Persona [FK]
+
+### MissionOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - role -> npc_services.NPCRole [FK]
+  - mission_template -> missions.MissionTemplate [FK]
+
 ### PermitOfferDetails
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - building_kind -> buildings.BuildingKind [FK] (nullable)
 
 ### Service Functions
-- `available_offers(session: 'InteractionSession') -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
+- `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
 - `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7a38846ad550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, default_factory=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x763ba6969550>) — Return an object to identify dataclass fields.`
+- `is_staff_observer(observer: 'object') -> 'bool' — Whether ``observer`` represents a staff user.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
-- `persona_for_character(character: 'ObjectDB') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
-- `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'ObjectDB', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
+- `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
 
 
 ## world.progression
@@ -2322,13 +2355,15 @@
 
 ### Project
 **Foreign Keys:**
+  - resulting_building -> buildings.Building [OneToOne] (nullable)
   - building_construction_details -> buildings.BuildingConstructionDetails [OneToOne] (nullable)
+  - room_feature_progression_details -> room_features.RoomFeatureProgressionDetails [OneToOne] (nullable)
   - owner_persona -> scenes.Persona [FK]
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
   - contributions <- projects.Contribution
-  - resulting_building <- buildings.Building
 
 ### Contribution
 **Foreign Keys:**
@@ -2636,9 +2671,9 @@
   - npc_standings <- npc_services.NPCStanding
   - standings_held_by <- npc_services.NPCStanding
   - offer_cooldowns <- npc_services.OfferCooldown
+  - role_cooldowns <- npc_services.NPCRoleCooldown
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
-  - held_building_permits <- buildings.BuildingPermitDetails
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
 
@@ -2728,6 +2763,7 @@
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
 - `cast(typ, val) — Cast a value to a type.`
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
+- `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 
 
 ## world.skills
@@ -2777,13 +2813,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7a3880500360>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x763ba29d8a50>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7a3880500360>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x763ba29d8a50>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
