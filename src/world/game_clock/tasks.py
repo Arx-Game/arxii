@@ -356,6 +356,25 @@ def register_all_tasks() -> None:
         )
     )
 
+    # #742 Phase I: Refresh the SocietyPrestigeRanking materialized view
+    # so the in-world herald/plaque displays show current rankings.
+    # Staff can disable via ScheduledTaskRecord.enabled in admin until
+    # the game launches.
+    from world.societies.ranking_services import refresh_society_prestige_ranking
+
+    register_task(
+        CronDefinition(
+            task_key="societies.ranking_refresh",
+            callable=refresh_society_prestige_ranking,
+            interval=timedelta(hours=24),
+            description=(
+                "Nightly refresh of societies_societyprestigeranking "
+                "(CONCURRENTLY-refreshable via the unique index). No-op on "
+                "SQLite — materialized views are PostgreSQL-only."
+            ),
+        )
+    )
+
     from world.fatigue.tasks import fatigue_dawn_reset_task
 
     register_task(

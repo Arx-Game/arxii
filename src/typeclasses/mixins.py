@@ -139,11 +139,60 @@ class ObjectParent:
         so that the calling command shows nothing (or its own fallback).
         Reactive flows that appended to ``ExaminePrePayload.sections`` have
         their text concatenated after the base appearance.
+
+        Objects with a ``RankingDisplay`` profile (#676 Phase I diegetic
+        rankings) get the rendered top-N appended after the base — the
+        herald reads names, the academy display shimmers, etc.
         """
         if looker is not None and not self.at_examined(looker):
             return ""
         base = super().return_appearance(looker, **kwargs)  # type: ignore[misc]
         sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL
+        ranking = _maybe_render_ranking_display(self, looker)
+        if ranking is not None:
+            sections = [*sections, ranking]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
+
+
+def _maybe_render_ranking_display(obj, looker) -> str | None:
+    """Render the ranking display attached to ``obj`` (if any) for ``looker``.
+
+    Returns the rendered IC narration or None when the object has no
+    ``RankingDisplay`` row. Lazy-imports the societies layer to keep the
+    typeclass package free of a hard dependency on it.
+
+    The viewer's currently-presented persona is resolved from
+    ``looker.item_data.presented_persona`` when available; falls back to
+    the looker's primary persona, then to None (which surfaces the
+    cloaked narration on SOCIETY_PRESTIGE displays — non-members can't
+    see names).
+    """
+    from world.societies.models import RankingDisplay
+    from world.societies.ranking_services import render_ranking_display
+
+    try:
+        display = obj.ranking_display
+    except RankingDisplay.DoesNotExist:
+        return None
+    except AttributeError:
+        return None
+    viewer_persona = _resolve_viewer_persona(looker)
+    return render_ranking_display(display, viewer_persona)
+
+
+def _resolve_viewer_persona(looker):
+    """Walk ``looker → sheet_data → primary_persona``; None on any miss."""
+    if looker is None:
+        return None
+    try:
+        sheet = looker.sheet_data
+    except AttributeError:
+        return None
+    if sheet is None:
+        return None
+    try:
+        return sheet.primary_persona
+    except Exception:  # noqa: BLE001 — Persona.DoesNotExist is fine; sheet may not exist.
+        return None
