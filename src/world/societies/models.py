@@ -1124,6 +1124,25 @@ class RankingDisplay(SharedMemoryModel):
         help_text="How many entries to show.",
     )
 
+    class Meta:
+        constraints = [
+            # SOCIETY_PRESTIGE rankings must scope to a specific society;
+            # ACADEMY_LEGEND rankings are global (society must be null).
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        ranking_type="society_prestige",
+                        scope_society__isnull=False,
+                    )
+                    | models.Q(
+                        ranking_type="academy_legend",
+                        scope_society__isnull=True,
+                    )
+                ),
+                name="societies_ranking_display_scope_matches_type",
+            ),
+        ]
+
     def __str__(self) -> str:
         scope = self.scope_society.name if self.scope_society else "global"
         return f"{self.get_ranking_type_display()} @ {scope}"

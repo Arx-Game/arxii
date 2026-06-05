@@ -73,7 +73,12 @@ def _resolve_owner_wallet(building: Building):
     character = sheet.character
     if character is None:
         return None
-    return getattr(character, "currency_balance", None)  # noqa: GETATTR_LITERAL
+    from world.items.models import CurrencyBalance  # noqa: PLC0415
+
+    try:
+        return character.currency_balance
+    except CurrencyBalance.DoesNotExist:
+        return None
 
 
 def _building_active_instances(building: Building):

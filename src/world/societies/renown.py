@@ -258,20 +258,17 @@ def _set_persona_prestige_source(persona: Persona, source_field: str, delta: int
     persona.save(update_fields=[source_field, "total_prestige"])
 
 
-def _resolve_home_realm(origin_area: object | None) -> object | None:
+def _resolve_home_realm(origin_area):
     """Walk an Area's parent chain to find the first non-null ``realm`` FK.
 
     Returns the Realm instance or None if origin_area is None or no realm
     is set anywhere up the chain.
     """
-    if origin_area is None:
-        return None
-    area: object | None = origin_area
+    area = origin_area
     while area is not None:
-        realm = getattr(area, "realm", None)  # noqa: GETATTR_LITERAL
-        if realm is not None:
-            return realm
-        area = getattr(area, "parent", None)  # noqa: GETATTR_LITERAL
+        if area.realm is not None:
+            return area.realm
+        area = area.parent
     return None
 
 
@@ -294,35 +291,49 @@ def _resolve_aware_realms(home_realm: object | None, reach: str) -> list:
     if reach in (RenownReach.LOCAL.value, RenownReach.REGIONAL.value):
         return [home_realm]
     if reach == RenownReach.CONTINENTAL.value:
-        # Find any Area on the home_realm at level CONTINENT, then collect
-        # every Realm with at least one area whose ancestor is that
-        # continent. The Area.parent chain is finite (PLANE > CONTINENT >
-        # KINGDOM > REGION > CITY > WARD > NEIGHBORHOOD > BUILDING), so
-        # walking it is bounded.
-        continents = list(Area.objects.filter(realm=home_realm, level=AreaLevel.CONTINENT))
-        if not continents:
-            # No continent-tier areas authored for this realm — fall back to
-            # home-realm-only awareness rather than zero out continental
-            # reach. Authoring should usually catch this, but be defensive.
+        # CONTINENTAL = every Realm with territory under the home Realm's
+        # CONTINENT-level Areas. Uses the AreaClosure materialized view
+        # (transitive ancestor-descendant pairs) for a single-query
+        # descendant scan rather than per-node BFS.
+        from world.areas.models import AreaClosure  # noqa: PLC0415
+
+        continent_ids = list(
+            Area.objects.filter(realm=home_realm, level=AreaLevel.CONTINENT).values_list(
+                "pk", flat=True
+            )
+        )
+        if not continent_ids:
+            logger.warning(
+                "renown.continental_reach: home Realm %s has no CONTINENT-level "
+                "Areas — falling back to LOCAL awareness. Author at least one "
+                "Continent area on this Realm.",
+                home_realm.pk if home_realm else None,
+            )
             return [home_realm]
-        # For each continent, gather descendant areas, then unique realms.
-        realm_ids: set[int] = set()
-        for continent in continents:
-            for descendant in _descendants_of(continent):
-                if descendant.realm_id is not None:
-                    realm_ids.add(descendant.realm_id)
+        realm_ids = set(
+            AreaClosure.objects.filter(ancestor_id__in=continent_ids)
+            .exclude(descendant__realm__isnull=True)
+            .values_list("descendant__realm_id", flat=True)
+            .distinct()
+        )
         return list(Realm.objects.filter(pk__in=realm_ids))
     msg = f"unknown reach: {reach!r}"
     raise ValueError(msg)
 
 
 def _descendants_of(area: object) -> Iterable:
-    """Yield Area + all of its descendants (BFS via the parent reverse manager)."""
-    queue: list = [area]
-    while queue:
-        current = queue.pop(0)
-        yield current
-        queue.extend(current.children.all())
+    """Yield Area + all of its descendants via the AreaClosure MV.
+
+    Single-query descendant scan. Used by the CONTINENTAL reach path
+    above; kept as a small helper for future call sites that want the
+    descendant Area instances directly (rather than just their IDs).
+    """
+    from world.areas.models import Area, AreaClosure  # noqa: PLC0415
+
+    descendant_ids = AreaClosure.objects.filter(ancestor=area).values_list(
+        "descendant_id", flat=True
+    )
+    yield from Area.objects.filter(pk__in=descendant_ids)
 
 
 def _archetype_dot_product(archetypes: Sequence, society: object) -> int:
@@ -588,14 +599,22 @@ def apply_body_covenant_legend_inflow(
     from world.scenes.constants import PersonaType  # noqa: PLC0415
     from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
 
-    primary = PersonaModel.objects.filter(
-        character_sheet=persona.character_sheet,
-        persona_type=PersonaType.PRIMARY,
-    ).first()
-    if primary is None:
+    # Spec: "Walk to the body's PRIMARY/ESTABLISHED persona's covenant
+    # memberships." Prefer PRIMARY when present; fall back to any
+    # ESTABLISHED on the same body so legend still flows for bodies
+    # that only have an established alter-ego (no formal PRIMARY).
+    body_persona = (
+        PersonaModel.objects.filter(
+            character_sheet=persona.character_sheet,
+            persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED],
+        )
+        .order_by("persona_type")  # PRIMARY sorts before ESTABLISHED alphabetically.
+        .first()
+    )
+    if body_persona is None:
         return ()
 
-    memberships = list(primary.organization_memberships.select_related("organization"))
+    memberships = list(body_persona.organization_memberships.select_related("organization"))
     if not memberships:
         return ()
 
@@ -681,7 +700,9 @@ def recompute_members_prestige_from_orgs_for_orgs(org_ids: Sequence[int]) -> int
 def apply_spread_fame_bump(
     deed,
     spreader: Persona,
-    value_added: int,
+    *,
+    npc_audience: int = 0,
+    success_level: int = 1,
 ) -> bool:
     """#676 Phase H — Bump the deed-subject's fame buffer when a spread lands.
 
@@ -690,18 +711,27 @@ def apply_spread_fame_bump(
     spreader's reward is the deed's existence in the world, not their
     own fame. (The spreader's fame can still rise via their *own* deeds.)
 
-    Bump formula (per spec): proportional to ``value_added`` (the legend
-    actually conveyed, after clamping). Returns True iff the fame tier
-    changed on the subject.
+    Spec formula (#676 §Legend Spread):
+        fame_bump = 1 × npc_audience × success_level
 
-    The spreader argument is kept for symmetry with future "spreader
-    reputation gain" logic — currently unused.
+    Default args yield bump=0 — caller MUST pass non-default values for
+    fame to actually move. This keeps the current admin-API spread
+    callers (which don't yet have NPC/check data) backwards-compatible:
+    they spread legend without bumping fame, exactly as before this fix.
+    The player-facing spread API (deferred follow-up) will pass real
+    values from the scene/check resolution.
+
+    Returns True iff the fame tier changed on the subject.
+
+    The ``spreader`` argument is kept for symmetry with future
+    "spreader reputation gain" logic — currently unused.
     """
     del spreader  # see docstring: reserved for future spreader-reward use.
-    if value_added <= 0 or deed.persona_id is None:
+    bump = npc_audience * success_level
+    if bump <= 0 or deed.persona_id is None:
         return False
     subject = deed.persona
-    return set_persona_fame(subject, subject.fame_points + value_added)
+    return set_persona_fame(subject, subject.fame_points + bump)
 
 
 def _covenant_org_ids(org_ids: Sequence[int]) -> set[int]:

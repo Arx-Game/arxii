@@ -202,8 +202,11 @@ def spread_deed(  # noqa: PLR0913
 
     for credit in deed.covenant_credits.all():
         recompute_covenant_level(covenant=credit.covenant)
-    # #676 Phase H: subject's fame buffer rises when the deed gets spread.
-    apply_spread_fame_bump(deed, spreader_persona, clamped_value)
+    # #676 Phase H: subject's fame buffer rises by ``1 × npc_audience × success_level``.
+    # The existing admin spread API doesn't carry NPC/check data yet, so
+    # this call no-ops on fame; the player-facing spread endpoint
+    # (deferred follow-up) will pass real values.
+    apply_spread_fame_bump(deed, spreader_persona)
     return spread
 
 

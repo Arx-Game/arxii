@@ -44,7 +44,16 @@ def place_item_in_room(
     Returns the created RoomItem, or None when the item is currently
     equipped (the XOR rule). Idempotent on the same placement: if the
     item is already placed in this room, returns the existing row.
+
+    XOR race-safety: locks ``item_instance`` for the duration of this
+    transaction so concurrent place/equip attempts on the same item
+    serialize. Without this lock, two callers could both pass their
+    "is the other state set?" check and both create rows.
     """
+    # Lock the item row first — any concurrent place or equip on this
+    # same item now blocks until this transaction commits.
+    ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
+
     if EquippedItem.objects.filter(item_instance=item_instance).exists():
         return None
 
