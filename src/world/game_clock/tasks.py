@@ -334,6 +334,11 @@ def register_all_tasks() -> None:
         )
     )
 
+    # #676 Phase A: Renown decay (fame on personas, accumulated on orgs)
+    from world.societies.tasks import register_all_tasks as register_renown_tasks
+
+    register_renown_tasks()
+
     from world.fatigue.tasks import fatigue_dawn_reset_task
 
     register_task(

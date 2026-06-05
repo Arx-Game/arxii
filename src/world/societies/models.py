@@ -103,6 +103,22 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
         help_text="Hierarchy (-5) to Equality (+5)",
     )
 
+    # #676 Phase A: how isolated this society's information network is.
+    # Effective tier subtraction applied when computing a persona's perceived
+    # fame tier from this society's perspective. 0 = fully connected (sees
+    # all tiers as authored). -4 = very isolated (only World Famous personas
+    # register at all, and they read as Normal multiplier). Admin-tunable
+    # per society. See docs on the Renown system in issue #676.
+    fame_perception_offset = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(-4), MaxValueValidator(0)],
+        help_text=(
+            "How isolated this society's news flow is. 0 = fully connected; "
+            "-4 = very isolated (only World Famous personas register at all, "
+            "and only at Normal multiplier). See Renown design (#676)."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -278,6 +294,44 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         blank=True,
         help_text="Override for rank 5 title. If blank, uses org_type's default.",
+    )
+
+    # #676 Phase A: Renown system org prestige stores. base_prestige is
+    # admin-authored and permanent; accumulated_* are event-fed from member
+    # deeds and decay (cron task in tasks.py). accumulated_legend is
+    # permanent and only populated for covenant-backed orgs (Org.covenant
+    # OneToOne reverse exists) — see #676 spec for the body-flow rule.
+    base_prestige = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Admin-set permanent prestige floor for this organization. "
+            "Never decays; never event-modified. Quarterly accounting may "
+            "uplift base from accumulated, but that's a separate operation."
+        ),
+    )
+    accumulated_prestige = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed prestige accumulation from member deeds (10% of any "
+            "member persona's deed prestige). Decays at a high rate per IC "
+            "day via the renown decay cron."
+        ),
+    )
+    accumulated_fame = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed fame buffer for this organization, from member deed "
+            "fame gains. Decays fast like persona fame."
+        ),
+    )
+    accumulated_legend = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed legend accumulation, COVENANTS ONLY. Body-flow rule: "
+            "any member-body's legend gain credits 10% here regardless of "
+            "which persona did the deed. Permanent — never decays. Used as "
+            "a ritual-availability gate (separate magic design pass)."
+        ),
     )
 
     objects = NaturalKeyManager()

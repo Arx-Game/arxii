@@ -18,6 +18,7 @@ from world.scenes.constants import (
     SummaryAction,
     SummaryStatus,
 )
+from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -226,6 +227,69 @@ class Persona(SharedMemoryModel):
         help_text="Neutral descriptive tags on this persona (e.g. masked-identity, "
         "abyssal), used by reactive examine-filters via has_property.",
     )
+
+    # #676 Phase A: Renown system fields. Four prestige sources (denormalized
+    # for cheap read), plus the cached total. Sources are updated event-driven
+    # in subsequent phases (B+); Phase A just establishes the schema and the
+    # cron decay infrastructure for fame. All fields default to 0; existing
+    # personas don't need backfill.
+    prestige_from_dwellings = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized prestige from owned/tenanted dwellings (Phase D wires "
+            "the polish-flow updates). Signed — can drop on decay or scandal."
+        ),
+    )
+    prestige_from_items = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized prestige from equipped/displayed items (Phase F wires "
+            "the equipment-flow updates). Signed — can drop on item loss."
+        ),
+    )
+    prestige_from_orgs = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized prestige from org memberships (Phase C wires the "
+            "rank-weighted outflow from each org). Signed."
+        ),
+    )
+    prestige_from_deeds = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Permanent accumulated prestige from Renown event deeds (Phase B "
+            "wires the event-fire awards). Signed — rare scandal awards subtract."
+        ),
+    )
+    total_prestige = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized sum of the four prestige source fields. Updated "
+            "whenever any source field is written. Signed."
+        ),
+    )
+    fame_points = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Current fame buffer for this persona. Event-augmented (renown "
+            "fires + legend spreads) and cron-decayed (5 + 5% per IC day). "
+            "Floors at 0. The derived fame_tier field is recomputed on every "
+            "write to this field."
+        ),
+    )
+    fame_tier = models.CharField(
+        max_length=20,
+        choices=FameTier.choices,
+        default=FameTier.NORMAL,
+        db_index=True,
+        help_text=(
+            "Derived display tier — Normal / Talked About / Celebrity / "
+            "Household Name / World Famous. Recomputed whenever fame_points "
+            "is written; UI reads this directly. Multiplier lookup lives in "
+            "societies.constants.FAME_TIER_MULTIPLIERS."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
