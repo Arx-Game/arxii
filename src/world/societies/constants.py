@@ -193,3 +193,37 @@ PRINCIPLE_FIELD_NAMES: tuple[str, ...] = (
     "allegiance",
     "power",
 )
+
+
+# ---------------------------------------------------------------------------
+# Org accumulation flow (Phase C, #676)
+#
+# Inflow: every member's renown deed contributes a flat fraction to each of
+# their org memberships' accumulated values. Flat (not rank-weighted) per
+# the spec — "any member's deeds reflect on the org because they're a member."
+#
+# Outflow: persona.prestige_from_orgs reads back the org's accumulated
+# values weighted by the member's rank — heads of org extract full standing,
+# peripheral members barely benefit. The asymmetric inflow/outflow creates
+# the patronage feel.
+#
+# Loop-safety: outflow is a pure *readout* of org state. It never feeds back
+# into the org's accumulated values. Deeds → org accumulated is the only
+# direction of write; prestige_from_orgs is recomputed on the persona side
+# whenever an affecting org changes.
+# ---------------------------------------------------------------------------
+
+# Fraction of a persona's renown-deed prestige/fame/legend that flows into
+# each of their org memberships. Flat across all ranks.
+ORG_INFLOW_FRACTION: float = 0.10
+
+# Rank-weighted outflow multipliers (1 = highest rank, 5 = lowest). Heads of
+# org get full org standing; aspirants get a token share. Admin-tunable in
+# a future settings model.
+RANK_OUTFLOW_MULTIPLIERS: dict[int, float] = {
+    1: 1.0,
+    2: 0.5,
+    3: 0.25,
+    4: 0.10,
+    5: 0.05,
+}

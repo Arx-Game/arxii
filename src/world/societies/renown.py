@@ -37,9 +37,11 @@ from world.societies.constants import (
     MAGNITUDE_TO_DEFAULT_REACH,
     ORG_FAME_DECAY_FLAT,
     ORG_FAME_DECAY_PCT,
+    ORG_INFLOW_FRACTION,
     ORG_PRESTIGE_DECAY_FLAT,
     ORG_PRESTIGE_DECAY_PCT,
     PRINCIPLE_FIELD_NAMES,
+    RANK_OUTFLOW_MULTIPLIERS,
     RISK_LEGEND_AWARDS,
     FameTier,
     RenownReach,
@@ -175,16 +177,23 @@ def decay_all_org_accumulated() -> int:
     """Apply accumulated-prestige + accumulated-fame decay to every org with positive accumulation.
 
     Single transaction. Iterates only orgs with either accumulated value > 0.
-    Does NOT touch covenants' accumulated_legend.
+    Does NOT touch covenants' accumulated_legend. After decaying each org,
+    recomputes ``prestige_from_orgs`` for every member persona whose outflow
+    reads this org — the org's accumulated dropping changes everyone's
+    rank-weighted readout.
     """
     from django.db.models import Q  # noqa: PLC0415
 
     touched = 0
+    touched_org_ids: list[int] = []
     for org in Organization.objects.filter(
         Q(accumulated_prestige__gt=0) | Q(accumulated_fame__gt=0)
     ).iterator():
         apply_org_accumulated_decay(org)
         touched += 1
+        touched_org_ids.append(org.pk)
+    if touched_org_ids:
+        recompute_members_prestige_from_orgs_for_orgs(touched_org_ids)
     logger.info("renown.org_accumulated_decay: applied to %d organizations", touched)
     return touched
 
@@ -219,6 +228,9 @@ class RenownAwardResult:
     legend_entry_id: int | None = None
     aware_society_ids: tuple[int, ...] = field(default_factory=tuple)
     reputation_deltas: dict[int, int] = field(default_factory=dict)
+    # Phase C: org accumulated inflow + covenant-legend body-flow.
+    org_inflow_org_ids: tuple[int, ...] = field(default_factory=tuple)
+    covenant_legend_inflow_org_ids: tuple[int, ...] = field(default_factory=tuple)
 
 
 def _set_persona_prestige_source(persona: Persona, source_field: str, delta: int) -> None:
@@ -426,6 +438,13 @@ def fire_renown_award(  # noqa: PLR0913
             entry.societies_aware.set(aware_society_ids)
         legend_entry_id = entry.pk
 
+    org_inflow_org_ids, covenant_legend_inflow_org_ids = _dispatch_org_inflow(
+        persona,
+        prestige_awarded=prestige_awarded,
+        fame_awarded=fame_awarded,
+        legend_awarded=legend_awarded,
+    )
+
     return RenownAwardResult(
         persona_id=persona.pk,
         fame_awarded=fame_awarded,
@@ -435,4 +454,241 @@ def fire_renown_award(  # noqa: PLR0913
         legend_entry_id=legend_entry_id,
         aware_society_ids=tuple(aware_society_ids),
         reputation_deltas=reputation_deltas,
+        org_inflow_org_ids=org_inflow_org_ids,
+        covenant_legend_inflow_org_ids=covenant_legend_inflow_org_ids,
+    )
+
+
+def _dispatch_org_inflow(
+    persona: Persona,
+    *,
+    prestige_awarded: int,
+    fame_awarded: int,
+    legend_awarded: int,
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Route a fired award's flows into the right org-inflow path for this persona.
+
+    PRIMARY/ESTABLISHED → flat inflow into every membership's org (returns
+    org_inflow_org_ids). TEMPORARY → body-flow covenant legend into the
+    body's PRIMARY persona's covenant memberships (returns
+    covenant_legend_inflow_org_ids). Returns the pair so the orchestrator
+    can stuff both into ``RenownAwardResult``.
+    """
+    if persona.is_established_or_primary:
+        return (
+            apply_org_inflow_for_persona_deed(
+                persona,
+                prestige_delta=prestige_awarded,
+                fame_delta=fame_awarded,
+                legend_delta=legend_awarded,
+            ),
+            (),
+        )
+    if legend_awarded > 0:
+        return (
+            (),
+            apply_body_covenant_legend_inflow(persona, legend_delta=legend_awarded),
+        )
+    return ((), ())
+
+
+# ---------------------------------------------------------------------------
+# Phase C — Org inflow + persona outflow
+#
+# Loop-safe flow:
+#
+#   persona deed ──(flat 10% inflow)──▶ each membership's org accumulated
+#                                              │
+#                                              ▼
+#                                       prestige_from_orgs(persona)
+#                                       = sum over memberships of
+#                                         (base + accum_prestige + accum_fame)
+#                                         × rank_multiplier(rank)
+#
+# Outflow is a pure readout — it never feeds back into the org. The only
+# write to an org's accumulated values is the inflow from a member's deed
+# or the cron decay (in the opposite direction).
+#
+# Whenever an org's accumulated values change (deed inflow or cron decay),
+# every member's prestige_from_orgs must be recomputed because the rank-
+# weighted sum reads the latest org values.
+# ---------------------------------------------------------------------------
+
+
+def apply_org_inflow_for_persona_deed(
+    persona: Persona,
+    *,
+    prestige_delta: int,
+    fame_delta: int,
+    legend_delta: int,
+) -> tuple[int, ...]:
+    """Apply flat-10% inflow from a persona's deed into each membership's org.
+
+    Returns the tuple of org IDs touched. After inflow, recomputes the
+    rank-weighted outflow for every member persona of every touched org
+    (the org's accumulated values changed, so everyone's readout changed).
+
+    Covenant-typed orgs additionally receive legend inflow (permanent, never
+    decays). Non-covenant orgs ignore legend_delta.
+
+    No-op for personas where ``is_established_or_primary`` is False.
+    """
+    if not persona.is_established_or_primary:
+        return ()
+    if prestige_delta <= 0 and fame_delta <= 0 and legend_delta <= 0:
+        return ()
+
+    memberships = list(persona.organization_memberships.select_related("organization"))
+    if not memberships:
+        return ()
+
+    org_ids = [m.organization_id for m in memberships]
+    covenant_org_ids = _covenant_org_ids(org_ids)
+
+    inflow_prestige = int(prestige_delta * ORG_INFLOW_FRACTION)
+    inflow_fame = int(fame_delta * ORG_INFLOW_FRACTION)
+    inflow_legend = int(legend_delta * ORG_INFLOW_FRACTION)
+
+    for membership in memberships:
+        org = membership.organization
+        update_fields: list[str] = []
+        if inflow_prestige > 0:
+            org.accumulated_prestige += inflow_prestige
+            update_fields.append("accumulated_prestige")
+        if inflow_fame > 0:
+            org.accumulated_fame += inflow_fame
+            update_fields.append("accumulated_fame")
+        if inflow_legend > 0 and org.pk in covenant_org_ids:
+            org.accumulated_legend += inflow_legend
+            update_fields.append("accumulated_legend")
+        if update_fields:
+            org.save(update_fields=update_fields)
+
+    recompute_members_prestige_from_orgs_for_orgs(org_ids)
+    return tuple(org_ids)
+
+
+def apply_body_covenant_legend_inflow(
+    persona: Persona,
+    *,
+    legend_delta: int,
+) -> tuple[int, ...]:
+    """Apply rank-weighted body-flow covenant-legend inflow for a TEMPORARY persona.
+
+    Legend follows the body, not the persona's social standing. So a
+    TEMPORARY persona's deed routes its legend into the body's PRIMARY
+    persona's covenant memberships, weighted by the primary's rank in each
+    covenant (per the spec — distinct from the flat inflow path).
+
+    Returns the tuple of covenant org IDs touched. No-op when the body has
+    no PRIMARY persona or that primary has no covenant memberships.
+    """
+    if legend_delta <= 0:
+        return ()
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
+
+    primary = PersonaModel.objects.filter(
+        character_sheet=persona.character_sheet,
+        persona_type=PersonaType.PRIMARY,
+    ).first()
+    if primary is None:
+        return ()
+
+    memberships = list(primary.organization_memberships.select_related("organization"))
+    if not memberships:
+        return ()
+
+    covenant_org_ids = _covenant_org_ids([m.organization_id for m in memberships])
+    if not covenant_org_ids:
+        return ()
+
+    touched: list[int] = []
+    for membership in memberships:
+        if membership.organization_id not in covenant_org_ids:
+            continue
+        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank, 0.0)
+        inflow = int(legend_delta * ORG_INFLOW_FRACTION * rank_mult)
+        if inflow <= 0:
+            continue
+        org = membership.organization
+        org.accumulated_legend += inflow
+        org.save(update_fields=["accumulated_legend"])
+        touched.append(org.pk)
+    return tuple(touched)
+
+
+def recompute_persona_prestige_from_orgs(persona: Persona) -> int:
+    """Rank-weighted readout of every membership's org standing into the persona.
+
+    Writes the recomputed ``prestige_from_orgs`` (and the dependent
+    ``total_prestige`` denorm) onto the persona. Returns the new
+    ``prestige_from_orgs`` value.
+
+    Loop-safe: this is a pure readout of org state. It never feeds back
+    into the org.
+    """
+    if not persona.is_established_or_primary:
+        # TEMPORARY personas have no memberships and cannot earn outflow.
+        # Their fields default to 0 and stay there.
+        return persona.prestige_from_orgs
+
+    total = 0
+    for membership in persona.organization_memberships.select_related("organization"):
+        org = membership.organization
+        org_standing = org.base_prestige + org.accumulated_prestige + org.accumulated_fame
+        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank, 0.0)
+        total += int(org_standing * rank_mult)
+
+    if total == persona.prestige_from_orgs:
+        return total
+    persona.prestige_from_orgs = total
+    persona.total_prestige = (
+        persona.prestige_from_dwellings
+        + persona.prestige_from_items
+        + persona.prestige_from_orgs
+        + persona.prestige_from_deeds
+    )
+    persona.save(update_fields=["prestige_from_orgs", "total_prestige"])
+    return total
+
+
+def recompute_members_prestige_from_orgs_for_orgs(org_ids: Sequence[int]) -> int:
+    """Recompute ``prestige_from_orgs`` for every persona with a membership in any of these orgs.
+
+    Returns the count of personas recomputed. Called after a sweep of
+    org inflow or org decay — any change to an org's accumulated values
+    invalidates every member's rank-weighted readout.
+    """
+    if not org_ids:
+        return 0
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    persona_ids = set(
+        OrganizationMembership.objects.filter(organization_id__in=org_ids).values_list(
+            "persona_id", flat=True
+        )
+    )
+    if not persona_ids:
+        return 0
+    count = 0
+    for persona in Persona.objects.filter(pk__in=persona_ids):
+        recompute_persona_prestige_from_orgs(persona)
+        count += 1
+    return count
+
+
+def _covenant_org_ids(org_ids: Sequence[int]) -> set[int]:
+    """Return the subset of ``org_ids`` whose Organizations back a Covenant.
+
+    Single query via the Covenant.organization OneToOneField reverse path.
+    """
+    if not org_ids:
+        return set()
+    from world.covenants.models import Covenant  # noqa: PLC0415
+
+    return set(
+        Covenant.objects.filter(organization_id__in=org_ids).values_list(
+            "organization_id", flat=True
+        )
     )
