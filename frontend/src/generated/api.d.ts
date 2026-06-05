@@ -8033,6 +8033,98 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/npc-services/mission-details/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    get: operations['npc_services_mission_details_list'];
+    put?: never;
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    post: operations['npc_services_mission_details_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/mission-details/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    get: operations['npc_services_mission_details_retrieve'];
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    put: operations['npc_services_mission_details_update'];
+    post?: never;
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    delete: operations['npc_services_mission_details_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff CRUD for mission-kind offer details (1:1 to an NPCServiceOffer).
+     *
+     *     Parallels ``PermitOfferDetailsViewSet`` (Plan 3 #668) and unblocks the
+     *     npc-services Mission Studio editor (#728). ``role`` on the model is
+     *     denormalized from ``offer.role`` via the model's ``save()`` override
+     *     (per #686 Phase 6), so the serializer marks it read-only — the FE
+     *     sets `offer` and the catalog uniqueness `(role, mission_template)`
+     *     is enforced at the DB level via the auto-mirrored FK.
+     */
+    patch: operations['npc_services_mission_details_partial_update'];
+    trace?: never;
+  };
   '/api/npc-services/offers/': {
     parameters: {
       query?: never;
@@ -8221,6 +8313,32 @@ export interface paths {
     head?: never;
     /** @description ViewSet for managing personas within scenes */
     patch: operations['personas_partial_update'];
+    trace?: never;
+  };
+  '/api/personas/{id}/renown/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #676 Phase G — Read-only renown payload for the renown tab.
+     *
+     *     Returns four prestige axes + total, fame buffer + tier metadata,
+     *     per-society reputation (named tier labels, never numeric values),
+     *     and the persona's recent deeds.
+     *
+     *     Writes happen through the event-firing services (fire_renown_award
+     *     etc.), not this endpoint.
+     */
+    get: operations['personas_renown_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/places/': {
@@ -14375,6 +14493,45 @@ export interface components {
       flavor_text_needs_rewrite?: boolean;
     };
     /**
+     * @description Staff CRUD for mission-kind offer details (#728).
+     *
+     *     ``role`` is denormalized from ``offer.role`` by the model's ``save()``
+     *     override (per #686 Phase 6) so callers never set it directly — it's
+     *     read-only here, and the unique-constraint promise on
+     *     ``(role, mission_template)`` is enforced at the DB level.
+     */
+    MissionOfferDetails: {
+      readonly id: number;
+      offer: number;
+      /** @description Denormalized from offer.role to enforce (role, mission_template) catalog uniqueness. Kept in sync via save(). */
+      readonly role: number;
+      mission_template: number;
+      /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
+      weight?: number | null;
+      /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
+      requirements_override?: unknown;
+      /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
+      role_cooldown_duration?: string | null;
+    };
+    /**
+     * @description Staff CRUD for mission-kind offer details (#728).
+     *
+     *     ``role`` is denormalized from ``offer.role`` by the model's ``save()``
+     *     override (per #686 Phase 6) so callers never set it directly — it's
+     *     read-only here, and the unique-constraint promise on
+     *     ``(role, mission_template)`` is enforced at the DB level.
+     */
+    MissionOfferDetailsRequest: {
+      offer: number;
+      mission_template: number;
+      /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
+      weight?: number | null;
+      /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
+      requirements_override?: unknown;
+      /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
+      role_cooldown_duration?: string | null;
+    };
+    /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
      *
      *     Both source_kind values are editable; consumer code distinguishes via
@@ -14575,10 +14732,11 @@ export interface components {
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
      *
-     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
-     *     ``validate_access_tier`` below — if any attached giver is not
-     *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' names so the Studio can show "needs-work."
+     *     Access-tier flip is unguarded post-#686 — the legacy
+     *     ``MissionGiver.is_publishable`` guard was stripped with the
+     *     giver editor surface; an equivalent guard against the new
+     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
+     *     npc-services authoring follow-up.
      */
     MissionTemplate: {
       readonly id: number;
@@ -14705,10 +14863,11 @@ export interface components {
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
      *
-     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
-     *     ``validate_access_tier`` below — if any attached giver is not
-     *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' names so the Studio can show "needs-work."
+     *     Access-tier flip is unguarded post-#686 — the legacy
+     *     ``MissionGiver.is_publishable`` guard was stripped with the
+     *     giver editor surface; an equivalent guard against the new
+     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
+     *     npc-services authoring follow-up.
      */
     MissionTemplateRequest: {
       name: string;
@@ -15772,6 +15931,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['MissionNode'][];
+    };
+    PaginatedMissionOfferDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MissionOfferDetails'][];
     };
     PaginatedMissionOptionList: {
       /** @example 123 */
@@ -16964,6 +17138,24 @@ export interface components {
       flavor_text_needs_rewrite?: boolean;
     };
     /**
+     * @description Staff CRUD for mission-kind offer details (#728).
+     *
+     *     ``role`` is denormalized from ``offer.role`` by the model's ``save()``
+     *     override (per #686 Phase 6) so callers never set it directly — it's
+     *     read-only here, and the unique-constraint promise on
+     *     ``(role, mission_template)`` is enforced at the DB level.
+     */
+    PatchedMissionOfferDetailsRequest: {
+      offer?: number;
+      mission_template?: number;
+      /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
+      weight?: number | null;
+      /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
+      requirements_override?: unknown;
+      /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
+      role_cooldown_duration?: string | null;
+    };
+    /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
      *
      *     Both source_kind values are editable; consumer code distinguishes via
@@ -17062,10 +17254,11 @@ export interface components {
      *     cooldown, reward-group rule, active flag, access tier, categories,
      *     availability rule.
      *
-     *     D4 access-tier flip: PATCHing ``access_tier=open`` runs through
-     *     ``validate_access_tier`` below — if any attached giver is not
-     *     ``is_publishable`` (no target FK), the flip is refused with the
-     *     list of unready givers' names so the Studio can show "needs-work."
+     *     Access-tier flip is unguarded post-#686 — the legacy
+     *     ``MissionGiver.is_publishable`` guard was stripped with the
+     *     giver editor surface; an equivalent guard against the new
+     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
+     *     npc-services authoring follow-up.
      */
     PatchedMissionTemplateRequest: {
       name?: string;
@@ -18303,6 +18496,19 @@ export interface components {
       readonly total_points: number;
       /** @description Return the name of the current tier, or None if no tier reached. */
       readonly current_tier_name: string | null;
+    };
+    /**
+     * @description Full renown payload for a single persona.
+     *
+     *     Read-only. Writes happen through the event-firing services.
+     */
+    Renown: {
+      persona_id: number;
+      persona_name: string;
+      prestige: components['schemas']['_PrestigeBreakdown'];
+      fame: components['schemas']['_Fame'];
+      reputation: components['schemas']['_SocietyReputation'][];
+      recent_deeds: components['schemas']['_Deed'][];
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -20311,6 +20517,24 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    /** @description LegendEntry summary for the recent-deeds list. */
+    _Deed: {
+      id: number;
+      title: string;
+      base_value: number;
+      /** Format: date-time */
+      created_at: string;
+    };
+    /** @description Persona's fame state for the renown tab header. */
+    _Fame: {
+      points: number;
+      tier: string;
+      tier_label: string;
+      /** Format: double */
+      tier_multiplier: number;
+      next_tier: string | null;
+      next_tier_threshold: number | null;
+    };
     /** @description One entry in the near-xp-lock list returned by ThreadHubSummaryView. */
     _NearXPLockProspect: {
       thread_id: number;
@@ -20318,12 +20542,26 @@ export interface components {
       xp_cost: number;
       dev_points_to_boundary: number;
     };
+    /** @description Four-axis breakdown of the persona's total_prestige. */
+    _PrestigeBreakdown: {
+      dwellings: number;
+      items: number;
+      orgs: number;
+      deeds: number;
+      total: number;
+    };
     /** @description One resonance balance entry returned by ThreadHubSummaryView. */
     _ResonanceBalance: {
       resonance_id: number;
       balance: number;
       lifetime_earned: number;
       flavor_text: string;
+    };
+    /** @description One reputation entry: society + tier label (no raw number). */
+    _SocietyReputation: {
+      society_id: number;
+      society_name: string;
+      tier: string;
     };
     /** @description One entry in the weavable_techniques list. */
     _WeavableTechnique: {
@@ -31641,6 +31879,148 @@ export interface operations {
       };
     };
   };
+  npc_services_mission_details_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissionOfferDetailsList'];
+        };
+      };
+    };
+  };
+  npc_services_mission_details_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_mission_details_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_mission_details_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_mission_details_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_mission_details_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission offer details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedMissionOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionOfferDetails'];
+        };
+      };
+    };
+  };
   npc_services_offers_list: {
     parameters: {
       query?: {
@@ -32360,6 +32740,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_renown_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Renown'];
         };
       };
     };
