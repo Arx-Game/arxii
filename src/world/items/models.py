@@ -200,6 +200,30 @@ class ItemTemplate(SharedMemoryModel):
             "Immutable across instances of this template."
         ),
     )
+    # #676 Phase F — Polish contribution. Drives both room polish (when
+    # placed via RoomItem) and fashion polish (when equipped on a body).
+    # Typical values: 0.1-1 per per-item (stored as scaled integers ×10
+    # by callers), signature items higher. 0 = item contributes no polish.
+    polish_value = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Polish contribution per item (Renown system). Stored as a "
+            "scaled integer — callers convert from per-spec fractional "
+            "values (×10). Applied either as room polish (when placed) "
+            "or fashion polish (when equipped)."
+        ),
+    )
+    polish_category = models.ForeignKey(
+        "buildings.PolishCategory",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="item_templates",
+        help_text=(
+            "Polish category for this item's contribution. Null means "
+            "polish_value is ignored (item is functional, not decorative)."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -524,6 +548,48 @@ class EquippedItem(SharedMemoryModel):
             f"{self.get_body_region_display()}"
             f"/{self.get_equipment_layer_display()}"
         )
+
+
+class RoomItem(SharedMemoryModel):
+    """#676 Phase F — Placement of a decorative item in a room.
+
+    Records that an ItemInstance is placed (as decor) in a specific
+    RoomProfile. Mutually exclusive with EquippedItem at the service
+    layer — ``place_item_in_room`` and ``equip_item`` both check the
+    other state and refuse if it's set.
+
+    When placed, the item's template ``polish_value`` flows into
+    ``RoomPolish`` via ``apply_room_polish_delta``. On removal, the same
+    delta is subtracted.
+    """
+
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="placed_items",
+    )
+    item_instance = models.OneToOneField(
+        ItemInstance,
+        on_delete=models.CASCADE,
+        related_name="room_placement",
+        help_text=(
+            "OneToOne — an item is placed in at most one room. "
+            "Combined with the place/equip exclusivity check at the "
+            "service layer, this enforces the spec's "
+            "'placed XOR equipped' invariant."
+        ),
+    )
+    placed_at = models.DateTimeField(auto_now_add=True)
+    placed_by_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="room_placements_made",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.item_instance.display_name} in {self.room}"
 
 
 class OwnershipEvent(SharedMemoryModel):

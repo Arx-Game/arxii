@@ -103,6 +103,22 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
         help_text="Hierarchy (-5) to Equality (+5)",
     )
 
+    # #676 Phase A: how isolated this society's information network is.
+    # Effective tier subtraction applied when computing a persona's perceived
+    # fame tier from this society's perspective. 0 = fully connected (sees
+    # all tiers as authored). -4 = very isolated (only World Famous personas
+    # register at all, and they read as Normal multiplier). Admin-tunable
+    # per society. See docs on the Renown system in issue #676.
+    fame_perception_offset = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(-4), MaxValueValidator(0)],
+        help_text=(
+            "How isolated this society's news flow is. 0 = fully connected; "
+            "-4 = very isolated (only World Famous personas register at all, "
+            "and only at Normal multiplier). See Renown design (#676)."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -278,6 +294,44 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         blank=True,
         help_text="Override for rank 5 title. If blank, uses org_type's default.",
+    )
+
+    # #676 Phase A: Renown system org prestige stores. base_prestige is
+    # admin-authored and permanent; accumulated_* are event-fed from member
+    # deeds and decay (cron task in tasks.py). accumulated_legend is
+    # permanent and only populated for covenant-backed orgs (Org.covenant
+    # OneToOne reverse exists) — see #676 spec for the body-flow rule.
+    base_prestige = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Admin-set permanent prestige floor for this organization. "
+            "Never decays; never event-modified. Quarterly accounting may "
+            "uplift base from accumulated, but that's a separate operation."
+        ),
+    )
+    accumulated_prestige = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed prestige accumulation from member deeds (10% of any "
+            "member persona's deed prestige). Decays at a high rate per IC "
+            "day via the renown decay cron."
+        ),
+    )
+    accumulated_fame = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed fame buffer for this organization, from member deed "
+            "fame gains. Decays fast like persona fame."
+        ),
+    )
+    accumulated_legend = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Event-fed legend accumulation, COVENANTS ONLY. Body-flow rule: "
+            "any member-body's legend gain credits 10% here regardless of "
+            "which persona did the deed. Permanent — never decays. Used as "
+            "a ritual-availability gate (separate magic design pass)."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -988,6 +1042,112 @@ class PersonaLegendSummary(SharedMemoryModel):
         db_table = "societies_personalegendsummary"
 
 
+class SocietyPrestigeRanking(SharedMemoryModel):
+    """#676 Phase I — Materialized view ranking personas by displayed prestige per society.
+
+    One row per (society, persona). ``displayed_prestige`` is the
+    persona's ``total_prestige × fame_tier_multiplier`` clamped at 0
+    (negative totals don't rank). ``rank`` is the 1-based dense rank
+    within the society. Refresh nightly via
+    ``REFRESH MATERIALIZED VIEW societies_societyprestigeranking``.
+
+    Per the spec, per-society rankings gate by viewer's society
+    membership (you see what your character would know) — that gate
+    lives in the consuming view/serializer, not in this MV.
+    """
+
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.DO_NOTHING,
+        related_name="+",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.DO_NOTHING,
+        related_name="+",
+    )
+    displayed_prestige = models.IntegerField()
+    rank = models.PositiveIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "societies_societyprestigeranking"
+
+
+class RankingDisplay(SharedMemoryModel):
+    """#676 Phase I — Diegetic ranking display: an in-world IC object
+    that shows a top-N leaderboard when interacted with.
+
+    Heralds at major society meeting places show society prestige
+    rankings; Academy displays show legend rankings. Per-society
+    rankings are gated by the viewer's society membership (handled at
+    interact time, not here).
+
+    The ``display_object`` is the Evennia ObjectDB the player interacts
+    with. ``ranking_type`` discriminates the data source. ``scope_target``
+    is the FK to the scope (which society for SOCIETY_PRESTIGE rankings,
+    null for global Legend rankings).
+    """
+
+    class RankingType(models.TextChoices):
+        SOCIETY_PRESTIGE = "society_prestige", "Society Prestige"
+        ACADEMY_LEGEND = "academy_legend", "Academy Legend"
+
+    display_object = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="ranking_display",
+        help_text=(
+            "The Evennia object (a herald, plaque, board) players "
+            "interact with to view the ranking."
+        ),
+    )
+    ranking_type = models.CharField(
+        max_length=30,
+        choices=RankingType.choices,
+        db_index=True,
+    )
+    scope_society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ranking_displays",
+        help_text=(
+            "Society this display is scoped to. Required for "
+            "SOCIETY_PRESTIGE; null for ACADEMY_LEGEND (global)."
+        ),
+    )
+    top_n = models.PositiveIntegerField(
+        default=10,
+        help_text="How many entries to show.",
+    )
+
+    class Meta:
+        constraints = [
+            # SOCIETY_PRESTIGE rankings must scope to a specific society;
+            # ACADEMY_LEGEND rankings are global (society must be null).
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        ranking_type="society_prestige",
+                        scope_society__isnull=False,
+                    )
+                    | models.Q(
+                        ranking_type="academy_legend",
+                        scope_society__isnull=True,
+                    )
+                ),
+                name="societies_ranking_display_scope_matches_type",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        scope = self.scope_society.name if self.scope_society else "global"
+        return f"{self.get_ranking_type_display()} @ {scope}"
+
+
 class CovenantLegendCredit(SharedMemoryModel):
     """Per-deed-per-covenant credit row. Snapshotted at LegendEntry creation
     from the persona's currently-engaged covenants. The covenant's total
@@ -1045,3 +1205,63 @@ def refresh_legend_views() -> None:
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_personalegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_covenantlegendsummary")
+
+
+# ---------------------------------------------------------------------------
+# Renown system (#676 Phase B)
+# ---------------------------------------------------------------------------
+
+
+class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
+    """Tag a Renown event with one or more archetypes; each contributes a
+    six-axis principle vector that dot-products against affected societies'
+    own principle values to produce the reputation delta.
+
+    Admin-authored library — Heroic, Treacherous, Lawful, Reformist, Pious,
+    Mercantile, etc. Multiple archetypes on an event sum their vectors.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    # Six principle deltas mirror Society.{mercy, method, status, change,
+    # allegiance, power}. Typical authored range is -2..+2; ±5 is allowed
+    # for rare extreme archetypes but most archetypes should be subtler.
+    mercy_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
+    )
+    method_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
+    )
+    status_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
+    )
+    change_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
+    )
+    allegiance_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
+    )
+    power_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name

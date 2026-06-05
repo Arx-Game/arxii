@@ -334,6 +334,28 @@ def register_all_tasks() -> None:
         )
     )
 
+    # #676 Phase A: Renown decay (fame on personas, accumulated on orgs)
+    from world.societies.tasks import register_all_tasks as register_renown_tasks
+
+    register_renown_tasks()
+
+    # #676 Phase E: Weekly building-polish upkeep sweep — deducts upkeep
+    # from owner wallets; on miss, decays outermost active feature.
+    from world.buildings.upkeep_services import apply_weekly_upkeep_all_buildings
+
+    register_task(
+        CronDefinition(
+            task_key="buildings.weekly_upkeep",
+            callable=apply_weekly_upkeep_all_buildings,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly polish-upkeep sweep: all-or-nothing deduction from "
+                "owner wallet; on miss, one tick of outermost-first "
+                "accelerating decay on the building's active features."
+            ),
+        )
+    )
+
     from world.fatigue.tasks import fatigue_dawn_reset_task
 
     register_task(
