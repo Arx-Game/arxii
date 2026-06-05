@@ -74,6 +74,7 @@ from world.missions.models import (
 )
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
+from world.missions.services.renown_emission import emit_terminal_renown_awards
 from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import PresentedOption
 from world.predicates.predicates import CharacterPredicateContext, evaluate
@@ -427,6 +428,8 @@ def resolve_option(  # noqa: PLR0913
         # ABOVE the deed.create — _finish_terminal runs before the deed
         # exists, so capture it locally and act after).
         emit_terminal_rewards(instance, route, deed)
+        # #735: fire any MissionRenownAward rows attached to the route.
+        emit_terminal_renown_awards(instance, route, deed)
     return deed
 
 
@@ -483,4 +486,8 @@ def _resolve_branch(
         # live on MissionOptionRoute rows; an authored terminal needs an
         # explicit null-target route.
         emit_terminal_rewards(instance, terminal_route, deed)
+        # #735: fire any MissionRenownAward rows attached to the branch's
+        # terminal route. Branch terminals without an authored route emit
+        # nothing on either path — same gate as the flat-reward side.
+        emit_terminal_renown_awards(instance, terminal_route, deed)
     return deed

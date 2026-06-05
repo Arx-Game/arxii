@@ -20,6 +20,7 @@ from rest_framework import serializers
 from world.scenes.models import Persona
 from world.societies.constants import (
     FAME_TIER_MULTIPLIERS,
+    FAME_TIER_ORDER,
     FAME_TIER_THRESHOLDS,
     FameTier,
 )
@@ -79,18 +80,25 @@ class RenownSerializer(serializers.Serializer):
     recent_deeds = _DeedSerializer(many=True)
 
 
-def build_renown_payload(persona: Persona, *, deeds_limit: int = 20) -> dict:
+def build_renown_payload(
+    persona: Persona,
+    *,
+    viewer_society=None,
+    deeds_limit: int = 20,
+) -> dict:
     """Assemble the renown payload for ``persona``.
 
-    Single function call; no caching layer (the underlying fields are
-    denormalized on the persona row + a small N for reputation rows).
-    Caller can cap deeds with ``deeds_limit``.
+    When ``viewer_society`` is supplied, the fame block's
+    ``tier`` / ``tier_label`` / ``tier_multiplier`` are computed using
+    that society's ``fame_perception_offset`` (#738) — an insular
+    society reads a Celebrity through their lens as merely Talked
+    About, etc. When None, the raw tier is shown.
     """
     return {
         "persona_id": persona.pk,
         "persona_name": persona.name,
         "prestige": _build_prestige(persona),
-        "fame": _build_fame(persona),
+        "fame": _build_fame(persona, viewer_society=viewer_society),
         "reputation": _build_reputation(persona),
         "recent_deeds": _build_recent_deeds(persona, limit=deeds_limit),
     }
@@ -106,8 +114,8 @@ def _build_prestige(persona: Persona) -> dict:
     }
 
 
-def _build_fame(persona: Persona) -> dict:
-    tier = persona.fame_tier
+def _build_fame(persona: Persona, *, viewer_society=None) -> dict:
+    tier = _apply_perception_offset(persona.fame_tier, viewer_society)
     next_tier_name, next_threshold = _next_tier_after(tier)
     return {
         "points": persona.fame_points,
@@ -117,6 +125,22 @@ def _build_fame(persona: Persona) -> dict:
         "next_tier": next_tier_name,
         "next_tier_threshold": next_threshold,
     }
+
+
+def _apply_perception_offset(tier: str, viewer_society) -> str:
+    """#738 — Subtract viewer society's perception offset from displayed tier.
+
+    Offset is ≤0 (insular societies hear less). Floors at NORMAL.
+    Returns the raw tier when viewer_society is None or offset is 0.
+    """
+    if viewer_society is None:
+        return tier
+    offset = viewer_society.fame_perception_offset or 0
+    if offset == 0:
+        return tier
+    tier_index = FAME_TIER_ORDER.index(tier)
+    adjusted_index = max(0, tier_index + offset)
+    return FAME_TIER_ORDER[adjusted_index]
 
 
 def _next_tier_after(current_tier: str) -> tuple[str | None, int | None]:

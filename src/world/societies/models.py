@@ -860,6 +860,22 @@ class LegendEntry(AbstractLegendRecord):
         related_name="known_legend_entries",
         help_text="Which societies know about this deed",
     )
+    # #737: Archetypes attached at fire-time so spread (and other
+    # awareness-extension paths) can re-fire archetype-dot-product
+    # reputation deltas for societies that become newly-aware later.
+    # Without this M2M, the archetype vector is lost after the original
+    # fire_renown_award call and spread can only widen awareness, not
+    # propagate the moral reading the original deed carried.
+    archetypes = models.ManyToManyField(
+        "societies.PhilosophicalArchetype",
+        blank=True,
+        related_name="legend_entries",
+        help_text=(
+            "Philosophical archetypes attached to this deed at fire time. "
+            "Used by spread-awareness extension to re-fire per-society "
+            "reputation deltas when new societies become aware."
+        ),
+    )
 
     class Meta:
         verbose_name = "Legend Entry"

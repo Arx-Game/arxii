@@ -381,16 +381,19 @@ def fire_renown_award(  # noqa: PLR0913
     """
     fame_awarded, prestige_awarded, legend_awarded = _award_amounts(magnitude, risk)
     fame_tier_changed = _apply_persona_writes(persona, fame_awarded, prestige_awarded)
+    archetype_list = list(archetypes)
 
     aware_realms = _resolve_aware_realms(
         _resolve_home_realm(origin_area),
         _effective_reach(reach, magnitude),
     )
     aware_society_ids, reputation_deltas = _apply_reputation_deltas(
-        persona, list(archetypes), aware_realms, society_overrides or {}
+        persona, archetype_list, aware_realms, society_overrides or {}
     )
 
-    legend_entry_id = _maybe_create_legend_entry(persona, legend_awarded, title, aware_society_ids)
+    legend_entry_id = _maybe_create_legend_entry(
+        persona, legend_awarded, title, aware_society_ids, archetype_list
+    )
 
     org_inflow_org_ids, covenant_legend_inflow_org_ids = _dispatch_org_inflow(
         persona,
@@ -494,8 +497,14 @@ def _maybe_create_legend_entry(
     legend_awarded: int,
     title: str,
     aware_society_ids: list[int],
+    archetype_list: list,
 ) -> int | None:
-    """Create a LegendEntry when legend > 0; return its pk (or None)."""
+    """Create a LegendEntry when legend > 0; return its pk (or None).
+
+    Pins the originating archetypes onto the entry so spread (#737) can
+    re-fire archetype-dot-product reputation deltas when new societies
+    become aware later.
+    """
     if legend_awarded <= 0:
         return None
     from world.societies.models import LegendEntry  # noqa: PLC0415
@@ -507,6 +516,8 @@ def _maybe_create_legend_entry(
     )
     if aware_society_ids:
         entry.societies_aware.set(aware_society_ids)
+    if archetype_list:
+        entry.archetypes.set(archetype_list)
     return entry.pk
 
 
@@ -735,6 +746,79 @@ def recompute_members_prestige_from_orgs_for_orgs(org_ids: Sequence[int]) -> int
         recompute_persona_prestige_from_orgs(persona)
         count += 1
     return count
+
+
+def extend_deed_awareness(
+    deed,
+    spreader: Persona,
+    *,
+    scene=None,
+) -> tuple[list[int], dict[int, int]]:
+    """#737 — Extend a deed's awareness to the spreader's current Realm.
+
+    When a spread succeeds, every Society in the spreader's current
+    Realm enters ``deed.societies_aware``. Per-society reputation
+    deltas (archetype dot product against ``deed.archetypes``) fire
+    one-shot on **newly-aware** societies only — already-aware
+    societies don't re-take the hit.
+
+    Returns ``(newly_aware_society_ids, applied_reputation_deltas)``.
+
+    No-ops (returns ``([], {})``) when:
+    * The spreader's current Realm can't be resolved (no scene with
+      location, or the scene's location has no Area chain leading to a
+      Realm).
+    * The deed has no archetypes (no moral reading to propagate); we
+      still extend awareness in that case but produce no reputation
+      deltas.
+    """
+    del spreader  # currently unused; reserved for spreader-location fallback.
+    home_realm = _resolve_spread_realm(scene)
+    if home_realm is None:
+        return [], {}
+    from world.societies.models import Society  # noqa: PLC0415
+
+    realm_society_ids = set(Society.objects.filter(realm=home_realm).values_list("pk", flat=True))
+    if not realm_society_ids:
+        return [], {}
+    already_aware_ids = set(deed.societies_aware.values_list("pk", flat=True))
+    newly_aware_ids = realm_society_ids - already_aware_ids
+    if not newly_aware_ids:
+        return [], {}
+
+    new_societies = list(Society.objects.filter(pk__in=newly_aware_ids))
+    deed.societies_aware.add(*new_societies)
+
+    archetype_list = list(deed.archetypes.all())
+    if not archetype_list or not deed.persona.is_established_or_primary:
+        return list(newly_aware_ids), {}
+
+    applied: dict[int, int] = {}
+    for society in new_societies:
+        delta = _archetype_dot_product(archetype_list, society)
+        if delta == 0:
+            continue
+        _bump_society_reputation(deed.persona, society, delta)
+        applied[society.pk] = delta
+    return list(newly_aware_ids), applied
+
+
+def _resolve_spread_realm(scene) -> object | None:
+    """Walk ``scene.location → RoomProfile.area`` → parent chain → Realm.
+
+    Returns None when the chain breaks at any step. The codebase's
+    spatial model puts rooms inside Areas (level=BUILDING); we walk
+    Area.parent until we find one whose ``realm`` FK is non-null.
+    """
+    if scene is None or scene.location is None:
+        return None
+    try:
+        room_profile = scene.location.room_profile
+    except Exception:  # noqa: BLE001 — RoomProfile.DoesNotExist for non-room locations.
+        return None
+    if room_profile is None:
+        return None
+    return _resolve_home_realm(room_profile.area)
 
 
 def apply_spread_fame_bump(
