@@ -775,6 +775,14 @@ class BuildingProjectInstance(SharedMemoryModel):
         blank=True,
         help_text="Last successful weekly upkeep deduction.",
     )
+    consecutive_missed_upkeep = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "How many consecutive weekly upkeep cycles have missed for "
+            "this instance. Drives the accelerating-decay curve in "
+            "Phase E. Reset to 0 on any successful building-wide payment."
+        ),
+    )
     decayed_at = models.DateTimeField(
         null=True,
         blank=True,

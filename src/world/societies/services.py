@@ -198,9 +198,12 @@ def spread_deed(  # noqa: PLR0913
         spread.societies_reached.set(societies_reached)
     refresh_legend_views()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
+    from world.societies.renown import apply_spread_fame_bump  # noqa: PLC0415
 
     for credit in deed.covenant_credits.all():
         recompute_covenant_level(covenant=credit.covenant)
+    # #676 Phase H: subject's fame buffer rises when the deed gets spread.
+    apply_spread_fame_bump(deed, spreader_persona, clamped_value)
     return spread
 
 

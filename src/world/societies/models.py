@@ -1042,6 +1042,93 @@ class PersonaLegendSummary(SharedMemoryModel):
         db_table = "societies_personalegendsummary"
 
 
+class SocietyPrestigeRanking(SharedMemoryModel):
+    """#676 Phase I — Materialized view ranking personas by displayed prestige per society.
+
+    One row per (society, persona). ``displayed_prestige`` is the
+    persona's ``total_prestige × fame_tier_multiplier`` clamped at 0
+    (negative totals don't rank). ``rank`` is the 1-based dense rank
+    within the society. Refresh nightly via
+    ``REFRESH MATERIALIZED VIEW societies_societyprestigeranking``.
+
+    Per the spec, per-society rankings gate by viewer's society
+    membership (you see what your character would know) — that gate
+    lives in the consuming view/serializer, not in this MV.
+    """
+
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.DO_NOTHING,
+        related_name="+",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.DO_NOTHING,
+        related_name="+",
+    )
+    displayed_prestige = models.IntegerField()
+    rank = models.PositiveIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "societies_societyprestigeranking"
+
+
+class RankingDisplay(SharedMemoryModel):
+    """#676 Phase I — Diegetic ranking display: an in-world IC object
+    that shows a top-N leaderboard when interacted with.
+
+    Heralds at major society meeting places show society prestige
+    rankings; Academy displays show legend rankings. Per-society
+    rankings are gated by the viewer's society membership (handled at
+    interact time, not here).
+
+    The ``display_object`` is the Evennia ObjectDB the player interacts
+    with. ``ranking_type`` discriminates the data source. ``scope_target``
+    is the FK to the scope (which society for SOCIETY_PRESTIGE rankings,
+    null for global Legend rankings).
+    """
+
+    class RankingType(models.TextChoices):
+        SOCIETY_PRESTIGE = "society_prestige", "Society Prestige"
+        ACADEMY_LEGEND = "academy_legend", "Academy Legend"
+
+    display_object = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="ranking_display",
+        help_text=(
+            "The Evennia object (a herald, plaque, board) players "
+            "interact with to view the ranking."
+        ),
+    )
+    ranking_type = models.CharField(
+        max_length=30,
+        choices=RankingType.choices,
+        db_index=True,
+    )
+    scope_society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ranking_displays",
+        help_text=(
+            "Society this display is scoped to. Required for "
+            "SOCIETY_PRESTIGE; null for ACADEMY_LEGEND (global)."
+        ),
+    )
+    top_n = models.PositiveIntegerField(
+        default=10,
+        help_text="How many entries to show.",
+    )
+
+    def __str__(self) -> str:
+        scope = self.scope_society.name if self.scope_society else "global"
+        return f"{self.get_ranking_type_display()} @ {scope}"
+
+
 class CovenantLegendCredit(SharedMemoryModel):
     """Per-deed-per-covenant credit row. Snapshotted at LegendEntry creation
     from the persona's currently-engaged covenants. The covenant's total

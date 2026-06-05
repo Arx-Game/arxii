@@ -678,6 +678,32 @@ def recompute_members_prestige_from_orgs_for_orgs(org_ids: Sequence[int]) -> int
     return count
 
 
+def apply_spread_fame_bump(
+    deed,
+    spreader: Persona,
+    value_added: int,
+) -> bool:
+    """#676 Phase H — Bump the deed-subject's fame buffer when a spread lands.
+
+    Called by ``spread_deed`` after the legend value is added. The fame
+    bump goes to the **deed's subject persona**, not the spreader — the
+    spreader's reward is the deed's existence in the world, not their
+    own fame. (The spreader's fame can still rise via their *own* deeds.)
+
+    Bump formula (per spec): proportional to ``value_added`` (the legend
+    actually conveyed, after clamping). Returns True iff the fame tier
+    changed on the subject.
+
+    The spreader argument is kept for symmetry with future "spreader
+    reputation gain" logic — currently unused.
+    """
+    del spreader  # see docstring: reserved for future spreader-reward use.
+    if value_added <= 0 or deed.persona_id is None:
+        return False
+    subject = deed.persona
+    return set_persona_fame(subject, subject.fame_points + value_added)
+
+
 def _covenant_org_ids(org_ids: Sequence[int]) -> set[int]:
     """Return the subset of ``org_ids`` whose Organizations back a Covenant.
 

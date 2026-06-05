@@ -274,6 +274,27 @@ class PersonaViewSet(viewsets.ModelViewSet):
             .order_by("created_at")
         )
 
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def renown(self, request: Request, pk: int | None = None) -> Response:
+        """#676 Phase G — Read-only renown payload for the renown tab.
+
+        Returns four prestige axes + total, fame buffer + tier metadata,
+        per-society reputation (named tier labels, never numeric values),
+        and the persona's recent deeds.
+
+        Writes happen through the event-firing services (fire_renown_award
+        etc.), not this endpoint.
+        """
+        from world.societies.renown_serializers import (  # noqa: PLC0415
+            RenownSerializer,
+            build_renown_payload,
+        )
+
+        persona = self.get_object()
+        payload = build_renown_payload(persona)
+        serializer = RenownSerializer(payload)
+        return Response(serializer.data)
+
 
 class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):
     """ViewSet for listing and creating scene summary revisions.
