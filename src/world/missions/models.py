@@ -38,6 +38,7 @@ from world.missions.constants import (
     OptionSource,
     RewardGroupRule,
 )
+from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 
 # MissionOptionRouteReward XOR (route, candidate) — module-level so the
 # clean() messages stay readable and the magic 2 has a name.
@@ -813,6 +814,126 @@ class MissionOptionRouteReward(SharedMemoryModel):
     def __str__(self) -> str:
         scope = "holder" if self.contract_holder_only else "broadcast"
         return f"{self.get_kind_display()}/{self.get_sink_display()} ({scope})"
+
+
+class MissionRenownAward(SharedMemoryModel):
+    """Authored Renown award bundle attached to a route OR a route candidate.
+
+    Parallel to ``MissionOptionRouteReward`` (which handles flat money /
+    legend-points / etc. distributions) — Renown awards are bundled and
+    multi-dimensional (Magnitude + Risk + Archetypes + optional Reach
+    override), and on terminal route resolution fire through the renown
+    event service to write into Persona / Org / Society / Legend state.
+
+    Phase B authoring lands the model; emit-on-terminal wiring is part of
+    Phase B's mission integration. Default propagation: contract-holder-only
+    (renown bundles typically award the persona who actually owned the
+    deed, not every participant equally — bystanders may witness via
+    awareness but don't earn the persona-side prestige).
+    """
+
+    route = models.ForeignKey(
+        "missions.MissionOptionRoute",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="renown_awards",
+        help_text=(
+            "Parent route (route-level award). Exactly one of route / "
+            "candidate must be set; enforced in clean()."
+        ),
+    )
+    candidate = models.ForeignKey(
+        "missions.MissionOptionRouteCandidate",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="renown_awards",
+        help_text=(
+            "Parent candidate (per-candidate award bundle). Stored but "
+            "unconsumed until candidate-emit lands (parallels the "
+            "MissionOptionRouteReward Phase D wiring on the flat-reward "
+            "side). Exactly one of route / candidate must be set."
+        ),
+    )
+    magnitude = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=RenownMagnitude.choices,
+        help_text=(
+            "Drives fame buffer + prestige-from-deeds. Blank = no fame/"
+            "prestige delta (e.g., a Risk-only secret-deed award)."
+        ),
+    )
+    risk = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=RenownRisk.choices,
+        default=RenownRisk.NONE,
+        help_text=(
+            "Drives legend. NONE / blank = no legend awarded — e.g., a "
+            "royal wedding has high Magnitude and None Risk."
+        ),
+    )
+    reach_override = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=RenownReach.choices,
+        help_text=(
+            "Reach override. Blank = derive from Magnitude per "
+            "MAGNITUDE_TO_DEFAULT_REACH (Small→LOCAL, Moderate→REGIONAL, "
+            "High→CONTINENTAL, Very High→WORLD)."
+        ),
+    )
+    archetypes = models.ManyToManyField(
+        "societies.PhilosophicalArchetype",
+        related_name="mission_awards",
+        blank=True,
+        help_text=(
+            "Philosophical archetype tags. Their principle deltas sum, then "
+            "dot-product against each affected society's principle values "
+            "to produce that society's reputation delta. Blank = no "
+            "reputation deltas fire (Magnitude-only or Risk-only event)."
+        ),
+    )
+    contract_holder_only = models.BooleanField(
+        default=True,
+        help_text=(
+            "True (default) → renown bundle awards only to the contract "
+            "holder persona. False → broadcast per the template's "
+            "reward_group_rule, same semantics as MissionOptionRouteReward."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(route__isnull=False) & Q(candidate__isnull=True))
+                    | (Q(route__isnull=True) & Q(candidate__isnull=False))
+                ),
+                name="missionrenownaward_exactly_one_parent",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
+        if set_count == 0:
+            raise ValidationError(_ERR_REWARD_NO_PARENT)
+        if set_count == _REWARD_BOTH_PARENTS_SET:
+            raise ValidationError(
+                {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
+            )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        mag = self.get_magnitude_display() if self.magnitude else "—"
+        risk = self.get_risk_display() if self.risk else "—"
+        return f"Renown(mag={mag}, risk={risk})"
 
 
 class MissionInstance(SharedMemoryModel):

@@ -1099,3 +1099,63 @@ def refresh_legend_views() -> None:
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_personalegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_covenantlegendsummary")
+
+
+# ---------------------------------------------------------------------------
+# Renown system (#676 Phase B)
+# ---------------------------------------------------------------------------
+
+
+class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
+    """Tag a Renown event with one or more archetypes; each contributes a
+    six-axis principle vector that dot-products against affected societies'
+    own principle values to produce the reputation delta.
+
+    Admin-authored library — Heroic, Treacherous, Lawful, Reformist, Pious,
+    Mercantile, etc. Multiple archetypes on an event sum their vectors.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    # Six principle deltas mirror Society.{mercy, method, status, change,
+    # allegiance, power}. Typical authored range is -2..+2; ±5 is allowed
+    # for rare extreme archetypes but most archetypes should be subtler.
+    mercy_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
+    )
+    method_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
+    )
+    status_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
+    )
+    change_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
+    )
+    allegiance_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
+    )
+    power_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name

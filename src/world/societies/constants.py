@@ -88,3 +88,108 @@ ORG_PRESTIGE_DECAY_FLAT: int = 5
 ORG_PRESTIGE_DECAY_PCT: float = 0.05
 ORG_FAME_DECAY_FLAT: int = 5
 ORG_FAME_DECAY_PCT: float = 0.05
+
+
+# ---------------------------------------------------------------------------
+# Renown event bundle scales (Phase B, #676)
+#
+# Each Renown event carries up to three independent scales:
+#
+#   * Magnitude — drives fame buffer + permanent prestige-from-deeds.
+#   * Risk      — drives legend.
+#   * Archetypes — drive reputation via principle dot product.
+#
+# Magnitude and Risk are admin-tunable TextChoices with numeric mappings
+# below. Archetypes are model rows (PhilosophicalArchetype) defined in
+# the societies models.
+# ---------------------------------------------------------------------------
+
+
+class RenownMagnitude(models.TextChoices):
+    """How fame-worthy / prestige-worthy this event is.
+
+    Drives both the fame buffer bump (visibility multiplier) and the
+    permanent prestige-from-deeds increment.
+    """
+
+    SMALL = "small", "Small"
+    MODERATE = "moderate", "Moderate"
+    HIGH = "high", "High"
+    VERY_HIGH = "very_high", "Very High"
+
+
+class RenownRisk(models.TextChoices):
+    """How life-threatening / consequential this event was.
+
+    Drives only legend. NONE means no legend awarded — a famous-but-safe
+    event like a royal wedding has high Magnitude and None Risk.
+    """
+
+    NONE = "none", "None"
+    LOW = "low", "Low"
+    MODERATE = "moderate", "Moderate"
+    HIGH = "high", "High"
+    EXTREME = "extreme", "Extreme"
+
+
+class RenownReach(models.TextChoices):
+    """How widely news of this event propagates.
+
+    Binary awareness gate per Realm: a Realm either becomes aware of the
+    event (full reputation delta applied) or doesn't (nothing happens for
+    that Realm's societies). Defaults from Magnitude per
+    ``MAGNITUDE_TO_DEFAULT_REACH`` below; authors can override per event.
+    """
+
+    LOCAL = "local", "Local"
+    REGIONAL = "regional", "Regional"
+    CONTINENTAL = "continental", "Continental"
+    WORLD = "world", "World"
+
+
+# Magnitude → numeric awards (admin-tunable starting points per the spec).
+# Fame outscales prestige — a Very High event puts you instantly at
+# Household Name fame (10k threshold), but permanent prestige climbs slowly.
+MAGNITUDE_FAME_AWARDS: dict[str, int] = {
+    RenownMagnitude.SMALL.value: 30,
+    RenownMagnitude.MODERATE.value: 150,
+    RenownMagnitude.HIGH.value: 1_200,
+    RenownMagnitude.VERY_HIGH.value: 12_000,
+}
+
+MAGNITUDE_PRESTIGE_AWARDS: dict[str, int] = {
+    RenownMagnitude.SMALL.value: 3,
+    RenownMagnitude.MODERATE.value: 15,
+    RenownMagnitude.HIGH.value: 75,
+    RenownMagnitude.VERY_HIGH.value: 300,
+}
+
+# Risk → legend base_value (added to LegendEntry; spreads extend it
+# further per the existing legend mechanics).
+RISK_LEGEND_AWARDS: dict[str, int] = {
+    RenownRisk.NONE.value: 0,
+    RenownRisk.LOW.value: 10,
+    RenownRisk.MODERATE.value: 50,
+    RenownRisk.HIGH.value: 250,
+    RenownRisk.EXTREME.value: 1_500,
+}
+
+# Magnitude → default Reach (event author can override per event).
+# Small events stay local; Very High events ripple worldwide.
+MAGNITUDE_TO_DEFAULT_REACH: dict[str, str] = {
+    RenownMagnitude.SMALL.value: RenownReach.LOCAL.value,
+    RenownMagnitude.MODERATE.value: RenownReach.REGIONAL.value,
+    RenownMagnitude.HIGH.value: RenownReach.CONTINENTAL.value,
+    RenownMagnitude.VERY_HIGH.value: RenownReach.WORLD.value,
+}
+
+# Names of the six society principle fields. Used by the archetype dot
+# product to walk fields uniformly via getattr.
+PRINCIPLE_FIELD_NAMES: tuple[str, ...] = (
+    "mercy",
+    "method",
+    "status",
+    "change",
+    "allegiance",
+    "power",
+)
