@@ -42,6 +42,19 @@ class SlotIncompatible(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item cannot be worn there."})
 
 
+class ItemPlacedNotEquippable(ItemError):
+    """Item is currently placed in a room as decor and can't be equipped.
+
+    #676 enforces the placed-XOR-equipped invariant at the service layer:
+    a decorative item must be removed from its room before it can be worn.
+    """
+
+    user_message = "That item is on display. Remove it from the room first."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That item is on display. Remove it from the room first."},
+    )
+
+
 class FacetCapacityExceeded(ItemError):
     """The item already carries the maximum number of facets its template allows."""
 
