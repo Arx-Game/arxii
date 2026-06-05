@@ -25,6 +25,12 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+# Cross-app FK string constants. Django resolves these lazily at app-ready
+# time; centralizing them here avoids the "literal duplicated N times" SonarCloud
+# code smell and gives a single grep target if the source model ever moves.
+_PROJECT_FK = "projects.Project"
+_POLISH_CATEGORY_FK = "buildings.PolishCategory"
+
 
 class BuildingKind(SharedMemoryModel):
     """An authorable category of building.
@@ -211,7 +217,7 @@ class Building(SharedMemoryModel):
         related_name="buildings_constructed",
     )
     source_project = models.OneToOneField(
-        "projects.Project",
+        _PROJECT_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -444,7 +450,7 @@ class BuildingConstructionDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        _PROJECT_FK,
         on_delete=models.CASCADE,
         related_name="building_construction_details",
         primary_key=True,
@@ -747,7 +753,7 @@ class BuildingProjectInstance(SharedMemoryModel):
         related_name="instances",
     )
     source_project = models.OneToOneField(
-        "projects.Project",
+        _PROJECT_FK,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

@@ -370,84 +370,27 @@ def fire_renown_award(  # noqa: PLR0913
 
     Bundle composition (per the #676 spec):
 
-    * ``magnitude`` → fame buffer bump + prestige_from_deeds permanent
-      bump, per ``MAGNITUDE_FAME_AWARDS`` and ``MAGNITUDE_PRESTIGE_AWARDS``.
-      Blank/None: no fame/prestige delta.
-    * ``risk`` → legend value via ``RISK_LEGEND_AWARDS``. Blank/None or
-      ``RenownRisk.NONE``: no legend awarded; no LegendEntry created.
-    * ``archetypes`` → for each aware Society (per reach + origin_area),
-      compute the principle dot product and update SocietyReputation. Empty
-      archetypes: no reputation deltas fire.
-    * ``reach`` override defaults from magnitude per
-      ``MAGNITUDE_TO_DEFAULT_REACH`` when None; explicit value wins.
-    * ``society_overrides`` (dict of ``Society → int``) overrides the
-      computed reputation delta for those specific societies.
+    * ``magnitude`` → fame buffer bump + prestige_from_deeds permanent bump.
+    * ``risk`` → legend value; creates a LegendEntry when > 0.
+    * ``archetypes`` → reputation deltas (dot product) to aware societies.
+    * ``reach`` defaults from magnitude when omitted; explicit wins.
+    * ``society_overrides`` (``{Society: int}``) overrides computed deltas.
 
-    Temporary personas earn fame + prestige_from_deeds + legend, but
-    SocietyReputation writes are skipped (existing system rule that only
-    PRIMARY/ESTABLISHED personas hold reputation).
+    Temporary personas earn fame + prestige_from_deeds + legend but skip
+    SocietyReputation writes (existing system rule).
     """
-    from world.societies.models import LegendEntry, SocietyReputation  # noqa: PLC0415
+    fame_awarded, prestige_awarded, legend_awarded = _award_amounts(magnitude, risk)
+    fame_tier_changed = _apply_persona_writes(persona, fame_awarded, prestige_awarded)
 
-    society_overrides = society_overrides or {}
-    archetype_list: list = list(archetypes)
-
-    fame_awarded = MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0
-    prestige_awarded = MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0
-    legend_awarded = RISK_LEGEND_AWARDS.get(risk, 0) if risk else 0
-
-    # Persona-side writes (fame buffer + permanent prestige).
-    fame_tier_changed = False
-    if fame_awarded > 0:
-        fame_tier_changed = set_persona_fame(persona, persona.fame_points + fame_awarded)
-    if prestige_awarded != 0:
-        _set_persona_prestige_source(persona, "prestige_from_deeds", prestige_awarded)
-
-    # Propagation: determine which Realms hear about this event.
-    effective_reach = (
-        reach
-        or (MAGNITUDE_TO_DEFAULT_REACH.get(magnitude) if magnitude else None)
-        or RenownReach.LOCAL.value
+    aware_realms = _resolve_aware_realms(
+        _resolve_home_realm(origin_area),
+        _effective_reach(reach, magnitude),
     )
-    home_realm = _resolve_home_realm(origin_area)
-    aware_realms = _resolve_aware_realms(home_realm, effective_reach)
+    aware_society_ids, reputation_deltas = _apply_reputation_deltas(
+        persona, list(archetypes), aware_realms, society_overrides or {}
+    )
 
-    # Reputation deltas to societies in aware realms (skipped for TEMPORARY
-    # personas — existing system gate).
-    aware_society_ids: list[int] = []
-    reputation_deltas: dict[int, int] = {}
-    if archetype_list and persona.is_established_or_primary:
-        from world.societies.models import Society  # noqa: PLC0415
-
-        aware_societies = Society.objects.filter(realm__in=[r.pk for r in aware_realms])
-        for society in aware_societies:
-            if society in society_overrides:
-                rep_delta = society_overrides[society]
-            else:
-                rep_delta = _archetype_dot_product(archetype_list, society)
-            aware_society_ids.append(society.pk)
-            if rep_delta == 0:
-                continue
-            reputation, _created = SocietyReputation.objects.get_or_create(
-                persona=persona,
-                society=society,
-                defaults={"value": 0},
-            )
-            reputation.value = max(-1000, min(1000, reputation.value + rep_delta))
-            reputation.save(update_fields=["value"])
-            reputation_deltas[society.pk] = rep_delta
-
-    # Legend entry creation when Risk awards legend.
-    legend_entry_id: int | None = None
-    if legend_awarded > 0:
-        entry = LegendEntry.objects.create(
-            persona=persona,
-            title=title,
-            base_value=legend_awarded,
-        )
-        if aware_society_ids:
-            entry.societies_aware.set(aware_society_ids)
-        legend_entry_id = entry.pk
+    legend_entry_id = _maybe_create_legend_entry(persona, legend_awarded, title, aware_society_ids)
 
     org_inflow_org_ids, covenant_legend_inflow_org_ids = _dispatch_org_inflow(
         persona,
@@ -468,6 +411,103 @@ def fire_renown_award(  # noqa: PLR0913
         org_inflow_org_ids=org_inflow_org_ids,
         covenant_legend_inflow_org_ids=covenant_legend_inflow_org_ids,
     )
+
+
+def _award_amounts(magnitude: str | None, risk: str | None) -> tuple[int, int, int]:
+    """Resolve (fame, prestige, legend) numeric awards from the bundle scales."""
+    fame = MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0
+    prestige = MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0
+    legend = RISK_LEGEND_AWARDS.get(risk, 0) if risk else 0
+    return fame, prestige, legend
+
+
+def _apply_persona_writes(persona: Persona, fame_awarded: int, prestige_awarded: int) -> bool:
+    """Fame buffer + permanent prestige writes. Returns True iff fame tier changed."""
+    fame_tier_changed = False
+    if fame_awarded > 0:
+        fame_tier_changed = set_persona_fame(persona, persona.fame_points + fame_awarded)
+    if prestige_awarded != 0:
+        _set_persona_prestige_source(persona, "prestige_from_deeds", prestige_awarded)
+    return fame_tier_changed
+
+
+def _effective_reach(reach: str | None, magnitude: str | None) -> str:
+    """Resolve the reach actually used for awareness propagation."""
+    if reach:
+        return reach
+    if magnitude:
+        from_magnitude = MAGNITUDE_TO_DEFAULT_REACH.get(magnitude)
+        if from_magnitude:
+            return from_magnitude
+    return RenownReach.LOCAL.value
+
+
+def _apply_reputation_deltas(
+    persona: Persona,
+    archetype_list: list,
+    aware_realms: list,
+    society_overrides: dict,
+) -> tuple[list[int], dict[int, int]]:
+    """Compute + apply per-society reputation deltas via archetype dot product.
+
+    Returns (aware_society_ids, applied_deltas). TEMPORARY personas and
+    empty archetype lists short-circuit to ([], {}).
+    """
+    if not archetype_list or not persona.is_established_or_primary:
+        return [], {}
+    from world.societies.models import Society  # noqa: PLC0415
+
+    aware_societies = list(Society.objects.filter(realm__in=[r.pk for r in aware_realms]))
+    aware_society_ids = [s.pk for s in aware_societies]
+    reputation_deltas: dict[int, int] = {}
+    for society in aware_societies:
+        rep_delta = _society_delta(society, archetype_list, society_overrides)
+        if rep_delta == 0:
+            continue
+        _bump_society_reputation(persona, society, rep_delta)
+        reputation_deltas[society.pk] = rep_delta
+    return aware_society_ids, reputation_deltas
+
+
+def _society_delta(society, archetype_list: list, society_overrides: dict) -> int:
+    """Per-society reputation delta — override wins; else archetype dot product."""
+    if society in society_overrides:
+        return society_overrides[society]
+    return _archetype_dot_product(archetype_list, society)
+
+
+def _bump_society_reputation(persona: Persona, society, rep_delta: int) -> None:
+    """Apply a clamped reputation delta to (persona, society)."""
+    from world.societies.models import SocietyReputation  # noqa: PLC0415
+
+    reputation, _created = SocietyReputation.objects.get_or_create(
+        persona=persona,
+        society=society,
+        defaults={"value": 0},
+    )
+    reputation.value = max(-1000, min(1000, reputation.value + rep_delta))
+    reputation.save(update_fields=["value"])
+
+
+def _maybe_create_legend_entry(
+    persona: Persona,
+    legend_awarded: int,
+    title: str,
+    aware_society_ids: list[int],
+) -> int | None:
+    """Create a LegendEntry when legend > 0; return its pk (or None)."""
+    if legend_awarded <= 0:
+        return None
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+
+    entry = LegendEntry.objects.create(
+        persona=persona,
+        title=title,
+        base_value=legend_awarded,
+    )
+    if aware_society_ids:
+        entry.societies_aware.set(aware_society_ids)
+    return entry.pk
 
 
 def _dispatch_org_inflow(

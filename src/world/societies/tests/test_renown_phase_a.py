@@ -132,7 +132,7 @@ class ApplyPersonaFameDecayTests(TestCase):
         self.assertEqual(self.persona.fame_points, 0)
 
     def test_low_fame_drained_by_flat(self) -> None:
-        # At fame 50, decay = 5 + 2 = 7. 50 → 43, still Normal.
+        # At fame 50, decay is 5 + 2 → 7, leaving 43 (still Normal).
         set_persona_fame(self.persona, 50)
         apply_persona_fame_decay(self.persona)
         self.persona.refresh_from_db()
@@ -140,7 +140,7 @@ class ApplyPersonaFameDecayTests(TestCase):
         self.assertEqual(self.persona.fame_tier, FameTier.NORMAL.value)
 
     def test_high_fame_dominated_by_pct(self) -> None:
-        # At fame 200_000, decay = 5 + 10000 = 10005. The pct term (10k)
+        # At fame 200_000, decay is 5 + 10000 → 10005. The pct term (10k)
         # dominates over the flat (5). Starting safely above the World Famous
         # threshold (100k) so one tick doesn't drop the tier.
         set_persona_fame(self.persona, 200_000)
@@ -163,7 +163,7 @@ class ApplyPersonaFameDecayTests(TestCase):
         set_persona_fame(self.persona, 102)
         tier_changed = apply_persona_fame_decay(self.persona)
         self.persona.refresh_from_db()
-        # 102 - 5 - 5 = 92, below TALKED_ABOUT threshold → tier should drop.
+        # 102 minus 5 minus 5 leaves 92, below TALKED_ABOUT threshold.
         self.assertTrue(tier_changed)
         self.assertEqual(self.persona.fame_tier, FameTier.NORMAL.value)
 
@@ -195,7 +195,7 @@ class ApplyOrgAccumulatedDecayTests(TestCase):
         org.save(update_fields=["accumulated_prestige"])
         apply_org_accumulated_decay(org)
         org.refresh_from_db()
-        # 1000 - 5 - 50 = 945
+        # Expected: 1000 minus flat 5 minus 5% of 1000 → 945.
         self.assertEqual(org.accumulated_prestige, 945)
 
     def test_decay_reduces_accumulated_fame(self) -> None:
@@ -204,7 +204,7 @@ class ApplyOrgAccumulatedDecayTests(TestCase):
         org.save(update_fields=["accumulated_fame"])
         apply_org_accumulated_decay(org)
         org.refresh_from_db()
-        # 500 - 5 - 25 = 470
+        # Expected: 500 minus flat 5 minus 5% of 500 → 470.
         self.assertEqual(org.accumulated_fame, 470)
 
     def test_decay_leaves_base_prestige_untouched(self) -> None:

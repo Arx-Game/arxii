@@ -190,8 +190,6 @@ def recompute_persona_prestige_from_dwellings(persona) -> int:
     )
 
     total = owned_buildings_polish + tenanted_rooms_polish + owned_building_rooms_polish
-    if total == persona.prestige_from_dwellings:
-        return total
     persona.prestige_from_dwellings = total
     persona.total_prestige = (
         persona.prestige_from_dwellings
