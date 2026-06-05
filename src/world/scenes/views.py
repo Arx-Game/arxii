@@ -4,6 +4,7 @@ from http import HTTPMethod
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
@@ -45,6 +46,7 @@ from world.scenes.serializers import (
     SceneSummaryRevisionSerializer,
 )
 from world.scenes.services import broadcast_scene_message
+from world.societies.renown_serializers import RenownSerializer, build_renown_payload
 
 
 class SceneViewSet(viewsets.ModelViewSet):
@@ -274,6 +276,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
             .order_by("created_at")
         )
 
+    @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])
     def renown(self, request: Request, pk: int | None = None) -> Response:
         """#676 Phase G — Read-only renown payload for the renown tab.
@@ -285,11 +288,6 @@ class PersonaViewSet(viewsets.ModelViewSet):
         Writes happen through the event-firing services (fire_renown_award
         etc.), not this endpoint.
         """
-        from world.societies.renown_serializers import (  # noqa: PLC0415
-            RenownSerializer,
-            build_renown_payload,
-        )
-
         persona = self.get_object()
         payload = build_renown_payload(persona)
         serializer = RenownSerializer(payload)

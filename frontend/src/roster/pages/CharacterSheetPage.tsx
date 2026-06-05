@@ -9,6 +9,8 @@ import {
   CharacterApplicationForm,
 } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RenownPanel } from '@/renown/components/RenownPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -31,35 +33,49 @@ export function CharacterSheetPage() {
         />
         {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
       </div>
-      {entry.description && (
-        <section>
-          <h3 className="text-xl font-semibold">Description</h3>
-          <p>{entry.description}</p>
-        </section>
-      )}
-      <BackgroundSection background={entry.character.background} />
-      <StatsSection
-        age={entry.character.age}
-        gender={entry.character.gender}
-        race={entry.character.race}
-        charClass={entry.character.char_class}
-        level={entry.character.level}
-        concept={entry.character.concept}
-        family={entry.character.family}
-        vocation={entry.character.vocation}
-        socialRank={entry.character.social_rank}
-      />
-      <RelationshipsSection
-        relationships={entry.character.relationships}
-        characterSheetId={entry.character.id}
-      />
-      <GalleriesSection galleries={entry.character.galleries} />
-      {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
-      {isMyCharacter && (
-        <div id="messages">
-          <MessagesSection />
-        </div>
-      )}
+
+      <Tabs defaultValue="sheet" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="sheet">Sheet</TabsTrigger>
+          <TabsTrigger value="renown">Renown</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sheet" className="space-y-4">
+          {entry.description && (
+            <section>
+              <h3 className="text-xl font-semibold">Description</h3>
+              <p>{entry.description}</p>
+            </section>
+          )}
+          <BackgroundSection background={entry.character.background} />
+          <StatsSection
+            age={entry.character.age}
+            gender={entry.character.gender}
+            race={entry.character.race}
+            charClass={entry.character.char_class}
+            level={entry.character.level}
+            concept={entry.character.concept}
+            family={entry.character.family}
+            vocation={entry.character.vocation}
+            socialRank={entry.character.social_rank}
+          />
+          <RelationshipsSection
+            relationships={entry.character.relationships}
+            characterSheetId={entry.character.id}
+          />
+          <GalleriesSection galleries={entry.character.galleries} />
+          {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
+          {isMyCharacter && (
+            <div id="messages">
+              <MessagesSection />
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="renown" className="space-y-4">
+          <RenownPanel characterSheetId={entry.character.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
