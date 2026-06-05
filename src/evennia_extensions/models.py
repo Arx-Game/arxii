@@ -400,6 +400,23 @@ class RoomProfile(SharedMemoryModel):
             "(weather, sky, etc.). Most rooms are indoor."
         ),
     )
+    # #676 Phase D: tenant_persona credits room polish into
+    # prestige_from_dwellings on the tenant + ALSO rolls up to the
+    # building owner (per-spec intentional double-count for head-of-house
+    # tenanting their own grandest suite). Nullable for common rooms
+    # without a designated tenant.
+    tenant_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tenanted_rooms",
+        help_text=(
+            "Persona credited for this room's polish (Renown system). "
+            "Room polish flows into tenant.prestige_from_dwellings AND "
+            "rolls up to the room's building owner."
+        ),
+    )
 
     class Meta:
         verbose_name = "Room Profile"

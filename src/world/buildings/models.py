@@ -145,6 +145,40 @@ class Building(SharedMemoryModel):
         primary_key=True,
         help_text="The Area row this Building decorates. Must be level BUILDING.",
     )
+    # #676 Phase D: owner_persona credits Building polish into
+    # prestige_from_dwellings on the owner. Nullable for newly-constructed
+    # buildings that haven't been formally deeded yet (intermediate state
+    # the existing construction flow doesn't otherwise distinguish).
+    owner_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_buildings",
+        help_text=(
+            "Persona credited for this building's polish (Renown system). "
+            "Building polish flows into owner.prestige_from_dwellings. "
+            "Room polish also rolls up to this persona (intentional "
+            "double-count when same persona owns building + tenants a room)."
+        ),
+    )
+    is_accessible = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text=(
+            "Renown system: flips False when all building-level polish "
+            "features have decayed to 0 — building goes dormant but "
+            "persists in DB. Restoration project flips it back."
+        ),
+    )
+    dormant_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when is_accessible flips False (Phase E decay). Used to "
+            "scale Restoration Project cost with dormancy duration."
+        ),
+    )
     kind = models.ForeignKey(
         BuildingKind,
         on_delete=models.PROTECT,
@@ -447,3 +481,347 @@ class BuildingConstructionDetails(SharedMemoryModel):
             f"Construction#{self.project_id}: {self.permit_details.building_kind.name} "
             f"size={self.target_size} grandeur={self.target_grandeur}"
         )
+
+
+# ---------------------------------------------------------------------------
+# #676 Phase D — Dwellings polish system
+#
+# Polish accumulates on buildings + rooms via two paths:
+#   * Projects — large additive chunks (50-10,000+) authored via
+#     ProjectTemplate.polish_increments. Add at project-completion time.
+#   * Items — small per-item contributions (0.1-1 typical, signature
+#     items higher). Phase F adds the RoomItem placement model that
+#     routes ItemTemplate.polish_value into RoomPolish.
+#
+# Polish is purely additive — no caps. Tier labels (Modest / Notable /
+# Grand / Palatial …) are derived from TierThreshold rows per category,
+# not stored on the buildings/rooms.
+#
+# Ownership credits:
+#   * Building polish credits Building.owner_persona.
+#   * Room polish credits RoomProfile.tenant_persona AND rolls up to
+#     Building.owner_persona — the spec calls out the double-count as
+#     intentional ("a head of house living in their own splendid suite
+#     is doubly prestigious").
+# ---------------------------------------------------------------------------
+
+
+class PolishCategory(SharedMemoryModel):
+    """Admin-authored polish dimension (Opulence, Elegance, Provenance, …).
+
+    Buildings and rooms accumulate polish along multiple independent
+    categories. Tier labels are derived per-category via TierThreshold.
+    The category name is the public-facing string.
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name_plural = "Polish categories"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TierThreshold(SharedMemoryModel):
+    """Admin-tunable label boundary for a polish category.
+
+    Example: ``PolishCategory(Elegance)`` might have thresholds
+    ``Modest@0``, ``Notable@500``, ``Grand@2500``, ``Palatial@10000``.
+    A building with 3000 Elegance polish displays as "Grand in Elegance".
+    """
+
+    category = models.ForeignKey(
+        PolishCategory,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    tier_name = models.CharField(max_length=60)
+    min_value = models.PositiveIntegerField(
+        validators=[MinValueValidator(0)],
+        help_text="Minimum polish value at which this tier label applies.",
+    )
+
+    class Meta:
+        ordering = ["category", "-min_value"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "tier_name"],
+                name="buildings_polish_tier_unique_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.category.name}: {self.tier_name} @ {self.min_value}"
+
+
+class BuildingPolish(SharedMemoryModel):
+    """Per-(building, category) accumulated polish value.
+
+    Through table; one row per (building, category). Created lazily by
+    the polish-add service. Values are integers despite the spec's
+    "0.1 per item" framing — internal storage uses scaled integers, with
+    callers multiplying small per-item floats by 10 before storage so
+    we never deal with floating-point polish totals.
+    """
+
+    building = models.ForeignKey(
+        Building,
+        on_delete=models.CASCADE,
+        related_name="polish_by_category",
+    )
+    category = models.ForeignKey(
+        PolishCategory,
+        on_delete=models.CASCADE,
+        related_name="building_polish_rows",
+    )
+    value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["building", "category"],
+                name="buildings_polish_unique_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.building}: {self.value} {self.category.name}"
+
+
+class RoomPolish(SharedMemoryModel):
+    """Per-(room, category) accumulated polish value.
+
+    Through table on RoomProfile (which extends ObjectDB and is the
+    Django-side handle for Evennia rooms in this codebase). Same shape
+    as BuildingPolish.
+    """
+
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="polish_by_category",
+    )
+    category = models.ForeignKey(
+        PolishCategory,
+        on_delete=models.CASCADE,
+        related_name="room_polish_rows",
+    )
+    value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "category"],
+                name="buildings_room_polish_unique_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.room}: {self.value} {self.category.name}"
+
+
+class ProjectTemplate(SharedMemoryModel):
+    """Admin-authored template for a polish-adding project.
+
+    A ProjectTemplate is the blueprint ("Gilded Walls", "Marble Foyer",
+    "Tapestry of Origins") with admin-set polish increments per category,
+    base cost, weekly upkeep, and decay priority. Commissioning a project
+    instantiates the template into a Project (existing system) that
+    resolves into a ``BuildingProjectInstance`` snapshot at completion.
+
+    Tier prerequisites are M2M to TierThreshold — commissioning checks
+    each tier prereq against the building's current polish-by-category.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    polish_increments = models.ManyToManyField(
+        PolishCategory,
+        through="ProjectTemplatePolishIncrement",
+        related_name="project_templates",
+        help_text=(
+            "Per-category polish added when this template is completed. "
+            "Through-table carries the per-category value."
+        ),
+    )
+    tier_prerequisites = models.ManyToManyField(
+        TierThreshold,
+        blank=True,
+        related_name="gated_project_templates",
+        help_text=(
+            "Tier thresholds the target building must already meet before "
+            "this template can be commissioned. Empty = no prereqs."
+        ),
+    )
+    base_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Gold cost to commission this project (Phase E will wire deduction).",
+    )
+    weekly_upkeep_cost = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Gold cost per real-time week to keep this project's polish "
+            "active. Phase E cron deducts from owner's wallet."
+        ),
+    )
+    decay_priority = models.PositiveIntegerField(
+        default=100,
+        help_text=(
+            "Lower = outermost = decays first when upkeep is missed. "
+            "Phase E uses this for serial outermost-first decay ordering."
+        ),
+    )
+    project_kind = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text=(
+            "ProjectKind discriminator the underlying Project uses when "
+            "this template is commissioned. Blank for templates that "
+            "represent direct polish authoring (no Project lifecycle)."
+        ),
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ProjectTemplatePolishIncrement(SharedMemoryModel):
+    """Per-(template, category) polish increment row.
+
+    Through table for ProjectTemplate.polish_increments. Lets a single
+    template add to multiple categories with different values
+    ("Marble Foyer": 800 Opulence + 200 Elegance).
+    """
+
+    template = models.ForeignKey(
+        ProjectTemplate,
+        on_delete=models.CASCADE,
+        related_name="polish_increment_rows",
+    )
+    category = models.ForeignKey(
+        PolishCategory,
+        on_delete=models.CASCADE,
+        related_name="polish_increment_rows",
+    )
+    value = models.PositiveIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "category"],
+                name="buildings_polish_increment_unique_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template.name}: +{self.value} {self.category.name}"
+
+
+class BuildingProjectInstance(SharedMemoryModel):
+    """Snapshot of a completed polish-adding project on a specific building.
+
+    Created by ``apply_project_completion`` when a ProjectTemplate
+    finishes on a building. Carries the **current** polish per category
+    (decays write to these values directly) plus upkeep tracking for
+    Phase E. The BuildingPolish row stores the building's total
+    polish-by-category; instances store the per-feature contribution.
+
+    On feature decay to 0, the instance row stays — restoration
+    refills the same row. Removal is rare (admin only).
+    """
+
+    building = models.ForeignKey(
+        Building,
+        on_delete=models.CASCADE,
+        related_name="project_instances",
+    )
+    template = models.ForeignKey(
+        ProjectTemplate,
+        on_delete=models.PROTECT,
+        related_name="instances",
+    )
+    source_project = models.OneToOneField(
+        "projects.Project",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resulting_building_project_instance",
+        help_text=(
+            "The completed Project that produced this instance. "
+            "OneToOne so re-running apply_project_completion catches "
+            "the duplicate at the unique constraint level."
+        ),
+    )
+    weekly_upkeep_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Snapshotted from template at completion (admin-tunable on template).",
+    )
+    decay_priority = models.PositiveIntegerField(
+        default=100,
+        help_text=(
+            "Snapshotted from template. Lower = decays first when upkeep "
+            "is missed. Phase E walks instances in (decay_priority, pk) "
+            "order for the serial outermost-first decay."
+        ),
+    )
+    last_upkeep_paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last successful weekly upkeep deduction.",
+    )
+    decayed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when this instance's polish first hits 0 due to missed "
+            "upkeep. Restoration clears this back to null."
+        ),
+    )
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["decay_priority", "pk"]
+        indexes = [
+            models.Index(fields=["building", "decay_priority"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template.name} on {self.building}"
+
+
+class BuildingProjectInstancePolish(SharedMemoryModel):
+    """Per-(instance, category) current polish value for this completed feature.
+
+    Decays write to ``value`` here directly. The aggregate per-building
+    per-category total in BuildingPolish is recomputed from the sum of
+    these rows after every decay sweep (Phase E).
+    """
+
+    instance = models.ForeignKey(
+        BuildingProjectInstance,
+        on_delete=models.CASCADE,
+        related_name="polish_by_category",
+    )
+    category = models.ForeignKey(
+        PolishCategory,
+        on_delete=models.CASCADE,
+        related_name="instance_polish_rows",
+    )
+    value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "category"],
+                name="buildings_instance_polish_unique_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.instance}: {self.value} {self.category.name}"
