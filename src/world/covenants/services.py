@@ -359,6 +359,22 @@ def evaluate_scene_engagement(
     character_sheet: CharacterSheet,
     room: ObjectDB,
 ) -> None:
+    """Auto-engage a Durance covenant if co-presence prerequisites met, then
+    fold the arriving character into any active rite in the room.
+
+    Calls _auto_engage_durance first (which may set the engaged membership),
+    then fold_arrival_into_active_rites so both newly-engaged and already-engaged
+    characters trigger the rite buff rescale on arrival.
+    """
+    _auto_engage_durance(character_sheet=character_sheet, room=room)
+    fold_arrival_into_active_rites(character_sheet=character_sheet, room=room)
+
+
+def _auto_engage_durance(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
     """Auto-engage a Durance covenant if co-presence prerequisites met.
 
     Manual engagement sticks — this no-ops if the character is already
@@ -386,6 +402,95 @@ def evaluate_scene_engagement(
     # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
     candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
     set_engaged_membership(membership=candidates[0][0])
+
+
+@transaction.atomic
+def fold_arrival_into_active_rites(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
+    """When an engaged member arrives in a room with an active CovenantRiteInstance,
+    fold them in: grant the buff, rescale all current participants to the new
+    severity (ratchet-up only), and emit a dramatic NarrativeMessage.
+
+    Atomic. Safe to call even if the character is not a member of any covenant
+    or there is no active rite — both paths are no-ops.
+    """
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        advance_condition_severity,
+        apply_condition,
+        get_condition_instance,
+    )
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # Find all covenants this character is currently engaged with.
+    engaged_covenants = list(
+        CharacterCovenantRole.objects.filter(
+            character_sheet=character_sheet,
+            engaged=True,
+            left_at__isnull=True,
+        )
+        .values_list("covenant_id", flat=True)
+        .distinct()
+    )
+    if not engaged_covenants:
+        return
+
+    for covenant_id in engaged_covenants:
+        # Find an active rite instance for this covenant in this room.
+        instance: CovenantRiteInstance | None = (
+            CovenantRiteInstance.objects.filter(
+                covenant_id=covenant_id,
+                completed_at__isnull=True,
+                combat_encounter__room=room,
+            )
+            .exclude(combat_encounter__status=EncounterStatus.COMPLETED)
+            .select_related("rite", "rite__granted_condition")
+            .first()
+        )
+        if instance is None:
+            continue
+        if instance.participants.filter(pk=character_sheet.pk).exists():
+            continue  # already a participant — no-op
+
+        # --- FOLD IN ---
+        instance.participants.add(character_sheet)
+        new_count = instance.participants.count()
+        new_severity = instance.rite.severity_for(present_count=new_count)
+
+        # Apply the buff to the newcomer.
+        apply_condition(
+            character_sheet.character,
+            instance.rite.granted_condition,
+            severity=new_severity,
+            duration_rounds=instance.rite.duration_rounds,
+            source_description="covenant rite",
+        )
+
+        # Rescale every OTHER existing participant's live buff upward if needed.
+        other_sheets = list(instance.participants.exclude(pk=character_sheet.pk))
+        for other_sheet in other_sheets:
+            live_inst = get_condition_instance(
+                other_sheet.character, instance.rite.granted_condition
+            )
+            if live_inst is None:
+                continue
+            delta = new_severity - live_inst.severity
+            if delta > 0:
+                advance_condition_severity(live_inst, delta)
+
+        # Emit dramatic NarrativeMessage to all current participants.
+        all_sheets = list(instance.participants.all())
+        send_narrative_message(
+            recipients=all_sheets,
+            body=(
+                f"{character_sheet.character.db_key} arrives — the covenant's oath blazes brighter."
+            ),
+            category=NarrativeCategory.COVENANT,
+        )
 
 
 def _co_present_member_count(

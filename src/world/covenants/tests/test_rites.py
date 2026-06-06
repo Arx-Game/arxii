@@ -1,4 +1,5 @@
 """Tests for Tasks 3 + 4: engaged_members_present helper and perform_covenant_rite service.
+Tests for Task 5: fold_arrival_into_active_rites (late-arrival fold-in).
 
 Uses setUp (not setUpTestData) because Evennia typeclasses (ObjectDB subclasses)
 are not deepcopy-safe, which Django's setUpTestData mechanism requires.
@@ -11,9 +12,19 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
-from world.covenants.factories import CovenantFactory, CovenantRoleFactory, make_engaged_member
+from world.covenants.factories import (
+    CharacterSheetFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+    make_engaged_member,
+)
 from world.covenants.models import CovenantRite, CovenantRiteInstance
-from world.covenants.services import engaged_members_present, perform_covenant_rite
+from world.covenants.services import (
+    engaged_members_present,
+    evaluate_scene_engagement,
+    fold_arrival_into_active_rites,
+    perform_covenant_rite,
+)
 
 
 def _make_room(key: str = "TestRoom"):
@@ -357,3 +368,255 @@ class PerformCovenantRiteGateTests(TestCase):
             perform_covenant_rite(session=bare_session)
 
         self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())
+
+
+# ---------------------------------------------------------------------------
+# Task 5: fold_arrival_into_active_rites
+# ---------------------------------------------------------------------------
+
+
+class FoldArrivalIntoActiveRitesTests(TestCase):
+    """Tests for the late-arrival fold-in service function.
+
+    Rite params: base_severity=2, severity_per_extra_participant=1,
+    min_engaged_present=2 → severity_for(2)=2, severity_for(3)=3.
+    """
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        self.room = _make_room("FoldRoom")
+        # level set directly — avoids legend/matview path absent on SQLite.
+        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # Two initial engaged members present for the rite.
+        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
+
+        self.condition_template = ConditionTemplateFactory()
+
+        # Build a rite with severity_for(2)=2, severity_for(3)=3.
+        from world.magic.factories import RitualFactory
+
+        self.ritual = RitualFactory(
+            service_function_path="world.covenants.services.perform_covenant_rite"
+        )
+        self.rite = CovenantRite.objects.create(
+            ritual=self.ritual,
+            covenant_type=self.covenant.covenant_type,
+            min_covenant_level=1,
+            min_engaged_present=2,
+            granted_condition=self.condition_template,
+            base_severity=2,
+            severity_per_extra_participant=1,
+            max_severity=None,
+            duration_rounds=5,
+        )
+
+        # Active CombatEncounter in the room.
+        from world.combat.constants import EncounterStatus
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatEncounter
+        from world.scenes.factories import SceneFactory
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.RESOLVING
+        )
+        self.encounter.refresh_from_db()
+
+        # Fire the rite for the two initial members → creates a CovenantRiteInstance.
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import RitualSessionFactory
+        from world.magic.models.sessions import RitualSessionReference
+
+        self.session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+        RitualSessionReference.objects.create(
+            session=self.session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=self.covenant,
+            ref_covenant_role=None,
+        )
+        self.rite_instance = perform_covenant_rite(session=self.session)
+        # Verify baseline: 2 participants, severity=2.
+        self.assertEqual(self.rite_instance.participants.count(), 2)
+        self.assertEqual(self.rite.severity_for(present_count=2), 2)
+        self.assertEqual(self.rite.severity_for(present_count=3), 3)
+
+        # Third engaged member — added but NOT in the room yet.
+        self.mem_c = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+
+    # ------------------------------------------------------------------
+    # Test 1: re-scale on arrival
+    # ------------------------------------------------------------------
+
+    def test_rescale_on_arrival(self) -> None:
+        """Third member arrives → gets buff at severity_for(3); existing two are rescaled up."""
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        expected_severity = self.rite.severity_for(present_count=3)  # == 3
+
+        # Third member has the buff at new severity.
+        inst_c = ConditionInstance.objects.filter(
+            target=self.mem_c.character_sheet.character,
+            condition=self.condition_template,
+        ).first()
+        self.assertIsNotNone(inst_c)
+        self.assertEqual(inst_c.severity, expected_severity)
+
+        # Original two participants were rescaled.
+        for member in (self.mem_a, self.mem_b):
+            inst = ConditionInstance.objects.filter(
+                target=member.character_sheet.character,
+                condition=self.condition_template,
+            ).first()
+            self.assertIsNotNone(inst, f"Expected live condition on {member.character_sheet}")
+            self.assertEqual(
+                inst.severity,
+                expected_severity,
+                f"Expected severity {expected_severity} on {member.character_sheet},"
+                f" got {inst.severity}",
+            )
+
+    # ------------------------------------------------------------------
+    # Test 2: already a participant — no-op
+    # ------------------------------------------------------------------
+
+    def test_already_participant_is_noop(self) -> None:
+        """Calling fold-in for a member already in participants is a no-op."""
+        # mem_a is already a participant; call fold-in for them again.
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_a.character_sheet, room=self.room)
+
+        # Participant count should still be 2 (no third was added).
+        self.rite_instance.refresh_from_db()
+        self.assertEqual(self.rite_instance.participants.count(), 2)
+
+        # Severity of mem_a's buff unchanged (still 2).
+        inst = ConditionInstance.objects.filter(
+            target=self.mem_a.character_sheet.character,
+            condition=self.condition_template,
+        ).first()
+        self.assertIsNotNone(inst)
+        self.assertEqual(inst.severity, self.rite.severity_for(present_count=2))
+
+    # ------------------------------------------------------------------
+    # Test 3: non-member ignored
+    # ------------------------------------------------------------------
+
+    def test_non_member_ignored(self) -> None:
+        """A character not engaged with the covenant gets no buff and does not change count."""
+        outsider_sheet = CharacterSheetFactory()
+        _place_character_in_room(outsider_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=outsider_sheet, room=self.room)
+
+        # No condition applied to outsider.
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=outsider_sheet.character,
+                condition=self.condition_template,
+            ).exists()
+        )
+        # Participant count unchanged.
+        self.rite_instance.refresh_from_db()
+        self.assertEqual(self.rite_instance.participants.count(), 2)
+
+    # ------------------------------------------------------------------
+    # Test 4: completed instance ignored
+    # ------------------------------------------------------------------
+
+    def test_completed_instance_ignored(self) -> None:
+        """If the instance's encounter is COMPLETED, arriving member is ignored."""
+        from world.combat.constants import EncounterStatus
+        from world.combat.models import CombatEncounter
+
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.COMPLETED
+        )
+        self.encounter.refresh_from_db()
+
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        # mem_c should NOT have the condition.
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.mem_c.character_sheet.character,
+                condition=self.condition_template,
+            ).exists()
+        )
+        # Participant count unchanged.
+        self.rite_instance.refresh_from_db()
+        self.assertEqual(self.rite_instance.participants.count(), 2)
+
+    # ------------------------------------------------------------------
+    # Test 5: ratchet-only (severity never lowered)
+    # ------------------------------------------------------------------
+
+    def test_ratchet_only(self) -> None:
+        """Fold-in for a new member never lowers an existing participant's severity.
+
+        Scenario: fold in the 3rd → severity becomes 3. Then fold in a 4th
+        (which would push it to 4). The check is only that after both operations
+        no participant's severity is lower than severity_for(3).
+        """
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+        # After 3rd member: severity_for(3) = 3.
+        sev_after_3 = self.rite.severity_for(present_count=3)
+
+        mem_d = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(mem_d.character_sheet.character, self.room)
+        fold_arrival_into_active_rites(character_sheet=mem_d.character_sheet, room=self.room)
+        # After 4th member: severity_for(4) = 4.
+        sev_after_4 = self.rite.severity_for(present_count=4)
+
+        for member in (self.mem_a, self.mem_b, self.mem_c, mem_d):
+            inst = ConditionInstance.objects.filter(
+                target=member.character_sheet.character,
+                condition=self.condition_template,
+            ).first()
+            self.assertIsNotNone(inst)
+            self.assertGreaterEqual(
+                inst.severity,
+                sev_after_3,
+                f"{member.character_sheet} severity should not be below {sev_after_3}",
+            )
+        # Final check: everyone is at sev_after_4.
+        for member in (self.mem_a, self.mem_b, self.mem_c, mem_d):
+            inst = ConditionInstance.objects.get(
+                target=member.character_sheet.character,
+                condition=self.condition_template,
+            )
+            self.assertEqual(inst.severity, sev_after_4)
+
+    # ------------------------------------------------------------------
+    # Test 6: wiring — evaluate_scene_engagement triggers fold-in
+    # ------------------------------------------------------------------
+
+    def test_evaluate_scene_engagement_triggers_fold_in(self) -> None:
+        """evaluate_scene_engagement wiring: arriving engaged member gets folded in."""
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        evaluate_scene_engagement(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        expected_severity = self.rite.severity_for(present_count=3)
+        inst = ConditionInstance.objects.filter(
+            target=self.mem_c.character_sheet.character,
+            condition=self.condition_template,
+        ).first()
+        self.assertIsNotNone(inst, "Expected fold-in buff on arriving member")
+        self.assertEqual(inst.severity, expected_severity)
