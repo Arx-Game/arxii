@@ -66,3 +66,8 @@ class GearArchetype(models.TextChoices):
     JEWELRY = "jewelry", "Jewelry"
     CLOTHING = "clothing", "Clothing"
     OTHER = "other", "Other"
+
+
+# Base points contributed per worn in-vogue facet match, before quality and
+# the FashionStyleBonus.weight multiplier are applied (Outfits Phase B, #513).
+FASHION_MATCH_BASE = 1

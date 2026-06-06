@@ -14,6 +14,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 
 
@@ -819,3 +820,67 @@ class OutfitSlot(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.outfit.name}: {self.item_instance.display_name}"
+
+
+class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
+    """An admin-authored 'what's in vogue' definition (Outfits Phase B, #513).
+
+    A society points at its current FashionStyle; worn items carrying the
+    style's in-vogue facets contribute a perception-relative fashion bonus.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    in_vogue_facets = models.ManyToManyField(
+        "magic.Facet",
+        related_name="fashion_styles",
+        blank=True,
+        help_text="Facets that are currently fashionable in this style.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class FashionStyleBonus(SharedMemoryModel):
+    """Maps a FashionStyle to a check-type ModifierTarget it flatters.
+
+    The authored ``weight`` is the magnitude multiplier applied to the worn
+    facet-match value. 'All social' = one row per Social check-type target.
+    """
+
+    fashion_style = models.ForeignKey(
+        "items.FashionStyle",
+        on_delete=models.CASCADE,
+        related_name="bonuses",
+    )
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.PROTECT,
+        related_name="fashion_style_bonuses",
+    )
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1,
+        help_text="Authored magnitude multiplier on the worn facet-match value.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fashion_style", "target"],
+                name="items_unique_fashionstylebonus_per_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.fashion_style.name} → {self.target.name} (x{self.weight})"
