@@ -96,11 +96,13 @@ class SocietyAdmin(admin.ModelAdmin):
         "change",
         "allegiance",
         "power",
+        "current_fashion_style",
         "organization_count",
     ]
     list_filter = ["realm"]
     search_fields = ["name", "description", "realm__name"]
     ordering = ["realm", "name"]
+    autocomplete_fields = ["current_fashion_style"]
     inlines = [OrganizationInline]
 
     fieldsets = (
@@ -118,6 +120,13 @@ class SocietyAdmin(admin.ModelAdmin):
                     "the spectrum (e.g., Ruthlessness, Cunning), positive values the "
                     "other (e.g., Compassion, Honor)."
                 ),
+            },
+        ),
+        (
+            "Fashion",
+            {
+                "fields": ("current_fashion_style",),
+                "description": "The active FashionStyle driving outfit bonuses for this society.",
             },
         ),
     )
