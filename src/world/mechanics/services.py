@@ -138,7 +138,12 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     )
 
 
-def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
+def get_modifier_total(
+    character,
+    modifier_target: ModifierTarget,
+    *,
+    perceiving_society: object | None = None,
+) -> int:
     """Get total modifier value for a target.
 
     Combines the eager modifier total (CharacterModifier rows, distinctions, etc.) with the
@@ -146,19 +151,32 @@ def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
     passive_facet_bonuses and covenant_role_bonus when the target's category is in
     EQUIPMENT_RELEVANT_CATEGORIES (stat, magic, affinity, resonance).
 
+    When ``perceiving_society`` is provided, the perception-relative fashion outfit bonus
+    (#513) for that society is also added. The fashion bonus reflects how well the
+    character's worn items align with the society's current FashionStyle. When omitted
+    (the default), fashion contributes nothing and behavior is identical to before —
+    all existing society-blind callers are 100% unaffected.
+
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
+        perceiving_society: Optional Society instance. When supplied, the outfit-vs-fashion
+            bonus for that society is included in the total. Defaults to None (no fashion
+            contribution).
 
     Returns:
-        Total modifier value (eager + equipment contributions, amplification/immunity applied)
+        Total modifier value (eager + equipment + optional fashion contributions,
+        amplification/immunity applied to the eager portion)
     """
     eager_total = get_modifier_breakdown(character, modifier_target).total
     equipment_total = 0
     if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
         equipment_total = passive_facet_bonuses(character, modifier_target)
         equipment_total += covenant_role_bonus(character, modifier_target)
-    return eager_total + equipment_total
+    fashion_total = 0
+    if perceiving_society is not None:
+        fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
+    return eager_total + equipment_total + fashion_total
 
 
 # =============================================================================
