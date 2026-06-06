@@ -1,11 +1,10 @@
-import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { useRenownEligiblePersonasQuery, usePersonaRenownCardQuery } from '../queries';
+import { usePersonaRenownCardQuery } from '../queries';
 import { DeedsLogCard } from './DeedsLogCard';
 import { ReputationListCard } from './ReputationListCard';
+import { PersonaSelectionShell } from './PersonaSelectionShell';
 import type { RenownCardPayload } from '../types';
 
 interface Props {
@@ -26,62 +25,29 @@ interface Props {
  * intentionally not surfaced for foreign personas.
  */
 export function RenownCardPanel({ characterSheetId, viewerPersonaId }: Props) {
-  const { data: personas, isLoading: personasLoading } =
-    useRenownEligiblePersonasQuery(characterSheetId);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-
-  const effectiveSelectedId =
-    selectedId ??
-    personas?.find((p) => p.persona_type === 'primary')?.id ??
-    personas?.[0]?.id ??
-    null;
-
-  const { data: card, isLoading: cardLoading } = usePersonaRenownCardQuery(
-    effectiveSelectedId,
-    viewerPersonaId
+  return (
+    <PersonaSelectionShell characterSheetId={characterSheetId}>
+      {(personaId) => <CardBody personaId={personaId} viewerPersonaId={viewerPersonaId} />}
+    </PersonaSelectionShell>
   );
+}
 
-  if (personasLoading) {
+function CardBody({
+  personaId,
+  viewerPersonaId,
+}: {
+  personaId: number;
+  viewerPersonaId: number | null;
+}) {
+  const { data: card, isLoading } = usePersonaRenownCardQuery(personaId, viewerPersonaId);
+  if (isLoading || !card) {
     return (
       <div className="flex justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
-
-  if (!personas || personas.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          No personas with renown to display.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {personas.length > 1 && (
-        <Tabs value={String(effectiveSelectedId)} onValueChange={(v) => setSelectedId(Number(v))}>
-          <TabsList>
-            {personas.map((p) => (
-              <TabsTrigger key={p.id} value={String(p.id)}>
-                {p.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
-
-      {cardLoading || !card ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <CardLayout card={card} />
-      )}
-    </div>
-  );
+  return <CardLayout card={card} />;
 }
 
 function CardLayout({ card }: { card: RenownCardPayload }) {
