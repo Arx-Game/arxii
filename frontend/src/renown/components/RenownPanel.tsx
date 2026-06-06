@@ -7,6 +7,7 @@ import { FameCard } from './FameCard';
 import { PrestigeBreakdownCard } from './PrestigeBreakdownCard';
 import { ReputationListCard } from './ReputationListCard';
 import { DeedsLogCard } from './DeedsLogCard';
+import { OwnedDwellingsCard } from './OwnedDwellingsCard';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -78,6 +79,7 @@ export function RenownPanel({ characterSheetId }: Props) {
           <PrestigeBreakdownCard prestige={renown.prestige} />
           <ReputationListCard reputation={renown.reputation} />
           <DeedsLogCard deeds={renown.recent_deeds} />
+          <OwnedDwellingsCard dwellings={renown.owned_dwellings} />
         </div>
       )}
     </div>

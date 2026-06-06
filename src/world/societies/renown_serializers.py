@@ -66,6 +66,27 @@ class _DeedSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
+class _CategoryPolishSerializer(serializers.Serializer):
+    """One polish category's value + derived tier label for a building."""
+
+    category_id = serializers.IntegerField()
+    category_name = serializers.CharField()
+    value = serializers.IntegerField()
+    tier_label = serializers.CharField(allow_null=True)
+
+
+class _OwnedDwellingSerializer(serializers.Serializer):
+    """One building the persona owns, with polish breakdown + upkeep state."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    polish_by_category = _CategoryPolishSerializer(many=True)
+    upkeep_warning = serializers.BooleanField()
+    decayed_features_count = serializers.IntegerField()
+    dormant = serializers.BooleanField()
+    dormant_since = serializers.DateTimeField(allow_null=True)
+
+
 class RenownSerializer(serializers.Serializer):
     """Full renown payload for a single persona.
 
@@ -78,6 +99,7 @@ class RenownSerializer(serializers.Serializer):
     fame = _FameSerializer()
     reputation = _SocietyReputationSerializer(many=True)
     recent_deeds = _DeedSerializer(many=True)
+    owned_dwellings = _OwnedDwellingSerializer(many=True)
 
 
 def build_renown_payload(
@@ -101,6 +123,7 @@ def build_renown_payload(
         "fame": _build_fame(persona, viewer_society=viewer_society),
         "reputation": _build_reputation(persona),
         "recent_deeds": _build_recent_deeds(persona, limit=deeds_limit),
+        "owned_dwellings": _build_owned_dwellings(persona),
     }
 
 
@@ -185,3 +208,68 @@ def _build_recent_deeds(persona: Persona, *, limit: int) -> list[dict]:
         }
         for deed in deeds
     ]
+
+
+def _build_owned_dwellings(persona: Persona) -> list[dict]:
+    """#742 — Per-owned-building polish breakdown + upkeep state.
+
+    For each building this persona owns, surface the polish-by-category
+    rows (with tier labels), an upkeep_warning flag (any instance with
+    consecutive_missed_upkeep > 0), the decayed-features count, and the
+    dormancy state. Empty list when the persona owns nothing.
+    """
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.buildings.models import (  # noqa: PLC0415
+        Building,
+        BuildingPolish,
+        BuildingProjectInstance,
+    )
+    from world.buildings.polish_services import derive_tier_label  # noqa: PLC0415
+
+    # ``to_attr`` is omitted intentionally — using it on a
+    # SharedMemoryModel parent (Building) leaks the cached list across
+    # requests via the identity map (see feedback_prefetch_to_attr_leaks).
+    # Without ``to_attr`` the prefetch attaches to ``_prefetched_objects_cache``
+    # which the standard manager reads through on each request.
+    buildings = (
+        Building.objects.filter(owner_persona=persona)
+        .select_related("area")
+        .prefetch_related(
+            Prefetch(  # noqa: PREFETCH_STRING — see comment above re identity-map leak.
+                "polish_by_category",
+                queryset=BuildingPolish.objects.select_related("category"),
+            ),
+            Prefetch(  # noqa: PREFETCH_STRING — see comment above.
+                "project_instances",
+                queryset=BuildingProjectInstance.objects.only(
+                    "pk", "building_id", "consecutive_missed_upkeep", "decayed_at"
+                ),
+            ),
+        )
+    )
+    return [_serialize_owned_building(b, derive_tier_label) for b in buildings]
+
+
+def _serialize_owned_building(building, derive_tier_label) -> dict:
+    polish_rows = [
+        {
+            "category_id": row.category_id,
+            "category_name": row.category.name,
+            "value": row.value,
+            "tier_label": derive_tier_label(row.category, row.value),
+        }
+        for row in building.polish_by_category.all()
+    ]
+    instances = list(building.project_instances.all())
+    upkeep_warning = any(inst.consecutive_missed_upkeep > 0 for inst in instances)
+    decayed_count = sum(1 for inst in instances if inst.decayed_at is not None)
+    return {
+        "id": building.pk,
+        "name": building.area.name,
+        "polish_by_category": polish_rows,
+        "upkeep_warning": upkeep_warning,
+        "decayed_features_count": decayed_count,
+        "dormant": not building.is_accessible,
+        "dormant_since": building.dormant_since,
+    }

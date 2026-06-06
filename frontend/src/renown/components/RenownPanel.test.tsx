@@ -29,6 +29,7 @@ function makeRenown(overrides: Partial<RenownPayload> = {}): RenownPayload {
     },
     reputation: [],
     recent_deeds: [],
+    owned_dwellings: [],
     ...overrides,
   };
 }

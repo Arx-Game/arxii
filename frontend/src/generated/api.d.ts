@@ -18509,6 +18509,7 @@ export interface components {
       fame: components['schemas']['_Fame'];
       reputation: components['schemas']['_SocietyReputation'][];
       recent_deeds: components['schemas']['_Deed'][];
+      owned_dwellings: components['schemas']['_OwnedDwelling'][];
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -20517,6 +20518,13 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    /** @description One polish category's value + derived tier label for a building. */
+    _CategoryPolish: {
+      category_id: number;
+      category_name: string;
+      value: number;
+      tier_label: string | null;
+    };
     /** @description LegendEntry summary for the recent-deeds list. */
     _Deed: {
       id: number;
@@ -20541,6 +20549,17 @@ export interface components {
       boundary_level: number;
       xp_cost: number;
       dev_points_to_boundary: number;
+    };
+    /** @description One building the persona owns, with polish breakdown + upkeep state. */
+    _OwnedDwelling: {
+      id: number;
+      name: string;
+      polish_by_category: components['schemas']['_CategoryPolish'][];
+      upkeep_warning: boolean;
+      decayed_features_count: number;
+      dormant: boolean;
+      /** Format: date-time */
+      dormant_since: string | null;
     };
     /** @description Four-axis breakdown of the persona's total_prestige. */
     _PrestigeBreakdown: {
