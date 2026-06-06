@@ -2149,6 +2149,45 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     )
 
 
+class BattleCovenantRiseRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the 'call the banners' battle-covenant rise ritual (Slice E)."""
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Call the Banners"
+    description = "Raise a dormant standing battle covenant back to war."
+    narrative_prose = (
+        "The banners are unfurled and the oath is sworn anew: war is declared "
+        "and the covenant rises to defend its own."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.rise_battle_covenant_via_session"
+    flow = None
+    participation_rule = ParticipationRule.FORMATION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "target_covenant",
+                    "type": "covenant_picker",
+                    "filter": "initiator_dormant_standing_battle_memberships",
+                    "required": True,
+                },
+                {"name": "declaration", "type": "textarea", "required": True},
+                {
+                    "name": "invitees",
+                    "type": "character_search",
+                    "multi": True,
+                    "min": 1,
+                    "required": True,
+                },
+            ],
+        }
+    )
+
+
 # =============================================================================
 # Issue #526: Scar-gated MOVED trigger authored content
 # =============================================================================

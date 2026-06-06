@@ -352,6 +352,86 @@ def _emit_level_change_message(covenant: Covenant, new_level: int) -> None:
     )
 
 
+@transaction.atomic
+def rise_battle_covenant_via_session(*, session: RitualSession) -> Covenant:
+    """Dispatched on a 'call the banners' rise ritual fire.
+
+    Flips a dormant STANDING battle covenant to risen and engages the accepted
+    participants who hold an active role there (Slice E). Mirrors
+    create_covenant_via_session's session-unpacking shape.
+    """
+    from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import (  # noqa: PLC0415
+        CovenantNotDormantError,
+        NotAStandingBattleCovenantError,
+    )
+
+    ref = session.references.filter(kind=ReferenceKind.COVENANT).first()
+    if ref is None or ref.ref_covenant is None:
+        raise RequiredReferenceMissingError
+    covenant = ref.ref_covenant
+    if (
+        covenant.covenant_type != CovenantType.BATTLE
+        or covenant.battle_binding != BattleBinding.STANDING
+    ):
+        raise NotAStandingBattleCovenantError
+    if not covenant.is_dormant:
+        raise CovenantNotDormantError
+    covenant.is_dormant = False
+    covenant.save(update_fields=["is_dormant"])
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        membership = CharacterCovenantRole.objects.filter(
+            character_sheet=p.character_sheet,
+            covenant=covenant,
+            left_at__isnull=True,
+        ).first()
+        if membership is not None:
+            set_engaged_membership(membership=membership)
+    _emit_rise_message(covenant)
+    return covenant
+
+
+@transaction.atomic
+def stand_down_battle_covenant(*, covenant: Covenant) -> None:
+    """Stand a STANDING battle covenant down to dormant; clear engagement."""
+    from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import NotAStandingBattleCovenantError  # noqa: PLC0415
+
+    if (
+        covenant.covenant_type != CovenantType.BATTLE
+        or covenant.battle_binding != BattleBinding.STANDING
+    ):
+        raise NotAStandingBattleCovenantError
+    covenant.is_dormant = True
+    covenant.save(update_fields=["is_dormant"])
+    for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
+        engaged=True, left_at__isnull=True
+    ):
+        m.engaged = False
+        m.save(update_fields=["engaged"])
+        m.character_sheet.character.covenant_roles.invalidate()
+
+
+def _emit_rise_message(covenant: Covenant) -> None:
+    """Fire one NarrativeMessage to engaged members when the banners are called."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    sheets = [
+        m.character_sheet
+        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
+            engaged=True, left_at__isnull=True
+        ).select_related("character_sheet")
+    ]
+    if not sheets:
+        return
+    send_narrative_message(
+        recipients=sheets,
+        body=f"The banners are called — {covenant.name} rises to war once more.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+
 def evaluate_scene_engagement(
     *,
     character_sheet: CharacterSheet,

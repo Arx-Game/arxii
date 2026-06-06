@@ -128,3 +128,25 @@ class SubroleResonanceMismatchError(SubrolePromotionError):
             "You do not have a Thread on the parent role with the matching resonance.",
         }
     )
+
+
+class NotAStandingBattleCovenantError(CovenantError):
+    """Raised when a rise/stand-down targets a non-STANDING-battle covenant."""
+
+    user_message = "This action requires a standing battle covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "This action requires a standing battle covenant.",
+        }
+    )
+
+
+class CovenantNotDormantError(CovenantError):
+    """Raised when a rise ritual targets a covenant that is not dormant."""
+
+    user_message = "This covenant is already risen — it cannot be called to banners again."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "This covenant is already risen — it cannot be called to banners again.",
+        }
+    )
