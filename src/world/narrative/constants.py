@@ -8,3 +8,4 @@ class NarrativeCategory(models.TextChoices):
     HAPPENSTANCE = "happenstance", "Happenstance"
     SYSTEM = "system", "System"
     COVENANT = "covenant", "Covenant"
+    RENOWN = "renown", "Renown"
