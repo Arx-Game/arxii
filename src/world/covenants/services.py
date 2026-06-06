@@ -404,6 +404,25 @@ def _co_present_member_count(
     return n
 
 
+def engaged_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
+    """CharacterSheets that are engaged with `covenant` AND present in `room`.
+
+    Builds the engaged-member set from the DB once, then walks room.contents —
+    no per-object queries. The ≥N test is len(engaged_members_present(...)).
+    """
+    engaged_sheet_ids = set(
+        covenant.memberships.filter(engaged=True, left_at__isnull=True).values_list(
+            "character_sheet_id", flat=True
+        )
+    )
+    present: list[CharacterSheet] = []
+    for obj in room.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is not None and sheet.pk in engaged_sheet_ids:
+            present.append(sheet)
+    return present
+
+
 @transaction.atomic
 def promote_to_subrole(
     *,
