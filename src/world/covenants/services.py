@@ -236,6 +236,27 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     character_sheet.character.covenant_roles.invalidate()
 
 
+def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
+    """Pick the single covenant role that governs combat for a character.
+
+    Slice E precedence: when a character is engaged with both a Durance and a
+    Battle covenant, the Battle role wins (it sets speed_rank / resolution
+    order). Modifier bonuses still stack additively elsewhere
+    (mechanics.covenant_role_bonus); this only chooses the one role attached to
+    the CombatParticipant. At most one engaged role per type, so the result is
+    deterministic.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    engaged = character_sheet.character.covenant_roles.currently_engaged_roles()
+    if not engaged:
+        return None
+    for role in engaged:
+        if role.covenant_type == CovenantType.BATTLE:
+            return role
+    return engaged[0]
+
+
 def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     """Return True if a row exists in GearArchetypeCompatibility for this pair.
 
