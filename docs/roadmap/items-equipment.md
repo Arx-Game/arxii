@@ -179,6 +179,45 @@ Explicitly NOT in Phase A: fashion compatibility, fashion bonuses, modeling /
 peer judging, outfit legendary level, outfit-bound mantles. Placeholders are in
 the UI but no server-side mechanics back them.
 
+## Outfits Phase B — Fashion Style (DONE)
+
+**Branch:** `feature-513-outfits-phase-b-fashionstyle`
+
+Fashion bonuses driven by admin-authored `FashionStyle` objects tied to the current
+season/rotation for each Society. The perceiving society supplies the context; there
+is no society-blind always-on scalar (no "home society" link exists on characters).
+
+What shipped:
+
+- **`FashionStyle` model** (admin-authored) — `name`, `description`, and an
+  `in_vogue_facets` M2M → `magic.Facet`; facets on the style define what's
+  currently fashionable. Compatibility is facet-only for MVP; extending to item
+  type or gear archetype is a deferred extension point.
+- **`FashionStyleBonus` through-model** — maps a `FashionStyle` to a per-`CheckType`
+  `mechanics.ModifierTarget` with an authored `weight`. Defines the mechanical payoff
+  when a character's outfit is in-vogue.
+- **`Society.current_fashion_style` FK** — the per-Society "current fashion" rotation;
+  set in Django admin. Changing it updates which facets are in-vogue for that society's
+  perception context.
+- **`fashion_outfit_bonus(sheet, target, society)` service** — perception-relative;
+  mirrors `passive_facet_bonuses`; queries the character's currently equipped item
+  facets against the society's `current_fashion_style.in_vogue_facets`. Returns a
+  weighted modifier for the given `ModifierTarget`.
+- **`get_modifier_total(character, target, *, perceiving_society=...)` integration** —
+  society-aware callers (#514 events, #512 combat) pass `perceiving_society`; existing
+  society-blind callers are unchanged.
+- **Admin** — `FashionStyleAdmin` with `FashionStyleBonus` inline registered;
+  `SocietyAdmin` exposes `current_fashion_style`.
+
+Design decisions:
+
+- **Contextual / perception-relative:** the perceiving society is supplied by
+  consumers; no always-on fashion scalar is applied globally.
+- **Facet-only compatibility for MVP;** item-type/archetype extension is a future
+  hook.
+- **Follow-up #750 filed:** derive the perceiving society from scene context so
+  event/combat callers don't have to thread it manually.
+
 ## Visible Worn Equipment (DONE)
 
 **Branch:** `visible-worn-equipment`
@@ -272,7 +311,7 @@ Explicitly NOT in this slice (parked):
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - Item interaction service functions — using items, consuming charges (not started)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
-- Outfits Phase B (Fashion) — `FashionStyle` model, item-fashion compatibility rules, current-fashion rotation, aggregate per-outfit fashion bonuses (not started)
+- ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; follow-up #750 for scene-derived society)
 - Outfits Phase C (Modeling) — present an outfit at events, peer judging, leaderboards (not started)
 - Outfits Phase D (Legendary + Mantle) — outfit legend accrual, outfit-bound mantles, famous outfits as referenceable artifacts in the magic / story layer (not started)
 - Servant retrieval — fetching items from off-character storage; parked in `docs/roadmap/rooms-and-estates.md` (not started)
