@@ -4,6 +4,8 @@ import { FameCard } from './FameCard';
 import { PrestigeBreakdownCard } from './PrestigeBreakdownCard';
 import { ReputationListCard } from './ReputationListCard';
 import { DeedsLogCard } from './DeedsLogCard';
+import { OwnedDwellingsCard } from './OwnedDwellingsCard';
+import { TenantedRoomsCard } from './TenantedRoomsCard';
 import { PersonaSelectionShell } from './PersonaSelectionShell';
 import type { RenownPayload } from '../types';
 
@@ -49,6 +51,8 @@ function CardLayout({ renown }: { renown: RenownPayload }) {
       <PrestigeBreakdownCard prestige={renown.prestige} />
       <ReputationListCard reputation={renown.reputation} />
       <DeedsLogCard deeds={renown.recent_deeds} />
+      <OwnedDwellingsCard dwellings={renown.owned_dwellings} />
+      <TenantedRoomsCard rooms={renown.tenanted_rooms} />
     </div>
   );
 }

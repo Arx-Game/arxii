@@ -332,7 +332,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
         try:
             viewer_persona = _resolve_request_viewer_persona(request)
         except _BadViewerPersona as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         except _ForbiddenViewerPersona:
             return Response(
                 {"detail": "viewer_persona must belong to the requesting account."},
@@ -352,7 +352,17 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
 
 class _BadViewerPersona(Exception):
-    """The viewer_persona query param could not be parsed or resolved."""
+    """The viewer_persona query param could not be parsed or resolved.
+
+    Carries an explicit ``user_message`` for the API response so we
+    never round-trip ``str(exc)`` (would leak the formatted call site
+    + traceback context per CodeQL's "Information exposure through an
+    exception" rule).
+    """
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
 
 
 class _ForbiddenViewerPersona(Exception):

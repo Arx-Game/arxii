@@ -7,6 +7,9 @@ export type SocietyReputationEntry = components['schemas']['_SocietyReputation']
 export type DeedEntry = components['schemas']['_Deed'];
 export type RenownCardPayload = components['schemas']['RenownCard'];
 export type RenownCardFame = components['schemas']['_RenownCardFame'];
+export type OwnedDwelling = components['schemas']['_OwnedDwelling'];
+export type TenantedRoom = components['schemas']['_TenantedRoom'];
+export type CategoryPolish = components['schemas']['_CategoryPolish'];
 
 /**
  * A persona that has a renown panel. PRIMARY and ESTABLISHED only —
