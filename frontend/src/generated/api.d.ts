@@ -18509,6 +18509,8 @@ export interface components {
       fame: components['schemas']['_Fame'];
       reputation: components['schemas']['_SocietyReputation'][];
       recent_deeds: components['schemas']['_Deed'][];
+      owned_dwellings: components['schemas']['_OwnedDwelling'][];
+      tenanted_rooms: components['schemas']['_TenantedRoom'][];
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -20517,6 +20519,13 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    /** @description One polish category's value + derived tier label for a building. */
+    _CategoryPolish: {
+      category_id: number;
+      category_name: string;
+      value: number;
+      tier_label: string | null;
+    };
     /** @description LegendEntry summary for the recent-deeds list. */
     _Deed: {
       id: number;
@@ -20542,6 +20551,17 @@ export interface components {
       xp_cost: number;
       dev_points_to_boundary: number;
     };
+    /** @description One building the persona owns, with polish breakdown + upkeep state. */
+    _OwnedDwelling: {
+      id: number;
+      name: string;
+      polish_by_category: components['schemas']['_CategoryPolish'][];
+      upkeep_warning: boolean;
+      decayed_features_count: number;
+      dormant: boolean;
+      /** Format: date-time */
+      dormant_since: string | null;
+    };
     /** @description Four-axis breakdown of the persona's total_prestige. */
     _PrestigeBreakdown: {
       dwellings: number;
@@ -20562,6 +20582,18 @@ export interface components {
       society_id: number;
       society_name: string;
       tier: string;
+    };
+    /**
+     * @description One room the persona tenants — polish breakdown only, no upkeep/dormancy.
+     *
+     *     Upkeep + dormancy are building-level concepts; rooms don't carry
+     *     them directly. The room's containing building's upkeep state shows
+     *     up in ``owned_dwellings`` separately (when the persona owns it).
+     */
+    _TenantedRoom: {
+      id: number;
+      name: string;
+      polish_by_category: components['schemas']['_CategoryPolish'][];
     };
     /** @description One entry in the weavable_techniques list. */
     _WeavableTechnique: {
