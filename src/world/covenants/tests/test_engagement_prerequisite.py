@@ -60,7 +60,11 @@ class EngagementPrerequisiteBranchesTests(TestCase):
         )
 
     def test_battle_short_circuits_true(self) -> None:
-        """Battle membership: helper returns True regardless of co-presence."""
+        """Battle membership with a risen covenant is engageable (no co-presence gate).
+
+        The dormancy gate added in Slice E only blocks engagement when the
+        battle covenant is dormant; a risen covenant short-circuits to True.
+        """
         from world.covenants.handlers import can_engage_membership
 
         self.assertTrue(can_engage_membership(self.mem_a_battle))

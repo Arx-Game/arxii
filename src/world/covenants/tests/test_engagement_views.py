@@ -93,8 +93,9 @@ class EngagementViewAuthorizationTests(TestCase):
     def test_engage_allows_owner(self) -> None:
         """200 when the requesting user owns the sheet.
 
-        BATTLE covenants have no IC prerequisite (can_engage_membership
-        returns True for non-Durance types), so this reaches the success path.
+        The BATTLE covenant here is risen (not dormant), so can_engage_membership
+        returns True and the request reaches the success path. (A dormant battle
+        covenant would be blocked — see test_battle_engagement.)
         """
         response = self.owner_client.post(
             f"/api/covenants/character-roles/{self.membership.pk}/engage/"
