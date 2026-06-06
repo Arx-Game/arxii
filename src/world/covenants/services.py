@@ -406,7 +406,7 @@ def stand_down_battle_covenant(*, covenant: Covenant) -> None:
     covenant.save(update_fields=["is_dormant"])
     for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
         engaged=True, left_at__isnull=True
-    ):
+    ).select_related("character_sheet"):
         m.engaged = False
         m.save(update_fields=["engaged"])
         m.character_sheet.character.covenant_roles.invalidate()
