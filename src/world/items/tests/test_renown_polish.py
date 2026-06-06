@@ -40,7 +40,7 @@ class PlaceItemInRoomTests(TestCase):
         template = _make_decorative_template(polish_value=15, category=cat)
         instance = ItemInstanceFactory(template=template)
 
-        placement = place_item_in_room(instance, room, persona=tenant)
+        placement = place_item_in_room(instance, room)
 
         self.assertIsNotNone(placement)
         rp = RoomPolish.objects.get(room=room, category=cat)
@@ -49,11 +49,10 @@ class PlaceItemInRoomTests(TestCase):
         self.assertEqual(tenant.prestige_from_dwellings, 15)
 
     def test_place_zero_polish_template_no_room_polish(self) -> None:
-        tenant = _make_primary_persona()
         room = RoomProfileFactory()
         template = ItemTemplateFactory(polish_value=0)
         instance = ItemInstanceFactory(template=template)
-        place_item_in_room(instance, room, persona=tenant)
+        place_item_in_room(instance, room)
         self.assertFalse(RoomPolish.objects.exists())
 
     def test_place_when_equipped_returns_none(self) -> None:
@@ -68,32 +67,30 @@ class PlaceItemInRoomTests(TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        result = place_item_in_room(instance, room, persona=tenant)
+        result = place_item_in_room(instance, room)
         self.assertIsNone(result)
         self.assertFalse(RoomPolish.objects.exists())
 
     def test_place_again_in_same_room_is_idempotent(self) -> None:
-        tenant = _make_primary_persona()
         room = RoomProfileFactory()
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=20, category=cat)
         instance = ItemInstanceFactory(template=template)
-        place_item_in_room(instance, room, persona=tenant)
-        place_item_in_room(instance, room, persona=tenant)
+        place_item_in_room(instance, room)
+        place_item_in_room(instance, room)
         rp = RoomPolish.objects.get(room=room, category=cat)
         # Polish does NOT stack with idempotent re-placement.
         self.assertEqual(rp.value, 20)
 
     def test_move_between_rooms_subtracts_old_adds_new(self) -> None:
-        tenant = _make_primary_persona()
         room_a = RoomProfileFactory()
         room_b = RoomProfileFactory()
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=30, category=cat)
         instance = ItemInstanceFactory(template=template)
 
-        place_item_in_room(instance, room_a, persona=tenant)
-        place_item_in_room(instance, room_b, persona=tenant)
+        place_item_in_room(instance, room_a)
+        place_item_in_room(instance, room_b)
 
         self.assertFalse(RoomItem.objects.filter(room=room_a).exists())
         self.assertEqual(RoomPolish.objects.get(room=room_a, category=cat).value, 0)
@@ -109,7 +106,7 @@ class RemoveItemFromRoomTests(TestCase):
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=12, category=cat)
         instance = ItemInstanceFactory(template=template)
-        place_item_in_room(instance, room, persona=tenant)
+        place_item_in_room(instance, room)
 
         result = remove_item_from_room(instance)
 
@@ -175,12 +172,11 @@ class EquipItemPolishTests(TestCase):
 
 class PlaceEquipMutualExclusionTests(TestCase):
     def test_can_equip_returns_false_when_placed(self) -> None:
-        tenant = _make_primary_persona()
         room = RoomProfileFactory()
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=5, category=cat)
         instance = ItemInstanceFactory(template=template)
-        place_item_in_room(instance, room, persona=tenant)
+        place_item_in_room(instance, room)
         self.assertFalse(can_equip_item(instance))
 
     def test_can_equip_returns_true_when_not_placed(self) -> None:
@@ -202,7 +198,7 @@ class RoomItemRollUpTests(TestCase):
         template = _make_decorative_template(polish_value=50, category=cat)
         instance = ItemInstanceFactory(template=template)
 
-        place_item_in_room(instance, room, persona=tenant)
+        place_item_in_room(instance, room)
 
         owner.refresh_from_db()
         tenant.refresh_from_db()

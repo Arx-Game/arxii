@@ -36,9 +36,3 @@ TARGET_GRANDEUR_MAX = 10
 # unit of maintenance.
 DECAY_BASE_AMOUNT: int = 50
 DECAY_ACCELERATION_FACTOR: float = 1.5
-
-# Mass Feature Restoration project cost is ~10% of the summed original
-# polish costs across decayed instances. The full Restoration Project
-# clears dormancy; mass-restoration refills polish on already-restored
-# buildings.
-MASS_RESTORATION_COST_FRACTION: float = 0.10

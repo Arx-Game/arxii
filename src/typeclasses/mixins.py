@@ -162,37 +162,19 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
     Returns the rendered IC narration or None when the object has no
     ``RankingDisplay`` row. Lazy-imports the societies layer to keep the
     typeclass package free of a hard dependency on it.
-
-    The viewer's currently-presented persona is resolved from
-    ``looker.item_data.presented_persona`` when available; falls back to
-    the looker's primary persona, then to None (which surfaces the
-    cloaked narration on SOCIETY_PRESTIGE displays — non-members can't
-    see names).
     """
+    from world.scenes.models import Persona
     from world.societies.models import RankingDisplay
     from world.societies.ranking_services import render_ranking_display
 
     try:
         display = obj.ranking_display
-    except RankingDisplay.DoesNotExist:
+    except (AttributeError, RankingDisplay.DoesNotExist):
         return None
-    except AttributeError:
-        return None
-    viewer_persona = _resolve_viewer_persona(looker)
+    import contextlib
+
+    viewer_persona = None
+    if looker is not None:
+        with contextlib.suppress(AttributeError, Persona.DoesNotExist):
+            viewer_persona = looker.sheet_data.primary_persona
     return render_ranking_display(display, viewer_persona)
-
-
-def _resolve_viewer_persona(looker):
-    """Walk ``looker → sheet_data → primary_persona``; None on any miss."""
-    if looker is None:
-        return None
-    try:
-        sheet = looker.sheet_data
-    except AttributeError:
-        return None
-    if sheet is None:
-        return None
-    try:
-        return sheet.primary_persona
-    except Exception:  # noqa: BLE001 — Persona.DoesNotExist is fine; sheet may not exist.
-        return None

@@ -61,7 +61,7 @@ class ExtendDeedAwarenessTests(TestCase):
         from world.societies.models import LegendEntry
 
         entry = LegendEntry.objects.get(pk=deed.legend_entry_id)
-        newly_aware, deltas = extend_deed_awareness(entry, persona, scene=None)
+        newly_aware, deltas = extend_deed_awareness(entry, scene=None)
         self.assertEqual(newly_aware, [])
         self.assertEqual(deltas, {})
 
@@ -80,7 +80,7 @@ class ExtendDeedAwarenessTests(TestCase):
         SocietyFactory(name="NewSocB", realm=new_realm)
         scene = _make_scene_in_realm(new_realm)
 
-        newly_aware, _deltas = extend_deed_awareness(entry, persona, scene=scene)
+        newly_aware, _deltas = extend_deed_awareness(entry, scene=scene)
 
         self.assertEqual(len(newly_aware), 2)
         self.assertEqual(entry.societies_aware.count(), 2)
@@ -107,7 +107,7 @@ class ExtendDeedAwarenessTests(TestCase):
         self.assertTrue(entry.societies_aware.filter(pk=society_a.pk).exists())
         # Already-aware society stays out of the newly-aware diff.
         scene_a = _make_scene_in_realm(realm_a)
-        newly_aware, deltas = extend_deed_awareness(entry, persona, scene=scene_a)
+        newly_aware, deltas = extend_deed_awareness(entry, scene=scene_a)
         self.assertEqual(newly_aware, [])
         self.assertEqual(deltas, {})
 
@@ -116,7 +116,7 @@ class ExtendDeedAwarenessTests(TestCase):
         society_b = SocietyFactory(name="SocB", realm=realm_b, mercy=4)
         scene_b = _make_scene_in_realm(realm_b)
 
-        newly_aware_b, deltas_b = extend_deed_awareness(entry, persona, scene=scene_b)
+        newly_aware_b, deltas_b = extend_deed_awareness(entry, scene=scene_b)
         self.assertEqual(newly_aware_b, [society_b.pk])
         # archetype_mercy_delta (3) * society_b.mercy (4) = 12
         self.assertEqual(deltas_b[society_b.pk], 12)
@@ -124,7 +124,7 @@ class ExtendDeedAwarenessTests(TestCase):
         self.assertEqual(rep.value, 12)
 
         # Second extend into the same realm — no double-apply.
-        newly_aware_again, deltas_again = extend_deed_awareness(entry, persona, scene=scene_b)
+        newly_aware_again, deltas_again = extend_deed_awareness(entry, scene=scene_b)
         self.assertEqual(newly_aware_again, [])
         self.assertEqual(deltas_again, {})
 

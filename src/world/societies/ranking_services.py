@@ -1,17 +1,13 @@
 """#742 — Diegetic ranking display services (#676 Phase I).
 
 Read-side queries and rendering for the in-world ranking displays
-(heralds, plaques, academy boards). Three responsibilities:
+(heralds, plaques, academy boards):
 
-* ``get_society_prestige_top_n`` / ``get_academy_legend_top_n`` — read
-  the materialized views and return the top-N rows for the herald to
-  read aloud (or the plaque to engrave, etc.).
-* ``render_ranking_display`` — the main entry point used by the
-  typeclass ``return_appearance`` hook. Dispatches on ``ranking_type``
-  and gates ``SOCIETY_PRESTIGE`` rankings against the viewer's society
-  membership.
-* ``refresh_society_prestige_ranking`` — wraps the
-  ``REFRESH MATERIALIZED VIEW CONCURRENTLY`` SQL the nightly cron runs.
+* ``get_society_prestige_top_n`` / ``get_academy_legend_top_n`` — runtime
+  queries that return the top-N rows for the herald to read aloud.
+* ``render_ranking_display`` — the typeclass ``return_appearance`` hook
+  uses this. Gates ``SOCIETY_PRESTIGE`` rankings against the viewer's
+  society membership.
 
 Author-visible IC prose is tagged ``PLACEHOLDER`` so the user can grep
 and rewrite it in their own voice.
@@ -20,23 +16,17 @@ and rewrite it in their own voice.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
-
-from django.db import connection, transaction
 
 from world.societies.models import (
     OrganizationMembership,
     PersonaLegendSummary,
     RankingDisplay,
-    SocietyPrestigeRanking,
 )
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class RankingRow:
-    """One row in a rendered ranking. ``rank`` is 1-based DENSE_RANK."""
+    """One row in a rendered ranking. ``rank`` is 1-based dense rank."""
 
     rank: int
     persona_name: str
@@ -49,20 +39,25 @@ class RankingRow:
 
 
 def get_society_prestige_top_n(society, *, n: int = 10) -> list[RankingRow]:
-    """Top-N personas by ``displayed_prestige`` in ``society``.
+    """Top-N personas by ``total_prestige`` among members of ``society``.
 
-    Reads ``SocietyPrestigeRanking`` MV. Empty list when the MV is
-    empty (no members, or the cron hasn't run yet, or — on SQLite —
-    the MV doesn't exist).
+    Runtime aggregate over members. We don't apply the fame-tier
+    multiplier here at MVP — the MV had it baked in but at our scale a
+    raw-total ordering is fine and lets us drop the MV + nightly cron.
+    A future scale-driven re-introduction can multiply at query time.
     """
-    rows = list(
-        SocietyPrestigeRanking.objects.filter(society=society)
-        .select_related("persona")
-        .order_by("rank", "persona__name")[:n]
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    personas = list(
+        Persona.objects.filter(
+            pk__in=OrganizationMembership.objects.filter(organization__society=society).values_list(
+                "persona_id", flat=True
+            )
+        ).order_by("-total_prestige", "name")[:n]
     )
     return [
-        RankingRow(rank=row.rank, persona_name=row.persona.name, value=row.displayed_prestige)
-        for row in rows
+        RankingRow(rank=index, persona_name=p.name, value=p.total_prestige)
+        for index, p in enumerate(personas, start=1)
     ]
 
 
@@ -163,30 +158,3 @@ def _format_rows(*, header: str, rows: list[RankingRow]) -> str:
     """Format a ranking as IC narration. Newline-separated; rank prefix."""
     lines = [header, *[f"  {row.rank}. {row.persona_name} ({row.value:,})" for row in rows]]
     return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Refresh (nightly cron)
-# ---------------------------------------------------------------------------
-
-
-@transaction.atomic
-def refresh_society_prestige_ranking() -> None:
-    """Refresh the ``societies_societyprestigeranking`` materialized view.
-
-    Uses ``REFRESH MATERIALIZED VIEW CONCURRENTLY`` — supported because
-    the migration includes a unique index on ``(society, persona)``.
-    CONCURRENTLY lets readers continue to query the view during refresh,
-    which matters at scale; at the dev tier it just means we don't
-    block the cron tick.
-
-    On SQLite (test tier) this is a no-op: materialized views don't
-    exist on SQLite. The vendor check keeps the cron task functional
-    when running under either backend.
-    """
-    if connection.vendor != "postgresql":  # noqa: STRING_LITERAL
-        logger.info("ranking.refresh: skipped — backend is %s", connection.vendor)
-        return
-    with connection.cursor() as cursor:
-        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_societyprestigeranking;")
-    logger.info("ranking.refresh: society_prestige_ranking refreshed")

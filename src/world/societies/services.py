@@ -207,10 +207,10 @@ def spread_deed(  # noqa: PLR0913
         recompute_covenant_level(covenant=credit.covenant)
     # #676 Phase H: subject's fame buffer rises by ``1 × npc_audience × success_level``.
     # Existing admin spread API doesn't carry NPC/check data yet → no-op on fame.
-    apply_spread_fame_bump(deed, spreader_persona)
-    # #737: extend deed awareness to spreader's current Realm; re-fire
-    # archetype-dot-product reputation deltas on newly-aware societies.
-    extend_deed_awareness(deed, spreader_persona, scene=scene)
+    apply_spread_fame_bump(deed)
+    # #737: extend deed awareness to scene's Realm; re-fire archetype
+    # dot-product reputation deltas on newly-aware societies.
+    extend_deed_awareness(deed, scene=scene)
     return spread
 
 

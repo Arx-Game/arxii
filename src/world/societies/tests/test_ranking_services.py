@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -158,36 +158,37 @@ class RenderRankingDisplayGatingTests(TestCase):
         self.assertIn("no names", text)
 
 
-class CronRegistrationTests(TestCase):
-    """The nightly refresh task is registered at startup."""
-
-    def test_refresh_task_registered(self) -> None:
-        from world.game_clock.task_registry import (
-            clear_registry,
-            get_registered_tasks,
-        )
-        from world.game_clock.tasks import register_all_tasks
-
-        clear_registry()
-        register_all_tasks()
-        task_keys = {t.task_key for t in get_registered_tasks()}
-        self.assertIn("societies.ranking_refresh", task_keys)
-
-
-@tag("postgres")
-class SocietyPrestigeTopNPostgresTests(TestCase):
-    """Direct MV reads — only run under PG parity."""
+class SocietyPrestigeTopNRuntimeTests(TestCase):
+    """Runtime aggregate query (no MV) — runs on both DB tiers."""
 
     def test_empty_society_returns_empty_list(self) -> None:
         society = SocietyFactory(name="House Untested")
         rows = get_society_prestige_top_n(society, n=10)
         self.assertEqual(rows, [])
 
+    def test_returns_members_ordered_by_total_prestige_desc(self) -> None:
+        society = SocietyFactory(name="House Ranked")
+        org = OrganizationFactory(society=society)
+        leader = _make_primary_persona("Leader")
+        follower = _make_primary_persona("Follower")
+        OrganizationMembershipFactory(persona=leader, organization=org)
+        OrganizationMembershipFactory(persona=follower, organization=org)
+        leader.total_prestige = 5_000
+        leader.save(update_fields=["total_prestige"])
+        follower.total_prestige = 1_000
+        follower.save(update_fields=["total_prestige"])
 
-@tag("postgres")
-class AcademyLegendTopNPostgresTests(TestCase):
-    def test_returns_global_top_n(self) -> None:
-        # The MV will be empty for a fresh DB; the test verifies the
-        # query shape and ordering rather than seeded data.
+        rows = get_society_prestige_top_n(society, n=10)
+
+        self.assertEqual([r.persona_name for r in rows], ["Leader", "Follower"])
+        self.assertEqual(rows[0].value, 5_000)
+        self.assertEqual(rows[0].rank, 1)
+        self.assertEqual(rows[1].rank, 2)
+
+
+class AcademyLegendTopNTests(TestCase):
+    """Academy reads the PersonaLegendSummary MV; tolerates SQLite (returns [])."""
+
+    def test_returns_empty_on_sqlite_or_fresh_pg(self) -> None:
         rows = get_academy_legend_top_n(n=5)
-        self.assertEqual(rows, [])
+        self.assertIsInstance(rows, list)

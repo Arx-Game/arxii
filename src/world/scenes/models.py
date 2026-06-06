@@ -281,7 +281,6 @@ class Persona(SharedMemoryModel):
         max_length=20,
         choices=FameTier.choices,
         default=FameTier.NORMAL,
-        db_index=True,
         help_text=(
             "Derived display tier — Normal / Talked About / Celebrity / "
             "Household Name / World Famous. Recomputed whenever fame_points "
