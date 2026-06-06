@@ -1,5 +1,6 @@
 """Tests for Tasks 3 + 4: engaged_members_present helper and perform_covenant_rite service.
 Tests for Task 5: fold_arrival_into_active_rites (late-arrival fold-in).
+Tests for Task 6: complete_rites_for_encounter (combat-end buff sweep).
 
 Uses setUp (not setUpTestData) because Evennia typeclasses (ObjectDB subclasses)
 are not deepcopy-safe, which Django's setUpTestData mechanism requires.
@@ -20,6 +21,7 @@ from world.covenants.factories import (
 )
 from world.covenants.models import CovenantRite, CovenantRiteInstance
 from world.covenants.services import (
+    complete_rites_for_encounter,
     engaged_members_present,
     evaluate_scene_engagement,
     fold_arrival_into_active_rites,
@@ -620,3 +622,158 @@ class FoldArrivalIntoActiveRitesTests(TestCase):
         ).first()
         self.assertIsNotNone(inst, "Expected fold-in buff on arriving member")
         self.assertEqual(inst.severity, expected_severity)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: complete_rites_for_encounter
+# ---------------------------------------------------------------------------
+
+
+class CompleteRitesForEncounterTests(TestCase):
+    """Tests for complete_rites_for_encounter (combat-end buff sweep).
+
+    Uses the same fixture pattern as FoldArrivalIntoActiveRitesTests:
+    2 initial engaged members fire the rite, producing 2 ConditionInstance rows.
+    """
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        self.room = _make_room("SweepRoom")
+        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # Two engaged members, both in the room.
+        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
+
+        self.condition_template = ConditionTemplateFactory()
+
+        from world.magic.factories import RitualFactory
+
+        self.ritual = RitualFactory(
+            service_function_path="world.covenants.services.perform_covenant_rite"
+        )
+        self.rite = CovenantRite.objects.create(
+            ritual=self.ritual,
+            covenant_type=self.covenant.covenant_type,
+            min_covenant_level=1,
+            min_engaged_present=2,
+            granted_condition=self.condition_template,
+            base_severity=2,
+            severity_per_extra_participant=1,
+            max_severity=None,
+            duration_rounds=5,
+        )
+
+        # Active CombatEncounter.
+        from world.combat.constants import EncounterStatus
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatEncounter
+        from world.scenes.factories import SceneFactory
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.RESOLVING
+        )
+        self.encounter.refresh_from_db()
+
+        # Fire the rite for the two members.
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import RitualSessionFactory
+        from world.magic.models.sessions import RitualSessionReference
+
+        session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=self.covenant,
+            ref_covenant_role=None,
+        )
+        self.rite_instance = perform_covenant_rite(session=session)
+        # Sanity: both have the buff.
+        for mem in (self.mem_a, self.mem_b):
+            self.assertTrue(
+                ConditionInstance.objects.filter(
+                    target=mem.character_sheet.character,
+                    condition=self.condition_template,
+                ).exists(),
+                f"setUp: expected condition on {mem.character_sheet}",
+            )
+
+    # ------------------------------------------------------------------
+    # Test 1: sweep on completion
+    # ------------------------------------------------------------------
+
+    def test_sweep_removes_buffs_and_stamps_completed_at(self) -> None:
+        """complete_rites_for_encounter removes the buff from all participants
+        and sets completed_at on the instance.
+        """
+        from world.conditions.services import get_condition_instance
+
+        complete_rites_for_encounter(encounter=self.encounter)
+
+        self.rite_instance.refresh_from_db()
+        self.assertIsNotNone(
+            self.rite_instance.completed_at,
+            "completed_at should be stamped after sweep",
+        )
+        for mem in (self.mem_a, self.mem_b):
+            live = get_condition_instance(mem.character_sheet.character, self.condition_template)
+            self.assertIsNone(
+                live,
+                f"Expected buff removed from {mem.character_sheet} after combat end",
+            )
+
+    # ------------------------------------------------------------------
+    # Test 2: idempotent
+    # ------------------------------------------------------------------
+
+    def test_idempotent_double_call(self) -> None:
+        """Calling complete_rites_for_encounter twice does not error;
+        completed_at remains set and the second call is a true no-op.
+        """
+        complete_rites_for_encounter(encounter=self.encounter)
+        self.rite_instance.refresh_from_db()
+        first_completed_at = self.rite_instance.completed_at
+
+        # Second call should not raise and should leave completed_at unchanged.
+        complete_rites_for_encounter(encounter=self.encounter)
+        self.rite_instance.refresh_from_db()
+        self.assertEqual(
+            self.rite_instance.completed_at,
+            first_completed_at,
+            "completed_at should not change on second call",
+        )
+
+    # ------------------------------------------------------------------
+    # Test 3: integration via cleanup_completed_encounter
+    # ------------------------------------------------------------------
+
+    def test_cleanup_completed_encounter_sweeps_rite_buffs(self) -> None:
+        """cleanup_completed_encounter wires to complete_rites_for_encounter:
+        calling it stamps completed_at and removes buffs from participants.
+        """
+        from world.combat.services import cleanup_completed_encounter
+        from world.conditions.services import get_condition_instance
+
+        cleanup_completed_encounter(self.encounter)
+
+        self.rite_instance.refresh_from_db()
+        self.assertIsNotNone(
+            self.rite_instance.completed_at,
+            "completed_at should be stamped after cleanup_completed_encounter",
+        )
+        for mem in (self.mem_a, self.mem_b):
+            live = get_condition_instance(mem.character_sheet.character, self.condition_template)
+            self.assertIsNone(
+                live,
+                f"Expected buff removed from {mem.character_sheet} after cleanup",
+            )

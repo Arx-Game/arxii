@@ -2108,6 +2108,11 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     ObjectDB is destroyed; the SET_NULL FK behavior nulls
     CombatOpponent.objectdb after deletion.
     """
+    # Sweep covenant rite buffs for this encounter.
+    from world.covenants.services import complete_rites_for_encounter  # noqa: PLC0415
+
+    complete_rites_for_encounter(encounter=encounter)
+
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
         objectdb_is_ephemeral=True,

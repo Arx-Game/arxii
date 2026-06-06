@@ -36,6 +36,7 @@ from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetM
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
 
@@ -619,6 +620,31 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
         character_sheet=candidate_participant.character_sheet,
         role=chosen_role,
     )
+
+
+@transaction.atomic
+def complete_rites_for_encounter(*, encounter: CombatEncounter) -> None:
+    """Sweep covenant rite buffs when a combat encounter ends.
+
+    For each active CovenantRiteInstance tied to `encounter`, removes the
+    granted_condition buff from every participant and stamps completed_at.
+
+    Idempotent: instances already completed (completed_at is set) are
+    excluded by the filter and will not be processed again.
+    """
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    active_instances = list(
+        CovenantRiteInstance.objects.filter(
+            combat_encounter=encounter,
+            completed_at__isnull=True,
+        ).select_related("rite__granted_condition")
+    )
+    for instance in active_instances:
+        for sheet in instance.participants.all():
+            remove_condition(sheet.character, instance.rite.granted_condition)
+        instance.completed_at = timezone.now()
+        instance.save(update_fields=["completed_at"])
 
 
 @transaction.atomic
