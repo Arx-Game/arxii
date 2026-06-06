@@ -4,7 +4,7 @@ from http import HTTPMethod
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
@@ -46,7 +46,12 @@ from world.scenes.serializers import (
     SceneSummaryRevisionSerializer,
 )
 from world.scenes.services import broadcast_scene_message
-from world.societies.renown_serializers import RenownSerializer, build_renown_payload
+from world.societies.renown_serializers import (
+    RenownCardSerializer,
+    RenownSerializer,
+    build_renown_card_payload,
+    build_renown_payload,
+)
 
 
 class SceneViewSet(viewsets.ModelViewSet):
@@ -292,6 +297,109 @@ class PersonaViewSet(viewsets.ModelViewSet):
         payload = build_renown_payload(persona)
         serializer = RenownSerializer(payload)
         return Response(serializer.data)
+
+    @extend_schema(
+        responses=RenownCardSerializer,
+        tags=["personas"],
+        parameters=[
+            OpenApiParameter(
+                name="viewer_persona",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "PK of the viewer's currently-presented persona. Drives "
+                    "deeds + reputation filtering. Omit for the anonymous "
+                    "view (tier label only)."
+                ),
+            ),
+        ],
+    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="renown-card")
+    def renown_card(self, request: Request, pk: int | None = None) -> Response:
+        """#744 — Limited renown view of this persona for a foreign viewer.
+
+        Surfaces only what the viewer's persona's societies are aware
+        of: fame tier label, deeds the viewer's societies have heard
+        about, reputation rows for the viewer's societies.
+
+        The viewer is resolved from ``request.user``. The optional
+        ``viewer_persona`` query param disambiguates among the
+        requester's own personas; a pk that doesn't belong to the
+        requester 403s.
+        """
+        target = self.get_object()
+        try:
+            viewer_persona = _resolve_request_viewer_persona(request)
+        except _BadViewerPersona as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        except _ForbiddenViewerPersona:
+            return Response(
+                {"detail": "viewer_persona must belong to the requesting account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payload = build_renown_card_payload(target, viewer_persona=viewer_persona)
+        serializer = RenownCardSerializer(payload)
+        return Response(serializer.data)
+
+    def get_permissions(self) -> list[BasePermission]:
+        # #744: renown / renown-card are read-only views that any
+        # authenticated user can read on any sheet. CanCreatePersonaInScene
+        # gates write/create paths only.
+        if self.action in {"renown", "renown_card"}:
+            return [permissions.IsAuthenticated()]
+        return [permission() for permission in self.permission_classes]
+
+
+class _BadViewerPersona(Exception):
+    """The viewer_persona query param could not be parsed or resolved.
+
+    Carries an explicit ``user_message`` for the API response so we
+    never round-trip ``str(exc)`` (would leak the formatted call site
+    + traceback context per CodeQL's "Information exposure through an
+    exception" rule).
+    """
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+class _ForbiddenViewerPersona(Exception):
+    """The viewer_persona pk exists but doesn't belong to the requesting account."""
+
+
+def _resolve_request_viewer_persona(request: Request) -> Persona | None:
+    """Resolve the viewer's persona from request.user (+ optional pk hint).
+
+    Behaviour:
+    * Unauthenticated → ``None`` (anonymous view).
+    * Explicit ``viewer_persona`` query pk → must resolve to a Persona
+      whose character is currently tenured by the requesting account,
+      else 400/403.
+    * No query pk → first such persona alphabetically, else ``None``.
+    """
+    if not request.user.is_authenticated:
+        return None
+    viewer_pk_raw = request.query_params.get("viewer_persona")  # noqa: USE_FILTERSET
+    own_persona_qs = Persona.objects.filter(
+        character_sheet__roster_entry__tenures__player_data__account=request.user,
+        character_sheet__roster_entry__tenures__end_date__isnull=True,
+    ).distinct()
+    if viewer_pk_raw is not None:
+        try:
+            viewer_pk = int(viewer_pk_raw)
+        except ValueError as exc:
+            msg = "viewer_persona must be an integer."
+            raise _BadViewerPersona(msg) from exc
+        if not Persona.objects.filter(pk=viewer_pk).exists():
+            msg = f"viewer_persona {viewer_pk} does not exist."
+            raise _BadViewerPersona(msg)
+        try:
+            return own_persona_qs.get(pk=viewer_pk)
+        except Persona.DoesNotExist as exc:
+            raise _ForbiddenViewerPersona from exc
+    return own_persona_qs.order_by("name").first()
 
 
 class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):

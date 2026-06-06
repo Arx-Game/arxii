@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
-import type { RenownEligiblePersona, RenownPayload } from './types';
+import type { RenownCardPayload, RenownEligiblePersona, RenownPayload } from './types';
 
 async function fetchPersonasForSheet(characterSheetId: number): Promise<RenownEligiblePersona[]> {
   // Fetch every persona on this sheet, then filter client-side to the
@@ -45,5 +45,33 @@ export function usePersonaRenownQuery(personaId: number | null) {
     queryKey: ['renown', personaId],
     queryFn: () => fetchPersonaRenown(personaId as number),
     enabled: personaId !== null,
+  });
+}
+
+async function fetchPersonaRenownCard(
+  targetPersonaId: number,
+  viewerPersonaId: number | null
+): Promise<RenownCardPayload> {
+  const q = viewerPersonaId !== null ? `?viewer_persona=${viewerPersonaId}` : '';
+  const res = await apiFetch(`/api/personas/${targetPersonaId}/renown-card/${q}`);
+  if (!res.ok) {
+    throw new Error('Failed to load renown card.');
+  }
+  return res.json();
+}
+
+/**
+ * Renown card for a foreign character. ``viewerPersonaId`` may be null
+ * when the viewer has no character/persona — the backend returns the
+ * anonymous-viewer subset (tier label only, no visible deeds/reputation).
+ */
+export function usePersonaRenownCardQuery(
+  targetPersonaId: number | null,
+  viewerPersonaId: number | null
+) {
+  return useQuery({
+    queryKey: ['renown-card', targetPersonaId, viewerPersonaId],
+    queryFn: () => fetchPersonaRenownCard(targetPersonaId as number, viewerPersonaId),
+    enabled: targetPersonaId !== null,
   });
 }

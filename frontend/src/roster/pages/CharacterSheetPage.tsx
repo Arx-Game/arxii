@@ -11,6 +11,7 @@ import {
 import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RenownPanel } from '@/renown/components/RenownPanel';
+import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -20,6 +21,10 @@ export function CharacterSheetPage() {
 
   // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
+  // For the Renown tab on foreign sheets: resolve the viewer's primary
+  // persona from their first owned character. Null when the viewer has
+  // no characters → the backend returns the anonymous subset.
+  const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
@@ -73,7 +78,14 @@ export function CharacterSheetPage() {
         </TabsContent>
 
         <TabsContent value="renown" className="space-y-4">
-          <RenownPanel characterSheetId={entry.character.id} />
+          {isMyCharacter ? (
+            <RenownPanel characterSheetId={entry.character.id} />
+          ) : (
+            <RenownCardPanel
+              characterSheetId={entry.character.id}
+              viewerPersonaId={viewerPersonaId}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>
