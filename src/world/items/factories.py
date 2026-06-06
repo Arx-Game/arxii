@@ -138,6 +138,8 @@ class OutfitSlotFactory(factory.django.DjangoModelFactory):
 
 
 class FashionStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionStyle."""
+
     class Meta:
         model = FashionStyle
         django_get_or_create = ("name",)
@@ -147,9 +149,10 @@ class FashionStyleFactory(factory.django.DjangoModelFactory):
 
 
 class FashionStyleBonusFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionStyleBonus."""
+
     class Meta:
         model = FashionStyleBonus
-        django_get_or_create = ("fashion_style", "target")
 
     fashion_style = factory.SubFactory(FashionStyleFactory)
     target = factory.SubFactory(ModifierTargetFactory)
