@@ -8341,6 +8341,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/{id}/renown-card/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #744 — Limited renown view of this persona for a foreign viewer.
+     *
+     *     Surfaces only what the viewer's persona's societies are aware
+     *     of: fame tier label, deeds the viewer's societies have heard
+     *     about, reputation rows for the viewer's societies.
+     */
+    get: operations['personas_renown_card_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/places/': {
     parameters: {
       query?: never;
@@ -18510,6 +18533,14 @@ export interface components {
       reputation: components['schemas']['_SocietyReputation'][];
       recent_deeds: components['schemas']['_Deed'][];
     };
+    /** @description Limited renown view of ``target_persona`` for a foreign viewer. */
+    RenownCard: {
+      persona_id: number;
+      persona_name: string;
+      fame: components['schemas']['_RenownCardFame'];
+      visible_deeds: components['schemas']['_Deed'][];
+      visible_reputation: components['schemas']['_SocietyReputation'][];
+    };
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success
@@ -20549,6 +20580,17 @@ export interface components {
       orgs: number;
       deeds: number;
       total: number;
+    };
+    /**
+     * @description Fame block on the card — tier label only.
+     *
+     *     The full Renown tab exposes numeric fame_points + multiplier for
+     *     the player's own personas; foreign personas show just the tier
+     *     label (the spec is explicit about no numeric reveal).
+     */
+    _RenownCardFame: {
+      tier: string;
+      tier_label: string;
     };
     /** @description One resonance balance entry returned by ThreadHubSummaryView. */
     _ResonanceBalance: {
@@ -32762,6 +32804,31 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Renown'];
+        };
+      };
+    };
+  };
+  personas_renown_card_retrieve: {
+    parameters: {
+      query?: {
+        /** @description PK of the viewer's currently-presented persona. Drives deeds + reputation filtering. Omit for the anonymous view (tier label only). */
+        viewer_persona?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RenownCard'];
         };
       };
     };

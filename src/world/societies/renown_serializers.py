@@ -185,3 +185,151 @@ def _build_recent_deeds(persona: Persona, *, limit: int) -> list[dict]:
         }
         for deed in deeds
     ]
+
+
+# ---------------------------------------------------------------------------
+# #744 — Renown card: the limited view a viewer sees on someone else's sheet.
+#
+# Per the spec:
+# * Fame tier label only (no numeric points, no multiplier).
+# * Deeds: visible iff ``deed.societies_aware`` intersects the viewer's
+#   persona's society memberships.
+# * Reputation: rows for societies the viewer is a member of (the viewer
+#   knows what their own circles think; nothing else).
+# * Perception offset applied via the viewer's first society (deterministic
+#   default; per-society lensing is a future refinement).
+# ---------------------------------------------------------------------------
+
+
+class _RenownCardFameSerializer(serializers.Serializer):
+    """Fame block on the card — tier label only.
+
+    The full Renown tab exposes numeric fame_points + multiplier for
+    the player's own personas; foreign personas show just the tier
+    label (the spec is explicit about no numeric reveal).
+    """
+
+    tier = serializers.CharField()
+    tier_label = serializers.CharField()
+
+
+class RenownCardSerializer(serializers.Serializer):
+    """Limited renown view of ``target_persona`` for a foreign viewer."""
+
+    persona_id = serializers.IntegerField()
+    persona_name = serializers.CharField()
+    fame = _RenownCardFameSerializer()
+    visible_deeds = _DeedSerializer(many=True)
+    visible_reputation = _SocietyReputationSerializer(many=True)
+
+
+def build_renown_card_payload(
+    target_persona: Persona,
+    *,
+    viewer_persona: Persona | None,
+    deeds_limit: int = 20,
+) -> dict:
+    """Assemble the filtered renown card payload for a foreign viewer.
+
+    ``viewer_persona`` is the persona the viewer is presenting. When
+    None, the card surfaces only the always-public bits: name + raw
+    fame tier label (which is what a stranger would observe).
+    """
+    viewer_society_ids = _viewer_society_ids(viewer_persona)
+    primary_viewer_society = _viewer_primary_society(viewer_persona)
+    adjusted_tier = _apply_perception_offset(target_persona.fame_tier, primary_viewer_society)
+    return {
+        "persona_id": target_persona.pk,
+        "persona_name": target_persona.name,
+        "fame": {
+            "tier": adjusted_tier,
+            "tier_label": FameTier(adjusted_tier).label,
+        },
+        "visible_deeds": _build_card_visible_deeds(
+            target_persona, viewer_society_ids, limit=deeds_limit
+        ),
+        "visible_reputation": _build_card_visible_reputation(target_persona, viewer_society_ids),
+    }
+
+
+def _viewer_society_ids(viewer_persona: Persona | None) -> set[int]:
+    """Set of society IDs the viewer's persona holds memberships in."""
+    if viewer_persona is None:
+        return set()
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return set(
+        OrganizationMembership.objects.filter(persona=viewer_persona)
+        .exclude(organization__society__isnull=True)
+        .values_list("organization__society_id", flat=True)
+        .distinct()
+    )
+
+
+def _viewer_primary_society(viewer_persona: Persona | None):
+    """Pick a single society to gate the perception-offset lookup through.
+
+    With multiple memberships we'd want per-society lensing in principle,
+    but the card surfaces one tier label. v1: alphabetically-first
+    society (deterministic; switchable via explicit persona context in a
+    future iteration).
+    """
+    if viewer_persona is None:
+        return None
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    membership = (
+        OrganizationMembership.objects.filter(persona=viewer_persona)
+        .exclude(organization__society__isnull=True)
+        .select_related("organization__society")
+        .order_by("organization__society__name")
+        .first()
+    )
+    return membership.organization.society if membership else None
+
+
+def _build_card_visible_deeds(
+    target_persona: Persona,
+    viewer_society_ids: set[int],
+    *,
+    limit: int,
+) -> list[dict]:
+    """Deeds whose ``societies_aware`` intersects the viewer's societies."""
+    if not viewer_society_ids:
+        return []
+    deeds = (
+        LegendEntry.objects.filter(persona=target_persona, societies_aware__in=viewer_society_ids)
+        .distinct()
+        .order_by("-created_at")[:limit]
+    )
+    return [
+        {
+            "id": deed.pk,
+            "title": deed.title,
+            "base_value": deed.base_value,
+            "created_at": deed.created_at,
+        }
+        for deed in deeds
+    ]
+
+
+def _build_card_visible_reputation(
+    target_persona: Persona,
+    viewer_society_ids: set[int],
+) -> list[dict]:
+    """Reputation rows for societies the viewer is a member of."""
+    if not viewer_society_ids or not target_persona.is_established_or_primary:
+        return []
+    rows = (
+        SocietyReputation.objects.filter(persona=target_persona, society_id__in=viewer_society_ids)
+        .select_related("society")
+        .order_by("society__name")
+    )
+    return [
+        {
+            "society_id": row.society_id,
+            "society_name": row.society.name,
+            "tier": ReputationTier.from_value(row.value).value,
+        }
+        for row in rows
+    ]

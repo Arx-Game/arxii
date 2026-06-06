@@ -5,6 +5,8 @@ export type FameBlock = components['schemas']['_Fame'];
 export type PrestigeBreakdown = components['schemas']['_PrestigeBreakdown'];
 export type SocietyReputationEntry = components['schemas']['_SocietyReputation'];
 export type DeedEntry = components['schemas']['_Deed'];
+export type RenownCardPayload = components['schemas']['RenownCard'];
+export type RenownCardFame = components['schemas']['_RenownCardFame'];
 
 /**
  * A persona that has a renown panel. PRIMARY and ESTABLISHED only —

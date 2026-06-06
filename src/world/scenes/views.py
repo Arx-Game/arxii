@@ -4,7 +4,7 @@ from http import HTTPMethod
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
@@ -46,7 +46,12 @@ from world.scenes.serializers import (
     SceneSummaryRevisionSerializer,
 )
 from world.scenes.services import broadcast_scene_message
-from world.societies.renown_serializers import RenownSerializer, build_renown_payload
+from world.societies.renown_serializers import (
+    RenownCardSerializer,
+    RenownSerializer,
+    build_renown_card_payload,
+    build_renown_payload,
+)
 
 
 class SceneViewSet(viewsets.ModelViewSet):
@@ -291,6 +296,44 @@ class PersonaViewSet(viewsets.ModelViewSet):
         persona = self.get_object()
         payload = build_renown_payload(persona)
         serializer = RenownSerializer(payload)
+        return Response(serializer.data)
+
+    @extend_schema(
+        responses=RenownCardSerializer,
+        tags=["personas"],
+        parameters=[
+            OpenApiParameter(
+                name="viewer_persona",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "PK of the viewer's currently-presented persona. Drives "
+                    "deeds + reputation filtering. Omit for the anonymous "
+                    "view (tier label only)."
+                ),
+            ),
+        ],
+    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="renown-card")
+    def renown_card(self, request: Request, pk: int | None = None) -> Response:
+        """#744 — Limited renown view of this persona for a foreign viewer.
+
+        Surfaces only what the viewer's persona's societies are aware
+        of: fame tier label, deeds the viewer's societies have heard
+        about, reputation rows for the viewer's societies.
+        """
+        target = self.get_object()
+        viewer_persona = None
+        # noqa: USE_FILTERSET — single optional pk, not a list filter shape.
+        viewer_pk = request.query_params.get("viewer_persona")  # noqa: USE_FILTERSET
+        if viewer_pk is not None:
+            try:
+                viewer_persona = Persona.objects.get(pk=int(viewer_pk))
+            except (Persona.DoesNotExist, ValueError):
+                viewer_persona = None
+        payload = build_renown_card_payload(target, viewer_persona=viewer_persona)
+        serializer = RenownCardSerializer(payload)
         return Response(serializer.data)
 
 
