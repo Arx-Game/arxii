@@ -363,7 +363,7 @@ def evaluate_scene_engagement(
     engaged for the Durance type. See Slice B spec §3.6, §4.10.
     """
     from world.covenants.constants import CovenantType  # noqa: PLC0415
-    from world.covenants.handlers import can_engage_durance_membership  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
 
     if (
         character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
@@ -374,7 +374,7 @@ def evaluate_scene_engagement(
     for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
         CovenantType.DURANCE
     ):
-        if not can_engage_durance_membership(membership):
+        if not can_engage_membership(membership):
             continue
         co_present = _co_present_member_count(membership, room)
         if co_present > 0:
