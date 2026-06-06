@@ -5,6 +5,8 @@ from django.contrib import admin
 from world.items.models import (
     CurrencyBalance,
     EquippedItem,
+    FashionStyle,
+    FashionStyleBonus,
     InteractionType,
     ItemInstance,
     ItemTemplate,
@@ -142,3 +144,17 @@ class CurrencyBalanceAdmin(admin.ModelAdmin):
     list_display = ["character", "gold"]
     list_select_related = ["character"]
     raw_id_fields = ["character"]
+
+
+class FashionStyleBonusInline(admin.TabularInline):
+    model = FashionStyleBonus
+    extra = 1
+    autocomplete_fields = ["target"]
+
+
+@admin.register(FashionStyle)
+class FashionStyleAdmin(admin.ModelAdmin):
+    list_display = ["name", "description"]
+    search_fields = ["name"]
+    filter_horizontal = ["in_vogue_facets"]
+    inlines = [FashionStyleBonusInline]

@@ -118,6 +118,14 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
             "and only at Normal multiplier). See Renown design (#676)."
         ),
     )
+    current_fashion_style = models.ForeignKey(
+        "items.FashionStyle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="societies_current",
+        help_text="The fashion style currently in vogue in this society (#513).",
+    )
 
     objects = NaturalKeyManager()
 

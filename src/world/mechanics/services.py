@@ -138,7 +138,12 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     )
 
 
-def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
+def get_modifier_total(
+    character,
+    modifier_target: ModifierTarget,
+    *,
+    perceiving_society: object | None = None,
+) -> int:
     """Get total modifier value for a target.
 
     Combines the eager modifier total (CharacterModifier rows, distinctions, etc.) with the
@@ -146,19 +151,32 @@ def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
     passive_facet_bonuses and covenant_role_bonus when the target's category is in
     EQUIPMENT_RELEVANT_CATEGORIES (stat, magic, affinity, resonance).
 
+    When ``perceiving_society`` is provided, the perception-relative fashion outfit bonus
+    (#513) for that society is also added. The fashion bonus reflects how well the
+    character's worn items align with the society's current FashionStyle. When omitted
+    (the default), fashion contributes nothing and behavior is identical to before —
+    all existing society-blind callers are 100% unaffected.
+
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
+        perceiving_society: Optional Society instance. When supplied, the outfit-vs-fashion
+            bonus for that society is included in the total. Defaults to None (no fashion
+            contribution).
 
     Returns:
-        Total modifier value (eager + equipment contributions, amplification/immunity applied)
+        Total modifier value (eager + equipment + optional fashion contributions,
+        amplification/immunity applied to the eager portion)
     """
     eager_total = get_modifier_breakdown(character, modifier_target).total
     equipment_total = 0
     if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
         equipment_total = passive_facet_bonuses(character, modifier_target)
         equipment_total += covenant_role_bonus(character, modifier_target)
-    return eager_total + equipment_total
+    fashion_total = 0
+    if perceiving_society is not None:
+        fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
+    return eager_total + equipment_total + fashion_total
 
 
 # =============================================================================
@@ -206,6 +224,42 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
                     item_facet=item_facet,
                 )
     return total
+
+
+def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object) -> int:
+    """Perception-relative outfit bonus vs. a society's current fashion (#513).
+
+    Worn items carrying facets that are in vogue for ``society.current_fashion_style``
+    contribute, scaled by item + attachment quality and the authored
+    FashionStyleBonus.weight for ``target``. Society-parameterized; consumers
+    (events #514, combat #512) supply the perceiving society. Returns 0 when no
+    current style, no FashionStyleBonus row for ``target``, or no worn matches.
+    """
+    from world.items.constants import FASHION_MATCH_BASE  # noqa: PLC0415
+    from world.items.models import FashionStyleBonus  # noqa: PLC0415
+
+    style = society.current_fashion_style
+    if style is None:
+        return 0
+    try:
+        bonus = style.bonuses.get(target=target)
+    except FashionStyleBonus.DoesNotExist:
+        return 0
+    char = sheet.character
+    if not hasattr(char, "equipped_items"):
+        return 0
+    match_value = Decimal(0)
+    for facet in style.in_vogue_facets.all():
+        for item_facet in char.equipped_items.item_facets_for(facet):
+            item = item_facet.item_instance
+            item_mult = (
+                Decimal(str(item.quality_tier.stat_multiplier))
+                if item.quality_tier is not None
+                else Decimal(1)
+            )
+            attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+            match_value += Decimal(FASHION_MATCH_BASE) * item_mult * attach_mult
+    return int(match_value * Decimal(str(bonus.weight)))
 
 
 def _facet_pull_effects_for(

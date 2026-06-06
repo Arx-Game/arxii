@@ -5,6 +5,8 @@ import factory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.models import (
     EquippedItem,
+    FashionStyle,
+    FashionStyleBonus,
     InteractionType,
     ItemFacet,
     ItemInstance,
@@ -14,6 +16,7 @@ from world.items.models import (
     QualityTier,
     TemplateSlot,
 )
+from world.mechanics.factories import ModifierTargetFactory
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -132,3 +135,25 @@ class OutfitSlotFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = OutfitSlot
+
+
+class FashionStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionStyle."""
+
+    class Meta:
+        model = FashionStyle
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Fashion Style {n}")
+    description = ""
+
+
+class FashionStyleBonusFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionStyleBonus."""
+
+    class Meta:
+        model = FashionStyleBonus
+
+    fashion_style = factory.SubFactory(FashionStyleFactory)
+    target = factory.SubFactory(ModifierTargetFactory)
+    weight = 1
