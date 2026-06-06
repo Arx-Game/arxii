@@ -40,18 +40,21 @@ def _make_viewer_with_society():
 
 
 class RenownCardShapeTests(TestCase):
-    def test_anonymous_viewer_sees_only_public_bits(self) -> None:
+    def test_anonymous_viewer_clamps_tier_to_normal(self) -> None:
+        """Per spec: 'essentially nothing visible' for an anonymous viewer.
+
+        A viewer with no society context lacks the lens through which
+        to read a Celebrity. Clamp to NORMAL.
+        """
         target = _make_primary_persona()
         target.name = "Alice"
         target.save(update_fields=["name"])
-        set_persona_fame(target, 1_500)  # CELEBRITY
+        set_persona_fame(target, 1_500)  # actually CELEBRITY
 
         payload = build_renown_card_payload(target, viewer_persona=None)
 
         self.assertEqual(payload["persona_name"], "Alice")
-        self.assertEqual(payload["fame"]["tier"], FameTier.CELEBRITY.value)
-        self.assertEqual(payload["fame"]["tier_label"], "Celebrity")
-        # No memberships → no deeds or reputation visible.
+        self.assertEqual(payload["fame"]["tier"], FameTier.NORMAL.value)
         self.assertEqual(payload["visible_deeds"], [])
         self.assertEqual(payload["visible_reputation"], [])
 
@@ -135,3 +138,95 @@ class PerceptionOffsetTests(TestCase):
         bare_viewer = _make_primary_persona()
         payload = build_renown_card_payload(target, viewer_persona=bare_viewer)
         self.assertEqual(payload["fame"]["tier"], FameTier.HOUSEHOLD_NAME.value)
+
+
+class RenownCardEndpointTests(TestCase):
+    """HTTP-level integration: permission + viewer_persona security gates."""
+
+    def _build_account_with_persona(self, username: str):
+        """Account + roster-tenured character with one primary persona."""
+        from evennia_extensions.factories import AccountFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        account = AccountFactory(username=username)
+        player_data = PlayerDataFactory(account=account)
+        character = CharacterFactory(db_key=f"{username}-char")
+        sheet = CharacterSheetFactory(character=character)
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=player_data,
+            end_date=None,
+        )
+        return account, sheet.primary_persona
+
+    def test_foreign_authenticated_viewer_can_read_card(self) -> None:
+        """B1 — the canonical use case: alice looks at bob's sheet."""
+        alice_account, alice_persona = self._build_account_with_persona("alice")
+        _, bob_persona = self._build_account_with_persona("bob")
+        self.client.force_login(alice_account)
+        response = self.client.get(
+            f"/api/personas/{bob_persona.pk}/renown-card/",
+            {"viewer_persona": alice_persona.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["persona_id"], bob_persona.pk)
+
+    def test_viewer_persona_belonging_to_other_account_403s(self) -> None:
+        """B2 — alice cannot pass charlie's persona pk as viewer."""
+        alice_account, _alice_persona = self._build_account_with_persona("alice2")
+        _, bob_persona = self._build_account_with_persona("bob2")
+        _, charlie_persona = self._build_account_with_persona("charlie2")
+        self.client.force_login(alice_account)
+        response = self.client.get(
+            f"/api/personas/{bob_persona.pk}/renown-card/",
+            {"viewer_persona": charlie_persona.pk},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_nonexistent_viewer_persona_pk_400s(self) -> None:
+        """H1 — bad pk should 400, not silently fall back to anonymous."""
+        alice_account, _alice_persona = self._build_account_with_persona("alice3")
+        _, bob_persona = self._build_account_with_persona("bob3")
+        self.client.force_login(alice_account)
+        response = self.client.get(
+            f"/api/personas/{bob_persona.pk}/renown-card/",
+            {"viewer_persona": 999_999},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_non_integer_viewer_persona_400s(self) -> None:
+        alice_account, _alice_persona = self._build_account_with_persona("alice4")
+        _, bob_persona = self._build_account_with_persona("bob4")
+        self.client.force_login(alice_account)
+        response = self.client.get(
+            f"/api/personas/{bob_persona.pk}/renown-card/",
+            {"viewer_persona": "abc"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_no_viewer_persona_param_defaults_to_users_own_persona(self) -> None:
+        """When the query param is omitted, the viewer resolves from request.user."""
+        alice_account, alice_persona = self._build_account_with_persona("alice5")
+        _, bob_persona = self._build_account_with_persona("bob5")
+        # Wire alice into a society so something would be visible if she's the viewer.
+        society = SocietyFactory(name="House Shared")
+        org = OrganizationFactory(society=society)
+        OrganizationMembershipFactory(persona=alice_persona, organization=org)
+        deed = LegendEntry.objects.create(persona=bob_persona, title="Common deed", base_value=10)
+        deed.societies_aware.add(society)
+        self.client.force_login(alice_account)
+
+        response = self.client.get(f"/api/personas/{bob_persona.pk}/renown-card/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["visible_deeds"]), 1)
+
+    def test_unauthenticated_request_401s(self) -> None:
+        _, bob_persona = self._build_account_with_persona("bob6")
+        response = self.client.get(f"/api/personas/{bob_persona.pk}/renown-card/")
+        self.assertIn(response.status_code, (401, 403))

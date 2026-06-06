@@ -322,19 +322,74 @@ class PersonaViewSet(viewsets.ModelViewSet):
         Surfaces only what the viewer's persona's societies are aware
         of: fame tier label, deeds the viewer's societies have heard
         about, reputation rows for the viewer's societies.
+
+        The viewer is resolved from ``request.user``. The optional
+        ``viewer_persona`` query param disambiguates among the
+        requester's own personas; a pk that doesn't belong to the
+        requester 403s.
         """
         target = self.get_object()
-        viewer_persona = None
-        # noqa: USE_FILTERSET — single optional pk, not a list filter shape.
-        viewer_pk = request.query_params.get("viewer_persona")  # noqa: USE_FILTERSET
-        if viewer_pk is not None:
-            try:
-                viewer_persona = Persona.objects.get(pk=int(viewer_pk))
-            except (Persona.DoesNotExist, ValueError):
-                viewer_persona = None
+        try:
+            viewer_persona = _resolve_request_viewer_persona(request)
+        except _BadViewerPersona as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except _ForbiddenViewerPersona:
+            return Response(
+                {"detail": "viewer_persona must belong to the requesting account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         payload = build_renown_card_payload(target, viewer_persona=viewer_persona)
         serializer = RenownCardSerializer(payload)
         return Response(serializer.data)
+
+    def get_permissions(self) -> list[BasePermission]:
+        # #744: renown / renown-card are read-only views that any
+        # authenticated user can read on any sheet. CanCreatePersonaInScene
+        # gates write/create paths only.
+        if self.action in {"renown", "renown_card"}:
+            return [permissions.IsAuthenticated()]
+        return [permission() for permission in self.permission_classes]
+
+
+class _BadViewerPersona(Exception):
+    """The viewer_persona query param could not be parsed or resolved."""
+
+
+class _ForbiddenViewerPersona(Exception):
+    """The viewer_persona pk exists but doesn't belong to the requesting account."""
+
+
+def _resolve_request_viewer_persona(request: Request) -> Persona | None:
+    """Resolve the viewer's persona from request.user (+ optional pk hint).
+
+    Behaviour:
+    * Unauthenticated → ``None`` (anonymous view).
+    * Explicit ``viewer_persona`` query pk → must resolve to a Persona
+      whose character is currently tenured by the requesting account,
+      else 400/403.
+    * No query pk → first such persona alphabetically, else ``None``.
+    """
+    if not request.user.is_authenticated:
+        return None
+    viewer_pk_raw = request.query_params.get("viewer_persona")  # noqa: USE_FILTERSET
+    own_persona_qs = Persona.objects.filter(
+        character_sheet__roster_entry__tenures__player_data__account=request.user,
+        character_sheet__roster_entry__tenures__end_date__isnull=True,
+    ).distinct()
+    if viewer_pk_raw is not None:
+        try:
+            viewer_pk = int(viewer_pk_raw)
+        except ValueError as exc:
+            msg = "viewer_persona must be an integer."
+            raise _BadViewerPersona(msg) from exc
+        if not Persona.objects.filter(pk=viewer_pk).exists():
+            msg = f"viewer_persona {viewer_pk} does not exist."
+            raise _BadViewerPersona(msg)
+        try:
+            return own_persona_qs.get(pk=viewer_pk)
+        except Persona.DoesNotExist as exc:
+            raise _ForbiddenViewerPersona from exc
+    return own_persona_qs.order_by("name").first()
 
 
 class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):

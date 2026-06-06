@@ -231,13 +231,17 @@ def build_renown_card_payload(
 ) -> dict:
     """Assemble the filtered renown card payload for a foreign viewer.
 
-    ``viewer_persona`` is the persona the viewer is presenting. When
-    None, the card surfaces only the always-public bits: name + raw
-    fame tier label (which is what a stranger would observe).
+    Anonymous-viewer fallback (no ``viewer_persona`` resolved) surfaces
+    the lowest fame tier (NORMAL) — a viewer with no society context
+    has no lens through which to recognise the subject's renown. Per
+    spec: "essentially nothing visible until at least one deed becomes
+    societies_aware for any society the viewer is in."
     """
-    viewer_society_ids = _viewer_society_ids(viewer_persona)
-    primary_viewer_society = _viewer_primary_society(viewer_persona)
-    adjusted_tier = _apply_perception_offset(target_persona.fame_tier, primary_viewer_society)
+    viewer_society_ids, primary_viewer_society = _viewer_societies(viewer_persona)
+    if viewer_persona is None:
+        adjusted_tier = FameTier.NORMAL.value
+    else:
+        adjusted_tier = _apply_perception_offset(target_persona.fame_tier, primary_viewer_society)
     return {
         "persona_id": target_persona.pk,
         "persona_name": target_persona.name,
@@ -252,40 +256,33 @@ def build_renown_card_payload(
     }
 
 
-def _viewer_society_ids(viewer_persona: Persona | None) -> set[int]:
-    """Set of society IDs the viewer's persona holds memberships in."""
-    if viewer_persona is None:
-        return set()
-    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+def _viewer_societies(viewer_persona: Persona | None):
+    """Return ``(set_of_society_ids, alphabetically_first_society)``.
 
-    return set(
-        OrganizationMembership.objects.filter(persona=viewer_persona)
-        .exclude(organization__society__isnull=True)
-        .values_list("organization__society_id", flat=True)
-        .distinct()
-    )
-
-
-def _viewer_primary_society(viewer_persona: Persona | None):
-    """Pick a single society to gate the perception-offset lookup through.
-
-    With multiple memberships we'd want per-society lensing in principle,
-    but the card surfaces one tier label. v1: alphabetically-first
-    society (deterministic; switchable via explicit persona context in a
-    future iteration).
+    Single query: fetches every (society_id, society_name) pair for the
+    viewer's memberships, picks the alphabetic minimum in Python for
+    the perception-offset lookup. v1 doesn't expose per-society lensing
+    so we don't need a queryset — a deterministic primary suffices.
     """
     if viewer_persona is None:
-        return None
-    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+        return set(), None
+    from world.societies.models import OrganizationMembership, Society  # noqa: PLC0415
 
-    membership = (
+    rows = list(
         OrganizationMembership.objects.filter(persona=viewer_persona)
         .exclude(organization__society__isnull=True)
-        .select_related("organization__society")
-        .order_by("organization__society__name")
-        .first()
+        .values_list(
+            "organization__society_id",
+            "organization__society__name",
+        )
+        .distinct()
     )
-    return membership.organization.society if membership else None
+    if not rows:
+        return set(), None
+    ids = {sid for sid, _ in rows}
+    primary_sid = min(rows, key=lambda row: row[1])[0]
+    primary_society = Society.objects.get(pk=primary_sid)
+    return ids, primary_society
 
 
 def _build_card_visible_deeds(
