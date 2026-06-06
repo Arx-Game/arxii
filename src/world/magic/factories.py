@@ -2077,6 +2077,14 @@ class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
                     "options": ["DURANCE", "BATTLE"],
                     "required": True,
                 },
+                {
+                    "name": "battle_binding",
+                    "type": "select",
+                    "options": ["standing", "campaign"],
+                    "depends_on": "covenant_type",
+                    "show_if": {"covenant_type": "BATTLE"},
+                    "required": False,
+                },
                 {"name": "sworn_objective", "type": "textarea", "required": True},
                 {
                     "name": "invitees",

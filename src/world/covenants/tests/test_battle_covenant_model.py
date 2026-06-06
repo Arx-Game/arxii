@@ -47,3 +47,24 @@ class BattleCovenantModelTests(TestCase):
             sworn_objective="x",
         )
         cov.clean()  # must not raise
+
+    def test_create_covenant_persists_battle_binding(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        founders = [
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+        ]
+        cov = create_covenant(
+            name="The Khati Crusade",
+            covenant_type=CovenantType.BATTLE,
+            sworn_objective="Free the Khati.",
+            founders=founders,
+            battle_binding=BattleBinding.CAMPAIGN,
+        )
+        self.assertEqual(cov.battle_binding, BattleBinding.CAMPAIGN)
+        self.assertFalse(cov.is_dormant)

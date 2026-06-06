@@ -44,6 +44,7 @@ def create_covenant(
     covenant_type: str,
     sworn_objective: str,
     founders: Sequence[CovenantFounder],
+    battle_binding: str = "",
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
 
@@ -63,6 +64,7 @@ def create_covenant(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
+        battle_binding=battle_binding,
     )
     for founder in founders:
         CharacterCovenantRole.objects.create(
@@ -264,6 +266,7 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
     name: str = session.session_kwargs["name"]
     covenant_type: str = session.session_kwargs["covenant_type"]
     sworn_objective: str = session.session_kwargs["sworn_objective"]
+    battle_binding: str = session.session_kwargs.get("battle_binding", "")
 
     founders: list[CovenantFounder] = []
     for p in session.participants.filter(state=ParticipantState.ACCEPTED):
@@ -282,6 +285,7 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
             covenant_type=covenant_type,
             sworn_objective=sworn_objective,
             founders=founders,
+            battle_binding=battle_binding,
         )
     except IntegrityError as e:
         # Translate the DB-level uniqueness violation to a typed,
