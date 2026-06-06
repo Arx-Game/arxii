@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { TenantedRoom } from '../types';
+import { PolishCategoryList } from './PolishCategoryList';
 
 interface Props {
   rooms: TenantedRoom[];
@@ -24,28 +25,7 @@ export function TenantedRoomsCard({ rooms }: Props) {
             {rooms.map((room) => (
               <li key={room.id} className="border-b pb-3 last:border-b-0">
                 <div className="font-semibold">{room.name}</div>
-                {room.polish_by_category.length === 0 ? (
-                  <p className="mt-1 text-xs text-muted-foreground">No polish recorded yet.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1 text-xs">
-                    {room.polish_by_category.map((row) => (
-                      <li
-                        key={row.category_id}
-                        className="flex items-baseline justify-between gap-2"
-                      >
-                        <span>
-                          {row.tier_label !== null && (
-                            <span className="mr-1 font-medium">{row.tier_label}</span>
-                          )}
-                          <span className="text-muted-foreground">{row.category_name}</span>
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {row.value.toLocaleString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <PolishCategoryList rows={room.polish_by_category} />
               </li>
             ))}
           </ul>

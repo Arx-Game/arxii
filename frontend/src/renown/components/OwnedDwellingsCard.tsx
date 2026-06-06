@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Moon } from 'lucide-react';
 import type { OwnedDwelling } from '../types';
+import { PolishCategoryList } from './PolishCategoryList';
 
 interface Props {
   dwellings: OwnedDwelling[];
@@ -71,28 +72,7 @@ export function OwnedDwellingsCard({ dwellings }: Props) {
                     )}
                   </div>
                 </div>
-                {dwelling.polish_by_category.length === 0 ? (
-                  <p className="mt-1 text-xs text-muted-foreground">No polish recorded yet.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1 text-xs">
-                    {dwelling.polish_by_category.map((row) => (
-                      <li
-                        key={row.category_id}
-                        className="flex items-baseline justify-between gap-2"
-                      >
-                        <span>
-                          {row.tier_label !== null && (
-                            <span className="mr-1 font-medium">{row.tier_label}</span>
-                          )}
-                          <span className="text-muted-foreground">{row.category_name}</span>
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {row.value.toLocaleString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <PolishCategoryList rows={dwelling.polish_by_category} />
               </li>
             ))}
           </ul>
