@@ -220,7 +220,7 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
     from world.items.constants import FASHION_MATCH_BASE  # noqa: PLC0415
     from world.items.models import FashionStyleBonus  # noqa: PLC0415
 
-    style = getattr(society, "current_fashion_style", None)  # noqa: GETATTR_LITERAL
+    style = society.current_fashion_style
     if style is None:
         return 0
     try:
