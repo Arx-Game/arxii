@@ -1,54 +1,83 @@
 """#743 — Renown event notifications.
 
-When ``fire_renown_award`` lands on a player-owned persona, fire a
-``NarrativeMessage`` of category ``RENOWN`` to the owning character's
-sheet. ``MessagesSection`` already renders these in the web client +
-Evennia's ``character.msg()`` pushes the chat line to telnet.
+When ``fire_renown_award`` lands on a player-owned persona, fire one
+``NarrativeMessage`` of category ``RENOWN`` for the deed itself, plus
+(when applicable) a second message for the fame-tier transition. The
+spec calls tier transitions out as a separate chat line.
+
+``MessagesSection`` already renders these in the web client; Evennia's
+``character.msg()`` pushes the chat line to telnet.
 
 No-op for non-player personas (no roster tenure, no account) — those
 deeds happen to NPCs and don't surface to a player inbox.
 
-The notification body matches the spec's "Brief chat-line" intent.
-Expander UX (clickable details panel) is a follow-up — surfacing the
-plain chat line is the minimum required for the player to know an
-award fired. The full ``RenownAwardResult`` is passed in so a future
-expander can attach the per-axis deltas without changing this API.
+Body intent: natural-language framing per the #676 spec. Magnitude
+maps to a qualitative descriptor ("minor", "moderate", "significant",
+"renowned"); raw point deltas stay off the chat line (per the
+"hidden mechanics stay tribal" project rule). The expander UX —
+clickable per-axis breakdown — is a follow-up that will read the same
+``RenownAwardResult`` we already pass around.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import send_narrative_message
+from world.societies.constants import FameTier, RenownMagnitude, RenownRisk
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
     from world.societies.renown import RenownAwardResult
 
 
+# Magnitude → qualitative descriptor (admin-tunable starting point).
+_MAGNITUDE_DESCRIPTORS: dict[str, str] = {
+    RenownMagnitude.SMALL.value: "minor",
+    RenownMagnitude.MODERATE.value: "moderate",
+    RenownMagnitude.HIGH.value: "significant",
+    RenownMagnitude.VERY_HIGH.value: "renowned",
+}
+
+_RISK_DESCRIPTORS: dict[str, str] = {
+    RenownRisk.LOW.value: "small",
+    RenownRisk.MODERATE.value: "real",
+    RenownRisk.HIGH.value: "grave",
+    RenownRisk.EXTREME.value: "lethal",
+}
+
+
 def notify_renown_event(
     persona: Persona,
     result: RenownAwardResult,
     *,
-    title: str,
+    magnitude: str | None = None,
+    risk: str | None = None,
+    title: str = "Renown deed",
 ) -> None:
-    """Send a NarrativeMessage announcing a renown event to the persona's owner.
+    """Send NarrativeMessage(s) announcing a renown event to the persona's owner.
 
-    No-op when no player owns the persona (no active tenure on the
-    character sheet, or the sheet has no character). The fame-tier
-    transition is surfaced as a separate sentence in the body when it
-    fires — the spec calls those out specifically.
+    No-op when no player owns the persona. Always fires the deed
+    message first; fires a separate tier-transition message after when
+    ``result.fame_tier_changed`` (spec: distinct chat lines).
     """
     sheet = persona.character_sheet
     if sheet is None or not _has_active_player(sheet):
         return
-    body = _build_body(result, title=title)
     send_narrative_message(
         recipients=[sheet],
-        body=body,
+        body=_build_deed_body(magnitude=magnitude, risk=risk, title=title),
         category=NarrativeCategory.RENOWN.value,
     )
+    if result.fame_tier_changed:
+        send_narrative_message(
+            recipients=[sheet],
+            body=_build_tier_transition_body(persona),
+            category=NarrativeCategory.RENOWN.value,
+        )
 
 
 def _has_active_player(sheet) -> bool:
@@ -60,34 +89,58 @@ def _has_active_player(sheet) -> bool:
     """
     try:
         roster_entry = sheet.roster_entry
-    except Exception:  # noqa: BLE001 — RosterEntry.DoesNotExist plus DescriptorAttribute misses.
+    except ObjectDoesNotExist:
         return False
     return roster_entry.tenures.filter(end_date__isnull=True).exists()
 
 
-def _build_body(result: RenownAwardResult, *, title: str) -> str:
-    """Build the chat-line body. Plain text; categorisation does the colouring.
+def _build_deed_body(
+    *,
+    magnitude: str | None,
+    risk: str | None,
+    title: str,
+) -> str:
+    """Spec-style chat line for the deed itself.
 
-    Format: one line for the deed, plus an optional second line for a
-    fame-tier transition. ``title`` is the deed's display name (e.g.
-    "Mission deed: Save the village" or admin-provided text).
+    Format: ``"✦ {title} earns {magnitude_word} renown. (details)"``,
+    with a risk clause appended when risk is non-NONE.
+
+    When neither magnitude nor risk fires (admin-fired bare event), the
+    body falls back to a minimal recognition line.
     """
-    parts = [f"✦ {title} ({_summarise_deltas(result)})."]
-    if result.fame_tier_changed:
-        # Spec calls the tier transition out as a separate chat line.
-        # Bundling here keeps both in one Notification; the FE can show
-        # the second sentence with emphasis once the expander lands.
-        parts.append("Your reputation has shifted to a new tier.")
-    return " ".join(parts)
+    mag_word = _MAGNITUDE_DESCRIPTORS.get(magnitude) if magnitude else None
+    risk_word = _RISK_DESCRIPTORS.get(risk) if risk else None
+
+    if mag_word is None and risk_word is None:
+        return f"✦ {title} is quietly recognised. (details)"
+
+    parts = [f"✦ {title}"]
+    if mag_word:
+        parts.append(f"earns {mag_word} renown")
+        if risk_word:
+            parts.append(f"at {risk_word} risk")
+    elif risk_word:
+        # Risk-only event: legend without fame/prestige.
+        parts.append(f"survives {risk_word} risk")
+    return " ".join(parts) + ". (details)"
 
 
-def _summarise_deltas(result: RenownAwardResult) -> str:
-    """One-line summary of what moved. Skips zero-delta axes."""
-    bits = []
-    if result.fame_awarded:
-        bits.append(f"+{result.fame_awarded} fame")
-    if result.prestige_awarded:
-        bits.append(f"+{result.prestige_awarded} prestige")
-    if result.legend_awarded:
-        bits.append(f"+{result.legend_awarded} legend")
-    return ", ".join(bits) if bits else "minor renown"
+def _build_tier_transition_body(persona: Persona) -> str:
+    """Standalone chat line for fame-tier transitions.
+
+    Spec example: ``"✦ You've become a Household Name."`` — the player
+    sees the new tier named explicitly.
+    """
+    tier_label = FameTier(persona.fame_tier).label
+    return f"✦ You've become {_tier_with_article(tier_label)}."
+
+
+def _tier_with_article(tier_label: str) -> str:
+    """Add the right indefinite article to the tier label."""
+    if not tier_label:
+        return tier_label
+    return (
+        f"an {tier_label}"
+        if tier_label[0].lower() in "aeiou"  # noqa: STRING_LITERAL — vowel set, not an identifier
+        else f"a {tier_label}"
+    )

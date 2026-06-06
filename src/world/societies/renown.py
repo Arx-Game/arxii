@@ -326,8 +326,53 @@ def _archetype_dot_product(archetypes: Sequence, society: object) -> int:
     return delta
 
 
+def fire_renown_award(  # noqa: PLR0913
+    *,
+    persona: Persona,
+    magnitude: str | None = None,
+    risk: str | None = None,
+    archetypes: Sequence = (),
+    origin_area: object | None = None,
+    reach: str | None = None,
+    society_overrides: dict | None = None,
+    title: str = "Renown deed",
+) -> RenownAwardResult:
+    """Thin wrapper around :func:`_apply_renown_award` that fires the
+    #743 narrative notification post-commit.
+
+    The renown writes are atomic (inner ``_apply_renown_award``); the
+    notification is best-effort and runs outside the transaction so a
+    notify failure can't roll back the deed. Notification exceptions are
+    logged + swallowed — the chat line is a UX nicety, the deed is the
+    source of truth.
+    """
+    result = _apply_renown_award(
+        persona=persona,
+        magnitude=magnitude,
+        risk=risk,
+        archetypes=archetypes,
+        origin_area=origin_area,
+        reach=reach,
+        society_overrides=society_overrides,
+        title=title,
+    )
+    try:
+        from world.societies.notifications import notify_renown_event  # noqa: PLC0415
+
+        notify_renown_event(
+            persona,
+            result,
+            magnitude=magnitude,
+            risk=risk,
+            title=title,
+        )
+    except Exception:
+        logger.exception("renown.notify failed for persona %s", persona.pk)
+    return result
+
+
 @transaction.atomic
-def fire_renown_award(  # noqa: PLR0913, C901
+def _apply_renown_award(  # noqa: PLR0913, C901
     *,
     persona: Persona,
     magnitude: str | None = None,
@@ -412,7 +457,7 @@ def fire_renown_award(  # noqa: PLR0913, C901
             persona, legend_delta=legend_awarded
         )
 
-    result = RenownAwardResult(
+    return RenownAwardResult(
         persona_id=persona.pk,
         fame_awarded=fame_awarded,
         prestige_awarded=prestige_awarded,
@@ -424,10 +469,6 @@ def fire_renown_award(  # noqa: PLR0913, C901
         org_inflow_org_ids=org_inflow_org_ids,
         covenant_legend_inflow_org_ids=covenant_legend_inflow_org_ids,
     )
-    from world.societies.notifications import notify_renown_event  # noqa: PLC0415
-
-    notify_renown_event(persona, result, title=title)
-    return result
 
 
 def _bump_society_reputation(persona: Persona, society, rep_delta: int) -> None:
