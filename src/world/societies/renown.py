@@ -412,7 +412,7 @@ def fire_renown_award(  # noqa: PLR0913, C901
             persona, legend_delta=legend_awarded
         )
 
-    return RenownAwardResult(
+    result = RenownAwardResult(
         persona_id=persona.pk,
         fame_awarded=fame_awarded,
         prestige_awarded=prestige_awarded,
@@ -424,6 +424,10 @@ def fire_renown_award(  # noqa: PLR0913, C901
         org_inflow_org_ids=org_inflow_org_ids,
         covenant_legend_inflow_org_ids=covenant_legend_inflow_org_ids,
     )
+    from world.societies.notifications import notify_renown_event  # noqa: PLC0415
+
+    notify_renown_event(persona, result, title=title)
+    return result
 
 
 def _bump_society_reputation(persona: Persona, society, rep_delta: int) -> None:
