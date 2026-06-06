@@ -4,8 +4,12 @@ from django.test import SimpleTestCase
 
 from world.covenants.exceptions import (
     CovenantEngagementPrerequisiteNotMetError,
+    CovenantLevelTooLowError,
     CovenantNameConflictError,
+    CovenantRiteError,
     CovenantRoleNeverHeldError,
+    NoActiveBattleError,
+    NotEnoughEngagedPresentError,
 )
 
 
@@ -37,3 +41,23 @@ class CovenantNameConflictErrorTests(SimpleTestCase):
             "A covenant with that name already exists.",
         )
         self.assertIn(exc.user_message, CovenantNameConflictError.SAFE_MESSAGES)
+
+
+class CovenantRiteExceptionTests(SimpleTestCase):
+    def test_rite_exceptions_are_covenant_rite_errors(self) -> None:
+        for exc_cls in (
+            CovenantLevelTooLowError,
+            NotEnoughEngagedPresentError,
+            NoActiveBattleError,
+        ):
+            self.assertTrue(issubclass(exc_cls, CovenantRiteError))
+
+    def test_user_messages_in_safe_messages(self) -> None:
+        for exc_cls in (
+            CovenantRiteError,
+            CovenantLevelTooLowError,
+            NotEnoughEngagedPresentError,
+            NoActiveBattleError,
+        ):
+            exc = exc_cls()
+            self.assertIn(exc.user_message, exc_cls.SAFE_MESSAGES)
