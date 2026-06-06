@@ -208,6 +208,42 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
     return total
 
 
+def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object) -> int:
+    """Perception-relative outfit bonus vs. a society's current fashion (#513).
+
+    Worn items carrying facets that are in vogue for ``society.current_fashion_style``
+    contribute, scaled by item + attachment quality and the authored
+    FashionStyleBonus.weight for ``target``. Society-parameterized; consumers
+    (events #514, combat #512) supply the perceiving society. Returns 0 when no
+    current style, no FashionStyleBonus row for ``target``, or no worn matches.
+    """
+    from world.items.constants import FASHION_MATCH_BASE  # noqa: PLC0415
+    from world.items.models import FashionStyleBonus  # noqa: PLC0415
+
+    style = getattr(society, "current_fashion_style", None)  # noqa: GETATTR_LITERAL
+    if style is None:
+        return 0
+    try:
+        bonus = style.bonuses.get(target=target)
+    except FashionStyleBonus.DoesNotExist:
+        return 0
+    char = sheet.character
+    if not hasattr(char, "equipped_items"):
+        return 0
+    match_value = Decimal(0)
+    for facet in style.in_vogue_facets.all():
+        for item_facet in char.equipped_items.item_facets_for(facet):
+            item = item_facet.item_instance
+            item_mult = (
+                Decimal(str(item.quality_tier.stat_multiplier))
+                if item.quality_tier is not None
+                else Decimal(1)
+            )
+            attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+            match_value += Decimal(FASHION_MATCH_BASE) * item_mult * attach_mult
+    return int(match_value * Decimal(str(bonus.weight)))
+
+
 def _facet_pull_effects_for(
     resonance: object,
     target: ModifierTarget,
