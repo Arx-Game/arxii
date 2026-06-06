@@ -19,7 +19,7 @@ the per-row decay functions defined here.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import logging
 
@@ -46,7 +46,7 @@ from world.societies.constants import (
     FameTier,
     RenownReach,
 )
-from world.societies.models import Organization
+from world.societies.models import REPUTATION_MAX, REPUTATION_MIN, Organization
 
 logger = logging.getLogger(__name__)
 
@@ -233,29 +233,16 @@ class RenownAwardResult:
     covenant_legend_inflow_org_ids: tuple[int, ...] = field(default_factory=tuple)
 
 
-def _set_persona_prestige_source(persona: Persona, source_field: str, delta: int) -> None:
-    """Add ``delta`` to a persona's prestige source field + recompute total_prestige.
-
-    Single write per call. ``source_field`` must be one of the four prestige
-    source field names — guarded against typos at the call site.
-    """
-    if source_field not in (
-        "prestige_from_dwellings",
-        "prestige_from_items",
-        "prestige_from_orgs",
-        "prestige_from_deeds",
-    ):
-        msg = f"unknown prestige source field: {source_field!r}"
-        raise ValueError(msg)
-    current = getattr(persona, source_field)  # noqa: GETATTR_LITERAL
-    setattr(persona, source_field, current + delta)
+def _bump_prestige_from_deeds(persona: Persona, delta: int) -> None:
+    """Add ``delta`` to ``prestige_from_deeds`` + recompute the total denorm."""
+    persona.prestige_from_deeds += delta
     persona.total_prestige = (
         persona.prestige_from_dwellings
         + persona.prestige_from_items
         + persona.prestige_from_orgs
         + persona.prestige_from_deeds
     )
-    persona.save(update_fields=[source_field, "total_prestige"])
+    persona.save(update_fields=["prestige_from_deeds", "total_prestige"])
 
 
 def _resolve_home_realm(origin_area):
@@ -321,21 +308,6 @@ def _resolve_aware_realms(home_realm: object | None, reach: str) -> list:
     raise ValueError(msg)
 
 
-def _descendants_of(area: object) -> Iterable:
-    """Yield Area + all of its descendants via the AreaClosure MV.
-
-    Single-query descendant scan. Used by the CONTINENTAL reach path
-    above; kept as a small helper for future call sites that want the
-    descendant Area instances directly (rather than just their IDs).
-    """
-    from world.areas.models import Area, AreaClosure  # noqa: PLC0415
-
-    descendant_ids = AreaClosure.objects.filter(ancestor=area).values_list(
-        "descendant_id", flat=True
-    )
-    yield from Area.objects.filter(pk__in=descendant_ids)
-
-
 def _archetype_dot_product(archetypes: Sequence, society: object) -> int:
     """Compute the principle dot product between an archetype vector + society.
 
@@ -355,7 +327,7 @@ def _archetype_dot_product(archetypes: Sequence, society: object) -> int:
 
 
 @transaction.atomic
-def fire_renown_award(  # noqa: PLR0913
+def fire_renown_award(  # noqa: PLR0913, C901
     *,
     persona: Persona,
     magnitude: str | None = None,
@@ -368,39 +340,77 @@ def fire_renown_award(  # noqa: PLR0913
 ) -> RenownAwardResult:
     """Apply a Renown award bundle to ``persona``. Writes across every axis.
 
-    Bundle composition (per the #676 spec):
-
-    * ``magnitude`` → fame buffer bump + prestige_from_deeds permanent bump.
-    * ``risk`` → legend value; creates a LegendEntry when > 0.
-    * ``archetypes`` → reputation deltas (dot product) to aware societies.
-    * ``reach`` defaults from magnitude when omitted; explicit wins.
-    * ``society_overrides`` (``{Society: int}``) overrides computed deltas.
-
-    Temporary personas earn fame + prestige_from_deeds + legend but skip
-    SocietyReputation writes (existing system rule).
+    Composition: ``magnitude`` → fame + prestige_from_deeds; ``risk`` →
+    legend (creates LegendEntry when > 0); ``archetypes`` → per-society
+    reputation via dot product against principles; ``reach`` defaults
+    from magnitude; ``society_overrides`` overrides computed per-society
+    deltas. TEMPORARY personas skip reputation writes.
     """
-    fame_awarded, prestige_awarded, legend_awarded = _award_amounts(magnitude, risk)
-    fame_tier_changed = _apply_persona_writes(persona, fame_awarded, prestige_awarded)
+    from world.societies.models import LegendEntry, Society, SocietyReputation  # noqa: PLC0415
+
+    fame_awarded = MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0
+    prestige_awarded = MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0
+    legend_awarded = RISK_LEGEND_AWARDS.get(risk, 0) if risk else 0
     archetype_list = list(archetypes)
+    overrides = society_overrides or {}
 
-    aware_realms = _resolve_aware_realms(
-        _resolve_home_realm(origin_area),
-        _effective_reach(reach, magnitude),
-    )
-    aware_society_ids, reputation_deltas = _apply_reputation_deltas(
-        persona, archetype_list, aware_realms, society_overrides or {}
-    )
+    fame_tier_changed = False
+    if fame_awarded > 0:
+        fame_tier_changed = set_persona_fame(persona, persona.fame_points + fame_awarded)
+    if prestige_awarded != 0:
+        _bump_prestige_from_deeds(persona, prestige_awarded)
 
-    legend_entry_id = _maybe_create_legend_entry(
-        persona, legend_awarded, title, aware_society_ids, archetype_list
+    effective_reach = (
+        reach
+        or (MAGNITUDE_TO_DEFAULT_REACH.get(magnitude) if magnitude else None)
+        or RenownReach.LOCAL.value
     )
+    aware_realms = _resolve_aware_realms(_resolve_home_realm(origin_area), effective_reach)
 
-    org_inflow_org_ids, covenant_legend_inflow_org_ids = _dispatch_org_inflow(
-        persona,
-        prestige_awarded=prestige_awarded,
-        fame_awarded=fame_awarded,
-        legend_awarded=legend_awarded,
-    )
+    aware_society_ids: list[int] = []
+    reputation_deltas: dict[int, int] = {}
+    if archetype_list and persona.is_established_or_primary:
+        aware_societies = list(Society.objects.filter(realm__in=[r.pk for r in aware_realms]))
+        aware_society_ids = [s.pk for s in aware_societies]
+        for society in aware_societies:
+            rep_delta = (
+                overrides[society]
+                if society in overrides
+                else _archetype_dot_product(archetype_list, society)
+            )
+            if rep_delta == 0:
+                continue
+            reputation, _ = SocietyReputation.objects.get_or_create(
+                persona=persona, society=society, defaults={"value": 0}
+            )
+            reputation.value = max(
+                REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + rep_delta)
+            )
+            reputation.save(update_fields=["value"])
+            reputation_deltas[society.pk] = rep_delta
+
+    legend_entry_id: int | None = None
+    if legend_awarded > 0:
+        entry = LegendEntry.objects.create(persona=persona, title=title, base_value=legend_awarded)
+        if aware_society_ids:
+            entry.societies_aware.set(aware_society_ids)
+        if archetype_list:
+            entry.archetypes.set(archetype_list)
+        legend_entry_id = entry.pk
+
+    org_inflow_org_ids: tuple[int, ...] = ()
+    covenant_legend_inflow_org_ids: tuple[int, ...] = ()
+    if persona.is_established_or_primary:
+        org_inflow_org_ids = apply_org_inflow_for_persona_deed(
+            persona,
+            prestige_delta=prestige_awarded,
+            fame_delta=fame_awarded,
+            legend_delta=legend_awarded,
+        )
+    elif legend_awarded > 0:
+        covenant_legend_inflow_org_ids = apply_body_covenant_legend_inflow(
+            persona, legend_delta=legend_awarded
+        )
 
     return RenownAwardResult(
         persona_id=persona.pk,
@@ -416,142 +426,15 @@ def fire_renown_award(  # noqa: PLR0913
     )
 
 
-def _award_amounts(magnitude: str | None, risk: str | None) -> tuple[int, int, int]:
-    """Resolve (fame, prestige, legend) numeric awards from the bundle scales."""
-    fame = MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0
-    prestige = MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0
-    legend = RISK_LEGEND_AWARDS.get(risk, 0) if risk else 0
-    return fame, prestige, legend
-
-
-def _apply_persona_writes(persona: Persona, fame_awarded: int, prestige_awarded: int) -> bool:
-    """Fame buffer + permanent prestige writes. Returns True iff fame tier changed."""
-    fame_tier_changed = False
-    if fame_awarded > 0:
-        fame_tier_changed = set_persona_fame(persona, persona.fame_points + fame_awarded)
-    if prestige_awarded != 0:
-        _set_persona_prestige_source(persona, "prestige_from_deeds", prestige_awarded)
-    return fame_tier_changed
-
-
-def _effective_reach(reach: str | None, magnitude: str | None) -> str:
-    """Resolve the reach actually used for awareness propagation."""
-    if reach:
-        return reach
-    if magnitude:
-        from_magnitude = MAGNITUDE_TO_DEFAULT_REACH.get(magnitude)
-        if from_magnitude:
-            return from_magnitude
-    return RenownReach.LOCAL.value
-
-
-def _apply_reputation_deltas(
-    persona: Persona,
-    archetype_list: list,
-    aware_realms: list,
-    society_overrides: dict,
-) -> tuple[list[int], dict[int, int]]:
-    """Compute + apply per-society reputation deltas via archetype dot product.
-
-    Returns (aware_society_ids, applied_deltas). TEMPORARY personas and
-    empty archetype lists short-circuit to ([], {}).
-    """
-    if not archetype_list or not persona.is_established_or_primary:
-        return [], {}
-    from world.societies.models import Society  # noqa: PLC0415
-
-    aware_societies = list(Society.objects.filter(realm__in=[r.pk for r in aware_realms]))
-    aware_society_ids = [s.pk for s in aware_societies]
-    reputation_deltas: dict[int, int] = {}
-    for society in aware_societies:
-        rep_delta = _society_delta(society, archetype_list, society_overrides)
-        if rep_delta == 0:
-            continue
-        _bump_society_reputation(persona, society, rep_delta)
-        reputation_deltas[society.pk] = rep_delta
-    return aware_society_ids, reputation_deltas
-
-
-def _society_delta(society, archetype_list: list, society_overrides: dict) -> int:
-    """Per-society reputation delta — override wins; else archetype dot product."""
-    if society in society_overrides:
-        return society_overrides[society]
-    return _archetype_dot_product(archetype_list, society)
-
-
 def _bump_society_reputation(persona: Persona, society, rep_delta: int) -> None:
-    """Apply a clamped reputation delta to (persona, society)."""
+    """Apply a clamped reputation delta to (persona, society). Used by spread-extension."""
     from world.societies.models import SocietyReputation  # noqa: PLC0415
 
-    reputation, _created = SocietyReputation.objects.get_or_create(
-        persona=persona,
-        society=society,
-        defaults={"value": 0},
+    reputation, _ = SocietyReputation.objects.get_or_create(
+        persona=persona, society=society, defaults={"value": 0}
     )
-    reputation.value = max(-1000, min(1000, reputation.value + rep_delta))
+    reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + rep_delta))
     reputation.save(update_fields=["value"])
-
-
-def _maybe_create_legend_entry(
-    persona: Persona,
-    legend_awarded: int,
-    title: str,
-    aware_society_ids: list[int],
-    archetype_list: list,
-) -> int | None:
-    """Create a LegendEntry when legend > 0; return its pk (or None).
-
-    Pins the originating archetypes onto the entry so spread (#737) can
-    re-fire archetype-dot-product reputation deltas when new societies
-    become aware later.
-    """
-    if legend_awarded <= 0:
-        return None
-    from world.societies.models import LegendEntry  # noqa: PLC0415
-
-    entry = LegendEntry.objects.create(
-        persona=persona,
-        title=title,
-        base_value=legend_awarded,
-    )
-    if aware_society_ids:
-        entry.societies_aware.set(aware_society_ids)
-    if archetype_list:
-        entry.archetypes.set(archetype_list)
-    return entry.pk
-
-
-def _dispatch_org_inflow(
-    persona: Persona,
-    *,
-    prestige_awarded: int,
-    fame_awarded: int,
-    legend_awarded: int,
-) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Route a fired award's flows into the right org-inflow path for this persona.
-
-    PRIMARY/ESTABLISHED → flat inflow into every membership's org (returns
-    org_inflow_org_ids). TEMPORARY → body-flow covenant legend into the
-    body's PRIMARY persona's covenant memberships (returns
-    covenant_legend_inflow_org_ids). Returns the pair so the orchestrator
-    can stuff both into ``RenownAwardResult``.
-    """
-    if persona.is_established_or_primary:
-        return (
-            apply_org_inflow_for_persona_deed(
-                persona,
-                prestige_delta=prestige_awarded,
-                fame_delta=fame_awarded,
-                legend_delta=legend_awarded,
-            ),
-            (),
-        )
-    if legend_awarded > 0:
-        return (
-            (),
-            apply_body_covenant_legend_inflow(persona, legend_delta=legend_awarded),
-        )
-    return ((), ())
 
 
 # ---------------------------------------------------------------------------
@@ -750,29 +633,19 @@ def recompute_members_prestige_from_orgs_for_orgs(org_ids: Sequence[int]) -> int
 
 def extend_deed_awareness(
     deed,
-    spreader: Persona,
     *,
     scene=None,
 ) -> tuple[list[int], dict[int, int]]:
-    """#737 — Extend a deed's awareness to the spreader's current Realm.
+    """#737 — Extend a deed's awareness to the spread-scene's Realm.
 
-    When a spread succeeds, every Society in the spreader's current
-    Realm enters ``deed.societies_aware``. Per-society reputation
-    deltas (archetype dot product against ``deed.archetypes``) fire
-    one-shot on **newly-aware** societies only — already-aware
-    societies don't re-take the hit.
+    Every Society in the scene's Realm enters ``deed.societies_aware``.
+    Per-society reputation deltas (archetype dot product against
+    ``deed.archetypes``) fire one-shot on newly-aware societies only.
 
     Returns ``(newly_aware_society_ids, applied_reputation_deltas)``.
-
-    No-ops (returns ``([], {})``) when:
-    * The spreader's current Realm can't be resolved (no scene with
-      location, or the scene's location has no Area chain leading to a
-      Realm).
-    * The deed has no archetypes (no moral reading to propagate); we
-      still extend awareness in that case but produce no reputation
-      deltas.
+    No-ops when the scene's Realm can't be resolved or no new societies
+    become aware.
     """
-    del spreader  # currently unused; reserved for spreader-location fallback.
     home_realm = _resolve_spread_realm(scene)
     if home_realm is None:
         return [], {}
@@ -804,53 +677,36 @@ def extend_deed_awareness(
 
 
 def _resolve_spread_realm(scene) -> object | None:
-    """Walk ``scene.location → RoomProfile.area`` → parent chain → Realm.
+    """Walk ``scene.location → RoomProfile.area → parent chain → Realm``.
 
-    Returns None when the chain breaks at any step. The codebase's
-    spatial model puts rooms inside Areas (level=BUILDING); we walk
-    Area.parent until we find one whose ``realm`` FK is non-null.
+    Returns None when the chain breaks at any step (no scene, no
+    location, non-room location, no realm in the area's parent chain).
     """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
     if scene is None or scene.location is None:
         return None
     try:
         room_profile = scene.location.room_profile
-    except Exception:  # noqa: BLE001 — RoomProfile.DoesNotExist for non-room locations.
-        return None
-    if room_profile is None:
+    except RoomProfile.DoesNotExist:
         return None
     return _resolve_home_realm(room_profile.area)
 
 
 def apply_spread_fame_bump(
     deed,
-    spreader: Persona,
     *,
     npc_audience: int = 0,
     success_level: int = 1,
 ) -> bool:
-    """#676 Phase H — Bump the deed-subject's fame buffer when a spread lands.
+    """#676 Phase H — Bump the deed-subject's fame on a successful spread.
 
-    Called by ``spread_deed`` after the legend value is added. The fame
-    bump goes to the **deed's subject persona**, not the spreader — the
-    spreader's reward is the deed's existence in the world, not their
-    own fame. (The spreader's fame can still rise via their *own* deeds.)
-
-    Spec formula (#676 §Legend Spread):
-        fame_bump = 1 × npc_audience × success_level
-
-    Default args yield bump=0 — caller MUST pass non-default values for
-    fame to actually move. This keeps the current admin-API spread
-    callers (which don't yet have NPC/check data) backwards-compatible:
-    they spread legend without bumping fame, exactly as before this fix.
-    The player-facing spread API (deferred follow-up) will pass real
-    values from the scene/check resolution.
-
-    Returns True iff the fame tier changed on the subject.
-
-    The ``spreader`` argument is kept for symmetry with future
-    "spreader reputation gain" logic — currently unused.
+    Spec formula (§Legend Spread): ``fame_bump = 1 × npc_audience ×
+    success_level``. The bump credits the deed subject (not the
+    spreader). Default args yield 0 — the admin spread API hasn't been
+    extended to carry NPC/check data yet, so this no-ops on every
+    current caller. Returns True iff the fame tier changed.
     """
-    del spreader  # see docstring: reserved for future spreader-reward use.
     bump = npc_audience * success_level
     if bump <= 0 or deed.persona_id is None:
         return False

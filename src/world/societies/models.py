@@ -1058,38 +1058,6 @@ class PersonaLegendSummary(SharedMemoryModel):
         db_table = "societies_personalegendsummary"
 
 
-class SocietyPrestigeRanking(SharedMemoryModel):
-    """#676 Phase I — Materialized view ranking personas by displayed prestige per society.
-
-    One row per (society, persona). ``displayed_prestige`` is the
-    persona's ``total_prestige × fame_tier_multiplier`` clamped at 0
-    (negative totals don't rank). ``rank`` is the 1-based dense rank
-    within the society. Refresh nightly via
-    ``REFRESH MATERIALIZED VIEW societies_societyprestigeranking``.
-
-    Per the spec, per-society rankings gate by viewer's society
-    membership (you see what your character would know) — that gate
-    lives in the consuming view/serializer, not in this MV.
-    """
-
-    society = models.ForeignKey(
-        "societies.Society",
-        on_delete=models.DO_NOTHING,
-        related_name="+",
-    )
-    persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.DO_NOTHING,
-        related_name="+",
-    )
-    displayed_prestige = models.IntegerField()
-    rank = models.PositiveIntegerField()
-
-    class Meta:
-        managed = False
-        db_table = "societies_societyprestigeranking"
-
-
 class RankingDisplay(SharedMemoryModel):
     """#676 Phase I — Diegetic ranking display: an in-world IC object
     that shows a top-N leaderboard when interacted with.

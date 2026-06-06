@@ -95,11 +95,10 @@ def emit_terminal_renown_awards(
         # Broadcast — distribute per reward_group_rule.
         if rule != RewardGroupRule.ALL_EQUAL:
             raise NotImplementedError(_ERR_UNIMPLEMENTED_RULE.format(rule=rule))
-        for participant in participants:
-            persona = _resolve_participant_persona(participant)
-            if persona is None:
-                continue
-            results.append(_fire_award(award, persona, archetypes))
+        results.extend(
+            _fire_award(award, _resolve_participant_persona(participant), archetypes)
+            for participant in participants
+        )
     return results
 
 
@@ -123,10 +122,8 @@ def _fire_award(
 
 def _award_title(award: MissionRenownAward) -> str:
     """Human-readable title for the LegendEntry this award produces."""
-    if award.route_id is not None:
-        template = award.route.option.node.template
-        return f"Mission deed: {template.name}"
-    return "Mission deed (candidate-emit)"
+    template = award.route.option.node.template
+    return f"Mission deed: {template.name}"
 
 
 def _resolve_holder_persona(
@@ -135,39 +132,22 @@ def _resolve_holder_persona(
 ) -> Persona | None:
     """Pick the persona to credit for a contract_holder_only award.
 
-    Prefer ``MissionInstance.accepted_as_persona`` when set (the persona
-    the holder explicitly presented when accepting). Fall back to the
-    contract-holding participant's character's PRIMARY persona.
+    Prefer ``MissionInstance.accepted_as_persona`` when set; fall back
+    to the contract-holding participant's character's PRIMARY persona.
+    Returns None when neither path resolves a persona.
     """
     if instance.accepted_as_persona_id is not None:
         return instance.accepted_as_persona
     holder = next((p for p in participants if p.is_contract_holder), None)
     if holder is None:
         return None
-    return _character_primary_persona(holder.character)
+    return holder.character.sheet_data.primary_persona
 
 
-def _resolve_participant_persona(participant: object) -> Persona | None:
+def _resolve_participant_persona(participant: object) -> Persona:
     """Each broadcast recipient credits their PRIMARY persona.
 
     Broadcast renown distribution doesn't carry per-participant persona
-    choice the way ``accepted_as_persona`` does for the holder. PRIMARY
-    is the natural default for "who actually did the deed."
+    choice the way ``accepted_as_persona`` does for the holder.
     """
-    return _character_primary_persona(participant.character)
-
-
-def _character_primary_persona(character: object) -> Persona | None:
-    """Walk ``character → sheet_data → primary_persona``; None on any miss."""
-    if character is None:
-        return None
-    try:
-        sheet = character.sheet_data
-    except AttributeError:
-        return None
-    if sheet is None:
-        return None
-    try:
-        return sheet.primary_persona
-    except Exception:  # noqa: BLE001 — Persona.DoesNotExist; sheet invariant violated.
-        return None
+    return participant.character.sheet_data.primary_persona

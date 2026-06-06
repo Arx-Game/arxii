@@ -170,7 +170,6 @@ class Building(SharedMemoryModel):
     )
     is_accessible = models.BooleanField(
         default=True,
-        db_index=True,
         help_text=(
             "Renown system: flips False when all building-level polish "
             "features have decayed to 0 — building goes dormant but "
@@ -644,15 +643,6 @@ class ProjectTemplate(SharedMemoryModel):
 
     name = models.CharField(max_length=120, unique=True)
     description = models.TextField(blank=True)
-    polish_increments = models.ManyToManyField(
-        PolishCategory,
-        through="ProjectTemplatePolishIncrement",
-        related_name="project_templates",
-        help_text=(
-            "Per-category polish added when this template is completed. "
-            "Through-table carries the per-category value."
-        ),
-    )
     tier_prerequisites = models.ManyToManyField(
         TierThreshold,
         blank=True,
@@ -797,7 +787,6 @@ class BuildingProjectInstance(SharedMemoryModel):
             "upkeep. Restoration clears this back to null."
         ),
     )
-    completed_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["decay_priority", "pk"]

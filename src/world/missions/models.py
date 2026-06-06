@@ -834,27 +834,8 @@ class MissionRenownAward(SharedMemoryModel):
 
     route = models.ForeignKey(
         "missions.MissionOptionRoute",
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         related_name="renown_awards",
-        help_text=(
-            "Parent route (route-level award). Exactly one of route / "
-            "candidate must be set; enforced in clean()."
-        ),
-    )
-    candidate = models.ForeignKey(
-        "missions.MissionOptionRouteCandidate",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="renown_awards",
-        help_text=(
-            "Parent candidate (per-candidate award bundle). Stored but "
-            "unconsumed until candidate-emit lands (parallels the "
-            "MissionOptionRouteReward Phase D wiring on the flat-reward "
-            "side). Exactly one of route / candidate must be set."
-        ),
     )
     magnitude = models.CharField(
         max_length=16,
@@ -904,31 +885,6 @@ class MissionRenownAward(SharedMemoryModel):
             "reward_group_rule, same semantics as MissionOptionRouteReward."
         ),
     )
-
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                check=(
-                    (Q(route__isnull=False) & Q(candidate__isnull=True))
-                    | (Q(route__isnull=True) & Q(candidate__isnull=False))
-                ),
-                name="missionrenownaward_exactly_one_parent",
-            ),
-        ]
-
-    def clean(self) -> None:
-        super().clean()
-        set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
-        if set_count == 0:
-            raise ValidationError(_ERR_REWARD_NO_PARENT)
-        if set_count == _REWARD_BOTH_PARENTS_SET:
-            raise ValidationError(
-                {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
-            )
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         mag = self.get_magnitude_display() if self.magnitude else "—"

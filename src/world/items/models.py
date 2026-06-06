@@ -579,14 +579,6 @@ class RoomItem(SharedMemoryModel):
             "'placed XOR equipped' invariant."
         ),
     )
-    placed_at = models.DateTimeField(auto_now_add=True)
-    placed_by_persona = models.ForeignKey(
-        "scenes.Persona",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="room_placements_made",
-    )
 
     def __str__(self) -> str:
         return f"{self.item_instance.display_name} in {self.room}"

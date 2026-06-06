@@ -139,11 +139,42 @@ class ObjectParent:
         so that the calling command shows nothing (or its own fallback).
         Reactive flows that appended to ``ExaminePrePayload.sections`` have
         their text concatenated after the base appearance.
+
+        Objects with a ``RankingDisplay`` profile (#676 Phase I diegetic
+        rankings) get the rendered top-N appended after the base — the
+        herald reads names, the academy display shimmers, etc.
         """
         if looker is not None and not self.at_examined(looker):
             return ""
         base = super().return_appearance(looker, **kwargs)  # type: ignore[misc]
         sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL
+        ranking = _maybe_render_ranking_display(self, looker)
+        if ranking is not None:
+            sections = [*sections, ranking]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
+
+
+def _maybe_render_ranking_display(obj, looker) -> str | None:
+    """Render the ranking display attached to ``obj`` (if any) for ``looker``.
+
+    Returns the rendered IC narration or None when the object has no
+    ``RankingDisplay`` row. Lazy-imports the societies layer to keep the
+    typeclass package free of a hard dependency on it.
+    """
+    from world.scenes.models import Persona
+    from world.societies.models import RankingDisplay
+    from world.societies.ranking_services import render_ranking_display
+
+    try:
+        display = obj.ranking_display
+    except (AttributeError, RankingDisplay.DoesNotExist):
+        return None
+    import contextlib
+
+    viewer_persona = None
+    if looker is not None:
+        with contextlib.suppress(AttributeError, Persona.DoesNotExist):
+            viewer_persona = looker.sheet_data.primary_persona
+    return render_ranking_display(display, viewer_persona)

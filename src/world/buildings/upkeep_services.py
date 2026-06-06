@@ -61,22 +61,17 @@ logger = logging.getLogger(__name__)
 def _resolve_owner_wallet(building: Building):
     """Walk ``building.owner_persona → character_sheet → character → currency_balance``.
 
-    Returns the CurrencyBalance row or None when any link is missing
-    (no owner, sheet, character, or wallet row).
+    Returns the CurrencyBalance row, or None when the building has no
+    owner or the body has never had a wallet created. Persona / sheet /
+    character relations are non-null at the DB level, so we only guard
+    the two breaking links: missing owner, and the optional wallet row.
     """
-    persona = building.owner_persona
-    if persona is None:
-        return None
-    sheet = persona.character_sheet
-    if sheet is None:
-        return None
-    character = sheet.character
-    if character is None:
-        return None
     from world.items.models import CurrencyBalance  # noqa: PLC0415
 
+    if building.owner_persona is None:
+        return None
     try:
-        return character.currency_balance
+        return building.owner_persona.character_sheet.character.currency_balance
     except CurrencyBalance.DoesNotExist:
         return None
 

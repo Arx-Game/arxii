@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 def place_item_in_room(
     item_instance: ItemInstance,
     room: RoomProfile,
-    persona: Persona | None = None,
 ) -> RoomItem | None:
     """Place ``item_instance`` as decor in ``room``.
 
@@ -68,7 +67,6 @@ def place_item_in_room(
     placement = RoomItem.objects.create(
         room=room,
         item_instance=item_instance,
-        placed_by_persona=persona,
     )
     _flow_item_polish(item_instance, room, delta_sign=1)
     return placement
