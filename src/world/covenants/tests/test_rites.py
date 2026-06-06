@@ -1,0 +1,359 @@
+"""Tests for Tasks 3 + 4: engaged_members_present helper and perform_covenant_rite service.
+
+Uses setUp (not setUpTestData) because Evennia typeclasses (ObjectDB subclasses)
+are not deepcopy-safe, which Django's setUpTestData mechanism requires.
+"""
+
+from __future__ import annotations
+
+from django.test import TestCase
+
+from evennia_extensions.factories import ObjectDBFactory
+from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.models import ConditionInstance
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory, make_engaged_member
+from world.covenants.models import CovenantRite, CovenantRiteInstance
+from world.covenants.services import engaged_members_present, perform_covenant_rite
+
+
+def _make_room(key: str = "TestRoom"):
+    """Create a Room typeclass instance usable as a combat/scene location."""
+    return ObjectDBFactory(
+        db_key=key,
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+
+
+def _place_character_in_room(character, room) -> None:
+    """Set a character's db_location directly."""
+    character.db_location = room
+    character.save(update_fields=["db_location"])
+
+
+def _make_rite(*, covenant, ritual, condition_template) -> CovenantRite:
+    """Create a CovenantRite with sensible defaults for testing."""
+    return CovenantRite.objects.create(
+        ritual=ritual,
+        covenant_type=covenant.covenant_type,
+        min_covenant_level=1,
+        min_engaged_present=2,
+        granted_condition=condition_template,
+        base_severity=2,
+        severity_per_extra_participant=1,
+        max_severity=None,
+        duration_rounds=3,
+    )
+
+
+class EngagedMembersPresentTests(TestCase):
+    """Unit tests for the engaged_members_present helper."""
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        self.room = _make_room("PresentRoom")
+        self.other_room = _make_room("OtherRoom")
+        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+    def test_returns_engaged_members_in_room(self) -> None:
+        """Members who are engaged AND in the room appear in results."""
+        mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(mem_a.character_sheet.character, self.room)
+        _place_character_in_room(mem_b.character_sheet.character, self.room)
+
+        result = engaged_members_present(covenant=self.covenant, room=self.room)
+
+        sheet_ids = {s.pk for s in result}
+        self.assertIn(mem_a.character_sheet.pk, sheet_ids)
+        self.assertIn(mem_b.character_sheet.pk, sheet_ids)
+        self.assertEqual(len(result), 2)
+
+    def test_excludes_unengaged_member_in_room(self) -> None:
+        """A member who is in the room but not engaged is excluded."""
+        from world.covenants.factories import CharacterCovenantRoleFactory
+
+        engaged = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        unengaged_ccr = CharacterCovenantRoleFactory(
+            covenant=self.covenant, covenant_role=self.role, engaged=False
+        )
+        _place_character_in_room(engaged.character_sheet.character, self.room)
+        _place_character_in_room(unengaged_ccr.character_sheet.character, self.room)
+
+        result = engaged_members_present(covenant=self.covenant, room=self.room)
+
+        sheet_ids = {s.pk for s in result}
+        self.assertIn(engaged.character_sheet.pk, sheet_ids)
+        self.assertNotIn(unengaged_ccr.character_sheet.pk, sheet_ids)
+
+    def test_excludes_engaged_member_in_different_room(self) -> None:
+        """An engaged member who is in a different room is excluded."""
+        in_room = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        elsewhere = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(in_room.character_sheet.character, self.room)
+        _place_character_in_room(elsewhere.character_sheet.character, self.other_room)
+
+        result = engaged_members_present(covenant=self.covenant, room=self.room)
+
+        sheet_ids = {s.pk for s in result}
+        self.assertIn(in_room.character_sheet.pk, sheet_ids)
+        self.assertNotIn(elsewhere.character_sheet.pk, sheet_ids)
+
+    def test_empty_room_returns_empty_list(self) -> None:
+        """No one in the room means an empty list."""
+        make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        self.assertEqual(result, [])
+
+
+class PerformCovenantRiteHappyPathTests(TestCase):
+    """Happy-path tests for perform_covenant_rite."""
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.magic.factories import RitualFactory, RitualSessionFactory
+
+        self.room = _make_room("RiteRoom")
+        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # 3 engaged members, all in the room.
+        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_c = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        self.condition_template = ConditionTemplateFactory()
+        self.ritual = RitualFactory(
+            service_function_path="world.covenants.services.perform_covenant_rite"
+        )
+        self.rite = _make_rite(
+            covenant=self.covenant,
+            ritual=self.ritual,
+            condition_template=self.condition_template,
+        )
+
+        # Build an active CombatEncounter in the room.
+        from world.combat.constants import EncounterStatus
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatEncounter
+        from world.scenes.factories import SceneFactory
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.encounter = CombatEncounterFactory(
+            room=self.room,
+            scene=self.scene,
+        )
+        # Ensure status is not COMPLETED.
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.RESOLVING
+        )
+        self.encounter.refresh_from_db()
+
+        # Build a RitualSession with a COVENANT ref pointing at our covenant.
+        from world.magic.constants import ReferenceKind
+        from world.magic.models.sessions import RitualSessionReference
+
+        self.session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+        RitualSessionReference.objects.create(
+            session=self.session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=self.covenant,
+            ref_covenant_role=None,
+        )
+
+    def _ritual_session_factory(self):
+        from world.magic.factories import RitualSessionFactory
+
+        return RitualSessionFactory
+
+    def test_returns_rite_instance(self) -> None:
+        """Happy path: returns a CovenantRiteInstance."""
+        result = perform_covenant_rite(session=self.session)
+        self.assertIsInstance(result, CovenantRiteInstance)
+
+    def test_instance_linked_to_covenant_and_encounter(self) -> None:
+        """The created instance is linked to the correct covenant and encounter."""
+        result = perform_covenant_rite(session=self.session)
+        self.assertEqual(result.covenant_id, self.covenant.pk)
+        self.assertEqual(result.combat_encounter_id, self.encounter.pk)
+
+    def test_participants_set_to_all_three_present(self) -> None:
+        """All three present engaged members are in the participants M2M."""
+        result = perform_covenant_rite(session=self.session)
+        participant_ids = set(result.participants.values_list("pk", flat=True))
+        self.assertIn(self.mem_a.character_sheet.pk, participant_ids)
+        self.assertIn(self.mem_b.character_sheet.pk, participant_ids)
+        self.assertIn(self.mem_c.character_sheet.pk, participant_ids)
+        self.assertEqual(len(participant_ids), 3)
+
+    def test_condition_applied_to_each_participant(self) -> None:
+        """Each present engaged member has a live ConditionInstance for granted_condition."""
+        perform_covenant_rite(session=self.session)
+        sheets = [
+            self.mem_a.character_sheet,
+            self.mem_b.character_sheet,
+            self.mem_c.character_sheet,
+        ]
+        for sheet in sheets:
+            has_it = ConditionInstance.objects.filter(
+                target=sheet.character,
+                condition=self.condition_template,
+            ).exists()
+            self.assertTrue(has_it, f"Expected condition on {sheet}")
+
+    def test_condition_severity_scaled_by_present_count(self) -> None:
+        """Condition severity matches rite.severity_for(present_count=3).
+
+        With base_severity=2, severity_per_extra=1, min_engaged_present=2:
+        severity = 2 + (3 - 2) * 1 = 3.
+        """
+        perform_covenant_rite(session=self.session)
+        expected_severity = self.rite.severity_for(present_count=3)  # = 3
+        instance = ConditionInstance.objects.filter(
+            target=self.mem_a.character_sheet.character,
+            condition=self.condition_template,
+        ).first()
+        self.assertIsNotNone(instance)
+        self.assertEqual(instance.severity, expected_severity)
+
+    def test_rite_instance_row_persisted(self) -> None:
+        """A CovenantRiteInstance row exists after a successful call."""
+        perform_covenant_rite(session=self.session)
+        self.assertTrue(
+            CovenantRiteInstance.objects.filter(
+                rite=self.rite,
+                covenant=self.covenant,
+                combat_encounter=self.encounter,
+            ).exists()
+        )
+
+
+class PerformCovenantRiteGateTests(TestCase):
+    """Gate failure tests: each gate must raise the typed exception and roll back."""
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.magic.factories import RitualFactory
+
+        self.room = _make_room("GateRoom")
+        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
+
+        self.condition_template = ConditionTemplateFactory()
+        self.ritual = RitualFactory(
+            service_function_path="world.covenants.services.perform_covenant_rite"
+        )
+        self.rite = _make_rite(
+            covenant=self.covenant,
+            ritual=self.ritual,
+            condition_template=self.condition_template,
+        )  # min_covenant_level=1, min_engaged_present=2
+
+        # Base encounter setup (active).
+        from world.combat.constants import EncounterStatus
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatEncounter
+        from world.scenes.factories import SceneFactory
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.RESOLVING
+        )
+        self.encounter.refresh_from_db()
+
+        # Base session + COVENANT ref.
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import RitualSessionFactory
+        from world.magic.models.sessions import RitualSessionReference
+
+        self.session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+        RitualSessionReference.objects.create(
+            session=self.session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=self.covenant,
+            ref_covenant_role=None,
+        )
+
+    def test_covenant_level_too_low_raises_and_rolls_back(self) -> None:
+        """covenant.level < rite.min_covenant_level → CovenantLevelTooLowError, no rows."""
+        from world.covenants.exceptions import CovenantLevelTooLowError
+
+        self.covenant.level = 0  # below min_covenant_level=1
+        self.covenant.save(update_fields=["level"])
+
+        with self.assertRaises(CovenantLevelTooLowError):
+            perform_covenant_rite(session=self.session)
+
+        self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())
+        self.assertFalse(
+            ConditionInstance.objects.filter(condition=self.condition_template).exists()
+        )
+
+    def test_no_active_encounter_raises_and_rolls_back(self) -> None:
+        """No active encounter in room → NoActiveBattleError, no rows."""
+        from world.combat.constants import EncounterStatus
+        from world.combat.models import CombatEncounter
+        from world.covenants.exceptions import NoActiveBattleError
+
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
+            status=EncounterStatus.COMPLETED
+        )
+        self.encounter.refresh_from_db()
+
+        with self.assertRaises(NoActiveBattleError):
+            perform_covenant_rite(session=self.session)
+
+        self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())
+        self.assertFalse(
+            ConditionInstance.objects.filter(condition=self.condition_template).exists()
+        )
+
+    def test_not_enough_engaged_present_raises_and_rolls_back(self) -> None:
+        """Fewer engaged present than min_engaged_present → NotEnoughEngagedPresentError."""
+        from world.covenants.exceptions import NotEnoughEngagedPresentError
+
+        # Remove mem_b from the room so only 1 engaged member is present.
+        other_room = _make_room("Elsewhere")
+        _place_character_in_room(self.mem_b.character_sheet.character, other_room)
+
+        with self.assertRaises(NotEnoughEngagedPresentError):
+            perform_covenant_rite(session=self.session)
+
+        self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())
+        self.assertFalse(
+            ConditionInstance.objects.filter(condition=self.condition_template).exists()
+        )
+
+    def test_missing_covenant_ref_raises_and_rolls_back(self) -> None:
+        """Session with no COVENANT reference → CovenantRiteError, no rows."""
+        from world.covenants.exceptions import CovenantRiteError
+        from world.magic.factories import RitualSessionFactory
+
+        # Session without a COVENANT ref.
+        bare_session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+
+        with self.assertRaises(CovenantRiteError):
+            perform_covenant_rite(session=bare_session)
+
+        self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())

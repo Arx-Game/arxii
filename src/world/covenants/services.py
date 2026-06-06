@@ -10,9 +10,13 @@ from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
+    CovenantLevelTooLowError,
     CovenantNameConflictError,
+    CovenantRiteError,
     DuplicateFounderError,
     InsufficientFoundersError,
+    NoActiveBattleError,
+    NotEnoughEngagedPresentError,
     SubroleParentMismatchError,
     SubroleResonanceMismatchError,
     SubroleThreadLevelInsufficientError,
@@ -20,6 +24,8 @@ from world.covenants.exceptions import (
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantRite,
+    CovenantRiteInstance,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -508,3 +514,93 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
         character_sheet=candidate_participant.character_sheet,
         role=chosen_role,
     )
+
+
+@transaction.atomic
+def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
+    """Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.
+
+    Activation gate (all checked before any writes):
+    1. Covenant ref present on the session.
+    2. Covenant level ≥ rite.min_covenant_level.
+    3. Active CombatEncounter present in the initiator's room.
+    4. At least rite.min_engaged_present engaged members in the room.
+
+    On success, creates a CovenantRiteInstance, sets participants, applies the
+    scaled condition buff to each via bulk_apply_conditions, and emits a
+    NarrativeMessage. Returns the new CovenantRiteInstance.
+    """
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+    from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # 1. Resolve the CovenantRite sidecar from the session's ritual.
+    rite: CovenantRite = session.ritual.covenant_rite
+
+    # 2. Resolve the covenant from the session-level COVENANT reference.
+    ref = session.references.filter(kind=ReferenceKind.COVENANT).first()
+    if ref is None:
+        raise CovenantRiteError
+    covenant: Covenant = ref.ref_covenant
+
+    # 3. Resolve room from initiator.
+    room = session.initiator.character.db_location
+    if room is None:
+        raise NoActiveBattleError
+
+    # 4a. Gate: covenant level.
+    if covenant.level < rite.min_covenant_level:
+        raise CovenantLevelTooLowError
+
+    # 4b. Gate: active combat encounter in room.
+    encounter = (
+        CombatEncounter.objects.filter(room=room)
+        .exclude(status=EncounterStatus.COMPLETED)
+        .order_by("-id")
+        .first()
+    )
+    if encounter is None:
+        raise NoActiveBattleError
+
+    # 4c. Gate: enough engaged members present.
+    beneficiaries = engaged_members_present(covenant=covenant, room=room)
+    if len(beneficiaries) < rite.min_engaged_present:
+        raise NotEnoughEngagedPresentError
+
+    # 5. Compute scaled severity.
+    severity = rite.severity_for(present_count=len(beneficiaries))
+
+    # 6. Create instance and attach participants.
+    instance = CovenantRiteInstance.objects.create(
+        rite=rite,
+        covenant=covenant,
+        scene=encounter.scene,
+        combat_encounter=encounter,
+    )
+    instance.participants.set(beneficiaries)
+
+    # 7. Apply the buff to each beneficiary.
+    bulk_apply_conditions(
+        [
+            BulkConditionApplication(
+                target=s.character,
+                template=rite.granted_condition,
+                severity=severity,
+                duration_rounds=rite.duration_rounds,
+            )
+            for s in beneficiaries
+        ],
+        source_description="covenant rite",
+    )
+
+    # 8. Emit drama.
+    send_narrative_message(
+        recipients=beneficiaries,
+        body="The covenant reaffirms its oath — power surges through the gathered.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+    return instance
