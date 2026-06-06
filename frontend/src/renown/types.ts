@@ -6,6 +6,7 @@ export type PrestigeBreakdown = components['schemas']['_PrestigeBreakdown'];
 export type SocietyReputationEntry = components['schemas']['_SocietyReputation'];
 export type DeedEntry = components['schemas']['_Deed'];
 export type OwnedDwelling = components['schemas']['_OwnedDwelling'];
+export type TenantedRoom = components['schemas']['_TenantedRoom'];
 export type CategoryPolish = components['schemas']['_CategoryPolish'];
 
 /**

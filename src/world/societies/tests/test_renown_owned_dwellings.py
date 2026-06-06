@@ -140,3 +140,49 @@ class DormancyTests(TestCase):
 
         self.assertTrue(entry["dormant"])
         self.assertIsNotNone(entry["dormant_since"])
+
+
+class TenantedRoomsTests(TestCase):
+    def test_persona_with_no_tenanted_rooms_yields_empty_list(self) -> None:
+        persona = _make_primary_persona()
+        payload = build_renown_payload(persona)
+        self.assertEqual(payload["tenanted_rooms"], [])
+
+    def test_tenanted_room_appears_with_polish_breakdown(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.buildings.models import RoomPolish
+
+        tenant = _make_primary_persona()
+        room = RoomProfileFactory()
+        room.tenant_persona = tenant
+        room.save(update_fields=["tenant_persona"])
+        cat = PolishCategory.objects.create(name="Elegance")
+        TierThreshold.objects.create(category=cat, tier_name="Notable", min_value=200)
+        RoomPolish.objects.create(room=room, category=cat, value=500)
+
+        payload = build_renown_payload(tenant)
+
+        self.assertEqual(len(payload["tenanted_rooms"]), 1)
+        entry = payload["tenanted_rooms"][0]
+        self.assertEqual(len(entry["polish_by_category"]), 1)
+        polish_row = entry["polish_by_category"][0]
+        self.assertEqual(polish_row["category_name"], "Elegance")
+        self.assertEqual(polish_row["value"], 500)
+        self.assertEqual(polish_row["tier_label"], "Notable")
+
+    def test_rooms_tenanted_by_others_are_excluded(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        tenant = _make_primary_persona()
+        other = _make_primary_persona()
+        mine = RoomProfileFactory()
+        mine.tenant_persona = tenant
+        mine.save(update_fields=["tenant_persona"])
+        theirs = RoomProfileFactory()
+        theirs.tenant_persona = other
+        theirs.save(update_fields=["tenant_persona"])
+
+        payload = build_renown_payload(tenant)
+
+        self.assertEqual(len(payload["tenanted_rooms"]), 1)
+        self.assertEqual(payload["tenanted_rooms"][0]["id"], mine.pk)
