@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.magic.constants import RitualExecutionKind
-from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
+from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory, TechniqueFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import (
@@ -145,3 +145,59 @@ class InteractionStrainCommittedTests(TestCase):
     def test_strain_committed_field_exists(self) -> None:
         field = Interaction._meta.get_field("strain_committed")
         self.assertEqual(field.default, 0)
+
+
+class StandalonecastTests(TestCase):
+    """Tests for standalone technique cast support on SceneActionRequest."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.technique = TechniqueFactory(damage_profile=False)
+
+    def test_standalone_cast_passes_full_clean(self) -> None:
+        """A request with technique set and no target/action_key/template passes validation."""
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            technique=self.technique,
+            action_key="",
+        )
+        request.full_clean()  # must not raise
+
+    def test_standalone_cast_is_standalone_cast_true(self) -> None:
+        """is_standalone_cast is True when only technique is set."""
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            technique=self.technique,
+            action_key="",
+        )
+        assert request.is_standalone_cast is True
+
+    def test_no_technique_no_action_raises_validation_error(self) -> None:
+        """A request with no technique, no action_key, and no template raises ValidationError."""
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            action_key="",
+            action_template=None,
+            technique=None,
+        )
+        with self.assertRaises(ValidationError):
+            request.full_clean()
+
+    def test_action_key_plus_technique_is_not_standalone(self) -> None:
+        """is_standalone_cast is False when action_key is also set."""
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            action_key="intimidate",
+            technique=self.technique,
+        )
+        assert request.is_standalone_cast is False
