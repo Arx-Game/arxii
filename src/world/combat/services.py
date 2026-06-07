@@ -2237,10 +2237,31 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     ObjectDB is destroyed; the SET_NULL FK behavior nulls
     CombatOpponent.objectdb after deletion.
     """
-    # Sweep covenant rite buffs for this encounter.
+    # Sweep covenant rite buffs for this encounter (stamps completed_at on the
+    # rite instances in addition to removing their granted condition).
     from world.covenants.services import complete_rites_for_encounter  # noqa: PLC0415
 
     complete_rites_for_encounter(encounter=encounter)
+
+    # Generically expire any remaining UNTIL_END_OF_COMBAT conditions on the
+    # encounter's participants and opponents. The rite sweep above already
+    # removed its own (rite-granted) buffs, so this is idempotent for those;
+    # it catches every other end-of-combat condition (e.g. technique-applied)
+    # that nothing else expires. Runs before ephemeral NPC deletion so the
+    # sweep observes those targets too.
+    from world.conditions.services import expire_end_of_combat_conditions  # noqa: PLC0415
+
+    participant_targets = [
+        p.character_sheet.character
+        for p in CombatParticipant.objects.filter(encounter=encounter).select_related(
+            "character_sheet__character"
+        )
+    ]
+    opponent_targets = [
+        opp.objectdb
+        for opp in CombatOpponent.objects.filter(encounter=encounter).select_related("objectdb")
+    ]
+    expire_end_of_combat_conditions(participant_targets + opponent_targets)
 
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
