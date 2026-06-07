@@ -29,6 +29,7 @@ from world.magic.factories import (
     ResonanceFactory,
     TechniqueFactory,
 )
+from world.magic.models import Technique
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
@@ -40,6 +41,7 @@ from world.scenes.cast_services import (
 )
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.models import Persona
 from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
@@ -107,12 +109,12 @@ class TestDeriveCastDifficulty(TestCase):
         assert derive_cast_difficulty(technique) == 15
 
 
-def _grant(persona, technique) -> None:
+def _grant(persona: Persona, technique: Technique) -> None:
     """Grant a technique to the persona's CharacterSheet so the knows-check passes."""
     CharacterTechniqueFactory(character=persona.character_sheet, technique=technique)
 
 
-def _benign_castable_technique() -> object:
+def _benign_castable_technique() -> Technique:
     """A non-hostile, standalone-castable technique (no power, no damage, has template)."""
     return TechniqueFactory(
         effect_type=BinaryEffectTypeFactory(),
@@ -121,7 +123,7 @@ def _benign_castable_technique() -> object:
     )
 
 
-def _hostile_castable_technique() -> object:
+def _hostile_castable_technique() -> Technique:
     """A hostile (damage) standalone-castable technique."""
     # Default EffectTypeFactory has base_power=10 → auto-seeds a damage profile →
     # is_technique_hostile() is True.
@@ -209,6 +211,21 @@ class TestRequestTechniqueCastRouting(TestCase):
         self.assertEqual(pose.mode, InteractionMode.OUTCOME)
         self.assertTrue(pose.persona.is_system)
         self.assertEqual(cast.request.result_interaction, pose)
+
+    def test_self_cast_persists_strain_commitment(self) -> None:
+        """strain_commitment forwarded on the immediate path is stored on the request."""
+        technique = _benign_castable_technique()
+        _grant(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            technique=technique,
+            strain_commitment=3,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        self.assertEqual(cast.request.strain_commitment, 3)
 
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
         """Benign technique aimed at another PC → PENDING consent request."""

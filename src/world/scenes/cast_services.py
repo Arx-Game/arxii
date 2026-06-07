@@ -60,6 +60,8 @@ def _resolve_cast(
     technique: Technique,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — mirrors _resolve_enhanced_action
     target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+    difficulty: int,
+    strain_commitment: int = 0,
 ) -> tuple[EnhancedSceneActionResult, PowerLedger | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
@@ -69,6 +71,13 @@ def _resolve_cast(
     itself (``technique.action_template``) and the difficulty from
     ``derive_cast_difficulty`` rather than a base-action difficulty choice.
 
+    Args:
+        difficulty: Pre-computed cast difficulty (from ``derive_cast_difficulty``);
+            passed in so the caller only computes it once and reuses it for
+            ``resolved_difficulty`` on the ``SceneActionRequest``.
+        strain_commitment: Extra anima committed beyond the technique baseline,
+            forwarded to ``use_technique`` so anima costs are tallied correctly.
+
     Returns the ``EnhancedSceneActionResult`` plus the cast-level ``PowerLedger``
     (BASE + ENVIRONMENT stages) captured from ``use_technique``'s ``resolve_fn``
     so the caller can surface ward/environment clauses in the OUTCOME pose.
@@ -76,7 +85,6 @@ def _resolve_cast(
     from world.magic.services import use_technique  # noqa: PLC0415
 
     action_template = technique.action_template
-    difficulty = derive_cast_difficulty(technique)
     context = ResolutionContext(character=character, target=target)
 
     captured: dict[str, object] = {}
@@ -95,6 +103,7 @@ def _resolve_cast(
         technique=technique,
         resolve_fn=_resolve_fn,
         confirm_soulfray_risk=True,
+        strain_commitment=strain_commitment,
     )
 
     resolution_result = technique_result.resolution_result  # type: ignore[assignment]
@@ -203,6 +212,7 @@ def request_technique_cast(
         initiator_persona=initiator_persona,
         target_persona=target_persona,
         technique=technique,
+        strain_commitment=strain_commitment,
     )
 
 
@@ -259,14 +269,20 @@ def _route_immediate_cast(
     initiator_persona: Persona,
     target_persona: Persona | None,
     technique: Technique,
+    strain_commitment: int = 0,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
     character = initiator_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
+    difficulty = derive_cast_difficulty(technique)
 
     with transaction.atomic():
         result, power_ledger = _resolve_cast(
-            technique=technique, character=character, target=target
+            technique=technique,
+            character=character,
+            target=target,
+            difficulty=difficulty,
+            strain_commitment=strain_commitment,
         )
 
         request = SceneActionRequest.objects.create(
@@ -276,7 +292,8 @@ def _route_immediate_cast(
             technique=technique,
             status=ActionRequestStatus.RESOLVED,
             resolved_at=timezone.now(),
-            resolved_difficulty=derive_cast_difficulty(technique),
+            resolved_difficulty=difficulty,
+            strain_commitment=strain_commitment,
         )
 
         pose = create_cast_outcome_pose(
