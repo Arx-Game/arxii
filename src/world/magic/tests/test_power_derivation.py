@@ -37,7 +37,7 @@ class PowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=7, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 12)
+        self.assertEqual(result.total, 12)
 
     def test_resonance_scoped_power_applies_on_matching_technique(self):
         fire = ResonanceFactory(name="Fire")
@@ -49,7 +49,7 @@ class PowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 7)
+        self.assertEqual(result.total, 7)
 
     def test_resonance_scoped_power_skipped_on_non_matching_technique(self):
         fire = ResonanceFactory(name="Fire")  # NOT added to the technique's gift
@@ -60,7 +60,7 @@ class PowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 3)
+        self.assertEqual(result.total, 3)
 
     def test_global_power_applies_regardless_of_resonance(self):
         fire = ResonanceFactory(name="Fire")
@@ -69,12 +69,12 @@ class PowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 5)
+        self.assertEqual(result.total, 5)
 
     def test_none_character_returns_channeled_intensity(self):
         self._add_power(self.global_target, 5)
         self.assertEqual(
-            _derive_power(channeled_intensity=4, technique=self.technique, character=None),
+            _derive_power(channeled_intensity=4, technique=self.technique, character=None).total,
             4,
         )
 
@@ -82,14 +82,14 @@ class PowerDerivationTests(TestCase):
         bare = CharacterFactory()  # no CharacterSheet created for this character
         self._add_power(self.global_target, 5)
         self.assertEqual(
-            _derive_power(channeled_intensity=4, technique=self.technique, character=bare),
+            _derive_power(channeled_intensity=4, technique=self.technique, character=bare).total,
             4,
         )
 
     def test_none_technique_still_applies_global_power(self):
         self._add_power(self.global_target, 6)
         self.assertEqual(
-            _derive_power(channeled_intensity=1, technique=None, character=self.character),
+            _derive_power(channeled_intensity=1, technique=None, character=self.character).total,
             7,
         )
 
@@ -98,7 +98,7 @@ class PowerDerivationTests(TestCase):
         self.assertEqual(
             _derive_power(
                 channeled_intensity=5, technique=self.technique, character=self.character
-            ),
+            ).total,
             0,
         )
 
@@ -109,7 +109,7 @@ class PowerDerivationTests(TestCase):
             channeled_intensity=channeled, technique=self.technique, character=self.character
         )
         # Power rose; the channeled-intensity input (which drives anima/mishap/Soulfray) did not.
-        self.assertEqual(power, 12)
+        self.assertEqual(power.total, 12)
         self.assertEqual(channeled, 7)
 
 
@@ -153,7 +153,7 @@ class LevelPowerTermTests(TestCase):
         result = _derive_power(
             channeled_intensity=5, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 11)  # 5 intensity + 3 levels * 2
+        self.assertEqual(result.total, 11)  # 5 intensity + 3 levels * 2
 
     def test_technique_level_raises_derived_power(self):
         self._make_config(tech_bonus=1)
@@ -162,7 +162,7 @@ class LevelPowerTermTests(TestCase):
         result = _derive_power(
             channeled_intensity=4, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 11)  # 4 intensity + 7 technique levels * 1
+        self.assertEqual(result.total, 11)  # 4 intensity + 7 technique levels * 1
 
     def test_both_bonuses_accumulate(self):
         self._make_config(char_bonus=1, tech_bonus=2)
@@ -172,7 +172,7 @@ class LevelPowerTermTests(TestCase):
         result = _derive_power(
             channeled_intensity=10, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 20)  # 10 + 4*1 + 3*2
+        self.assertEqual(result.total, 20)  # 10 + 4*1 + 3*2
 
     def test_zero_bonuses_contribute_nothing(self):
         self._make_config(char_bonus=0, tech_bonus=0)
@@ -180,14 +180,14 @@ class LevelPowerTermTests(TestCase):
         result = _derive_power(
             channeled_intensity=5, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 5)
+        self.assertEqual(result.total, 5)
 
     def test_no_config_row_contributes_nothing(self):
         self._set_character_level(5)
         result = _derive_power(
             channeled_intensity=5, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 5)
+        self.assertEqual(result.total, 5)
 
     def test_character_with_no_class_level_contributes_nothing(self):
         self._make_config(char_bonus=5)
@@ -195,13 +195,13 @@ class LevelPowerTermTests(TestCase):
         result = _derive_power(
             channeled_intensity=8, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 8)
+        self.assertEqual(result.total, 8)
 
     def test_none_technique_still_applies_character_level(self):
         self._make_config(char_bonus=3)
         self._set_character_level(2)
         result = _derive_power(channeled_intensity=5, technique=None, character=self.character)
-        self.assertEqual(result, 11)  # 5 + 2*3
+        self.assertEqual(result.total, 11)  # 5 + 2*3
 
     def test_level_term_does_not_affect_channeled_intensity(self):
         self._make_config(char_bonus=3)
@@ -228,7 +228,7 @@ class ApplicableThreadsParameterTests(TestCase):
             character=self.character,
             applicable_threads=[],
         )
-        self.assertEqual(result, 5)
+        self.assertEqual(result.total, 5)
 
     def test_applicable_threads_kwarg_accepted(self):
         from world.magic.factories import ThreadFactory
@@ -244,7 +244,7 @@ class ApplicableThreadsParameterTests(TestCase):
             applicable_threads=threads,
         )
         # Stub returns 0 — power unchanged
-        self.assertEqual(result, 6)
+        self.assertEqual(result.total, 6)
 
 
 class DamageTypePowerDerivationTests(TestCase):
@@ -281,7 +281,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 7)
+        self.assertEqual(result.total, 7)
 
     def test_damage_type_scoped_power_skipped_on_non_matching_profile(self):
         """A slashing-scoped modifier does NOT apply when technique has only a fire profile."""
@@ -290,7 +290,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 3)
+        self.assertEqual(result.total, 3)
 
     def test_damage_type_scoped_power_skipped_when_no_profiles(self):
         """A slashing-scoped modifier does NOT apply when technique has no damage profiles."""
@@ -298,7 +298,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 3)
+        self.assertEqual(result.total, 3)
 
     def test_damage_type_scoped_power_skipped_on_untyped_profile(self):
         """A slashing-scoped modifier does NOT apply when technique has only untyped damage.
@@ -311,7 +311,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=3, technique=untyped_technique, character=self.character
         )
-        self.assertEqual(result, 3)
+        self.assertEqual(result.total, 3)
 
     def test_damage_type_applies_when_any_profile_matches(self):
         """Modifier applies when technique has multiple profiles including a matching one."""
@@ -321,7 +321,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=2, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 5)
+        self.assertEqual(result.total, 5)
 
     def test_global_target_applies_regardless_of_damage_type(self):
         """A global (null damage-type) modifier applies even when technique has a typed profile."""
@@ -330,7 +330,7 @@ class DamageTypePowerDerivationTests(TestCase):
         result = _derive_power(
             channeled_intensity=5, technique=self.technique, character=self.character
         )
-        self.assertEqual(result, 7)
+        self.assertEqual(result.total, 7)
 
     def test_channeled_intensity_unaffected_by_damage_type_modifier(self):
         """Damage-type-scoped power raises landed effect only, not channeled intensity."""
@@ -340,5 +340,119 @@ class DamageTypePowerDerivationTests(TestCase):
         power = _derive_power(
             channeled_intensity=channeled, technique=self.technique, character=self.character
         )
-        self.assertEqual(power, 12)
+        self.assertEqual(power.total, 12)
         self.assertEqual(channeled, 7)
+
+
+class PowerLedgerStructureTests(TestCase):
+    """_derive_power returns an ordered PowerLedger; entries attribute every stage (#639)."""
+
+    def setUp(self):
+        self.category = ModifierCategoryFactory(name=POWER_CATEGORY_NAME)
+        self.global_target = ModifierTargetFactory(
+            category=self.category, name="power", target_resonance=None
+        )
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.technique = TechniqueFactory()
+
+    def _add_power(self, target, value, *, source_name=None):
+        kwargs = {}
+        if source_name is not None:
+            kwargs["distinction_effect__distinction__name"] = source_name
+        source = DistinctionModifierSourceFactory(**kwargs)
+        CharacterModifierFactory(character=self.sheet, target=target, value=value, source=source)
+
+    def test_ledger_has_base_entry_equal_to_channeled_intensity(self):
+        from world.magic.constants import LedgerOp, PowerStage
+
+        ledger = _derive_power(
+            channeled_intensity=9, technique=self.technique, character=self.character
+        )
+        base_entries = [e for e in ledger.entries if e.stage == PowerStage.BASE]
+        self.assertEqual(len(base_entries), 1)
+        self.assertEqual(base_entries[0].amount, 9)
+        self.assertEqual(base_entries[0].op, LedgerOp.SET)
+        # Invariant: total == last running_total.
+        self.assertEqual(ledger.total, ledger.entries[-1].running_total)
+
+    def test_flat_modifier_entry_per_source_in_multi_source_case(self):
+        from world.magic.constants import PowerStage
+
+        self._add_power(self.global_target, 3, source_name="Source A")
+        self._add_power(self.global_target, 4, source_name="Source B")
+        ledger = _derive_power(
+            channeled_intensity=5, technique=self.technique, character=self.character
+        )
+        flat_entries = [e for e in ledger.entries if e.stage == PowerStage.FLAT_MODIFIER]
+        self.assertEqual(len(flat_entries), 2)
+        names = {e.source_label for e in flat_entries}
+        self.assertEqual(names, {"Source A", "Source B"})
+        self.assertEqual(ledger.total, 12)  # 5 + 3 + 4
+
+    def test_multiplier_entry_when_power_multiplier_source_exists(self):
+        from world.magic.constants import LedgerOp, PowerStage
+        from world.mechanics.factories import PowerMultiplierTargetFactory
+
+        mult_target = PowerMultiplierTargetFactory()
+        self._add_power(mult_target, 50)
+        ledger = _derive_power(
+            channeled_intensity=10, technique=self.technique, character=self.character
+        )
+        mult_entries = [e for e in ledger.entries if e.stage == PowerStage.MULTIPLIER]
+        self.assertEqual(len(mult_entries), 1)
+        self.assertEqual(mult_entries[0].op, LedgerOp.MULTIPLY)
+        self.assertEqual(mult_entries[0].amount, 50)  # whole percent delta
+        self.assertEqual(ledger.total, 15)  # round(10 * 150 / 100)
+
+    def test_term_entry_when_provider_returns_nonzero(self):
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.magic.constants import PowerStage
+        from world.magic.models import LevelPowerConfig
+
+        LevelPowerConfig.objects.create(pk=1, character_level_bonus=2, technique_level_bonus=0)
+        CharacterClassLevelFactory(character=self.character, level=3)
+        self.sheet.invalidate_class_level_cache()
+        ledger = _derive_power(
+            channeled_intensity=5, technique=self.technique, character=self.character
+        )
+        term_entries = [e for e in ledger.entries if e.stage == PowerStage.TERM]
+        self.assertEqual(len(term_entries), 1)
+        self.assertEqual(term_entries[0].amount, 6)  # 3 levels * 2
+        self.assertEqual(term_entries[0].source_label, "level power")
+        self.assertEqual(ledger.total, 11)
+
+    def test_ledger_total_matches_old_formula_for_mixed_case(self):
+        """Numeric-fidelity proof: flat + multiplier + level term together equal the
+        pre-ledger formula round(base*(100+delta)/100) + flat + Σterms."""
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.magic.constants import PowerStage
+        from world.magic.models import LevelPowerConfig
+        from world.mechanics.factories import PowerMultiplierTargetFactory
+
+        # Flat: two sources summing to 7.
+        self._add_power(self.global_target, 3, source_name="Flat A")
+        self._add_power(self.global_target, 4, source_name="Flat B")
+        # Multiplier: +35% delta.
+        mult_target = PowerMultiplierTargetFactory()
+        self._add_power(mult_target, 35)
+        # Term: 4 character levels * 2 = 8.
+        LevelPowerConfig.objects.create(pk=1, character_level_bonus=2, technique_level_bonus=0)
+        CharacterClassLevelFactory(character=self.character, level=4)
+        self.sheet.invalidate_class_level_cache()
+
+        base = 13
+        delta = 35
+        flat = 7
+        terms = 8
+        expected = round(base * (100 + delta) / 100) + flat + terms
+
+        ledger = _derive_power(
+            channeled_intensity=base, technique=self.technique, character=self.character
+        )
+        self.assertEqual(ledger.total, expected)
+        # And the ledger actually exercised all three stages.
+        stages = {e.stage for e in ledger.entries}
+        self.assertIn(PowerStage.MULTIPLIER, stages)
+        self.assertIn(PowerStage.FLAT_MODIFIER, stages)
+        self.assertIn(PowerStage.TERM, stages)

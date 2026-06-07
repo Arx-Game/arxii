@@ -28,7 +28,9 @@ class DerivePowerTests(TestCase):
     def test_derive_power_equals_channeled_intensity_in_pr1(self) -> None:
         from world.magic.services.techniques import _derive_power
 
-        self.assertEqual(_derive_power(channeled_intensity=7, technique=None, character=None), 7)
+        self.assertEqual(
+            _derive_power(channeled_intensity=7, technique=None, character=None).total, 7
+        )
 
 
 # ---------------------------------------------------------------------------
