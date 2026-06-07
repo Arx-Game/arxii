@@ -13,6 +13,7 @@ const CATEGORY_LABELS: Record<NarrativeCategory, string> = {
   happenstance: 'Happenstance',
   system: 'System',
   covenant: 'Covenant',
+  renown: 'Renown',
 };
 
 const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
@@ -22,6 +23,7 @@ const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
   happenstance: 'bg-amber-600 text-white border-transparent',
   system: 'bg-gray-500 text-white border-transparent',
   covenant: 'bg-emerald-600 text-white border-transparent',
+  renown: 'bg-red-700 text-white border-transparent',
 };
 
 interface CategoryBadgeProps {

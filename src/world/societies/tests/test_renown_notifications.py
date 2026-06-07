@@ -98,12 +98,14 @@ class NotificationBodyShapeTests(TestCase):
         self.assertIn("Quiet recognition", deed_msg.body)
         self.assertIn("quietly recognised", deed_msg.body)
 
-    def test_deed_body_includes_details_expander_stub(self) -> None:
-        """Spec example: '(details)' clickable expander stub."""
+    def test_deed_body_has_no_details_placeholder(self) -> None:
+        """The inbox '(details)' stub was dropped — the Renown tab is the
+        home for per-axis detail, so the chat line carries no expander hook.
+        """
         persona = _make_player_persona()
         fire_renown_award(persona=persona, magnitude=RenownMagnitude.MODERATE, title="A deed")
         deed_msg = NarrativeMessage.objects.order_by("pk").first()
-        self.assertIn("(details)", deed_msg.body)
+        self.assertNotIn("(details)", deed_msg.body)
 
 
 class TierTransitionTests(TestCase):
