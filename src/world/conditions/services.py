@@ -55,6 +55,7 @@ from world.conditions.models import (
     ConditionTemplate,
     DamageSuccessLevelMultiplier,
     DamageType,
+    PenetrationOutcomeFactor,
     TreatmentAttempt,
     TreatmentTemplate,
 )
@@ -2460,3 +2461,19 @@ def get_damage_multiplier(success_level: int) -> Decimal:
     ).order_by("-min_success_level")
     first = rows.first()
     return first.multiplier if first else Decimal(0)
+
+
+def get_penetration_factor(success_level: int) -> Decimal:
+    """Look up the penetration power factor for a given success level (#639).
+
+    Returns the ``factor`` of the highest authored row whose
+    ``min_success_level`` is <= ``success_level``. Returns ``Decimal("1.00")``
+    (full power, unchanged) when no row matches — an unauthored ladder must
+    never accidentally zero out a working. A ``factor`` of ``0`` means the
+    working bounced off the ward.
+    """
+    rows = PenetrationOutcomeFactor.objects.filter(
+        min_success_level__lte=success_level,
+    ).order_by("-min_success_level")
+    first = rows.first()
+    return first.factor if first else Decimal("1.00")

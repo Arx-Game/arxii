@@ -177,6 +177,18 @@ OFFENSE_FULL_THRESHOLD: int = 2
 OFFENSE_HALF_THRESHOLD: int = 1
 
 # ---------------------------------------------------------------------------
+# Penetration-vs-resistance contest (#639)
+#
+# Name of the seeded CheckType the caster rolls to penetrate a warded
+# opponent's barrier. Penetration difficulty == the target's
+# CombatOpponent.barrier_strength (the ward only — NOT damage-type resistance,
+# which is soaked once in apply_damage_to_opponent). The check's success level
+# selects a power factor from conditions.PenetrationOutcomeFactor.
+# ---------------------------------------------------------------------------
+
+PENETRATION_CHECK_TYPE_NAME: str = "penetration"
+
+# ---------------------------------------------------------------------------
 # Clash enums
 # ---------------------------------------------------------------------------
 

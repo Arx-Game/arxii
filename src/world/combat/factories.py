@@ -513,3 +513,22 @@ class PlayableCombatScenarioFactory:
             threat_pool=threat_pool,
             threat_entry=threat_entry,
         )
+
+
+def wire_penetration_check_type():
+    """Seed the 'penetration' CheckType for the ward contest (#639).
+
+    Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
+    category). The check resolves through the shared rank/chart pipeline
+    (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
+    needed; tests that need a concrete success level force it via
+    force_check_outcome or an offense_check_fn override.
+    """
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+    from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
+
+    return CheckTypeFactory(
+        name=PENETRATION_CHECK_TYPE_NAME,
+        category=CheckCategoryFactory(name="Combat"),
+        description="Penetrate a warded target's barrier (#639).",
+    )
