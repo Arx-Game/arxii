@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from actions.types import PendingActionResolution
 from world.magic.types import TechniqueUseResult
+
+if TYPE_CHECKING:
+    from world.combat.models import CombatEncounter
+    from world.scenes.action_models import SceneActionRequest
+    from world.scenes.models import Interaction
 
 
 class PersonaPayload(TypedDict):
@@ -47,3 +52,19 @@ class EnhancedSceneActionResult:
     action_resolution: PendingActionResolution
     action_key: str
     technique_result: TechniqueUseResult | None = None
+
+
+@dataclass(frozen=True)
+class CastResult:
+    """Outcome of routing a standalone technique cast.
+
+    Exactly one of the optional payloads is populated per the routing matrix:
+    - immediate self/room/no-target cast → ``result`` + ``outcome_interaction``,
+    - benign cast at another PC → only ``request`` (PENDING; resolves on accept),
+    - hostile cast at another PC → ``encounter`` (combat seeded/fed).
+    """
+
+    request: SceneActionRequest
+    result: EnhancedSceneActionResult | None = None
+    encounter: CombatEncounter | None = None
+    outcome_interaction: Interaction | None = None

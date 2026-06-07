@@ -1,9 +1,25 @@
-"""Tests for cast_services: derive_cast_difficulty."""
+"""Tests for cast_services: derive_cast_difficulty and request_technique_cast."""
 
+from unittest.mock import patch
+
+from django.core.exceptions import ValidationError
 from django.test import TestCase
+from evennia import create_object
 
-from world.magic.factories import TechniqueFactory
-from world.scenes.cast_services import derive_cast_difficulty
+from actions.factories import ActionTemplateFactory
+from world.combat.constants import EncounterStatus
+from world.magic.factories import (
+    BinaryEffectTypeFactory,
+    CharacterAnimaFactory,
+    CharacterTechniqueFactory,
+    TechniqueFactory,
+)
+from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.cast_services import derive_cast_difficulty, request_technique_cast
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import PersonaFactory, SceneFactory
+from world.traits.factories import CheckSystemSetupFactory
+from world.vitals.models import CharacterVitals
 
 
 class TestDeriveCastDifficulty(TestCase):
@@ -66,3 +82,140 @@ class TestDeriveCastDifficulty(TestCase):
         technique = TechniqueFactory(intensity=1, damage_profile=False)
         technique.intensity = 0
         assert derive_cast_difficulty(technique) == 15
+
+
+def _grant(persona, technique) -> None:
+    """Grant a technique to the persona's CharacterSheet so the knows-check passes."""
+    CharacterTechniqueFactory(character=persona.character_sheet, technique=technique)
+
+
+def _benign_castable_technique() -> object:
+    """A non-hostile, standalone-castable technique (no power, no damage, has template)."""
+    return TechniqueFactory(
+        effect_type=BinaryEffectTypeFactory(),
+        damage_profile=False,
+        action_template=ActionTemplateFactory(),
+    )
+
+
+def _hostile_castable_technique() -> object:
+    """A hostile (damage) standalone-castable technique."""
+    # Default EffectTypeFactory has base_power=10 → auto-seeds a damage profile →
+    # is_technique_hostile() is True.
+    return TechniqueFactory(action_template=ActionTemplateFactory())
+
+
+class TestRequestTechniqueCastValidation(TestCase):
+    """request_technique_cast guards: must know the technique and it must be castable."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+
+    def test_unknown_technique_raises(self) -> None:
+        technique = _benign_castable_technique()  # not granted to the initiator
+        with self.assertRaises(ValidationError):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.initiator,
+                technique=technique,
+            )
+
+    def test_technique_without_action_template_raises(self) -> None:
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+        )
+        _grant(self.initiator, technique)
+        with self.assertRaises(ValidationError):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.initiator,
+                technique=technique,
+            )
+
+
+class TestRequestTechniqueCastRouting(TestCase):
+    """request_technique_cast routes self / benign-other / hostile-other correctly."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        room = create_object("typeclasses.rooms.Room", key="Cast Room", nohome=True)
+        cls.scene = SceneFactory(location=room)
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        # Anima + vitals so use_technique and combat seeding have real data.
+        CharacterAnimaFactory(
+            character=cls.initiator.character_sheet.character,
+            current=20,
+            maximum=30,
+        )
+        for persona in (cls.initiator, cls.target):
+            CharacterVitals.objects.create(
+                character_sheet=persona.character_sheet,
+                health=50,
+                max_health=50,
+                base_max_health=50,
+            )
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def test_self_cast_resolves_and_creates_outcome_pose(self) -> None:
+        """No target → RESOLVED request with a Narrator OUTCOME pose."""
+        technique = _benign_castable_technique()
+        _grant(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            technique=technique,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(cast.result)
+        self.assertIsNone(cast.encounter)
+        pose = cast.outcome_interaction
+        self.assertIsNotNone(pose)
+        self.assertEqual(pose.mode, InteractionMode.OUTCOME)
+        self.assertTrue(pose.persona.is_system)
+        self.assertEqual(cast.request.result_interaction, pose)
+
+    def test_benign_cast_at_other_pc_is_pending(self) -> None:
+        """Benign technique aimed at another PC → PENDING consent request."""
+        technique = _benign_castable_technique()
+        _grant(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            technique=technique,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.PENDING)
+        self.assertIsNone(cast.result)
+        self.assertIsNone(cast.encounter)
+
+    def test_hostile_cast_at_other_pc_seeds_encounter(self) -> None:
+        """Hostile technique aimed at another PC → combat encounter seeded (DECLARING)."""
+        technique = _hostile_castable_technique()
+        _grant(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            technique=technique,
+        )
+
+        self.assertIsNotNone(cast.encounter)
+        cast.encounter.refresh_from_db()
+        self.assertEqual(cast.encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
