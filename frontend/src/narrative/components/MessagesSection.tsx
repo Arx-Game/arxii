@@ -21,6 +21,8 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: 'visions', label: 'Visions' },
   { value: 'happenstance', label: 'Happenstance' },
   { value: 'system', label: 'System' },
+  { value: 'covenant', label: 'Covenant' },
+  { value: 'renown', label: 'Renown' },
 ];
 
 function isNarrativeCategory(value: FilterTab): value is NarrativeCategory {
