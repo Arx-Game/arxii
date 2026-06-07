@@ -1155,6 +1155,37 @@ def get_condition_modifier_total(
     return total
 
 
+def get_condition_modifier_breakdown(
+    character_sheet: "CharacterSheet",
+    modifier_target: "ModifierTarget",
+) -> list[tuple[str, int]]:
+    """Per-source sibling of get_condition_modifier_total (#639 power ledger).
+
+    Returns one (source_label, value) row per active-condition ConditionModifierEffect
+    that targets ``modifier_target`` — same walk/scaling as get_condition_modifier_total,
+    but attributed per condition instead of summed. ``source_label`` is the condition's
+    name. Staged conditions scale by current_stage.severity_multiplier (mirrors the total).
+    The sum of returned values MUST equal get_condition_modifier_total for the same inputs.
+    Empty list when no contributions.
+    """
+    target = character_sheet.character
+    rows: list[tuple[str, int]] = []
+
+    for instance in get_active_conditions(target):
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
+
+        for effect in effects:
+            value = effect.value
+            if instance.current_stage:
+                value = int(value * instance.current_stage.severity_multiplier)
+            rows.append((instance.condition.name, value))
+
+    return rows
+
+
 def get_capability_value(
     character_sheet: "CharacterSheet",
     capability: CapabilityType,
