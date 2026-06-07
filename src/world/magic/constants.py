@@ -209,6 +209,24 @@ class AffinityInteractionAggressor(models.TextChoices):
 ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME: str = "endure_hallowed_ground"
 
 
+class PowerStage(models.TextChoices):
+    BASE = "base", "Channeled intensity"
+    FLAT_MODIFIER = "flat_modifier", "Power modifier"
+    MULTIPLIER = "multiplier", "Power multiplier"
+    TERM = "term", "Power term"
+    ENVIRONMENT = "environment", "Environment"
+    REACTIVE = "reactive", "Pre-cast reactive edit"
+    COMBAT_PULL = "combat_pull", "Combat pull"
+    PENETRATION = "penetration", "Penetration vs resistance"
+    CLAMP = "clamp", "Floor / cap"
+
+
+class LedgerOp(models.TextChoices):
+    ADD = "add", "Add"
+    MULTIPLY = "multiply", "Multiply (percent)"
+    SET = "set", "Set"
+
+
 class InapplicabilityReason(models.TextChoices):
     """Stable enum of reasons a thread pull cannot apply to an action context.
 
