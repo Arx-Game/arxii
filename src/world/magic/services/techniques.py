@@ -304,7 +304,11 @@ def _derive_power(
         mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
         mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
         delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
-        names = [s.source_name for s in mult_breakdown.sources if s.source_name]
+        names = [
+            s.source_name
+            for s in mult_breakdown.sources
+            if s.source_name and not s.blocked_by_immunity
+        ]
         names += [name for name, _value in mult_condition_rows if name]
         label = ", ".join(names) if names else "power multipliers"
         builder.multiply(PowerStage.MULTIPLIER, label, delta)
