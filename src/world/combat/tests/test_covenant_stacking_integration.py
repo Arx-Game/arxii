@@ -38,9 +38,14 @@ class DuranceAndBattleStackingIntegrationTest(TestCase):
     def setUp(self) -> None:
         super().setUp()
 
-        # --- Durance covenant + engaged role (speed_rank=6, typical foot-soldier) ---
+        # --- Durance covenant + engaged role ---
+        # speed_rank=20 is deliberately SLOWER than NPC_SPEED_RANK (15). This makes the
+        # resolution-order assertion discriminating: if precedence ever regressed and the
+        # Durance role (not the Battle role) drove the participant, the PC would sort AFTER
+        # the NPC and the position check below would fail on its own — not only the
+        # covenant_role equality check.
         self.durance_cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
-        self.durance_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, speed_rank=6)
+        self.durance_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, speed_rank=20)
 
         # --- Battle covenant: risen (not dormant), STANDING ---
         self.battle_cov = CovenantFactory(
@@ -103,7 +108,9 @@ class DuranceAndBattleStackingIntegrationTest(TestCase):
         """The PC entry in get_resolution_order has the battle role; sorts ahead of a slow NPC."""
         participant = add_participant(self.encounter, self.sheet)
 
-        # Add a slow NPC so there is something to sort against (NPC_SPEED_RANK = 15).
+        # Add an NPC (NPC_SPEED_RANK = 15) that sits BETWEEN the battle role (1) and the
+        # durance role (20). The PC sorts first only because Battle precedence gives it
+        # speed_rank=1; a regression to the Durance role (20) would sort it last.
         npc = CombatOpponentFactory(encounter=self.encounter)
 
         order = get_resolution_order(self.encounter)
