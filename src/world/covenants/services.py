@@ -60,6 +60,18 @@ def create_covenant(
     if len(set(sheet_pks)) != len(sheet_pks):
         raise DuplicateFounderError
 
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import (  # noqa: PLC0415
+        BattleBindingNotAllowedError,
+        BattleBindingRequiredError,
+    )
+
+    if covenant_type == CovenantType.BATTLE:
+        if not battle_binding:
+            raise BattleBindingRequiredError
+    elif battle_binding:
+        raise BattleBindingNotAllowedError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,

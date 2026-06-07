@@ -68,3 +68,45 @@ class BattleCovenantModelTests(TestCase):
         )
         self.assertEqual(cov.battle_binding, BattleBinding.CAMPAIGN)
         self.assertFalse(cov.is_dormant)
+
+    def test_create_covenant_rejects_battle_without_binding(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.exceptions import BattleBindingRequiredError
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        founders = [
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+        ]
+        with self.assertRaises(BattleBindingRequiredError):
+            create_covenant(
+                name="Bindingless Battle",
+                covenant_type=CovenantType.BATTLE,
+                sworn_objective="x",
+                founders=founders,
+                battle_binding="",
+            )
+
+    def test_create_covenant_rejects_durance_with_binding(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.exceptions import BattleBindingNotAllowedError
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        founders = [
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+        ]
+        with self.assertRaises(BattleBindingNotAllowedError):
+            create_covenant(
+                name="Bound Durance",
+                covenant_type=CovenantType.DURANCE,
+                sworn_objective="x",
+                founders=founders,
+                battle_binding=BattleBinding.STANDING,
+            )
