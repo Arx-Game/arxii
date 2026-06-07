@@ -183,7 +183,21 @@ class PenetrationContestTests(TestCase):
         mock_pen.assert_not_called()
         self.assertEqual(result.power_ledger.total, 20)
 
-    # --- 5. Resistance applied once (not double-counted) --------------------
+    # --- 5. Overpenetration scales power up ---------------------------------
+
+    def test_overpenetration_scales_power_up(self) -> None:
+        """SL=3 → factor 1.50 → pct=+50 → power scaled up by 50%."""
+        resolver = _build_resolver(barrier_strength=5)
+        with patch("world.combat.services.perform_check") as mock_pen:
+            mock_pen.return_value = MagicMock(success_level=3)  # factor 1.50
+            result = resolver(power=20, ledger=_ledger(20))
+
+        pen_entries = [e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION]
+        self.assertEqual(len(pen_entries), 1)
+        self.assertEqual(pen_entries[0].amount, 50)
+        self.assertEqual(result.power_ledger.total, round(20 * 1.5))  # 30
+
+    # --- 6. Resistance applied once (not double-counted) --------------------
 
     def test_resistance_applied_once_after_partial_penetration(self) -> None:
         """A partial-penetration cast on a target that ALSO has damage-type
@@ -260,12 +274,8 @@ class PenetrationEndToEndTests(TestCase):
         wire_penetration_factors()
         wire_penetration_check_type()
         # CheckOutcome rows needed by force_check_outcome's forced-result path.
-        cls.outcome_partial = CheckOutcomeFactory(
-            name="E2E Partial Pen Success", success_level=0
-        )
-        cls.outcome_full = CheckOutcomeFactory(
-            name="E2E Full Pen Success", success_level=1
-        )
+        cls.outcome_partial = CheckOutcomeFactory(name="E2E Partial Pen Success", success_level=0)
+        cls.outcome_full = CheckOutcomeFactory(name="E2E Full Pen Success", success_level=1)
 
     def test_real_perform_check_produces_penetration_ledger_entry(self) -> None:
         """Run CombatTechniqueResolver against a warded opponent WITHOUT mocking
@@ -285,9 +295,7 @@ class PenetrationEndToEndTests(TestCase):
         with force_check_outcome(self.outcome_partial):
             result = resolver(power=20, ledger=_ledger(20))
 
-        pen_entries = [
-            e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION
-        ]
+        pen_entries = [e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION]
         # A graded outcome flowed through the real check pipeline and produced an entry.
         self.assertEqual(len(pen_entries), 1, "Expected exactly one PENETRATION ledger entry")
 
@@ -302,17 +310,13 @@ class PenetrationEndToEndTests(TestCase):
 
     def test_real_perform_check_bounce_zeroes_power(self) -> None:
         """SL < 0 (factor 0.00) through the real pipeline → bounce → total == 0."""
-        outcome_bounce = CheckOutcomeFactory(
-            name="E2E Bounce Pen Success", success_level=-1
-        )
+        outcome_bounce = CheckOutcomeFactory(name="E2E Bounce Pen Success", success_level=-1)
         resolver = _build_resolver(barrier_strength=30, base_power=20)
 
         with force_check_outcome(outcome_bounce):
             result = resolver(power=20, ledger=_ledger(20))
 
-        pen_entries = [
-            e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION
-        ]
+        pen_entries = [e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION]
         self.assertEqual(len(pen_entries), 1)
         self.assertEqual(pen_entries[0].source_label, "ward (bounced)")
         self.assertEqual(result.power_ledger.total, 0)
@@ -321,3 +325,28 @@ class PenetrationEndToEndTests(TestCase):
             result.power_ledger.total,
             result.power_ledger.entries[-1].running_total,
         )
+
+    def test_clean_full_penetration_records_entry_and_leaves_power_unchanged(self) -> None:
+        """SL=1 (factor 1.00) through the real pipeline → 'ward (penetrated)' entry,
+        total unchanged (== power), and damage is applied normally.
+
+        This distinguishes a warded-but-cleanly-penetrated cast from an unwarded
+        cast (the unopposed path records NO PENETRATION entry at all).
+        """
+        resolver = _build_resolver(barrier_strength=7, base_power=20)
+
+        with force_check_outcome(self.outcome_full):
+            result = resolver(power=20, ledger=_ledger(20))
+
+        pen_entries = [e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION]
+        self.assertEqual(len(pen_entries), 1, "Expected exactly one PENETRATION ledger entry")
+        self.assertEqual(pen_entries[0].source_label, "ward (penetrated)")
+        # Power is unchanged for a clean penetration.
+        self.assertEqual(result.power_ledger.total, 20)
+        # Ledger running-total invariant.
+        self.assertEqual(
+            result.power_ledger.total,
+            result.power_ledger.entries[-1].running_total,
+        )
+        # Damage is applied normally (cast was not bounced).
+        self.assertGreater(result.scaled_damage, 0)

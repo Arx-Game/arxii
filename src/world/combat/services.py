@@ -353,10 +353,14 @@ class CombatTechniqueResolver:
           the ledger unchanged and ``bounced=False``, rolls NO check, adds NO
           entry. Inert for every existing combat path (those targets carry no
           barrier) — a zero-power unwarded cast still flows to its base_damage.
-        - factor == 0 → the working bounced: a PENETRATION ``set 0`` entry and
+        - factor == 0 → bounce: a PENETRATION ``set 0`` entry and
           ``bounced=True`` (the caller short-circuits damage/conditions).
-        - else → a PENETRATION ``multiply`` entry by ``(factor - 1) * 100`` pct
-          and ``bounced=False``.
+        - pct == 0 (factor 1.00, clean penetration) → a PENETRATION ``set``
+          entry with the unchanged total and ``bounced=False``. Power is
+          unmodified, but the entry lets narration distinguish a
+          warded-but-cleanly-penetrated cast from an unwarded one.
+        - pct != 0 (partial or overpenetration) → a PENETRATION ``multiply``
+          entry by ``(factor - 1) * 100`` pct and ``bounced=False``.
         """
         from world.conditions.services import get_penetration_factor  # noqa: PLC0415
         from world.magic.constants import PowerStage  # noqa: PLC0415
@@ -378,6 +382,16 @@ class CombatTechniqueResolver:
         if factor == 0:
             return builder.set_value(PowerStage.PENETRATION, "ward (bounced)", 0).build(), True
         pct = round((float(factor) - 1.0) * 100)
+        if pct == 0:
+            # Clean full penetration: record the event without changing power so
+            # narration can distinguish a warded-but-cleanly-penetrated cast from
+            # an unwarded one (which records NO entry at all).
+            return (
+                builder.set_value(
+                    PowerStage.PENETRATION, "ward (penetrated)", combat_ledger.total
+                ).build(),
+                False,
+            )
         return builder.multiply(PowerStage.PENETRATION, "ward", pct).build(), False
 
     def __call__(self, *, power: int, ledger: PowerLedger) -> CombatTechniqueResolution:  # noqa: ARG002
