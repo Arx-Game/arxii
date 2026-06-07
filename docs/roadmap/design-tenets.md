@@ -224,6 +224,48 @@ Account-scoped FKs on IC surfaces collapse this boundary silently. See
 [#684](https://github.com/Arx-Game/arxii/issues/684) for the audit + sweep
 moving `ItemInstance.owner` from AccountDB to Persona.
 
+## Drama & immersion
+
+### Default to the narrative roll
+
+For any IC system, never shy away from a chance for drama. When a mechanic
+*can* be expressed as a narrative roll — a moment with visible stakes, a beat
+the player and the room would *feel* — default to making it one rather than a
+silent calculation. A quiet stat adjustment that could have been a dramatic
+beat is a missed opportunity, not a clean design.
+
+Lore-building rituals — telling, naming, founding, swearing, spreading a tale —
+are especially high-value: they turn a mechanic into a piece of the world the
+players author. When a system offers a natural hook for one, take it.
+
+The bounds: this never overrides the player-respect hard rules, frictionless-RP
+entry, or consent. Drama is opt-in and foreseeable (per "Risk is a conscious
+player choice") — never sprung on a player as a non-consented consequence.
+Within those bounds, lean in.
+
+## Designing systems
+
+### Walk every user's view, end to end
+
+A system isn't designed until it's been walked from the seat of *every* user it
+touches — the actor, the observers in the room, the target, the GM, the staff
+author. For each, narrate concretely: what do they see, how do they interact,
+what does it look like, how does it feel — at every step, from entry to result.
+
+This is the discipline that catches the missed step, the surface left unwired,
+and the assumption that turned out not to be what we wanted. A design described
+only as backend mechanics (models, formulas, multipliers) is half-finished; the
+screen-by-screen experience is the other half, and the two are designed
+together, not sequenced. If you can't narrate what a user sees at a step, that
+step isn't designed yet.
+
+**The frontend is where the game lives.** "What the user sees" means the React
+web client first — the primary interface, not a coat of paint on a MUD. Telnet
+compatibility is a goal we design *toward*, but it follows the web; it never
+leads. The completion bar for any player-facing feature is the web client: **if
+it isn't wired into the React frontend, it isn't implemented.** A green backend
+with no player-reachable web surface is an unfinished feature, not a done one.
+
 ---
 
 ## What's NOT here
