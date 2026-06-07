@@ -266,3 +266,20 @@ class BilateralRoleConflictError(RitualSessionError):
 class ParticipantCountError(RitualSessionError):
     user_message = "The number of participants does not satisfy this ritual's requirements."
     SAFE_MESSAGES = frozenset({user_message})
+
+
+# =============================================================================
+# Technique Builder exceptions (#537)
+# =============================================================================
+
+
+class TechniqueAuthoringNotPermitted(MagicError):
+    user_message = "You are not permitted to author a technique at that tier."
+
+
+class TechniqueBudgetExceeded(MagicError):
+    user_message = "This design exceeds the power budget for its tier."
+
+    def __init__(self, breakdown=None):
+        super().__init__(self.user_message)
+        self.breakdown = breakdown
