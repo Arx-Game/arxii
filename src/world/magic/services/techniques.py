@@ -12,7 +12,7 @@ from flows.events.payloads import (
     TechniqueCastPayload,
     TechniquePreCastPayload,
 )
-from world.magic.constants import PowerStage
+from world.magic.constants import AffinityInteractionKind, PowerStage
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
 from world.magic.services.resonance_environment import (
@@ -276,9 +276,6 @@ def _derive_power(
     Power-scoped contributions raise landed effect only; channeled intensity
     (anima/mishap/Soulfray) is untouched by construction.
     """
-    # environment stage wired in #639 Task 4
-    _ = environment
-
     from world.conditions.services import (  # noqa: PLC0415
         get_condition_modifier_breakdown,
         get_condition_modifier_total,
@@ -330,6 +327,20 @@ def _derive_power(
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
+
+    # --- ENVIRONMENT stage (#639 Task 4): a place's cast-time resonance reaction ---
+    # Only AMPLIFY (ALIGNED amplify) adds power here. Double-count guards:
+    #   - OPPOSED (REJECT/REPEL): NO power change — its penalty is the existing Step 10
+    #     backfire; subtracting power here would double-count the same opposition.
+    #   - ALIGNED persistent presence boon: applied as a ConditionInstance on move and
+    #     already flows through the FLAT/condition stage above; no entry here.
+    #   - CORRUPT: deferred; no entry.
+    if (
+        environment is not None
+        and environment.kind == AffinityInteractionKind.AMPLIFY
+        and environment.magnitude > 0
+    ):
+        builder.add(PowerStage.ENVIRONMENT, "resonance environment", environment.magnitude)
 
     return builder.clamp_floor().build()
 
@@ -470,8 +481,27 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
     effective_targets = targets or []
     caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+
+    # Evaluate the resonance-environment primitive ONCE per cast, before power
+    # derivation. The result feeds the ENVIRONMENT power-shift stage here AND is
+    # reused at Step 10 (backfire + defilement) — evaluate-once (#639/#722).
+    environment_effect: ResonanceEnvironmentEffect | None = None
+    room_profile = None
+    if caster_room is not None:
+        try:
+            room_profile = caster_room.room_profile
+        except RoomProfile.DoesNotExist:
+            room_profile = None
+        if room_profile is not None:
+            environment_effect = evaluate_resonance_environment(
+                caster=character, room=caster_room, technique=technique
+            )
+
     seed_ledger = _derive_power(
-        channeled_intensity=stats.intensity, technique=technique, character=character
+        channeled_intensity=stats.intensity,
+        technique=technique,
+        character=character,
+        environment=environment_effect,
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
@@ -587,37 +617,29 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         )
 
     # Step 10: Universal resonance-environment reaction (core magic-physics; no flow/trigger)
-    if sheet is not None and caster_room is not None:
-        try:
-            room_profile = caster_room.room_profile
-        except RoomProfile.DoesNotExist:
-            room_profile = None
-        if room_profile is not None:
-            # Evaluate the resonance-environment primitive ONCE per cast and
-            # feed it into both consumers — they read the same room state and
-            # re-evaluation costs ~15-21 redundant queries on a cascade-room
-            # cast (#722).
-            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+    # Reuses the hoisted environment_effect / room_profile computed before power
+    # derivation — evaluate_resonance_environment runs at most ONCE per cast (#639/#722).
+    # The sheet guard keeps backfire/defile gated to magically-active casters; when
+    # room_profile is None (no profile) this block stays inert exactly as before.
+    if sheet is not None and room_profile is not None and environment_effect is not None:
+        from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
 
-            primitive_effect = evaluate_resonance_environment(
-                caster=character, room=caster_room, technique=technique
-            )
-            resonance_environment_for_cast(
-                caster_sheet=sheet,
-                room_profile=room_profile,
-                technique=technique,
-                effect=primitive_effect,
-            )
-            # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
-            # degrades it, spreads its taint, and accrues caster->world corruption
-            # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
-            defile_place_for_cast(
-                caster_sheet=sheet,
-                room_profile=room_profile,
-                technique=technique,
-                technique_result=technique_result,
-                effect=primitive_effect,
-            )
+        resonance_environment_for_cast(
+            caster_sheet=sheet,
+            room_profile=room_profile,
+            technique=technique,
+            effect=environment_effect,
+        )
+        # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
+        # degrades it, spreads its taint, and accrues caster->world corruption
+        # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
+        defile_place_for_cast(
+            caster_sheet=sheet,
+            room_profile=room_profile,
+            technique=technique,
+            technique_result=technique_result,
+            effect=environment_effect,
+        )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:

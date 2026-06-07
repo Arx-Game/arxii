@@ -469,6 +469,147 @@ class PowerLedgerStructureTests(TestCase):
         self.assertIn(PowerStage.TERM, stages)
 
 
+class EnvironmentPowerStageTests(TestCase):
+    """The ENVIRONMENT power-shift stage (#639 Task 4): AMPLIFY-only, no double-count."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.technique = TechniqueFactory()
+
+    def _effect(self, *, valence, kind, magnitude):
+        from world.magic.constants import ResonanceDirection
+        from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
+
+        return ResonanceEnvironmentEffect(
+            valence=valence,
+            kind=kind,
+            direction=ResonanceDirection.ENVIRONMENT_DOMINANT,
+            magnitude=magnitude,
+            source_affinity=None,
+            environment_affinity=None,
+            interaction=None,
+            backfire_difficulty=0,
+        )
+
+    def test_amplify_adds_magnitude_as_single_environment_entry(self):
+        from world.magic.constants import (
+            AffinityInteractionKind,
+            LedgerOp,
+            PowerStage,
+            ResonanceValence,
+        )
+
+        magnitude = 4
+        baseline = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=None,
+        )
+        effect = self._effect(
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.AMPLIFY,
+            magnitude=magnitude,
+        )
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=effect,
+        )
+        env_entries = [e for e in ledger.entries if e.stage == PowerStage.ENVIRONMENT]
+        self.assertEqual(len(env_entries), 1)
+        self.assertEqual(env_entries[0].amount, magnitude)
+        self.assertEqual(env_entries[0].op, LedgerOp.ADD)
+        self.assertEqual(env_entries[0].source_label, "resonance environment")
+        self.assertEqual(ledger.total, baseline.total + magnitude)
+
+    def test_opposed_reject_adds_no_power(self):
+        """OPPOSED penalty lives in the Step-10 backfire; no power change here (no double-count)."""
+        from world.magic.constants import (
+            AffinityInteractionKind,
+            PowerStage,
+            ResonanceValence,
+        )
+
+        baseline = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=None,
+        )
+        effect = self._effect(
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.REJECT,
+            magnitude=4,
+        )
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=effect,
+        )
+        env_entries = [e for e in ledger.entries if e.stage == PowerStage.ENVIRONMENT]
+        self.assertEqual(env_entries, [])
+        self.assertEqual(ledger.total, baseline.total)
+
+    def test_aligned_non_amplify_kind_does_not_double_count(self):
+        """ALIGNED presence boon flows through the FLAT/condition stage; no ENVIRONMENT entry."""
+        from world.magic.constants import PowerStage, ResonanceValence
+
+        baseline = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=None,
+        )
+        # ALIGNED valence but kind is "" (inert/non-AMPLIFY) — must not add power here.
+        effect = self._effect(valence=ResonanceValence.ALIGNED, kind="", magnitude=4)
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=effect,
+        )
+        env_entries = [e for e in ledger.entries if e.stage == PowerStage.ENVIRONMENT]
+        self.assertEqual(env_entries, [])
+        self.assertEqual(ledger.total, baseline.total)
+
+    def test_none_environment_adds_no_entry(self):
+        from world.magic.constants import PowerStage
+
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=None,
+        )
+        env_entries = [e for e in ledger.entries if e.stage == PowerStage.ENVIRONMENT]
+        self.assertEqual(env_entries, [])
+
+    def test_amplify_zero_magnitude_adds_no_entry(self):
+        from world.magic.constants import (
+            AffinityInteractionKind,
+            PowerStage,
+            ResonanceValence,
+        )
+
+        effect = self._effect(
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.AMPLIFY,
+            magnitude=0,
+        )
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=self.technique,
+            character=self.character,
+            environment=effect,
+        )
+        env_entries = [e for e in ledger.entries if e.stage == PowerStage.ENVIRONMENT]
+        self.assertEqual(env_entries, [])
+
+
 class ImmunityBlockedFlatSourceTests(TestCase):
     """Immunity-blocked negative sources must be excluded from FLAT stage (#639 fidelity).
 
