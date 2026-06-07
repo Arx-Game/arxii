@@ -47,3 +47,28 @@ class PowerLedgerBuilderTests(SimpleTestCase):
         self.assertEqual(extended.total, 150)
         self.assertEqual(len(extended.entries), 3)
         self.assertEqual(extended.entries[-1].running_total, 150)
+
+    def test_clamp_floor_on_negative_total(self):
+        b = PowerLedgerBuilder(base=100, base_label="channeled")
+        b.add(PowerStage.FLAT_MODIFIER, "big debuff", -150)
+        ledger = b.clamp_floor().build()
+        self.assertEqual(ledger.total, 0)
+        self.assertEqual(ledger.entries[-1].stage, PowerStage.CLAMP)
+        self.assertEqual(ledger.entries[-1].op, LedgerOp.SET)
+        self.assertEqual(ledger.entries[-1].running_total, 0)
+
+    def test_build_floors_and_records_clamp_without_explicit_call(self):
+        b = PowerLedgerBuilder(base=100, base_label="channeled")
+        b.add(PowerStage.FLAT_MODIFIER, "big debuff", -150)
+        ledger = b.build()  # no explicit clamp_floor()
+        self.assertEqual(ledger.total, 0)
+        self.assertEqual(ledger.entries[-1].running_total, ledger.total)  # invariant holds
+        self.assertEqual(ledger.entries[-1].stage, PowerStage.CLAMP)
+
+    def test_negative_multiply_dampens(self):
+        b = PowerLedgerBuilder(base=100, base_label="channeled")
+        self.assertEqual(b.multiply(PowerStage.MULTIPLIER, "dampener", -50).build().total, 50)
+
+    def test_set_value_positive_cap(self):
+        b = PowerLedgerBuilder(base=100, base_label="channeled")
+        self.assertEqual(b.set_value(PowerStage.CLAMP, "hard cap", 200).build().total, 200)

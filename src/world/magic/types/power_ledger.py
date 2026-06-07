@@ -9,9 +9,9 @@ from world.magic.constants import LedgerOp, PowerStage
 
 @dataclass(frozen=True)
 class PowerLedgerEntry:
-    stage: str  # PowerStage value
+    stage: PowerStage
     source_label: str
-    op: str  # LedgerOp value
+    op: LedgerOp
     amount: int  # signed delta (add) | whole percent (multiply) | target value (set)
     running_total: int
 
@@ -63,11 +63,15 @@ class PowerLedgerBuilder:
         )
         return self
 
-    def clamp_floor(self) -> PowerLedgerBuilder:
+    def _apply_floor(self) -> None:
         if self._total < 0:
             self._total = 0
             self._entries.append(PowerLedgerEntry(PowerStage.CLAMP, "floor", LedgerOp.SET, 0, 0))
+
+    def clamp_floor(self) -> PowerLedgerBuilder:
+        self._apply_floor()
         return self
 
     def build(self) -> PowerLedger:
-        return PowerLedger(entries=tuple(self._entries), total=max(0, self._total))
+        self._apply_floor()
+        return PowerLedger(entries=tuple(self._entries), total=self._total)
