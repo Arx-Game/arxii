@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         DamageType,
     )
     from world.magic.models import Technique
+    from world.magic.types.power_ledger import PowerLedger
 
 
 @dataclass
@@ -193,6 +194,7 @@ class TechniquePreCastPayload:
     targets: list[Character | ObjectDB]
     intensity: int
     power: int
+    ledger: PowerLedger
 
 
 @dataclass(frozen=True)
@@ -202,6 +204,7 @@ class TechniqueCastPayload:
     targets: list[Character | ObjectDB]
     intensity: int
     power: int
+    ledger: PowerLedger
     # `result` is the return of a caller-provided ``resolve_fn: Callable[..., Any]``;
     # its shape is defined by the caller, not this layer. Intentionally opaque.
     result: object
@@ -212,6 +215,7 @@ class TechniqueAffectedPayload:
     caster: Character
     technique: Technique
     power: int
+    ledger: PowerLedger
     target: Character | ObjectDB
     effect: object
 

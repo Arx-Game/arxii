@@ -12,6 +12,7 @@ from flows.events.payloads import (
     TechniqueCastPayload,
     TechniquePreCastPayload,
 )
+from world.magic.constants import AffinityInteractionKind, PowerStage
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
 from world.magic.services.resonance_environment import (
@@ -31,6 +32,7 @@ from world.magic.types import (
     RuntimeTechniqueStats,
     TechniqueUseResult,
 )
+from world.magic.types.power_ledger import PowerLedger, PowerLedgerBuilder
 from world.mechanics.constants import (
     TECHNIQUE_STAT_CATEGORY_NAME,
     TECHNIQUE_STAT_CONTROL,
@@ -47,6 +49,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.magic.models import Technique
     from world.magic.services.power_terms import ApplicableThread
+    from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.mechanics.models import ModifierTarget
 
 
@@ -185,54 +188,29 @@ def _build_resonance_involvements(
     )
 
 
-def _derive_power(
-    *,
-    channeled_intensity: int,
-    technique: Technique | None,
-    character: ObjectDB | None,
-    applicable_threads: Sequence[ApplicableThread] | None = None,
-) -> int:
-    """Derive effective power. NEVER stored — recomputed each cast.
+def _power_term_label(provider: Callable[..., int]) -> str:
+    """Human-readable ledger label for a power-term provider function.
 
-    Two accumulation passes feed the final result:
-
-    **Pass 1 — CharacterModifier / condition modifiers:**
-    Each matched power-category target contributes both its CharacterModifier rows
-    (#634) and its active-condition effects (#636), summed together. Targets named
-    ``power_multiplier`` contribute a percent-delta applied multiplicatively to
-    channeled intensity; all other power targets are flat additive bonuses::
-
-        flat   = Σ (additive power contributions)
-        delta  = Σ (power_multiplier percent-delta contributions)   # 0 when none
-        scaled = round(channeled_intensity * (100 + delta) / 100)
-
-    **Pass 2 — power term providers (#637):**
-    Each registered provider in ``services.power_terms`` receives a
-    ``PowerTermContext`` and returns a flat int. Providers own their own config
-    and return 0 when unconfigured (opt-in per term)::
-
-        power = max(0, scaled + flat + Σ provider(ctx))
-
-    A target is matched when it passes both scope gates (AND semantics; null = global):
-    - Resonance scope: target_resonance is None, or matches a technique gift resonance.
-    - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
-    Untyped damage profiles (damage_type=None) never count as a damage-type match.
-    Power-scoped contributions raise landed effect only; channeled intensity
-    (anima/mishap/Soulfray) is untouched by construction.
+    ``level_power_term`` → "level power"; falls back to the cleaned name for
+    any provider that does not follow the ``*_term`` convention.
     """
-    from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
-    from world.magic.services.power_terms import (  # noqa: PLC0415
-        PowerTermContext,
-        get_power_term_providers,
-    )
-    from world.mechanics.constants import POWER_MULTIPLIER_TARGET_NAME  # noqa: PLC0415
-    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+    name = provider.__name__
+    name = name.removesuffix("_term")
+    return name.replace("_", " ")
 
-    if character is None:
-        return max(0, channeled_intensity)
-    sheet = _get_character_sheet(character)
-    if sheet is None:
-        return max(0, channeled_intensity)
+
+def _partition_power_targets(
+    *,
+    technique: Technique | None,
+) -> tuple[ModifierTarget | None, list[ModifierTarget]]:
+    """Split scope-matched power targets into (multiplier_target, flat_targets).
+
+    A target matches when it passes both scope gates (AND semantics; null = global):
+    - Resonance: target_resonance is None, or matches a technique gift resonance.
+    - Damage-type: target_damage_type is None, or matches a technique damage profile.
+    Untyped damage profiles (damage_type=None) never count as a damage-type match.
+    """
+    from world.mechanics.constants import POWER_MULTIPLIER_TARGET_NAME  # noqa: PLC0415
 
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
@@ -244,8 +222,8 @@ def _derive_power(
             if p.damage_type_id is not None
         }
 
-    flat = 0
-    multiplier_delta = 0
+    multiplier_target: ModifierTarget | None = None
+    flat_targets: list[ModifierTarget] = []
     for target in _get_power_targets():
         resonance_matches = (
             target.target_resonance_id is None
@@ -255,25 +233,116 @@ def _derive_power(
             target.target_damage_type_id is None
             or target.target_damage_type_id in technique_damage_type_ids
         )
-        if resonance_matches and damage_type_matches:
-            contribution = get_modifier_total(sheet, target) + get_condition_modifier_total(
-                sheet, target
-            )
-            if target.name == POWER_MULTIPLIER_TARGET_NAME:
-                multiplier_delta += contribution
-            else:
-                flat += contribution
+        if not (resonance_matches and damage_type_matches):
+            continue
+        if target.name == POWER_MULTIPLIER_TARGET_NAME:
+            multiplier_target = target
+        else:
+            flat_targets.append(target)
+    return multiplier_target, flat_targets
 
-    scaled = round(channeled_intensity * (100 + multiplier_delta) / 100)
 
+def _derive_power(
+    *,
+    channeled_intensity: int,
+    technique: Technique | None,
+    character: ObjectDB | None,
+    applicable_threads: Sequence[ApplicableThread] | None = None,
+    environment: ResonanceEnvironmentEffect | None = None,
+) -> PowerLedger:
+    """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
+
+    The returned :class:`PowerLedger` records every contribution as an entry; its
+    ``total`` is the effective power (floored at 0). The numerics are identical to
+    the prior int-returning implementation::
+
+        flat   = Σ (additive power contributions)
+        delta  = Σ (power_multiplier percent-delta contributions)   # 0 when none
+        scaled = round(channeled_intensity * (100 + delta) / 100)
+        power  = max(0, scaled + flat + Σ provider(ctx))
+
+    **Stage ordering vs. display ordering.** The multiplier mathematically applies
+    to the BASE channeled intensity ONLY (never to flats or terms), so to reproduce
+    the single-round ``round(base * (100 + delta) / 100)`` exactly we apply the
+    MULTIPLIER stage FIRST (one aggregate call, never per-source — per-source
+    ``multiply`` would round repeatedly and drift), then per-source FLAT adds, then
+    TERM adds. The ledger therefore *displays* MULTIPLIER before FLAT; this is
+    intentional and required for numeric fidelity.
+
+    A target is matched when it passes both scope gates (AND semantics; null = global):
+    - Resonance scope: target_resonance is None, or matches a technique gift resonance.
+    - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
+    Untyped damage profiles (damage_type=None) never count as a damage-type match.
+    Power-scoped contributions raise landed effect only; channeled intensity
+    (anima/mishap/Soulfray) is untouched by construction.
+    """
+    from world.conditions.services import (  # noqa: PLC0415
+        get_condition_modifier_breakdown,
+        get_condition_modifier_total,
+    )
+    from world.magic.services.power_terms import (  # noqa: PLC0415
+        PowerTermContext,
+        get_power_term_providers,
+    )
+    from world.mechanics.services import get_modifier_breakdown  # noqa: PLC0415
+
+    if character is None:
+        return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
+
+    multiplier_target, flat_targets = _partition_power_targets(technique=technique)
+
+    builder = PowerLedgerBuilder(base=channeled_intensity, base_label="channeled intensity")
+
+    # --- MULTIPLIER stage (applies to base only; single aggregate call) ---
+    if multiplier_target is not None:
+        mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
+        mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
+        delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
+        names = [
+            s.source_name
+            for s in mult_breakdown.sources
+            if s.source_name and not s.blocked_by_immunity
+        ]
+        names += [name for name, _value in mult_condition_rows if name]
+        label = ", ".join(names) if names else "power multipliers"
+        builder.multiply(PowerStage.MULTIPLIER, label, delta)
+
+    # --- FLAT stage (per source; addition does not round) ---
+    for target in flat_targets:
+        for source in get_modifier_breakdown(sheet, target).sources:
+            if source.blocked_by_immunity:
+                continue
+            builder.add(PowerStage.FLAT_MODIFIER, source.source_name, source.final_value)
+        for name, value in get_condition_modifier_breakdown(sheet, target):
+            builder.add(PowerStage.FLAT_MODIFIER, name, value)
+
+    # --- TERM stage (per provider) ---
     ctx = PowerTermContext(
         sheet=sheet,
         technique=technique,
         applicable_threads=applicable_threads or [],
     )
-    term_total = sum(provider(ctx) for provider in get_power_term_providers())
+    for provider in get_power_term_providers():
+        builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
 
-    return max(0, scaled + flat + term_total)
+    # --- ENVIRONMENT stage (#639 Task 4): a place's cast-time resonance reaction ---
+    # Only AMPLIFY (ALIGNED amplify) adds power here. Double-count guards:
+    #   - OPPOSED (REJECT/REPEL): NO power change — its penalty is the existing Step 10
+    #     backfire; subtracting power here would double-count the same opposition.
+    #   - ALIGNED persistent presence boon: applied as a ConditionInstance on move and
+    #     already flows through the FLAT/condition stage above; no entry here.
+    #   - CORRUPT: deferred; no entry.
+    if (
+        environment is not None
+        and environment.kind == AffinityInteractionKind.AMPLIFY
+        and environment.magnitude > 0
+    ):
+        builder.add(PowerStage.ENVIRONMENT, "resonance environment", environment.magnitude)
+
+    return builder.clamp_floor().build()
 
 
 def get_runtime_technique_stats(
@@ -412,15 +481,35 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
     effective_targets = targets or []
     caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
-    seed_power = _derive_power(
-        channeled_intensity=stats.intensity, technique=technique, character=character
+
+    # Evaluate the resonance-environment primitive ONCE per cast, before power
+    # derivation. The result feeds the ENVIRONMENT power-shift stage here AND is
+    # reused at Step 10 (backfire + defilement) — evaluate-once (#639/#722).
+    environment_effect: ResonanceEnvironmentEffect | None = None
+    room_profile = None
+    if caster_room is not None:
+        try:
+            room_profile = caster_room.room_profile
+        except RoomProfile.DoesNotExist:
+            room_profile = None
+        if room_profile is not None:
+            environment_effect = evaluate_resonance_environment(
+                caster=character, room=caster_room, technique=technique
+            )
+
+    seed_ledger = _derive_power(
+        channeled_intensity=stats.intensity,
+        technique=technique,
+        character=character,
+        environment=environment_effect,
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
         technique=technique,
         targets=effective_targets,
         intensity=stats.intensity,
-        power=seed_power,
+        power=seed_ledger.total,
+        ledger=seed_ledger,
     )
     if caster_room is not None:
         stack = emit_event(
@@ -440,11 +529,25 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     # and the post-hook value when the emit path ran.
     effective_power = pre_payload.power
 
+    # Stage 6 (REACTIVE): if a pre-cast MODIFY_PAYLOAD hook edited payload.power,
+    # reconcile the ledger so its running total matches the post-hook power. The
+    # signed delta becomes a single REACTIVE entry.
+    effective_ledger = pre_payload.ledger
+    if pre_payload.power != effective_ledger.total:
+        effective_ledger = (
+            PowerLedgerBuilder.from_ledger(effective_ledger)
+            .add(PowerStage.REACTIVE, "pre-cast edit", pre_payload.power - effective_ledger.total)
+            .build()
+        )
+    # Ledger is the source of truth: keep effective_power == effective_ledger.total so a
+    # hook that drives power below 0 yields a floored (>=0) value, never a negative power.
+    effective_power = effective_ledger.total
+
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)
 
     # Steps 5 + 6: Resolution
-    resolution_result = resolve_fn(power=effective_power)
+    resolution_result = resolve_fn(power=effective_power, ledger=effective_ledger)
 
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
@@ -529,37 +632,29 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         )
 
     # Step 10: Universal resonance-environment reaction (core magic-physics; no flow/trigger)
-    if sheet is not None and caster_room is not None:
-        try:
-            room_profile = caster_room.room_profile
-        except RoomProfile.DoesNotExist:
-            room_profile = None
-        if room_profile is not None:
-            # Evaluate the resonance-environment primitive ONCE per cast and
-            # feed it into both consumers — they read the same room state and
-            # re-evaluation costs ~15-21 redundant queries on a cascade-room
-            # cast (#722).
-            from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+    # Reuses the hoisted environment_effect / room_profile computed before power
+    # derivation — evaluate_resonance_environment runs at most ONCE per cast (#639/#722).
+    # The sheet guard keeps backfire/defile gated to magically-active casters; when
+    # room_profile is None (no profile) this block stays inert exactly as before.
+    if sheet is not None and room_profile is not None and environment_effect is not None:
+        from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
 
-            primitive_effect = evaluate_resonance_environment(
-                caster=character, room=caster_room, technique=technique
-            )
-            resonance_environment_for_cast(
-                caster_sheet=sheet,
-                room_profile=room_profile,
-                technique=technique,
-                effect=primitive_effect,
-            )
-            # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
-            # degrades it, spreads its taint, and accrues caster->world corruption
-            # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
-            defile_place_for_cast(
-                caster_sheet=sheet,
-                room_profile=room_profile,
-                technique=technique,
-                technique_result=technique_result,
-                effect=primitive_effect,
-            )
+        resonance_environment_for_cast(
+            caster_sheet=sheet,
+            room_profile=room_profile,
+            technique=technique,
+            effect=environment_effect,
+        )
+        # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
+        # degrades it, spreads its taint, and accrues caster->world corruption
+        # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
+        defile_place_for_cast(
+            caster_sheet=sheet,
+            room_profile=room_profile,
+            technique=technique,
+            technique_result=technique_result,
+            effect=environment_effect,
+        )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:
@@ -571,6 +666,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
                 targets=effective_targets,
                 intensity=stats.intensity,
                 power=effective_power,
+                ledger=effective_ledger,
                 result=resolution_result,
             ),
             location=caster_room,
@@ -587,6 +683,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
                     technique=technique,
                     target=affected_target,
                     power=effective_power,
+                    ledger=effective_ledger,
                     effect=resolution_result,
                 ),
                 location=target_room,

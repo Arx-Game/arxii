@@ -28,7 +28,9 @@ class DerivePowerTests(TestCase):
     def test_derive_power_equals_channeled_intensity_in_pr1(self) -> None:
         from world.magic.services.techniques import _derive_power
 
-        self.assertEqual(_derive_power(channeled_intensity=7, technique=None, character=None), 7)
+        self.assertEqual(
+            _derive_power(channeled_intensity=7, technique=None, character=None).total, 7
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +93,7 @@ class PreCastPowerReadBackTests(TestCase):
 
         captured: dict[str, object] = {}
 
-        def spy(*, power: int) -> SimpleNamespace:
+        def spy(*, power: int, ledger: object = None) -> SimpleNamespace:
             captured["power"] = power
             return SimpleNamespace(check_result=None)
 
@@ -108,7 +110,7 @@ class PreCastPowerReadBackTests(TestCase):
         """resolve_fn must be called with power as a keyword argument."""
         captured: dict[str, object] = {}
 
-        def spy(*, power: int) -> SimpleNamespace:
+        def spy(*, power: int, ledger: object = None) -> SimpleNamespace:
             captured["power"] = power
             return SimpleNamespace(check_result=None)
 
@@ -156,7 +158,7 @@ class PreCastModifyPowerInvariantTests(TestCase):
             )
             character.trigger_handler._populated = False
 
-        def spy(*, power: int) -> SimpleNamespace:
+        def spy(*, power: int, ledger: object = None) -> SimpleNamespace:
             return SimpleNamespace(check_result=None)
 
         result = use_technique(
@@ -429,7 +431,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: mock_resolution,  # noqa: ARG005
             confirm_soulfray_risk=True,
         )
 
@@ -480,7 +482,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: mock_resolution,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: mock_resolution,  # noqa: ARG005
             confirm_soulfray_risk=True,
         )
 

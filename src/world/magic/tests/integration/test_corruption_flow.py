@@ -468,7 +468,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         result = use_technique(
             character=sheet.character,
             technique=technique,
-            resolve_fn=lambda *, power: None,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
         )
 
         # Summary is attached to the result
@@ -503,7 +503,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         result = use_technique(
             character=sheet.character,
             technique=technique,
-            resolve_fn=lambda *, power: None,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
         )
 
         # Summary is still attached (orchestrator ran, just skipped Celestial)
@@ -548,7 +548,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         result = use_technique(
             character=sheet.character,
             technique=technique,
-            resolve_fn=lambda *, power: None,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
         )
 
         assert result.corruption_summary is not None
@@ -602,7 +602,7 @@ class FullCastPipelineCorruptionTests(TestCase):
             use_technique(
                 character=sheet.character,
                 technique=technique,
-                resolve_fn=lambda *, power: None,  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
             )
 
         assert EventName.CORRUPTION_WARNING in emitted_event_names
@@ -622,7 +622,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         result = use_technique(
             character=character,
             technique=technique,
-            resolve_fn=lambda *, power: None,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
         )
 
         # Cast succeeded

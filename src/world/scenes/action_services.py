@@ -328,7 +328,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     technique_result = use_technique(
         character=character,
         technique=technique,
-        resolve_fn=lambda *, power: start_action_resolution(  # noqa: ARG005
+        resolve_fn=lambda *, power, ledger: start_action_resolution(  # noqa: ARG005
             character=character,
             template=action_template,
             target_difficulty=difficulty,

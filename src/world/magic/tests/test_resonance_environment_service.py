@@ -895,7 +895,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             result = use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
             )
 
         # use_technique should complete successfully
@@ -932,7 +932,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
         )
 
         self.assertTrue(result.confirmed)
@@ -943,16 +943,17 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         )
 
     def test_step10_evaluates_resonance_environment_exactly_once(self) -> None:
-        """#722 regression guard: Step 10 must evaluate the primitive ONCE per cast.
+        """#722/#639 regression guard: evaluate the primitive ONCE per cast.
 
-        The orchestrator computes ``evaluate_resonance_environment`` and passes
-        the result to BOTH ``resonance_environment_for_cast`` and
-        ``defile_place_for_cast`` via their ``effect=`` kwarg, so both
-        consumers go through ``_resolve_effect`` and short-circuit instead of
-        re-evaluating. A future refactor that re-introduces a second
-        evaluation path (dropping the kwarg, or calling
-        ``evaluate_resonance_environment`` again inside a consumer) would
-        silently undo the #722 perf win — this test pins the call count.
+        The orchestrator computes ``evaluate_resonance_environment`` once — hoisted
+        before power derivation (#639 Task 4) so its magnitude can feed the
+        ENVIRONMENT power-shift stage — and reuses the SAME result for BOTH
+        ``resonance_environment_for_cast`` and ``defile_place_for_cast`` via their
+        ``effect=`` kwarg at Step 10, so both consumers go through
+        ``_resolve_effect`` and short-circuit instead of re-evaluating. A future
+        refactor that re-introduces a second evaluation path (dropping the kwarg,
+        re-evaluating in a consumer, or evaluating separately for derivation and
+        Step 10) would silently undo the perf win — this test pins the call count.
         """
         check_result = _make_check_result(self.outcome_failure)
         with (
@@ -968,7 +969,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
             )
 
         # The orchestrator (techniques.py Step 10) calls it once, and feeds the

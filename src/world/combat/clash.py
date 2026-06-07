@@ -221,7 +221,8 @@ def commit_to_clash(  # noqa: PLR0913
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
-    def resolve_fn(*, power: int) -> object:  # noqa: ARG001
+    # clash check is strain-driven; the power ledger is ledger-independent here.
+    def resolve_fn(*, power: int, ledger: object) -> object:  # noqa: ARG001
         return perform_check(
             objectdb,
             check_type,

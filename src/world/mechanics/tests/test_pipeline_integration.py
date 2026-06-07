@@ -925,7 +925,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             is_revealed=True,
         )
 
-    def _resolve_challenge(self, *, power: int) -> object:  # noqa: ARG002
+    def _resolve_challenge(self, *, power: int, ledger: object = None) -> object:  # noqa: ARG002
         """Helper that calls resolve_challenge with mocked check."""
         sources = get_capability_sources_for_character(self.character)
         gen_source = next(s for s in sources if s.capability_name == "generation")
@@ -1056,7 +1056,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             use_technique(
                 character=self.character,
                 technique=controlled_technique,
-                resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             )
             mock_pool.assert_not_called()
 
@@ -1067,7 +1067,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.flow_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
         )
 
         assert result.anima_cost.base_cost == 8
@@ -1586,7 +1586,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
         )
 
         assert result.soulfray_result is None
@@ -1620,7 +1620,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
         )
 
         assert result.soulfray_result is not None
@@ -1650,7 +1650,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
         )
 
         # No warning was raised (no pre-existing Soulfray condition)
@@ -1677,7 +1677,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             confirm_soulfray_risk=False,
         )
 
@@ -1718,7 +1718,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             confirm_soulfray_risk=True,
         )
 
@@ -1757,7 +1757,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
             result = use_technique(
                 character=self.character,
                 technique=self.soulfray_technique,
-                resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
                 confirm_soulfray_risk=True,
             )
 
@@ -1816,7 +1816,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.soulfray_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             confirm_soulfray_risk=True,
             check_result=botch_result,
         )
@@ -1859,7 +1859,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.wild_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             check_result=check_result,
         )
 
@@ -1914,7 +1914,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         result = use_technique(
             character=self.character,
             technique=self.wild_technique,
-            resolve_fn=lambda *, power: "ok",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "ok",  # noqa: ARG005
             confirm_soulfray_risk=True,
             check_result=check_result,
         )

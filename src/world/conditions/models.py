@@ -1347,3 +1347,32 @@ class DamageSuccessLevelMultiplier(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         suffix = f" — {self.label}" if self.label else ""
         return f"SL ≥ {self.min_success_level}: ×{self.multiplier}{suffix}"
+
+
+class PenetrationOutcomeFactor(NaturalKeyMixin, SharedMemoryModel):
+    """Authored success-level → power factor for the penetration contest (#639).
+
+    A working that targets a warded opponent rolls a penetration check against
+    the target's ``CombatOpponent.barrier_strength``. The check's success level
+    selects a factor that SCALES the (already-derived) power before it enters
+    the unchanged damage/condition path. A ``factor`` of ``0.00`` means the
+    working "bounced off the ward" (zero effective power). Mirrors
+    :class:`DamageSuccessLevelMultiplier`: the resolver picks the highest
+    authored row whose ``min_success_level`` is ≤ the actual SL.
+    """
+
+    min_success_level = models.IntegerField(unique=True)
+    factor = models.DecimalField(max_digits=4, decimal_places=2)
+    label = models.CharField(max_length=64, blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["min_success_level"]
+
+    class Meta:
+        ordering = ["-min_success_level"]
+
+    def __str__(self) -> str:
+        suffix = f" — {self.label}" if self.label else ""
+        return f"SL ≥ {self.min_success_level}: ×{self.factor}{suffix}"

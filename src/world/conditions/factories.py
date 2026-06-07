@@ -36,6 +36,7 @@ from world.conditions.models import (
     ConditionTemplate,
     DamageSuccessLevelMultiplier,
     DamageType,
+    PenetrationOutcomeFactor,
     TreatmentTemplate,
 )
 
@@ -471,3 +472,40 @@ class OathboundResolveConditionFactory(ConditionTemplateFactory):
     # NOT NULL; keep the parent's default of 3 (irrelevant at runtime).
     is_stackable = False
     can_be_dispelled = False
+
+
+class PenetrationOutcomeFactorFactory(DjangoModelFactory):
+    class Meta:
+        model = PenetrationOutcomeFactor
+        django_get_or_create = ("min_success_level",)
+
+    min_success_level = 1
+    factor = Decimal("1.00")
+    label = "Penetrated"
+
+
+def wire_penetration_factors() -> list[PenetrationOutcomeFactor]:
+    """Author the default penetration ladder (#639).
+
+    Small, data-driven mapping from penetration-check success level to a
+    power factor. Any failure (SL ≤ -1) bounces off the ward (factor 0); SL 0
+    partially penetrates (half power); SL ≥ 1 fully penetrates; SL ≥ 3
+    over-penetrates (a modest overpenetration bonus). The bounce tier sits at
+    a low sentinel threshold so even a deep failure bounces rather than
+    falling through to the full-power safety default. Idempotent via
+    ``django_get_or_create``.
+    """
+    return [
+        PenetrationOutcomeFactorFactory(
+            min_success_level=-99, factor=Decimal("0.00"), label="Bounced"
+        ),
+        PenetrationOutcomeFactorFactory(
+            min_success_level=0, factor=Decimal("0.50"), label="Partial"
+        ),
+        PenetrationOutcomeFactorFactory(
+            min_success_level=1, factor=Decimal("1.00"), label="Penetrated"
+        ),
+        PenetrationOutcomeFactorFactory(
+            min_success_level=3, factor=Decimal("1.50"), label="Overpenetrated"
+        ),
+    ]

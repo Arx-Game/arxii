@@ -26,6 +26,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
     )
     from world.combat.types import ActionOutcome
+    from world.magic.types.power_ledger import PowerLedger
 
 
 def create_action_interaction(
@@ -118,12 +119,79 @@ def render_clash_contribution_label(contribution: ClashContribution) -> str:
     return f"{technique.name} → {flavor} vs {opponent_name}"
 
 
+def _power_outcome_clause(power_ledger: PowerLedger | None) -> str:
+    """Return a short, dramatic prose clause describing the ledger’s notable event.
+
+    Inspects PENETRATION and ENVIRONMENT stages in priority order:
+
+    1. Bounce (PENETRATION SET to 0) — the ward entirely turned the working aside.
+    2. Partial bleed (PENETRATION MULTIPLY with a negative percent) — the ward
+       absorbed much of the force but the working still landed.
+    3. Clean penetration (PENETRATION SET to a positive value, label
+       "ward (penetrated)") — the working tore cleanly through the ward.
+    4. Environment amplification (ENVIRONMENT ADD with a positive amount) —
+       a resonant node swelled the working’s power.
+
+    Returns ``""`` when none of these cases apply (plain unwarded, non-magic, or
+    combo path). Only one clause is returned — priorities run top to bottom.
+    """
+    if power_ledger is None:
+        return ""
+
+    from world.magic.constants import LedgerOp, PowerStage  # noqa: PLC0415
+
+    for entry in power_ledger.entries:
+        if entry.stage != PowerStage.PENETRATION:
+            continue
+        # Bounce: SET to 0 (label "ward (bounced)")
+        if entry.op == LedgerOp.SET and entry.amount == 0:
+            return "— the ward turns it aside"
+        # Partial: MULTIPLY with negative percent (ward reduced power)
+        if entry.op == LedgerOp.MULTIPLY and entry.amount < 0:
+            return "— the ward bleeds off much of its force"
+        # Clean / over penetration: SET to positive value (label "ward (penetrated)")
+        # or MULTIPLY with a positive pct (overpenetration amplified by the bounce factor).
+        # Both are "tore through" — collapse into one condition.
+        if entry.amount > 0:
+            return "— it tears through the ward"
+
+    # Environment amplification: ENVIRONMENT ADD with positive amount
+    for entry in power_ledger.entries:
+        if entry.stage == PowerStage.ENVIRONMENT and entry.op == LedgerOp.ADD and entry.amount > 0:
+            return "— the place’s resonance swells the working"
+
+    return ""
+
+
+def _build_tail_clauses(
+    *, wounds: list[str], defeated: bool, dying: bool, knocked_out: bool
+) -> list[str]:
+    """Collect the consequence tail clauses for a damage hit."""
+    tail: list[str] = []
+    if wounds:
+        tail.append("leaving them " + ", ".join(wounds))
+    if defeated:
+        tail.append("defeating them")
+    elif dying:
+        tail.append("leaving them dying")
+    elif knocked_out:
+        tail.append("knocking them out")
+    return tail
+
+
+def _assemble_hit_line(head: str, tail_clauses: list[str], power_clause: str) -> str:
+    """Compose the damage-hit narration line from its constituent parts."""
+    body = head + (", " + ", ".join(tail_clauses) if tail_clauses else "")
+    return f"{body} {power_clause}." if power_clause else f"{body}."
+
+
 def render_action_outcome_narration(
     *,
     actor_label: str,
     technique_name: str,
     target_label: str | None,
     outcome: ActionOutcome,
+    power_ledger: PowerLedger | None = None,
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -132,10 +200,17 @@ def render_action_outcome_narration(
     clause. Used as the content of an OUTCOME-mode Interaction authored by the
     Narrator persona.
 
+    When ``power_ledger`` is supplied (magic-pipeline actions only), a concise
+    ward/environment clause is appended to the OUTCOME line: e.g.
+    "— the ward turns it aside" for a full bounce, "— it tears through the ward"
+    for clean penetration, or "— the place’s resonance swells the working" for
+    an environment amplification. Combo and non-magic paths pass ``None`` and
+    get no clause, preserving backward compatibility.
+
     Examples:
         "Kira’s Frost Bolt strikes the Pyromancer for 24 damage."
         "Kira’s Frost Bolt strikes the Pyromancer for 40 damage, defeating them."
-        "Kira’s Frost Bolt misses the Pyromancer."
+        "Kira’s Frost Bolt misses the Pyromancer — the ward turns it aside."
         "Garruk uses Guard Stance."
     """
     total_damage = sum(dr.damage_dealt for dr in outcome.damage_results)
@@ -150,24 +225,18 @@ def render_action_outcome_narration(
             return f"{actor_label} unleashes {outcome.combo_used.name}."
         return f"{actor_label} uses {technique_name}."
 
-    # Targeted action with no damage and no wounds → miss.
+    power_clause = _power_outcome_clause(power_ledger)
+
+    # Targeted action with no damage and no wounds → miss (or warded bounce).
     if total_damage <= 0 and not wounds:
-        return f"{actor_label}’s {technique_name} misses {target_label}."
+        base = f"{actor_label}’s {technique_name} misses {target_label}"
+        return f"{base} {power_clause}." if power_clause else f"{base}."
 
     head = f"{actor_label}’s {technique_name} strikes {target_label} for {total_damage} damage"
-    tail_clauses: list[str] = []
-    if wounds:
-        tail_clauses.append("leaving them " + ", ".join(wounds))
-    if defeated:
-        tail_clauses.append("defeating them")
-    elif dying:
-        tail_clauses.append("leaving them dying")
-    elif knocked_out:
-        tail_clauses.append("knocking them out")
-
-    if tail_clauses:
-        return head + ", " + ", ".join(tail_clauses) + "."
-    return head + "."
+    tail = _build_tail_clauses(
+        wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
+    )
+    return _assemble_hit_line(head, tail, power_clause)
 
 
 def render_challenge_outcome_narration(

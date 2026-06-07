@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
+    from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -50,6 +51,7 @@ from world.combat.constants import (
     ENTITY_TYPE_PC,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
+    PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
     EncounterStatus,
     OpponentStatus,
@@ -147,6 +149,20 @@ def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTD
         resolved_at__isnull=True,
         condition__properties__name="death_deferred",
     ).exists()
+
+
+def get_penetration_check_type() -> CheckType:
+    """Return the seeded 'penetration' CheckType for the ward contest (#639).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    chartless fabricated row would silently break the resolution pipeline.
+    If the seed is missing, CheckType.DoesNotExist propagates loudly (a real
+    misconfiguration), not masked. Mirrors
+    ``_get_endure_hallowed_ground_check_type``.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    return CheckType.objects.get(name=PENETRATION_CHECK_TYPE_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +340,61 @@ class CombatTechniqueResolver:
             )
         return out
 
-    def __call__(self, *, power: int) -> CombatTechniqueResolution:
+    def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:
+        """Run the penetration-vs-resistance contest (#639) against the ward.
+
+        The penetration difficulty is the focused opponent's
+        ``barrier_strength`` (the ward ONLY — damage-type resistance is soaked
+        once downstream in ``apply_damage_to_opponent``; never consumed here).
+
+        Returns ``(ledger, bounced)``:
+
+        - No focused opponent / no barrier (None or 0) → UNOPPOSED: returns
+          the ledger unchanged and ``bounced=False``, rolls NO check, adds NO
+          entry. Inert for every existing combat path (those targets carry no
+          barrier) — a zero-power unwarded cast still flows to its base_damage.
+        - factor == 0 → bounce: a PENETRATION ``set 0`` entry and
+          ``bounced=True`` (the caller short-circuits damage/conditions).
+        - pct == 0 (factor 1.00, clean penetration) → a PENETRATION ``set``
+          entry with the unchanged total and ``bounced=False``. Power is
+          unmodified, but the entry lets narration distinguish a
+          warded-but-cleanly-penetrated cast from an unwarded one.
+        - pct != 0 (partial or overpenetration) → a PENETRATION ``multiply``
+          entry by ``(factor - 1) * 100`` pct and ``bounced=False``.
+        """
+        from world.conditions.services import get_penetration_factor  # noqa: PLC0415
+        from world.magic.constants import PowerStage  # noqa: PLC0415
+        from world.magic.types.power_ledger import PowerLedgerBuilder  # noqa: PLC0415
+
+        target = self.action.focused_opponent_target
+        ward = (target.barrier_strength or 0) if target is not None else 0
+        if ward <= 0:
+            return combat_ledger, False
+
+        caster = self.participant.character_sheet.character
+        pen_result = perform_check(
+            caster,
+            get_penetration_check_type(),
+            target_difficulty=ward,
+        )
+        factor = get_penetration_factor(pen_result.success_level)
+        builder = PowerLedgerBuilder.from_ledger(combat_ledger)
+        if factor == 0:
+            return builder.set_value(PowerStage.PENETRATION, "ward (bounced)", 0).build(), True
+        pct = round((float(factor) - 1.0) * 100)
+        if pct == 0:
+            # Clean full penetration: record the event without changing power so
+            # narration can distinguish a warded-but-cleanly-penetrated cast from
+            # an unwarded one (which records NO entry at all).
+            return (
+                builder.set_value(
+                    PowerStage.PENETRATION, "ward (penetrated)", combat_ledger.total
+                ).build(),
+                False,
+            )
+        return builder.multiply(PowerStage.PENETRATION, "ward", pct).build(), False
+
+    def __call__(self, *, power: int, ledger: PowerLedger) -> CombatTechniqueResolution:  # noqa: ARG002
         """Resolve the combat technique inner step.
 
         ``power`` is injected by ``use_technique`` after the PRE_CAST envelope
@@ -332,10 +402,47 @@ class CombatTechniqueResolver:
         been further modified by a pre-cast MODIFY_PAYLOAD hook).  INTENSITY_BUMP
         pull bonuses from the current round are added on top inside this method
         so the final effective intensity = power + pull intensity bumps.
+
+        ``ledger`` is the per-cast :class:`PowerLedger` carrying all stages up
+        to and including the environment power-shift.  The resolver appends a
+        ``COMBAT_PULL`` stage for the INTENSITY_BUMP bonuses sourced from active
+        :class:`~world.combat.models.CombatPull` rows and builds a per-target
+        ledger whose ``total`` equals the final effective intensity forwarded to
+        damage and condition resolution.
         """
-        pull_intensity = self._sum_intensity_bump_pulls()
-        eff_intensity = power + pull_intensity
+        from world.magic.constants import PowerStage  # noqa: PLC0415
+        from world.magic.types.power_ledger import PowerLedgerBuilder  # noqa: PLC0415
+
+        pull_bonus = self._sum_intensity_bump_pulls()
+        combat_ledger = (
+            PowerLedgerBuilder.from_ledger(ledger)
+            .add(PowerStage.COMBAT_PULL, "combat pulls", pull_bonus)
+            .build()
+        )
         check_result = self._roll_check()
+
+        # Penetration-vs-resistance contest (#639): if the focused target has a
+        # ward (barrier_strength > 0), the caster rolls a penetration check
+        # against the ward and the resulting factor SCALES power before it
+        # enters the unchanged damage/condition path. Unwarded targets are
+        # unopposed — no check, no ledger entry, behavior identical to pre-#639.
+        combat_ledger, bounced = self._apply_penetration(combat_ledger)
+        eff_intensity = combat_ledger.total
+
+        if bounced:
+            # Bounced off the ward: no damage, no conditions. The returned
+            # ledger still records the bounce so narration can pose it. (A
+            # legitimately zero-power UNWARDED cast does NOT take this path —
+            # it still flows to base_damage downstream.)
+            return CombatTechniqueResolution(
+                check_result=check_result,
+                damage_results=[],
+                applied_conditions=[],
+                pull_flat_bonus=self.pull_flat_bonus,
+                scaled_damage=0,
+                power_ledger=combat_ledger,
+            )
+
         damage_results = self._apply_damage(check_result, eff_intensity=eff_intensity)
         applied_conditions = self._apply_conditions(check_result, eff_intensity=eff_intensity)
         return CombatTechniqueResolution(
@@ -344,6 +451,7 @@ class CombatTechniqueResolver:
             applied_conditions=applied_conditions,
             pull_flat_bonus=self.pull_flat_bonus,
             scaled_damage=sum(r.damage_dealt for r in damage_results),
+            power_ledger=combat_ledger,
         )
 
 
@@ -467,6 +575,7 @@ def _build_combat_result(
         damage_results=list(resolution.damage_results),
         applied_conditions=list(resolution.applied_conditions),
         technique_use_result=technique_use_result,
+        power_ledger=resolution.power_ledger,
     )
 
 
@@ -1898,6 +2007,10 @@ def _resolve_pc_action(
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
 
+    # combat_result is only set on non-combo magic-pipeline paths; all other
+    # branches (combos, passives-only) produce no CombatTechniqueResult.
+    combat_result: CombatTechniqueResult | None = None
+
     # Combo upgrades require an active opponent target — bail out early if defeated.
     if target is not None and action.combo_upgrade:
         target.refresh_from_db()
@@ -1956,12 +2069,16 @@ def _resolve_pc_action(
         push_interaction(interaction)
 
     # Broadcast a durable, Narrator-authored OUTCOME line for this action.
+    # The power_ledger is threaded from the combat resolver (magic pipeline) so
+    # narration can fold in ward/environment drama clauses. Combo paths and
+    # unconfirmed casts produce no ledger (combat_result is None).
     target_label = target.name if target is not None else None
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
         target_label=target_label,
         outcome=outcome,
+        power_ledger=combat_result.power_ledger if combat_result is not None else None,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 

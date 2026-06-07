@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from world.magic.types.power_ledger import PowerLedger
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
@@ -111,6 +112,11 @@ class RoundResolutionResult:
 # ---------------------------------------------------------------------------
 
 
+def _empty_ledger() -> PowerLedger:
+    """Return an empty PowerLedger suitable as a default for CombatTechniqueResolution."""
+    return PowerLedger(entries=(), total=0)
+
+
 @dataclass(frozen=True)
 class AppliedConditionResult:
     """Per-condition apply outcome from CombatTechniqueResolver._apply_conditions."""
@@ -131,6 +137,12 @@ class CombatTechniqueResolution:
     check_result at the top level (no main_result wrapper) — the
     use_technique extractor accepts this shape per spec
     2026-04-30-combat-magic-pipeline-integration-design.
+
+    ``power_ledger`` is the per-target ledger that includes the cast-level
+    stages (BASE, ENVIRONMENT_SHIFT, etc.) plus the COMBAT_PULL stage appended
+    by the resolver. Available for narration (Task 8) and future
+    penetration-vs-resistance work (Task 7).  Defaults to an empty ledger for
+    backwards-compatible construction in tests and legacy call sites.
     """
 
     check_result: CheckResult
@@ -138,6 +150,7 @@ class CombatTechniqueResolution:
     applied_conditions: list[AppliedConditionResult]
     pull_flat_bonus: int
     scaled_damage: int
+    power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
 
 
 @dataclass(frozen=True)
@@ -147,11 +160,18 @@ class CombatTechniqueResult:
     Wraps the magic-pipeline outcome (TechniqueUseResult) plus the
     combat-side damage_results extracted from it. Frozen because the
     cast is over by the time this is constructed.
+
+    ``power_ledger`` mirrors the ledger on the inner
+    ``CombatTechniqueResolution`` — threaded here so narration helpers can
+    inspect ward/environment stages without reaching into nested dataclasses.
+    Defaults to an empty ledger for unconfirmed casts (soulfray-cancelled) or
+    paths where no resolution was produced.
     """
 
     damage_results: list[OpponentDamageResult]
     applied_conditions: list[AppliedConditionResult]
     technique_use_result: TechniqueUseResult
+    power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
 
 
 # ---------------------------------------------------------------------------

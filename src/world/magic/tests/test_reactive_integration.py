@@ -474,9 +474,167 @@ class TechniqueCheckResultExtractorTest(TestCase):
             use_technique(
                 character=self.char,
                 technique=self.technique,
-                resolve_fn=lambda *, power: resolution,  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: resolution,  # noqa: ARG005
             )
 
         # The extractor must have found .check_result and passed it through.
         self.assertEqual(len(captured), 1)
         self.assertIs(captured[0], fake_check)
+
+
+# ---------------------------------------------------------------------------
+# Stage 6 (REACTIVE): pre-cast power edits land as a REACTIVE ledger entry
+# ---------------------------------------------------------------------------
+
+
+class ReactivePowerLedgerStageTest(TestCase):
+    """A pre-cast MODIFY_PAYLOAD on ``power`` reconciles the PowerLedger.
+
+    When a TECHNIQUE_PRE_CAST trigger edits ``payload.power``, ``use_technique``
+    records the signed delta as a single ``PowerStage.REACTIVE`` ledger entry
+    whose running total matches the post-hook power. This is the power-side
+    (intensity) family only — anima cost / mishap selection / Soulfray severity
+    are control/intensity-derived and must be untouched by a power edit.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
+
+    def setUp(self) -> None:
+        self.room = _create_room()
+        self.char, self.anima = _setup_caster(room=self.room)
+
+    def _make_power_add_flow(self, delta: int):
+        """Return a FlowDefinition that adds ``delta`` to payload.power."""
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "power", "op": "add", "value": delta},
+        )
+        return flow
+
+    def _run_capturing_cast(self, technique):
+        """Run a cast capturing the resolve_fn ledger and TECHNIQUE_CAST payload."""
+        captured_resolve: dict[str, object] = {}
+        captured_cast: list[TechniqueCastPayload] = []
+
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventName.TECHNIQUE_CAST:
+                captured_cast.append(payload)
+            return original(name, payload, **kw)
+
+        def resolve_fn(*, power, ledger):
+            captured_resolve["power"] = power
+            captured_resolve["ledger"] = ledger
+            return MagicMock(check_result=None)
+
+        svc_mod.emit_event = capturing
+        try:
+            result = use_technique(
+                character=self.char,
+                technique=technique,
+                resolve_fn=resolve_fn,
+            )
+        finally:
+            svc_mod.emit_event = original
+        return result, captured_resolve, captured_cast
+
+    def test_reactive_entry_records_signed_delta(self) -> None:
+        from world.magic.constants import PowerStage
+
+        delta = 4
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=SELF_FILTER,
+            flow_definition=self._make_power_add_flow(delta),
+            target=self.char,
+        )
+
+        _, captured_resolve, captured_cast = self._run_capturing_cast(self.technique)
+
+        ledger = captured_resolve["ledger"]
+        effective_power = captured_resolve["power"]
+
+        # The reconciled ledger total tracks the post-hook power.
+        self.assertEqual(ledger.total, effective_power)
+
+        reactive_entries = [e for e in ledger.entries if e.stage == PowerStage.REACTIVE]
+        self.assertEqual(len(reactive_entries), 1)
+        entry = reactive_entries[0]
+        self.assertEqual(entry.amount, delta)  # signed delta of the edit
+        self.assertEqual(entry.running_total, effective_power)
+
+        # The cast payload carries the same reconciled ledger.
+        self.assertEqual(len(captured_cast), 1)
+        self.assertIs(captured_cast[0].ledger, ledger)
+        self.assertEqual(captured_cast[0].power, effective_power)
+
+    def test_negative_delta_is_signed(self) -> None:
+        from world.magic.constants import PowerStage
+
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=SELF_FILTER,
+            flow_definition=self._make_power_add_flow(-2),
+            target=self.char,
+        )
+
+        _, captured_resolve, _ = self._run_capturing_cast(self.technique)
+        ledger = captured_resolve["ledger"]
+        reactive = [e for e in ledger.entries if e.stage == PowerStage.REACTIVE]
+        self.assertEqual(len(reactive), 1)
+        self.assertEqual(reactive[0].amount, -2)
+        self.assertEqual(ledger.total, captured_resolve["power"])
+
+    def test_no_trigger_has_no_reactive_entry(self) -> None:
+        from world.magic.constants import PowerStage
+
+        _, captured_resolve, _ = self._run_capturing_cast(self.technique)
+        ledger = captured_resolve["ledger"]
+        self.assertFalse(any(e.stage == PowerStage.REACTIVE for e in ledger.entries))
+
+    def test_power_edit_does_not_touch_intensity_family(self) -> None:
+        """Power edits must leave anima cost / mishap / Soulfray identical.
+
+        Control run (no trigger) vs. a +4 power edit: the caster-side outcomes
+        (anima cost, mishap, Soulfray) are intensity/control-derived and must be
+        invariant under a pure power edit.
+        """
+        # Control: no pre-cast trigger.
+        control_result, _, _ = self._run_capturing_cast(self.technique)
+        self.anima.refresh_from_db()
+        self.anima.current = self.anima.maximum
+        self.anima.save()
+
+        # Treatment: a fresh caster (clean anima) with a +4 power edit.
+        treat_char, _ = _setup_caster(room=self.room)
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=SELF_FILTER,
+            flow_definition=self._make_power_add_flow(4),
+            target=treat_char,
+        )
+
+        def resolve_fn(*, power, ledger):
+            return MagicMock(check_result=None)
+
+        treat_result = use_technique(
+            character=treat_char,
+            technique=self.technique,
+            resolve_fn=resolve_fn,
+        )
+
+        # Intensity-side family is unchanged by the power edit.
+        self.assertEqual(
+            treat_result.anima_cost.effective_cost,
+            control_result.anima_cost.effective_cost,
+        )
+        self.assertEqual(treat_result.mishap, control_result.mishap)
+        self.assertEqual(treat_result.soulfray_result, control_result.soulfray_result)

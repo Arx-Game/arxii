@@ -35,7 +35,7 @@ class DerivePowerConditionContributionTests(TestCase):
     def _derive(self, channeled_intensity):
         return _derive_power(
             channeled_intensity=channeled_intensity, technique=None, character=self.character
-        )
+        ).total
 
     def test_flat_condition_effect_raises_power_additively(self):
         target = GlobalPowerTargetFactory()
@@ -99,7 +99,7 @@ class AuderePowerSpikeTests(TestCase):
     def _derive(self, channeled_intensity):
         return _derive_power(
             channeled_intensity=channeled_intensity, technique=None, character=self.character
-        )
+        ).total
 
     def test_wiring_is_idempotent(self):
         # A second call must not raise (unique constraint) nor change the delta.
@@ -125,10 +125,10 @@ class AuderePowerSpikeTests(TestCase):
 
         audere_power = _derive_power(
             channeled_intensity=10, technique=None, character=audere_sheet.character
-        )
+        ).total
         majora_power = _derive_power(
             channeled_intensity=10, technique=None, character=majora_sheet.character
-        )
+        ).total
         self.assertGreater(majora_power, audere_power)
 
     def test_spike_does_not_change_channeled_cost_inputs(self):
