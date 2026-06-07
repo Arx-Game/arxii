@@ -13,6 +13,22 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
 
 
+def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature; all params required
+    *,
+    actor_label: str,
+    technique_name: str,
+    target_label: str | None,
+    outcome_label: str,
+    success_level: int,  # noqa: ARG001  (reserved for future verb tuning)
+    power_ledger: PowerLedger | None = None,
+) -> str:
+    """One-line deterministic narration for a standalone scene cast. Pure."""
+    clause = power_outcome_clause(power_ledger)
+    target_part = f" at {target_label}" if target_label else ""
+    head = f"{actor_label} casts {technique_name}{target_part}: {outcome_label}"
+    return f"{head} {clause}." if clause else f"{head}."
+
+
 def power_outcome_clause(power_ledger: PowerLedger | None) -> str:
     """Return a short, dramatic prose clause describing the ledger's notable event.
 

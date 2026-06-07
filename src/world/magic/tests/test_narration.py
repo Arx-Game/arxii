@@ -2,12 +2,13 @@
 
 Covers:
 - power_outcome_clause: pure unit tests over constructed PowerLedgers.
+- render_cast_outcome_narration: deterministic one-line scene-cast narration.
 """
 
 from django.test import SimpleTestCase
 
 from world.magic.constants import PowerStage
-from world.magic.narration import power_outcome_clause
+from world.magic.narration import power_outcome_clause, render_cast_outcome_narration
 from world.magic.types.power_ledger import PowerLedger, PowerLedgerBuilder
 
 # ---------------------------------------------------------------------------
@@ -124,3 +125,51 @@ class PowerOutcomeClauseTest(SimpleTestCase):
             .build()
         )
         assert power_outcome_clause(ledger) == ""
+
+
+# ---------------------------------------------------------------------------
+# render_cast_outcome_narration unit tests
+# ---------------------------------------------------------------------------
+
+
+class RenderCastOutcomeNarrationTest(SimpleTestCase):
+    def test_self_no_target_no_ledger(self) -> None:
+        """Self/no-target cast with no ledger: plain outcome sentence."""
+        result = render_cast_outcome_narration(
+            actor_label="Kira",
+            technique_name="Inner Light",
+            target_label=None,
+            outcome_label="Decisive Success",
+            success_level=2,
+            power_ledger=None,
+        )
+        assert result == "Kira casts Inner Light: Decisive Success."
+
+    def test_targeted_with_bounce_ledger(self) -> None:
+        """Targeted cast with a bounce ledger appends the ward clause."""
+        ledger = (
+            PowerLedgerBuilder(base=100)
+            .set_value(PowerStage.PENETRATION, "ward (bounced)", 0)
+            .build()
+        )
+        result = render_cast_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="Davos",
+            outcome_label="Failure",
+            success_level=0,
+            power_ledger=ledger,
+        )
+        assert result == "Kira casts Frost Bolt at Davos: Failure — the ward turns it aside."
+
+    def test_targeted_no_ledger(self) -> None:
+        """Targeted cast with no ledger: plain outcome sentence with target."""
+        result = render_cast_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="Davos",
+            outcome_label="Success",
+            success_level=1,
+            power_ledger=None,
+        )
+        assert result == "Kira casts Frost Bolt at Davos: Success."
