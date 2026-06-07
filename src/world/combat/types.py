@@ -160,11 +160,18 @@ class CombatTechniqueResult:
     Wraps the magic-pipeline outcome (TechniqueUseResult) plus the
     combat-side damage_results extracted from it. Frozen because the
     cast is over by the time this is constructed.
+
+    ``power_ledger`` mirrors the ledger on the inner
+    ``CombatTechniqueResolution`` — threaded here so narration helpers can
+    inspect ward/environment stages without reaching into nested dataclasses.
+    Defaults to an empty ledger for unconfirmed casts (soulfray-cancelled) or
+    paths where no resolution was produced.
     """
 
     damage_results: list[OpponentDamageResult]
     applied_conditions: list[AppliedConditionResult]
     technique_use_result: TechniqueUseResult
+    power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
 
 
 # ---------------------------------------------------------------------------

@@ -575,6 +575,7 @@ def _build_combat_result(
         damage_results=list(resolution.damage_results),
         applied_conditions=list(resolution.applied_conditions),
         technique_use_result=technique_use_result,
+        power_ledger=resolution.power_ledger,
     )
 
 
@@ -2006,6 +2007,10 @@ def _resolve_pc_action(
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
 
+    # combat_result is only set on non-combo magic-pipeline paths; all other
+    # branches (combos, passives-only) produce no CombatTechniqueResult.
+    combat_result: CombatTechniqueResult | None = None
+
     # Combo upgrades require an active opponent target — bail out early if defeated.
     if target is not None and action.combo_upgrade:
         target.refresh_from_db()
@@ -2064,12 +2069,16 @@ def _resolve_pc_action(
         push_interaction(interaction)
 
     # Broadcast a durable, Narrator-authored OUTCOME line for this action.
+    # The power_ledger is threaded from the combat resolver (magic pipeline) so
+    # narration can fold in ward/environment drama clauses. Combo paths and
+    # unconfirmed casts produce no ledger (combat_result is None).
     target_label = target.name if target is not None else None
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
         target_label=target_label,
         outcome=outcome,
+        power_ledger=combat_result.power_ledger if combat_result is not None else None,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
