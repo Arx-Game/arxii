@@ -6,6 +6,7 @@ import django_filters
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -50,6 +51,14 @@ class CovenantFilter(django_filters.FilterSet):
         if value is False:
             return queryset.filter(dissolved_at__isnull=False)
         return queryset
+
+
+class CovenantRiteFilter(django_filters.FilterSet):
+    """Filter covenant rites by covenant type."""
+
+    class Meta:
+        model = CovenantRite
+        fields = ["covenant_type"]
 
 
 class GearArchetypeCompatibilityFilter(django_filters.FilterSet):

@@ -7,6 +7,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -144,6 +145,31 @@ class CovenantLevelThresholdSerializer(serializers.ModelSerializer):
     class Meta:
         model = CovenantLevelThreshold
         fields = ("level", "required_legend")
+
+
+class CovenantRiteSerializer(serializers.ModelSerializer):
+    """Read-only serializer for CovenantRite authored definitions."""
+
+    covenant_type_display = serializers.CharField(
+        source="get_covenant_type_display", read_only=True
+    )
+
+    class Meta:
+        model = CovenantRite
+        fields = [
+            "id",
+            "ritual",
+            "covenant_type",
+            "covenant_type_display",
+            "min_covenant_level",
+            "min_engaged_present",
+            "granted_condition",
+            "base_severity",
+            "severity_per_extra_participant",
+            "max_severity",
+            "duration_rounds",
+        ]
+        read_only_fields = fields
 
 
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):

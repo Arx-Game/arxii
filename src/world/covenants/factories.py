@@ -9,6 +9,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -105,6 +106,89 @@ class CovenantLevelThresholdFactory(factory_django.DjangoModelFactory):
 
     level = factory.Sequence(lambda n: n + 1)
     required_legend = factory.LazyAttribute(lambda o: (o.level - 1) * 100)
+
+
+class CovenantRiteFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRite — the 'Renew the Oath' reference rite.
+
+    Doubles as integration-test setUp AND staff seed data (per factories-as-seed-data
+    convention). The backing Ritual is created via RenewTheOathRitualFactory
+    (django_get_or_create on name) so repeated calls in the same test DB never
+    produce duplicate Ritual rows. The granted_condition uses UNTIL_END_OF_COMBAT
+    duration so the buff expires naturally at encounter end.
+
+    Gate defaults mirror the reference spec:
+        min_covenant_level=2, min_engaged_present=2, base_severity=2,
+        severity_per_extra_participant=1, max_severity=None.
+    """
+
+    class Meta:
+        model = CovenantRite
+
+    ritual = factory.SubFactory("world.magic.factories.RenewTheOathRitualFactory")
+    granted_condition = factory.SubFactory(
+        "world.conditions.factories.OathboundResolveConditionFactory"
+    )
+    covenant_type = CovenantType.DURANCE
+    min_covenant_level = 2
+    min_engaged_present = 2
+    base_severity = 2
+    severity_per_extra_participant = 1
+    max_severity = None
+    duration_rounds = None
+
+
+def wire_covenant_rite_content() -> CovenantRite:
+    """Idempotent seed helper: create the Renew the Oath ritual + CovenantRite row.
+
+    Safe to call as both integration-test setUp and staff/seed scripts — uses
+    get_or_create semantics at each step so no duplicate rows are created.
+
+    Returns the CovenantRite instance (whether newly created or already present).
+    """
+    from world.magic.constants import ParticipationRule, RitualExecutionKind
+    from world.magic.models import Ritual
+
+    ritual, _ = Ritual.objects.get_or_create(
+        name="Renew the Oath",
+        defaults={
+            "description": (
+                "A covenant rite performed by engaged members in the heat of battle. "
+                "By reaffirming their sacred oath together, participants renew the bond "
+                "that grants them supernatural resolve."
+            ),
+            "narrative_prose": (
+                "The members of the covenant gather, voices joined in the words they swore at "
+                "formation. The oath-magic stirs between them, recognising the bond that was "
+                "forged in blood and will. As the last word falls, a wave of clarity and "
+                "purpose settles over each participant — Oathbound Resolve, the covenant's gift "
+                "to those who honour its demands."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.covenants.services.perform_covenant_rite",
+            "flow": None,
+            "participation_rule": ParticipationRule.FORMATION,
+        },
+    )
+
+    from world.conditions.factories import OathboundResolveConditionFactory
+
+    condition = OathboundResolveConditionFactory()
+
+    rite, _ = CovenantRite.objects.get_or_create(
+        ritual=ritual,
+        defaults={
+            "granted_condition": condition,
+            "covenant_type": CovenantType.DURANCE,
+            "min_covenant_level": 2,
+            "min_engaged_present": 2,
+            "base_severity": 2,
+            "severity_per_extra_participant": 1,
+            "max_severity": None,
+            "duration_rounds": None,
+        },
+    )
+    return rite
 
 
 def make_engaged_member(

@@ -152,6 +152,50 @@ class SubroleResonanceMismatchError(SubrolePromotionError):
     )
 
 
+class CovenantRiteError(CovenantError):
+    """Base for covenant rite activation failures."""
+
+    user_message = "The rite cannot be performed right now."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The rite cannot be performed right now.",
+        }
+    )
+
+
+class CovenantLevelTooLowError(CovenantRiteError):
+    """Raised when the covenant's level is below the rite's requirement."""
+
+    user_message = "Your covenant is not yet powerful enough to perform this rite."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your covenant is not yet powerful enough to perform this rite.",
+        }
+    )
+
+
+class NotEnoughEngagedPresentError(CovenantRiteError):
+    """Raised when too few engaged covenant members are present to perform the rite."""
+
+    user_message = "Not enough engaged covenant members are present."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Not enough engaged covenant members are present.",
+        }
+    )
+
+
+class NoActiveBattleError(CovenantRiteError):
+    """Raised when a rite that requires a battle is attempted outside an active encounter."""
+
+    user_message = "This rite can only be performed in battle."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "This rite can only be performed in battle.",
+        }
+    )
+
+
 class NotAStandingBattleCovenantError(CovenantError):
     """Raised when a rise/stand-down targets a non-STANDING-battle covenant."""
 

@@ -10,9 +10,13 @@ from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
+    CovenantLevelTooLowError,
     CovenantNameConflictError,
+    CovenantRiteError,
     DuplicateFounderError,
     InsufficientFoundersError,
+    NoActiveBattleError,
+    NotEnoughEngagedPresentError,
     SubroleParentMismatchError,
     SubroleResonanceMismatchError,
     SubroleThreadLevelInsufficientError,
@@ -20,6 +24,8 @@ from world.covenants.exceptions import (
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantRite,
+    CovenantRiteInstance,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -30,6 +36,7 @@ from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetM
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
 
@@ -470,6 +477,22 @@ def evaluate_scene_engagement(
     character_sheet: CharacterSheet,
     room: ObjectDB,
 ) -> None:
+    """Auto-engage a Durance covenant if co-presence prerequisites met, then
+    fold the arriving character into any active rite in the room.
+
+    Calls _auto_engage_durance first (which may set the engaged membership),
+    then fold_arrival_into_active_rites so both newly-engaged and already-engaged
+    characters trigger the rite buff rescale on arrival.
+    """
+    _auto_engage_durance(character_sheet=character_sheet, room=room)
+    fold_arrival_into_active_rites(character_sheet=character_sheet, room=room)
+
+
+def _auto_engage_durance(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
     """Auto-engage a Durance covenant if co-presence prerequisites met.
 
     Manual engagement sticks — this no-ops if the character is already
@@ -499,6 +522,95 @@ def evaluate_scene_engagement(
     set_engaged_membership(membership=candidates[0][0])
 
 
+@transaction.atomic
+def fold_arrival_into_active_rites(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
+    """When an engaged member arrives in a room with an active CovenantRiteInstance,
+    fold them in: grant the buff, rescale all current participants to the new
+    severity (ratchet-up only), and emit a dramatic NarrativeMessage.
+
+    Atomic. Safe to call even if the character is not a member of any covenant
+    or there is no active rite — both paths are no-ops.
+    """
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        advance_condition_severity,
+        apply_condition,
+        get_condition_instance,
+    )
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # Find all covenants this character is currently engaged with.
+    engaged_covenants = list(
+        CharacterCovenantRole.objects.filter(
+            character_sheet=character_sheet,
+            engaged=True,
+            left_at__isnull=True,
+        )
+        .values_list("covenant_id", flat=True)
+        .distinct()
+    )
+    if not engaged_covenants:
+        return
+
+    for covenant_id in engaged_covenants:
+        # Find an active rite instance for this covenant in this room.
+        instance: CovenantRiteInstance | None = (
+            CovenantRiteInstance.objects.filter(
+                covenant_id=covenant_id,
+                completed_at__isnull=True,
+                combat_encounter__room=room,
+            )
+            .exclude(combat_encounter__status=EncounterStatus.COMPLETED)
+            .select_related("rite", "rite__granted_condition")
+            .first()
+        )
+        if instance is None:
+            continue
+        if instance.participants.filter(pk=character_sheet.pk).exists():
+            continue  # already a participant — no-op
+
+        # --- FOLD IN ---
+        instance.participants.add(character_sheet)
+        new_count = instance.participants.count()
+        new_severity = instance.rite.severity_for(present_count=new_count)
+
+        # Apply the buff to the newcomer.
+        apply_condition(
+            character_sheet.character,
+            instance.rite.granted_condition,
+            severity=new_severity,
+            duration_rounds=instance.rite.duration_rounds,
+            source_description="covenant rite",
+        )
+
+        # Rescale every OTHER existing participant's live buff upward if needed.
+        other_sheets = list(instance.participants.exclude(pk=character_sheet.pk))
+        for other_sheet in other_sheets:
+            live_inst = get_condition_instance(
+                other_sheet.character, instance.rite.granted_condition
+            )
+            if live_inst is None:
+                continue
+            delta = new_severity - live_inst.severity
+            if delta > 0:
+                advance_condition_severity(live_inst, delta)
+
+        # Emit dramatic NarrativeMessage to all current participants.
+        all_sheets = list(instance.participants.all())
+        send_narrative_message(
+            recipients=all_sheets,
+            body=(
+                f"{character_sheet.character.db_key} arrives — the covenant's oath blazes brighter."
+            ),
+            category=NarrativeCategory.COVENANT,
+        )
+
+
 def _co_present_member_count(
     membership: _CharacterCovenantRole,
     room: ObjectDB,
@@ -519,6 +631,25 @@ def _co_present_member_count(
         if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
             n += 1
     return n
+
+
+def engaged_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
+    """CharacterSheets that are engaged with `covenant` AND present in `room`.
+
+    Builds the engaged-member set from the DB once, then walks room.contents —
+    no per-object queries. The ≥N test is len(engaged_members_present(...)).
+    """
+    engaged_sheet_ids = set(
+        covenant.memberships.filter(engaged=True, left_at__isnull=True).values_list(
+            "character_sheet_id", flat=True
+        )
+    )
+    present: list[CharacterSheet] = []
+    for obj in room.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is not None and sheet.pk in engaged_sheet_ids:
+            present.append(sheet)
+    return present
 
 
 @transaction.atomic
@@ -606,3 +737,118 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
         character_sheet=candidate_participant.character_sheet,
         role=chosen_role,
     )
+
+
+@transaction.atomic
+def complete_rites_for_encounter(*, encounter: CombatEncounter) -> None:
+    """Sweep covenant rite buffs when a combat encounter ends.
+
+    For each active CovenantRiteInstance tied to `encounter`, removes the
+    granted_condition buff from every participant and stamps completed_at.
+
+    Idempotent: instances already completed (completed_at is set) are
+    excluded by the filter and will not be processed again.
+    """
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    active_instances = list(
+        CovenantRiteInstance.objects.filter(
+            combat_encounter=encounter,
+            completed_at__isnull=True,
+        ).select_related("rite__granted_condition")
+    )
+    for instance in active_instances:
+        for sheet in instance.participants.all():
+            remove_condition(sheet.character, instance.rite.granted_condition)
+        instance.completed_at = timezone.now()
+        instance.save(update_fields=["completed_at"])
+
+
+@transaction.atomic
+def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
+    """Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.
+
+    Activation gate (all checked before any writes):
+    1. Covenant ref present on the session.
+    2. Covenant level ≥ rite.min_covenant_level.
+    3. Active CombatEncounter present in the initiator's room.
+    4. At least rite.min_engaged_present engaged members in the room.
+
+    On success, creates a CovenantRiteInstance, sets participants, applies the
+    scaled condition buff to each via bulk_apply_conditions, and emits a
+    NarrativeMessage. Returns the new CovenantRiteInstance.
+    """
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+    from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # 1. Resolve the CovenantRite sidecar from the session's ritual.
+    rite: CovenantRite = session.ritual.covenant_rite
+
+    # 2. Resolve the covenant from the session-level COVENANT reference.
+    ref = session.references.filter(kind=ReferenceKind.COVENANT).first()
+    if ref is None:
+        raise CovenantRiteError
+    covenant: Covenant = ref.ref_covenant
+
+    # 3. Resolve room from initiator.
+    room = session.initiator.character.db_location
+    if room is None:
+        raise NoActiveBattleError
+
+    # 4a. Gate: covenant level.
+    if covenant.level < rite.min_covenant_level:
+        raise CovenantLevelTooLowError
+
+    # 4b. Gate: active combat encounter in room.
+    encounter = (
+        CombatEncounter.objects.filter(room=room)
+        .exclude(status=EncounterStatus.COMPLETED)
+        .order_by("-id")
+        .first()
+    )
+    if encounter is None:
+        raise NoActiveBattleError
+
+    # 4c. Gate: enough engaged members present.
+    beneficiaries = engaged_members_present(covenant=covenant, room=room)
+    if len(beneficiaries) < rite.min_engaged_present:
+        raise NotEnoughEngagedPresentError
+
+    # 5. Compute scaled severity.
+    severity = rite.severity_for(present_count=len(beneficiaries))
+
+    # 6. Create instance and attach participants.
+    instance = CovenantRiteInstance.objects.create(
+        rite=rite,
+        covenant=covenant,
+        scene=encounter.scene,
+        combat_encounter=encounter,
+    )
+    instance.participants.set(beneficiaries)
+
+    # 7. Apply the buff to each beneficiary.
+    bulk_apply_conditions(
+        [
+            BulkConditionApplication(
+                target=s.character,
+                template=rite.granted_condition,
+                severity=severity,
+                duration_rounds=rite.duration_rounds,
+            )
+            for s in beneficiaries
+        ],
+        source_description="covenant rite",
+    )
+
+    # 8. Emit drama.
+    send_narrative_message(
+        recipients=beneficiaries,
+        body="The covenant reaffirms its oath — power surges through the gathered.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+    return instance

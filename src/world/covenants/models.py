@@ -400,3 +400,78 @@ class CovenantLevelThreshold(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Level {self.level} (≥ {self.required_legend} legend)"
+
+
+class CovenantRite(SharedMemoryModel):
+    """Authored definition: a covenant-scoped group ritual ('rite') with an
+    activation gate and a turnout-scaled shared buff. Sidecar on a Ritual so the
+    generic Ritual table stays gate-free."""
+
+    ritual = models.OneToOneField(
+        "magic.Ritual",
+        on_delete=models.CASCADE,
+        related_name="covenant_rite",
+    )
+    covenant_type = models.CharField(
+        max_length=32,
+        choices=CovenantType.choices,
+        blank=True,
+        help_text="Restrict to this covenant type; blank = any.",
+    )
+    min_covenant_level = models.PositiveSmallIntegerField(default=1)
+    min_engaged_present = models.PositiveSmallIntegerField(default=2)
+    granted_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    base_severity = models.PositiveSmallIntegerField(default=1)
+    severity_per_extra_participant = models.PositiveSmallIntegerField(default=0)
+    max_severity = models.PositiveSmallIntegerField(null=True, blank=True)
+    duration_rounds = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override; blank uses the condition's UNTIL_END_OF_COMBAT default.",
+    )
+
+    def severity_for(self, *, present_count: int) -> int:
+        extras = max(0, present_count - self.min_engaged_present)
+        value = self.base_severity + self.severity_per_extra_participant * extras
+        return min(value, self.max_severity) if self.max_severity is not None else value
+
+    class Meta:
+        verbose_name = "Covenant Rite"
+        verbose_name_plural = "Covenant Rites"
+
+
+class CovenantRiteInstance(SharedMemoryModel):
+    """A live fired rite scoped to a combat encounter."""
+
+    rite = models.ForeignKey(
+        CovenantRite,
+        on_delete=models.PROTECT,
+        related_name="instances",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.PROTECT,
+        related_name="rite_instances",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="covenant_rite_instances",
+    )
+    combat_encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        related_name="covenant_rite_instances",
+        null=True,
+        blank=True,
+    )
+    participants = models.ManyToManyField(
+        "character_sheets.CharacterSheet",
+        related_name="covenant_rite_instances",
+    )
+    fired_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)

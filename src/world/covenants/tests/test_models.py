@@ -314,3 +314,91 @@ class CovenantNameUniqueTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 CovenantFactory(name="Sword of Aerith")
+
+
+class CovenantRiteSeverityForTests(TestCase):
+    """Unit tests for CovenantRite.severity_for() — no DB required."""
+
+    def _make_rite(self) -> object:
+        from world.covenants.models import CovenantRite
+
+        return CovenantRite(
+            min_engaged_present=2,
+            base_severity=3,
+            severity_per_extra_participant=2,
+            max_severity=10,
+        )
+
+    def test_exactly_minimum_present(self) -> None:
+        rite = self._make_rite()
+        self.assertEqual(rite.severity_for(present_count=2), 3)
+
+    def test_two_extras(self) -> None:
+        rite = self._make_rite()
+        self.assertEqual(rite.severity_for(present_count=4), 7)
+
+    def test_capped_at_max_severity(self) -> None:
+        rite = self._make_rite()
+        self.assertEqual(rite.severity_for(present_count=10), 10)
+
+    def test_below_minimum_floors_to_base(self) -> None:
+        rite = self._make_rite()
+        self.assertEqual(rite.severity_for(present_count=1), 3)
+
+    def test_no_max_severity_uncapped(self) -> None:
+        from world.covenants.models import CovenantRite
+
+        rite = CovenantRite(
+            min_engaged_present=2,
+            base_severity=1,
+            severity_per_extra_participant=5,
+            max_severity=None,
+        )
+        self.assertEqual(rite.severity_for(present_count=12), 51)
+
+
+class CovenantRiteInstanceTests(TestCase):
+    """DB integration tests for CovenantRiteInstance."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.covenants.factories import CovenantFactory
+        from world.magic.factories import RitualFactory
+        from world.scenes.factories import SceneFactory
+
+        cls.covenant = CovenantFactory()
+        cls.scene = SceneFactory()
+        cls.ritual = RitualFactory()
+        cls.condition_template = ConditionTemplateFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def _make_rite(self) -> object:
+        from world.covenants.models import CovenantRite
+
+        return CovenantRite.objects.create(
+            ritual=self.ritual,
+            granted_condition=self.condition_template,
+            base_severity=2,
+        )
+
+    def test_create_instance_and_add_participant(self) -> None:
+        from world.covenants.models import CovenantRiteInstance
+
+        rite = self._make_rite()
+        instance = CovenantRiteInstance.objects.create(
+            rite=rite,
+            covenant=self.covenant,
+            scene=self.scene,
+        )
+        instance.participants.add(self.sheet)
+
+        self.assertEqual(instance.participants.count(), 1)
+        self.assertIsNone(instance.completed_at)
+        self.assertIsNone(instance.combat_encounter)
+        self.assertIsNotNone(instance.fired_at)
+
+    def test_rite_meta(self) -> None:
+        rite = self._make_rite()
+        self.assertEqual(rite._meta.verbose_name, "Covenant Rite")
+        self.assertEqual(rite._meta.verbose_name_plural, "Covenant Rites")

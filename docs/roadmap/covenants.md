@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; group abilities / dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped; per-role powers (#751) + dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -512,11 +512,29 @@ additively while combat speed precedence goes to the Battle role.
 - Battle covenant frontend (#518).
 - Group abilities (#516, Slice F).
 
-### Slice F — Group Abilities
+### Slice F — Covenant Rites (group-activated buff rituals)
 
-- **Covenant-level techniques or rituals** available only when ≥N members
-  are engaged and present. Authored content layered on the Slice A
-  engagement substrate.
+Group-activated covenant **rites**: authored rituals gated by **covenant level
+≥N** AND **≥N engaged members present**, where the gathered members renew their
+vows and each participant gains a temporary shared buff for the coming battle —
+stacking on top of their individual covenant role bonuses, scaled by turnout. A
+member who arrives mid-battle is **folded into the active rite and re-empowers
+everyone** (severity recomputed upward for all participants, ratchet-only). The
+buff is swept when the combat encounter ends.
+
+Reuses the Slice B `Ritual`/`RitualSession` substrate (the rite is a SERVICE
+ritual; the session coordinates) + the conditions system (`apply_condition`,
+`UNTIL_END_OF_COMBAT`). The only new models are `CovenantRite` (authored sidecar
+O2O on `Ritual`, carrying the gate + buff config) and `CovenantRiteInstance`
+(the live fired rite, scoped to a combat encounter). Reference rite authored as
+a factory seed: **"Renew the Oath"**.
+
+This is deliberately **not** "every member is granted an identical castable
+power at covenant level N" (rejected as anti-individualization), and **not**
+per-**role** unique powers. That role-scoped axis — each `CovenantRole` granting
+its own castable techniques and tier-0 passive abilities — is tracked separately
+in **#751** and is delivered through the existing `Thread`-on-`COVENANT_ROLE` +
+`ThreadPullEffect` machinery, not here.
 
 ### Slice G — Use-based Thread mechanics
 
