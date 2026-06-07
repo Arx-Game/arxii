@@ -215,20 +215,25 @@ def respond_to_action_request(
         return None
 
     if decision == ConsentDecision.ACCEPT:
-        # Standalone cast (no action_template, no action_key) — resolve via the cast
-        # pipeline; enhanced/plain actions go through the standard resolution path.
-        if action_request.is_standalone_cast:
-            from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
+        with transaction.atomic():
+            # Standalone cast (no action_template, no action_key) — resolve via the cast
+            # pipeline; enhanced/plain actions go through the standard resolution path.
+            # The inner transaction.atomic() blocks in resolve_accepted_cast and
+            # _resolve_standard_action become savepoints inside this outer atomic — harmless
+            # and idiomatic Django. This outer block restores the pre-refactor guarantee:
+            # if the resolver or kudos award raises, the whole resolution rolls back.
+            if action_request.is_standalone_cast:
+                from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
 
-            result = resolve_accepted_cast(action_request)
-        else:
-            result = _resolve_standard_action(action_request)
+                result = resolve_accepted_cast(action_request)
+            else:
+                result = _resolve_standard_action(action_request)
 
-        _award_acceptance_kudos(action_request)
+            _award_acceptance_kudos(action_request)
 
-        resolver = get_resolver(action_request.action_key)
-        if resolver is not None:
-            resolver(action_request, result)
+            resolver = get_resolver(action_request.action_key)
+            if resolver is not None:
+                resolver(action_request, result)
 
         return result
 
