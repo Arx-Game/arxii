@@ -25,7 +25,7 @@ def is_technique_hostile(technique: Technique) -> bool:
     This predicate is derived from authored data only; no model field is read
     or written by this function.
     """
-    if technique.effect_type_id is not None and technique.effect_type.base_power is not None:
+    if technique.effect_type.base_power is not None:
         return True
     if technique.damage_profiles.filter(base_damage__gt=0).exists():
         return True

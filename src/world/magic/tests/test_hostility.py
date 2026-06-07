@@ -89,6 +89,17 @@ class IsTechniqueHostileTests(EvenniaTestCase):
         )
         self.assertFalse(is_technique_hostile(technique))
 
+    def test_zero_base_damage_profile_is_not_hostile(self):
+        """A damage profile with base_damage=0 does NOT make the technique hostile."""
+        from world.magic.factories import BinaryEffectTypeFactory, TechniqueDamageProfileFactory
+        from world.magic.services.hostility import is_technique_hostile
+
+        profile = TechniqueDamageProfileFactory(
+            base_damage=0,
+            technique__effect_type=BinaryEffectTypeFactory(),
+        )
+        self.assertFalse(is_technique_hostile(profile.technique))
+
     def test_effect_type_with_base_power_makes_technique_hostile(self):
         """A technique whose effect_type has a non-null base_power is hostile."""
         from world.magic.factories import EffectTypeFactory, TechniqueFactory
