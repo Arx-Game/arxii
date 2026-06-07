@@ -2748,3 +2748,112 @@ class ThreadApplicabilitySerializer(serializers.Serializer):
         allow_null=True,
         required=False,
     )
+
+
+# =============================================================================
+# Technique Builder serializers (#537) — policy-aware design input
+# =============================================================================
+
+
+class _CapabilityGrantSpecSerializer(serializers.Serializer):
+    capability_id = serializers.IntegerField()
+    base_value = serializers.IntegerField(default=0)
+    intensity_multiplier = serializers.FloatField(default=0.0)
+
+
+class _DamageProfileSpecSerializer(serializers.Serializer):
+    damage_type_id = serializers.IntegerField(allow_null=True, required=False)
+    base_damage = serializers.IntegerField(default=0)
+    damage_intensity_multiplier = serializers.FloatField(default=0.0)
+
+
+class _AppliedConditionSpecSerializer(serializers.Serializer):
+    condition_id = serializers.IntegerField()
+    base_severity = serializers.IntegerField(default=1)
+    base_duration_rounds = serializers.IntegerField(allow_null=True, required=False)
+
+
+class TechniqueDesignSerializer(serializers.Serializer):
+    """Policy-aware write input for the technique builder.
+
+    Expects ``policy`` (an ``AuthoringPolicy`` instance) and optionally
+    ``character`` (a ``CharacterSheet``) in ``context``.  The serializer
+    validates FK existence, enforces player gift-ownership, derives
+    ``level`` from the tier's ``representative_level``, and stores the
+    built ``TechniqueDesignInput`` in ``validated_data["_design"]``.
+    """
+
+    name = serializers.CharField(max_length=200)
+    description = serializers.CharField(allow_blank=True, default="")
+    gift_id = serializers.IntegerField()
+    style_id = serializers.PrimaryKeyRelatedField(queryset=TechniqueStyle.objects.all())
+    effect_type_id = serializers.PrimaryKeyRelatedField(queryset=EffectType.objects.all())
+    action_category = serializers.CharField(max_length=10)
+    tier = serializers.IntegerField(min_value=1, max_value=5)
+    intensity = serializers.IntegerField(min_value=0)
+    control = serializers.IntegerField(min_value=0)
+    anima_cost = serializers.IntegerField(min_value=0)
+    restriction_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Restriction.objects.all(),
+        many=True,
+        required=False,
+        default=list,
+    )
+    capability_grants = _CapabilityGrantSpecSerializer(many=True, required=False, default=list)
+    damage_profiles = _DamageProfileSpecSerializer(many=True, required=False, default=list)
+    applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs):
+        from world.magic.services.technique_builder import PlayerPolicy  # noqa: PLC0415
+
+        policy = self.context["policy"]
+        character = self.context.get("character")
+
+        gift = Gift.objects.filter(pk=attrs["gift_id"]).first()
+        if gift is None:
+            raise serializers.ValidationError({"gift_id": "Unknown gift."})
+
+        # Player must own the gift; staff may use any gift.
+        if isinstance(policy, PlayerPolicy):
+            if (
+                character is None
+                or not CharacterGift.objects.filter(character=character, gift=gift).exists()
+            ):
+                raise serializers.ValidationError({"gift_id": "You do not know that gift."})
+
+        attrs["_gift"] = gift
+        attrs["_design"] = self._to_design(attrs)
+        return attrs
+
+    def _to_design(self, attrs):
+        from world.magic.services.technique_builder import (  # noqa: PLC0415
+            get_technique_tier_budget,
+        )
+        from world.magic.types.technique_builder import (  # noqa: PLC0415
+            AppliedConditionSpec,
+            CapabilityGrantSpec,
+            DamageProfileSpec,
+            TechniqueDesignInput,
+        )
+
+        tier = attrs["tier"]
+        level = get_technique_tier_budget(tier).representative_level
+        return TechniqueDesignInput(
+            name=attrs["name"],
+            description=attrs["description"],
+            gift_id=attrs["gift_id"],
+            style_id=attrs["style_id"].id,
+            effect_type_id=attrs["effect_type_id"].id,
+            action_category=attrs["action_category"],
+            tier=tier,
+            intensity=attrs["intensity"],
+            control=attrs["control"],
+            anima_cost=attrs["anima_cost"],
+            level=level,
+            restriction_ids=tuple(r.id for r in attrs["restriction_ids"]),
+            capability_grants=tuple(CapabilityGrantSpec(**c) for c in attrs["capability_grants"]),
+            damage_profiles=tuple(DamageProfileSpec(**d) for d in attrs["damage_profiles"]),
+            applied_conditions=tuple(
+                AppliedConditionSpec(**a) for a in attrs["applied_conditions"]
+            ),
+        )
