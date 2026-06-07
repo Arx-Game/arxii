@@ -149,6 +149,54 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     )
 
 
+def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneActionResult:
+    """Resolve a PENDING standalone cast on consent acceptance.
+
+    Resolves via the cast pipeline, marks the request RESOLVED, and authors a
+    Narrator OUTCOME pose (with the cast-level power ledger). Returns the result.
+
+    Args:
+        action_request: A PENDING SceneActionRequest with ``is_standalone_cast`` True.
+
+    Returns:
+        The resolved EnhancedSceneActionResult from the cast pipeline.
+    """
+    technique = action_request.technique
+    caster_persona = action_request.initiator_persona
+    target_persona = action_request.target_persona
+    character = caster_persona.character_sheet.character
+    target = target_persona.character_sheet.character if target_persona is not None else None
+    difficulty = derive_cast_difficulty(technique)
+
+    with transaction.atomic():
+        result, power_ledger = _resolve_cast(
+            technique=technique,
+            character=character,
+            target=target,
+            difficulty=difficulty,
+            strain_commitment=action_request.strain_commitment,
+        )
+
+        action_request.status = ActionRequestStatus.RESOLVED
+        action_request.resolved_at = timezone.now()
+        action_request.resolved_difficulty = difficulty
+        action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+
+        pose = create_cast_outcome_pose(
+            scene=action_request.scene,
+            caster_persona=caster_persona,
+            target_persona=target_persona,
+            technique=technique,
+            result=result,
+            power_ledger=power_ledger,
+        )
+
+        action_request.result_interaction = pose
+        action_request.save(update_fields=["result_interaction"])
+
+    return result
+
+
 def request_technique_cast(
     *,
     scene: Scene,

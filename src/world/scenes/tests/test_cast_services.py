@@ -33,7 +33,8 @@ from world.magic.models import Technique
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
-from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_services import respond_to_action_request
 from world.scenes.cast_services import (
     create_cast_outcome_pose,
     derive_cast_difficulty,
@@ -41,7 +42,7 @@ from world.scenes.cast_services import (
 )
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
-from world.scenes.models import Persona
+from world.scenes.models import Interaction, Persona
 from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
@@ -332,7 +333,7 @@ class TestImmediateCastSurfacesEnvironmentLedger(ResonanceCacheIsolationMixin, T
         self.assertIsNotNone(pose)
         self.assertTrue(
             pose.content.endswith("— the place's resonance swells the working."),
-            f"OUTCOME pose missing environment clause: {pose.content!r}",
+            f"OUTCOME pose missing environment clause (integration): {pose.content!r}",
         )
 
 
@@ -383,3 +384,134 @@ class TestCreateCastOutcomePoseLedgerClause(TestCase):
             pose.content.endswith("— the place's resonance swells the working."),
             f"OUTCOME pose missing environment clause: {pose.content!r}",
         )
+
+
+class TestRespondToActionRequestStandaloneCast(TestCase):
+    """respond_to_action_request accept/deny paths for a PENDING standalone technique cast.
+
+    A benign technique aimed at another PC creates a PENDING SceneActionRequest
+    (no action_template, no action_key). Accepting it should resolve the cast
+    pipeline, set status=RESOLVED, and author a Narrator OUTCOME pose.
+    Denying it should set status=DENIED with no OUTCOME pose created.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        room = create_object("typeclasses.rooms.Room", key="Respond Cast Room", nohome=True)
+        cls.scene = SceneFactory(location=room)
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        CharacterAnimaFactory(
+            character=cls.initiator.character_sheet.character,
+            current=20,
+            maximum=30,
+        )
+        for persona in (cls.initiator, cls.target):
+            CharacterVitals.objects.create(
+                character_sheet=persona.character_sheet,
+                health=50,
+                max_health=50,
+                base_max_health=50,
+            )
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_pending_standalone_request(self) -> object:
+        """Create a PENDING standalone cast request via request_technique_cast."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        CharacterTechniqueFactory(character=self.initiator.character_sheet, technique=technique)
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            technique=technique,
+        )
+        return cast.request
+
+    def test_accept_standalone_cast_returns_result(self) -> None:
+        """ACCEPT on a pending standalone cast returns an EnhancedSceneActionResult."""
+        req = self._make_pending_standalone_request()
+
+        result = respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, EnhancedSceneActionResult)
+
+    def test_accept_standalone_cast_sets_resolved(self) -> None:
+        """ACCEPT sets request status to RESOLVED and populates resolved fields."""
+        req = self._make_pending_standalone_request()
+
+        respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        req.refresh_from_db()
+        self.assertEqual(req.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(req.resolved_at)
+        self.assertIsNotNone(req.resolved_difficulty)
+
+    def test_accept_standalone_cast_creates_outcome_pose(self) -> None:
+        """ACCEPT creates a Narrator OUTCOME pose and links it on result_interaction."""
+        req = self._make_pending_standalone_request()
+
+        respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        req.refresh_from_db()
+        self.assertIsNotNone(req.result_interaction)
+        pose = req.result_interaction
+        self.assertEqual(pose.mode, InteractionMode.OUTCOME)
+        self.assertTrue(pose.persona.is_system)
+
+        # An OUTCOME interaction by a system persona must exist in the scene.
+        outcome_poses = Interaction.objects.filter(
+            scene=self.scene,
+            mode=InteractionMode.OUTCOME,
+            persona__is_system=True,
+        )
+        self.assertTrue(outcome_poses.exists())
+
+    def test_deny_standalone_cast_returns_none(self) -> None:
+        """DENY returns None and sets status to DENIED."""
+        req = self._make_pending_standalone_request()
+
+        result = respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.DENY,
+        )
+
+        self.assertIsNone(result)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ActionRequestStatus.DENIED)
+
+    def test_deny_standalone_cast_creates_no_outcome_pose(self) -> None:
+        """DENY must not create any OUTCOME pose for the scene."""
+        req = self._make_pending_standalone_request()
+        scene = req.scene
+
+        respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.DENY,
+        )
+
+        outcome_poses = Interaction.objects.filter(
+            scene=scene,
+            mode=InteractionMode.OUTCOME,
+        )
+        self.assertFalse(outcome_poses.exists())
