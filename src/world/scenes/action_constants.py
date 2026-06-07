@@ -37,3 +37,16 @@ DIFFICULTY_VALUES: dict[str, int] = {
     DifficultyChoice.HARD: 60,
     DifficultyChoice.DAUNTING: 75,
 }
+
+CAST_ACTION_KEY = "cast"  # sentinel marking a standalone cast request
+
+# Authored difficulty bands keyed by technique intensity ceiling. Single source
+# of truth (no inline magic numbers in logic). On the same 0-75 scale as
+# DIFFICULTY_VALUES so consequence resolution thresholds line up.
+CAST_DIFFICULTY_BANDS: tuple[tuple[int, int], ...] = (
+    (2, 15),
+    (4, 30),
+    (6, 45),
+    (8, 60),
+    (9999, 75),
+)
