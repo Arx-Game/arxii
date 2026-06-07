@@ -1,5 +1,7 @@
 """Tests for the CovenantRite read-only API."""
 
+import secrets
+
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -8,6 +10,27 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.constants import CovenantType
 from world.covenants.models import CovenantRite
 from world.magic.factories import RitualFactory
+
+
+def _make_rite(name: str, **overrides) -> CovenantRite:
+    """Create a CovenantRite with sensible defaults for view testing.
+
+    Pass only the fields that differ from the defaults as keyword overrides.
+    Each call creates distinct Ritual and ConditionTemplate rows to avoid O2O conflicts.
+    """
+    defaults = {
+        "covenant_type": CovenantType.DURANCE,
+        "min_covenant_level": 1,
+        "min_engaged_present": 2,
+        "base_severity": 1,
+        "severity_per_extra_participant": 0,
+    }
+    defaults.update(overrides)
+    return CovenantRite.objects.create(
+        ritual=RitualFactory(name=f"{name} Ritual"),
+        granted_condition=ConditionTemplateFactory(name=f"{name} Condition"),
+        **defaults,
+    )
 
 
 class CovenantRiteViewTestCase(TestCase):
@@ -20,7 +43,7 @@ class CovenantRiteViewTestCase(TestCase):
         cls.user = AccountDB.objects.create_user(
             username="riteviewtestuser",
             email="riteview@test.com",
-            password="testpass123",
+            password=secrets.token_urlsafe(),
         )
 
     def setUp(self) -> None:
@@ -35,26 +58,12 @@ class CovenantRiteListTests(CovenantRiteViewTestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
 
-        cls.ritual_durance = RitualFactory(name="Rite View Test Ritual Durance")
-        cls.ritual_battle = RitualFactory(name="Rite View Test Ritual Battle")
-        cls.condition = ConditionTemplateFactory(name="Rite View Test Condition")
-        cls.condition2 = ConditionTemplateFactory(name="Rite View Test Condition 2")
-
-        cls.rite_durance = CovenantRite.objects.create(
-            ritual=cls.ritual_durance,
-            covenant_type=CovenantType.DURANCE,
-            min_covenant_level=1,
-            min_engaged_present=2,
-            granted_condition=cls.condition,
-            base_severity=1,
-            severity_per_extra_participant=0,
-        )
-        cls.rite_battle = CovenantRite.objects.create(
-            ritual=cls.ritual_battle,
+        cls.rite_durance = _make_rite("rite-views-durance")
+        cls.rite_battle = _make_rite(
+            "rite-views-battle",
             covenant_type=CovenantType.BATTLE,
             min_covenant_level=2,
             min_engaged_present=3,
-            granted_condition=cls.condition2,
             base_severity=2,
             severity_per_extra_participant=1,
             max_severity=5,
@@ -95,7 +104,7 @@ class CovenantRiteListTests(CovenantRiteViewTestCase):
         """Read-only ViewSet: POST returns 405."""
         response = self.client.post(
             "/api/covenants/rites/",
-            {"ritual": self.ritual_durance.pk},
+            {"ritual": self.rite_durance.ritual.pk},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
@@ -108,14 +117,10 @@ class CovenantRiteDetailTests(CovenantRiteViewTestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
 
-        cls.ritual = RitualFactory(name="Rite Detail Test Ritual")
-        cls.condition = ConditionTemplateFactory(name="Rite Detail Test Condition")
-        cls.rite = CovenantRite.objects.create(
-            ritual=cls.ritual,
-            covenant_type=CovenantType.DURANCE,
+        cls.rite = _make_rite(
+            "rite-detail",
             min_covenant_level=3,
             min_engaged_present=2,
-            granted_condition=cls.condition,
             base_severity=2,
             severity_per_extra_participant=1,
             max_severity=8,
@@ -133,11 +138,11 @@ class CovenantRiteDetailTests(CovenantRiteViewTestCase):
         response = self.client.get(f"/api/covenants/rites/{self.rite.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data
-        self.assertEqual(data["ritual"], self.ritual.pk)
+        self.assertEqual(data["ritual"], self.rite.ritual.pk)
         self.assertEqual(data["covenant_type"], CovenantType.DURANCE)
         self.assertEqual(data["min_covenant_level"], 3)
         self.assertEqual(data["min_engaged_present"], 2)
-        self.assertEqual(data["granted_condition"], self.condition.pk)
+        self.assertEqual(data["granted_condition"], self.rite.granted_condition.pk)
         self.assertEqual(data["base_severity"], 2)
         self.assertEqual(data["severity_per_extra_participant"], 1)
         self.assertEqual(data["max_severity"], 8)
@@ -153,16 +158,8 @@ class CovenantRiteDetailTests(CovenantRiteViewTestCase):
 
     def test_nullable_fields_can_be_null(self) -> None:
         """max_severity and duration_rounds are null when not set."""
-        ritual_null = RitualFactory(name="Rite Null Fields Ritual")
-        condition_null = ConditionTemplateFactory(name="Rite Null Fields Condition")
-        rite_null = CovenantRite.objects.create(
-            ritual=ritual_null,
-            covenant_type=CovenantType.DURANCE,
-            min_covenant_level=1,
-            min_engaged_present=2,
-            granted_condition=condition_null,
-            base_severity=1,
-            severity_per_extra_participant=0,
+        rite_null = _make_rite(
+            "rite-null-fields",
             max_severity=None,
             duration_rounds=None,
         )

@@ -58,6 +58,76 @@ def _make_rite(*, covenant, ritual, condition_template) -> CovenantRite:
     )
 
 
+def _make_active_encounter(room, scene):
+    """Create a CombatEncounter in RESOLVING status for the given room and scene."""
+    from world.combat.constants import EncounterStatus
+    from world.combat.factories import CombatEncounterFactory
+    from world.combat.models import CombatEncounter
+
+    encounter = CombatEncounterFactory(room=room, scene=scene)
+    CombatEncounter.objects.filter(pk=encounter.pk).update(status=EncounterStatus.RESOLVING)
+    encounter.refresh_from_db()
+    return encounter
+
+
+class _RiteSceneTestCase(TestCase):
+    """Shared setUp for tests that need: room, covenant, role, 2 engaged members,
+    a condition template, a ritual+rite, an active CombatEncounter, and a RitualSession
+    with a COVENANT reference.
+
+    Subclasses may override or extend setUp; all common objects are available as
+    self.room, self.covenant, self.role, self.mem_a, self.mem_b,
+    self.condition_template, self.ritual, self.rite, self.scene,
+    self.encounter, self.session.
+    """
+
+    _room_key: str = "BaseRiteRoom"
+    _covenant_level: int = 3
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import RitualFactory, RitualSessionFactory
+        from world.magic.models.sessions import RitualSessionReference
+        from world.scenes.factories import SceneFactory
+
+        self.room = _make_room(self._room_key)
+        self.covenant = CovenantFactory(
+            covenant_type=CovenantType.DURANCE, level=self._covenant_level
+        )
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
+        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
+
+        self.condition_template = ConditionTemplateFactory()
+        self.ritual = RitualFactory(
+            service_function_path="world.covenants.services.perform_covenant_rite"
+        )
+        self.rite = _make_rite(
+            covenant=self.covenant,
+            ritual=self.ritual,
+            condition_template=self.condition_template,
+        )
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.encounter = _make_active_encounter(room=self.room, scene=self.scene)
+
+        self.session = RitualSessionFactory(
+            ritual=self.ritual,
+            initiator=self.mem_a.character_sheet,
+        )
+        RitualSessionReference.objects.create(
+            session=self.session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=self.covenant,
+            ref_covenant_role=None,
+        )
+
+
 class EngagedMembersPresentTests(TestCase):
     """Unit tests for the engaged_members_present helper."""
 
@@ -120,72 +190,17 @@ class EngagedMembersPresentTests(TestCase):
         self.assertEqual(result, [])
 
 
-class PerformCovenantRiteHappyPathTests(TestCase):
+class PerformCovenantRiteHappyPathTests(_RiteSceneTestCase):
     """Happy-path tests for perform_covenant_rite."""
 
+    _room_key = "RiteRoom"
+
     def setUp(self) -> None:
-        from world.covenants.constants import CovenantType
-        from world.magic.factories import RitualFactory, RitualSessionFactory
+        super().setUp()
 
-        self.room = _make_room("RiteRoom")
-        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
-        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-
-        # 3 engaged members, all in the room.
-        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
+        # Add a third engaged member in the room (beyond the two from base setUp).
         self.mem_c = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
-        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
         _place_character_in_room(self.mem_c.character_sheet.character, self.room)
-
-        self.condition_template = ConditionTemplateFactory()
-        self.ritual = RitualFactory(
-            service_function_path="world.covenants.services.perform_covenant_rite"
-        )
-        self.rite = _make_rite(
-            covenant=self.covenant,
-            ritual=self.ritual,
-            condition_template=self.condition_template,
-        )
-
-        # Build an active CombatEncounter in the room.
-        from world.combat.constants import EncounterStatus
-        from world.combat.factories import CombatEncounterFactory
-        from world.combat.models import CombatEncounter
-        from world.scenes.factories import SceneFactory
-
-        self.scene = SceneFactory(location=self.room, is_active=True)
-        self.encounter = CombatEncounterFactory(
-            room=self.room,
-            scene=self.scene,
-        )
-        # Ensure status is not COMPLETED.
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.RESOLVING
-        )
-        self.encounter.refresh_from_db()
-
-        # Build a RitualSession with a COVENANT ref pointing at our covenant.
-        from world.magic.constants import ReferenceKind
-        from world.magic.models.sessions import RitualSessionReference
-
-        self.session = RitualSessionFactory(
-            ritual=self.ritual,
-            initiator=self.mem_a.character_sheet,
-        )
-        RitualSessionReference.objects.create(
-            session=self.session,
-            participant=None,
-            kind=ReferenceKind.COVENANT,
-            ref_covenant=self.covenant,
-            ref_covenant_role=None,
-        )
-
-    def _ritual_session_factory(self):
-        from world.magic.factories import RitualSessionFactory
-
-        return RitualSessionFactory
 
     def test_returns_rite_instance(self) -> None:
         """Happy path: returns a CovenantRiteInstance."""
@@ -249,61 +264,10 @@ class PerformCovenantRiteHappyPathTests(TestCase):
         )
 
 
-class PerformCovenantRiteGateTests(TestCase):
+class PerformCovenantRiteGateTests(_RiteSceneTestCase):
     """Gate failure tests: each gate must raise the typed exception and roll back."""
 
-    def setUp(self) -> None:
-        from world.covenants.constants import CovenantType
-        from world.magic.factories import RitualFactory
-
-        self.room = _make_room("GateRoom")
-        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
-        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-
-        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
-        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
-
-        self.condition_template = ConditionTemplateFactory()
-        self.ritual = RitualFactory(
-            service_function_path="world.covenants.services.perform_covenant_rite"
-        )
-        self.rite = _make_rite(
-            covenant=self.covenant,
-            ritual=self.ritual,
-            condition_template=self.condition_template,
-        )  # min_covenant_level=1, min_engaged_present=2
-
-        # Base encounter setup (active).
-        from world.combat.constants import EncounterStatus
-        from world.combat.factories import CombatEncounterFactory
-        from world.combat.models import CombatEncounter
-        from world.scenes.factories import SceneFactory
-
-        self.scene = SceneFactory(location=self.room, is_active=True)
-        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.RESOLVING
-        )
-        self.encounter.refresh_from_db()
-
-        # Base session + COVENANT ref.
-        from world.magic.constants import ReferenceKind
-        from world.magic.factories import RitualSessionFactory
-        from world.magic.models.sessions import RitualSessionReference
-
-        self.session = RitualSessionFactory(
-            ritual=self.ritual,
-            initiator=self.mem_a.character_sheet,
-        )
-        RitualSessionReference.objects.create(
-            session=self.session,
-            participant=None,
-            kind=ReferenceKind.COVENANT,
-            ref_covenant=self.covenant,
-            ref_covenant_role=None,
-        )
+    _room_key = "GateRoom"
 
     def test_covenant_level_too_low_raises_and_rolls_back(self) -> None:
         """covenant.level < rite.min_covenant_level → CovenantLevelTooLowError, no rows."""
@@ -377,76 +341,19 @@ class PerformCovenantRiteGateTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class FoldArrivalIntoActiveRitesTests(TestCase):
+class FoldArrivalIntoActiveRitesTests(_RiteSceneTestCase):
     """Tests for the late-arrival fold-in service function.
 
     Rite params: base_severity=2, severity_per_extra_participant=1,
     min_engaged_present=2 → severity_for(2)=2, severity_for(3)=3.
     """
 
+    _room_key = "FoldRoom"
+
     def setUp(self) -> None:
-        from world.covenants.constants import CovenantType
-
-        self.room = _make_room("FoldRoom")
-        # level set directly — avoids legend/matview path absent on SQLite.
-        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
-        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-
-        # Two initial engaged members present for the rite.
-        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
-        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
-
-        self.condition_template = ConditionTemplateFactory()
-
-        # Build a rite with severity_for(2)=2, severity_for(3)=3.
-        from world.magic.factories import RitualFactory
-
-        self.ritual = RitualFactory(
-            service_function_path="world.covenants.services.perform_covenant_rite"
-        )
-        self.rite = CovenantRite.objects.create(
-            ritual=self.ritual,
-            covenant_type=self.covenant.covenant_type,
-            min_covenant_level=1,
-            min_engaged_present=2,
-            granted_condition=self.condition_template,
-            base_severity=2,
-            severity_per_extra_participant=1,
-            max_severity=None,
-            duration_rounds=5,
-        )
-
-        # Active CombatEncounter in the room.
-        from world.combat.constants import EncounterStatus
-        from world.combat.factories import CombatEncounterFactory
-        from world.combat.models import CombatEncounter
-        from world.scenes.factories import SceneFactory
-
-        self.scene = SceneFactory(location=self.room, is_active=True)
-        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.RESOLVING
-        )
-        self.encounter.refresh_from_db()
+        super().setUp()
 
         # Fire the rite for the two initial members → creates a CovenantRiteInstance.
-        from world.magic.constants import ReferenceKind
-        from world.magic.factories import RitualSessionFactory
-        from world.magic.models.sessions import RitualSessionReference
-
-        self.session = RitualSessionFactory(
-            ritual=self.ritual,
-            initiator=self.mem_a.character_sheet,
-        )
-        RitualSessionReference.objects.create(
-            session=self.session,
-            participant=None,
-            kind=ReferenceKind.COVENANT,
-            ref_covenant=self.covenant,
-            ref_covenant_role=None,
-        )
         self.rite_instance = perform_covenant_rite(session=self.session)
         # Verify baseline: 2 participants, severity=2.
         self.assertEqual(self.rite_instance.participants.count(), 2)
@@ -629,75 +536,20 @@ class FoldArrivalIntoActiveRitesTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class CompleteRitesForEncounterTests(TestCase):
+class CompleteRitesForEncounterTests(_RiteSceneTestCase):
     """Tests for complete_rites_for_encounter (combat-end buff sweep).
 
     Uses the same fixture pattern as FoldArrivalIntoActiveRitesTests:
     2 initial engaged members fire the rite, producing 2 ConditionInstance rows.
     """
 
+    _room_key = "SweepRoom"
+
     def setUp(self) -> None:
-        from world.covenants.constants import CovenantType
-
-        self.room = _make_room("SweepRoom")
-        self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)
-        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-
-        # Two engaged members, both in the room.
-        self.mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        self.mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        _place_character_in_room(self.mem_a.character_sheet.character, self.room)
-        _place_character_in_room(self.mem_b.character_sheet.character, self.room)
-
-        self.condition_template = ConditionTemplateFactory()
-
-        from world.magic.factories import RitualFactory
-
-        self.ritual = RitualFactory(
-            service_function_path="world.covenants.services.perform_covenant_rite"
-        )
-        self.rite = CovenantRite.objects.create(
-            ritual=self.ritual,
-            covenant_type=self.covenant.covenant_type,
-            min_covenant_level=1,
-            min_engaged_present=2,
-            granted_condition=self.condition_template,
-            base_severity=2,
-            severity_per_extra_participant=1,
-            max_severity=None,
-            duration_rounds=5,
-        )
-
-        # Active CombatEncounter.
-        from world.combat.constants import EncounterStatus
-        from world.combat.factories import CombatEncounterFactory
-        from world.combat.models import CombatEncounter
-        from world.scenes.factories import SceneFactory
-
-        self.scene = SceneFactory(location=self.room, is_active=True)
-        self.encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.RESOLVING
-        )
-        self.encounter.refresh_from_db()
+        super().setUp()
 
         # Fire the rite for the two members.
-        from world.magic.constants import ReferenceKind
-        from world.magic.factories import RitualSessionFactory
-        from world.magic.models.sessions import RitualSessionReference
-
-        session = RitualSessionFactory(
-            ritual=self.ritual,
-            initiator=self.mem_a.character_sheet,
-        )
-        RitualSessionReference.objects.create(
-            session=session,
-            participant=None,
-            kind=ReferenceKind.COVENANT,
-            ref_covenant=self.covenant,
-            ref_covenant_role=None,
-        )
-        self.rite_instance = perform_covenant_rite(session=session)
+        self.rite_instance = perform_covenant_rite(session=self.session)
         # Sanity: both have the buff.
         for mem in (self.mem_a, self.mem_b):
             self.assertTrue(
