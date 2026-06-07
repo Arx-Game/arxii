@@ -142,6 +142,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-requests/cast/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Submit a standalone technique cast.
+     *
+     *     Routes per the consent/combat/immediate matrix:
+     *     - self/room/no-target → resolves immediately (201 with result + power_ledger)
+     *     - benign at another PC → PENDING consent request (201, no result yet)
+     *     - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
+     */
+    post: operations['action_requests_cast_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/castable-techniques/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List techniques the given persona can cast standalone.
+     *
+     *     Requires ?initiator_persona=<id> query param. Returns only techniques
+     *     with an action_template (castable standalone) known by that character.
+     */
+    get: operations['action_requests_castable_techniques_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -2871,6 +2917,50 @@ export interface paths {
      *     No pagination — this is a small, stable lookup table.
      */
     get: operations['covenants_level_thresholds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/rites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRite authored definitions.
+     *
+     *     Rites are authored/public content — any authenticated user may read.
+     *     No per-user scoping needed.
+     */
+    get: operations['covenants_rites_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/rites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRite authored definitions.
+     *
+     *     Rites are authored/public content — any authenticated user may read.
+     *     No per-user scoping needed.
+     */
+    get: operations['covenants_rites_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -12544,6 +12634,27 @@ export interface components {
       level: number;
       required_legend: number;
     };
+    /** @description Read-only serializer for CovenantRite authored definitions. */
+    CovenantRite: {
+      readonly id: number;
+      readonly ritual: number;
+      /**
+       * @description Restrict to this covenant type; blank = any.
+       *
+       *     * `durance` - Covenant of the Durance
+       *     * `battle` - Covenant of Battle
+       */
+      readonly covenant_type: components['schemas']['CovenantTypeEnum'];
+      readonly covenant_type_display: string;
+      readonly min_covenant_level: number;
+      readonly min_engaged_present: number;
+      readonly granted_condition: number;
+      readonly base_severity: number;
+      readonly severity_per_extra_participant: number;
+      readonly max_severity: number | null;
+      /** @description Override; blank uses the condition's UNTIL_END_OF_COMBAT default. */
+      readonly duration_rounds: number | null;
+    };
     /** @description Read-only serializer for CovenantRole lookup data. */
     CovenantRole: {
       readonly id: number;
@@ -15579,6 +15690,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Covenant'][];
+    };
+    PaginatedCovenantRiteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CovenantRite'][];
     };
     PaginatedDraftApplicationList: {
       /** @example 123 */
@@ -18971,8 +19097,8 @@ export interface components {
       /** @description The persona performing the action */
       initiator_persona: number;
       readonly initiator_name: string;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted (null for standalone technique casts) */
+      target_persona?: number | null;
       readonly target_name: string;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
@@ -19010,8 +19136,8 @@ export interface components {
       scene: number;
       /** @description The persona performing the action */
       initiator_persona: number;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted (null for standalone technique casts) */
+      target_persona?: number | null;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
       /** @description Data-driven action template if applicable */
@@ -20840,6 +20966,48 @@ export interface operations {
         'application/json': components['schemas']['SceneActionRequestRequest'];
       };
     };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_cast_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneActionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_castable_techniques_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -24244,6 +24412,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CovenantLevelThreshold'];
+        };
+      };
+    };
+  };
+  covenants_rites_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Restrict to this covenant type; blank = any.
+         *
+         *     * `durance` - Covenant of the Durance
+         *     * `battle` - Covenant of Battle
+         */
+        covenant_type?: 'battle' | 'durance';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCovenantRiteList'];
+        };
+      };
+    };
+  };
+  covenants_rites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Covenant Rite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRite'];
         };
       };
     };

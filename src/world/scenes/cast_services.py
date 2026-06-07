@@ -356,4 +356,9 @@ def _route_immediate_cast(
         request.result_interaction = pose
         request.save(update_fields=["result_interaction"])
 
-    return CastResult(request=request, result=result, outcome_interaction=pose)
+    return CastResult(
+        request=request,
+        result=result,
+        outcome_interaction=pose,
+        power_ledger=power_ledger,
+    )

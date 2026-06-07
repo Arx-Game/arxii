@@ -19,12 +19,15 @@ from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_filters import SceneActionRequestFilter
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_serializers import (
+    CastableTechniqueSerializer,
     ConsentResponseSerializer,
     EnhancedSceneActionResultSerializer,
     SceneActionRequestCreateSerializer,
     SceneActionRequestSerializer,
+    TechniqueCastCreateSerializer,
 )
 from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.cast_services import request_technique_cast
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
 
@@ -169,3 +172,134 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             ).data
 
         return Response(response_data)
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
+    def cast(self, request: Request) -> Response:
+        """Submit a standalone technique cast.
+
+        Routes per the consent/combat/immediate matrix:
+        - self/room/no-target → resolves immediately (201 with result + power_ledger)
+        - benign at another PC → PENDING consent request (201, no result yet)
+        - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
+        """
+        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+        from world.magic.models import Technique  # noqa: PLC0415
+
+        serializer = TechniqueCastCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        persona_ids = get_account_personas(request)
+        if not persona_ids:
+            return Response(
+                {"detail": "No personas found for your account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        vd = serializer.validated_data
+        scene_id = vd["scene"]
+        initiator_persona_id = vd["initiator_persona"]
+        technique_id = vd["technique_id"]
+        target_persona_id = vd.get("target_persona")
+        strain_commitment = vd.get("strain_commitment", 0) or 0
+
+        try:
+            scene = Scene.objects.get(pk=scene_id, is_active=True)
+        except Scene.DoesNotExist:
+            return Response(
+                {"detail": "Active scene not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if initiator_persona_id not in persona_ids:
+            return Response(
+                {"detail": "Initiator persona not found for your account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+
+        target_persona: Persona | None = None
+        if target_persona_id is not None:
+            target_persona = get_object_or_404(Persona, pk=target_persona_id)
+
+        technique = get_object_or_404(Technique, pk=technique_id)
+
+        try:
+            cast_result = request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                technique=technique,
+                strain_commitment=strain_commitment,
+            )
+        except DjangoValidationError as exc:
+            messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]
+            return Response(
+                {"detail": messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_data = SceneActionRequestSerializer(cast_result.request).data
+
+        if cast_result.result is not None:
+            response_data["result"] = EnhancedSceneActionResultSerializer(
+                cast_result.result,
+                context={"request": request, "power_ledger": cast_result.power_ledger},
+            ).data
+
+        if cast_result.encounter is not None:
+            response_data["encounter"] = {
+                "id": cast_result.encounter.pk,
+                "status": cast_result.encounter.status,
+            }
+
+        if cast_result.outcome_interaction is not None:
+            response_data["outcome_interaction"] = cast_result.outcome_interaction.pk
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="castable-techniques")
+    def castable_techniques(self, request: Request) -> Response:
+        """List techniques the given persona can cast standalone.
+
+        Requires ?initiator_persona=<id> query param. Returns only techniques
+        with an action_template (castable standalone) known by that character.
+        """
+        from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
+
+        initiator_persona_id_str = request.query_params.get("initiator_persona")
+        if not initiator_persona_id_str:
+            return Response(
+                {"detail": "initiator_persona query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            initiator_persona_id = int(initiator_persona_id_str)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "initiator_persona must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        persona_ids = get_account_personas(request)
+        if initiator_persona_id not in persona_ids:
+            return Response(
+                {"detail": "Initiator persona not found for your account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+        sheet_id = initiator_persona.character_sheet_id
+
+        char_techniques = (
+            CharacterTechnique.objects.filter(
+                character_id=sheet_id,
+                technique__action_template__isnull=False,
+            )
+            .select_related("technique", "technique__action_template", "technique__effect_type")
+            .order_by("technique__name")
+        )
+
+        techniques = [ct.technique for ct in char_techniques]
+        return Response(CastableTechniqueSerializer(techniques, many=True).data)
