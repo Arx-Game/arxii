@@ -539,6 +539,9 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
             .add(PowerStage.REACTIVE, "pre-cast edit", pre_payload.power - effective_ledger.total)
             .build()
         )
+    # Ledger is the source of truth: keep effective_power == effective_ledger.total so a
+    # hook that drives power below 0 yields a floored (>=0) value, never a negative power.
+    effective_power = effective_ledger.total
 
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)
