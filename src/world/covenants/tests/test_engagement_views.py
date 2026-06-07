@@ -93,8 +93,9 @@ class EngagementViewAuthorizationTests(TestCase):
     def test_engage_allows_owner(self) -> None:
         """200 when the requesting user owns the sheet.
 
-        BATTLE covenants have no IC prerequisite (can_engage_durance_membership
-        returns True for non-Durance types), so this reaches the success path.
+        The BATTLE covenant here is risen (not dormant), so can_engage_membership
+        returns True and the request reaches the success path. (A dormant battle
+        covenant would be blocked — see test_battle_engagement.)
         """
         response = self.owner_client.post(
             f"/api/covenants/character-roles/{self.membership.pk}/engage/"
@@ -145,9 +146,9 @@ class EngagePrerequisiteTests(TestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_engage_returns_400_when_prerequisite_not_met(self) -> None:
-        """can_engage_durance_membership returning False → 400 with user_message."""
+        """can_engage_membership returning False → 400 with user_message."""
         with patch(
-            "world.covenants.views.can_engage_durance_membership",
+            "world.covenants.views.can_engage_membership",
             return_value=False,
         ):
             response = self.client.post(
@@ -163,7 +164,7 @@ class EngagePrerequisiteTests(TestCase):
     def test_engage_returns_200_and_engaged_when_prerequisite_met(self) -> None:
         """Sets engaged=True when prerequisite passes."""
         with patch(
-            "world.covenants.views.can_engage_durance_membership",
+            "world.covenants.views.can_engage_membership",
             return_value=True,
         ):
             response = self.client.post(
@@ -246,7 +247,7 @@ class CanEngageSerializerFieldTests(TestCase):
     def test_can_engage_true_when_prerequisite_met(self) -> None:
         """can_engage field is True when IC prerequisite passes."""
         with patch(
-            "world.covenants.serializers.can_engage_durance_membership",
+            "world.covenants.serializers.can_engage_membership",
             return_value=True,
         ):
             response = self.client.get(f"/api/covenants/character-roles/{self.membership.pk}/")
@@ -257,7 +258,7 @@ class CanEngageSerializerFieldTests(TestCase):
     def test_can_engage_false_with_blocked_reason(self) -> None:
         """can_engage is False and engage_blocked_reason is set when prerequisite fails."""
         with patch(
-            "world.covenants.serializers.can_engage_durance_membership",
+            "world.covenants.serializers.can_engage_membership",
             return_value=False,
         ):
             response = self.client.get(f"/api/covenants/character-roles/{self.membership.pk}/")

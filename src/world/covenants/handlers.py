@@ -131,14 +131,14 @@ class CovenantMembershipHandler:
         self._cached = None
 
 
-def can_engage_durance_membership(membership: CharacterCovenantRole) -> bool:
+def can_engage_membership(membership: CharacterCovenantRole) -> bool:
     """Shared prerequisite check used by manual + auto engage paths.
 
-    Returns True iff:
-      - The membership is for a non-Durance covenant (placeholder until Battles
-        ship — Slice E will refine), OR
-      - The character is in a room with an active scene AND at least one other
-        active member of the same covenant is physically present in that room.
+    - BATTLE: engageable iff the covenant is risen (not dormant). A dormant
+      battle covenant cannot be engaged — vows lie latent until a "call the
+      banners" rise ritual brings the covenant back (Slice E).
+    - DURANCE: the character is in a room with an active scene AND at least one
+      other active member of the same covenant is co-present in that room.
 
     All membership lookups go through cached handlers per project rule §3.9 of
     the Slice B spec — no .filter() on related managers.
@@ -146,8 +146,10 @@ def can_engage_durance_membership(membership: CharacterCovenantRole) -> bool:
     from world.covenants.constants import CovenantType  # noqa: PLC0415
     from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
 
-    if membership.covenant.covenant_type != CovenantType.DURANCE:
-        return True
+    covenant = membership.covenant
+    if covenant.covenant_type == CovenantType.BATTLE:
+        return not covenant.is_dormant
+
     char = membership.character_sheet.character
     location = char.location
     if location is None:

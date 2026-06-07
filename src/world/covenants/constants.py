@@ -25,3 +25,15 @@ class RoleArchetype(models.TextChoices):
     SWORD = "sword", "Sword"  # Offense
     SHIELD = "shield", "Shield"  # Defense
     CROWN = "crown", "Crown"  # Support
+
+
+class BattleBinding(models.TextChoices):
+    """How a Battle covenant is bound to its cause (Slice E).
+
+    STANDING covenants (a military unit or a state's banner-call) can rise
+    again after standing down. CAMPAIGN covenants are bound to a single
+    event and dissolve when it concludes.
+    """
+
+    STANDING = "standing", "Standing (unit or banner — can rise again)"
+    CAMPAIGN = "campaign", "Campaign (one-time event — dissolves when done)"

@@ -2077,6 +2077,14 @@ class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
                     "options": ["DURANCE", "BATTLE"],
                     "required": True,
                 },
+                {
+                    "name": "battle_binding",
+                    "type": "select",
+                    "options": ["standing", "campaign"],
+                    "depends_on": "covenant_type",
+                    "show_if": {"covenant_type": "BATTLE"},
+                    "required": False,
+                },
                 {"name": "sworn_objective", "type": "textarea", "required": True},
                 {
                     "name": "invitees",
@@ -2134,6 +2142,45 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
                     "type": "covenant_role_picker",
                     "depends_on": "session.target_covenant.covenant_type",
                     "applies_to": "candidate_only",
+                    "required": True,
+                },
+            ],
+        }
+    )
+
+
+class BattleCovenantRiseRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the 'call the banners' battle-covenant rise ritual (Slice E)."""
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Call the Banners"
+    description = "Raise a dormant standing battle covenant back to war."
+    narrative_prose = (
+        "The banners are unfurled and the oath is sworn anew: war is declared "
+        "and the covenant rises to defend its own."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.rise_battle_covenant_via_session"
+    flow = None
+    participation_rule = ParticipationRule.FORMATION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "target_covenant",
+                    "type": "covenant_picker",
+                    "filter": "initiator_dormant_standing_battle_memberships",
+                    "required": True,
+                },
+                {"name": "declaration", "type": "textarea", "required": True},
+                {
+                    "name": "invitees",
+                    "type": "character_search",
+                    "multi": True,
+                    "min": 1,
                     "required": True,
                 },
             ],
