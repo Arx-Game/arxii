@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ActionCategory, OpponentTier
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -41,6 +42,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.types.power_ledger import PowerLedger
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _ledger(power: int) -> PowerLedger:
@@ -230,3 +232,92 @@ class PenetrationContestTests(TestCase):
         raw_budget = result.damage_results[0].damage_dealt + fresh_opp.soak_value
         single = apply_damage_to_opponent(fresh_opp, raw_budget)
         self.assertEqual(single.damage_dealt, observed)
+
+
+class PenetrationEndToEndTests(TestCase):
+    """End-to-end penetration test: real perform_check pipeline, no mocking.
+
+    Uses ``force_check_outcome`` (the test-seam in perform_check itself) so the
+    dice roll is bypassed but the full path from CheckType → CheckRank →
+    ResultChart → success_level → get_penetration_factor → PowerLedger is
+    exercised without patching world.combat.services.perform_check.
+
+    The authored factor ladder from wire_penetration_factors():
+      SL ≤ -99 → 0.00 (bounced)
+      SL =  0  → 0.50 (partial)
+      SL ≥  1  → 1.00 (penetrated)
+      SL ≥  3  → 1.50 (overpenetrated)
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="E2E Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="E2E Partial"
+        )
+        wire_penetration_factors()
+        wire_penetration_check_type()
+        # CheckOutcome rows needed by force_check_outcome's forced-result path.
+        cls.outcome_partial = CheckOutcomeFactory(
+            name="E2E Partial Pen Success", success_level=0
+        )
+        cls.outcome_full = CheckOutcomeFactory(
+            name="E2E Full Pen Success", success_level=1
+        )
+
+    def test_real_perform_check_produces_penetration_ledger_entry(self) -> None:
+        """Run CombatTechniqueResolver against a warded opponent WITHOUT mocking
+        perform_check.  force_check_outcome injects a deterministic CheckOutcome
+        (SL=0 → factor 0.50) so the outcome is stable across random rolls, while
+        the real perform_check code path (trait calculation, rank lookup, the
+        test-seam branch) executes.
+
+        Assertions (all structural; none depend on authored factor values beyond
+        what wire_penetration_factors seeds):
+        - A PENETRATION-stage entry exists in the power ledger.
+        - power_ledger.total matches the entry's running_total (invariant).
+        - total equals round(20 * 0.50) = 10 for a SL=0 outcome (partial).
+        """
+        resolver = _build_resolver(barrier_strength=7, base_power=20)
+
+        with force_check_outcome(self.outcome_partial):
+            result = resolver(power=20, ledger=_ledger(20))
+
+        pen_entries = [
+            e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION
+        ]
+        # A graded outcome flowed through the real check pipeline and produced an entry.
+        self.assertEqual(len(pen_entries), 1, "Expected exactly one PENETRATION ledger entry")
+
+        # Ledger running-total invariant: last entry's running_total == total.
+        self.assertEqual(
+            result.power_ledger.total,
+            result.power_ledger.entries[-1].running_total,
+        )
+
+        # SL=0 → factor 0.50 → 20 * 0.50 = 10 (no rounding needed at power=20).
+        self.assertEqual(result.power_ledger.total, 10)
+
+    def test_real_perform_check_bounce_zeroes_power(self) -> None:
+        """SL < 0 (factor 0.00) through the real pipeline → bounce → total == 0."""
+        outcome_bounce = CheckOutcomeFactory(
+            name="E2E Bounce Pen Success", success_level=-1
+        )
+        resolver = _build_resolver(barrier_strength=30, base_power=20)
+
+        with force_check_outcome(outcome_bounce):
+            result = resolver(power=20, ledger=_ledger(20))
+
+        pen_entries = [
+            e for e in result.power_ledger.entries if e.stage == PowerStage.PENETRATION
+        ]
+        self.assertEqual(len(pen_entries), 1)
+        self.assertEqual(pen_entries[0].source_label, "ward (bounced)")
+        self.assertEqual(result.power_ledger.total, 0)
+        # Ledger invariant still holds after a bounce.
+        self.assertEqual(
+            result.power_ledger.total,
+            result.power_ledger.entries[-1].running_total,
+        )
