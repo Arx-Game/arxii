@@ -312,6 +312,8 @@ def _derive_power(
     # --- FLAT stage (per source; addition does not round) ---
     for target in flat_targets:
         for source in get_modifier_breakdown(sheet, target).sources:
+            if source.blocked_by_immunity:
+                continue
             builder.add(PowerStage.FLAT_MODIFIER, source.source_name, source.final_value)
         for name, value in get_condition_modifier_breakdown(sheet, target):
             builder.add(PowerStage.FLAT_MODIFIER, name, value)

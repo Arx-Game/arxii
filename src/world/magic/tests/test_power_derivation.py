@@ -5,14 +5,25 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import DamageTypeFactory
+from world.distinctions.factories import (
+    CharacterDistinctionFactory,
+    DistinctionEffectFactory,
+    DistinctionFactory,
+)
 from world.magic.factories import ResonanceFactory, TechniqueDamageProfileFactory, TechniqueFactory
 from world.magic.services.techniques import _derive_power
 from world.mechanics.constants import POWER_CATEGORY_NAME
 from world.mechanics.factories import (
     CharacterModifierFactory,
     DistinctionModifierSourceFactory,
+    GlobalPowerTargetFactory,
     ModifierCategoryFactory,
     ModifierTargetFactory,
+)
+from world.mechanics.services import (
+    create_distinction_modifiers,
+    get_modifier_breakdown,
+    get_modifier_total,
 )
 
 
@@ -456,3 +467,83 @@ class PowerLedgerStructureTests(TestCase):
         self.assertIn(PowerStage.MULTIPLIER, stages)
         self.assertIn(PowerStage.FLAT_MODIFIER, stages)
         self.assertIn(PowerStage.TERM, stages)
+
+
+class ImmunityBlockedFlatSourceTests(TestCase):
+    """Immunity-blocked negative sources must be excluded from FLAT stage (#639 fidelity).
+
+    Regression: the refactored _derive_power iterated all breakdown.sources including
+    immunity-blocked ones, re-adding the blocked negative and diverging from the old
+    get_modifier_total result. The fix skips sources with blocked_by_immunity=True.
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        # Global power target (no scope gates — matches technique=None).
+        self.power_target = GlobalPowerTargetFactory()
+
+        # Immunity-granting source: +5 power, grants_immunity_to_negative=True.
+        self.immunity_distinction = DistinctionFactory(name="Warded Strike")
+        DistinctionEffectFactory(
+            distinction=self.immunity_distinction,
+            target=self.power_target,
+            value_per_rank=5,
+            grants_immunity_to_negative=True,
+        )
+        cd_immunity = CharacterDistinctionFactory(
+            character=self.character,
+            distinction=self.immunity_distinction,
+            rank=1,
+        )
+        create_distinction_modifiers(cd_immunity)
+
+        # Negative source: -3 power (should be blocked by immunity).
+        self.negative_distinction = DistinctionFactory(name="Cursed Aim")
+        DistinctionEffectFactory(
+            distinction=self.negative_distinction,
+            target=self.power_target,
+            value_per_rank=-3,
+        )
+        cd_negative = CharacterDistinctionFactory(
+            character=self.character,
+            distinction=self.negative_distinction,
+            rank=1,
+        )
+        create_distinction_modifiers(cd_negative)
+
+    def test_mechanics_breakdown_excludes_blocked_negative(self):
+        """Sanity: get_modifier_breakdown already blocks the negative source."""
+        breakdown = get_modifier_breakdown(self.sheet, self.power_target)
+        self.assertEqual(breakdown.total, 5)  # only the +5; -3 is blocked
+        self.assertTrue(breakdown.has_immunity)
+        self.assertEqual(breakdown.negatives_blocked, 1)
+        cursed = next(s for s in breakdown.sources if s.source_name == "Cursed Aim")
+        self.assertTrue(cursed.blocked_by_immunity)
+
+    def test_derive_power_total_excludes_blocked_negative(self):
+        """_derive_power.total must equal get_modifier_total (i.e. NOT subtract the blocked -3)."""
+        expected_flat = get_modifier_total(self.sheet, self.power_target)  # == 5
+        channeled = 10
+        ledger = _derive_power(
+            channeled_intensity=channeled,
+            technique=None,  # global target matches with no technique
+            character=self.character,
+        )
+        # 10 (base) + 5 (unblocked flat) = 15; NOT 10 + 5 - 3 = 12.
+        self.assertEqual(ledger.total, channeled + expected_flat)
+
+    def test_blocked_source_absent_from_flat_ledger_entries(self):
+        """No FLAT_MODIFIER ledger entry should exist for the blocked negative source."""
+        from world.magic.constants import PowerStage
+
+        ledger = _derive_power(
+            channeled_intensity=10,
+            technique=None,
+            character=self.character,
+        )
+        flat_labels = {
+            e.source_label for e in ledger.entries if e.stage == PowerStage.FLAT_MODIFIER
+        }
+        self.assertNotIn("Cursed Aim", flat_labels)
+        self.assertIn("Warded Strike", flat_labels)
