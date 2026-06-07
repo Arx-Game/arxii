@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict
 
+from django.db import transaction
+
 from world.combat.constants import (
     EncounterStatus,
     EncounterType,
@@ -69,12 +71,14 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
     - ``threat_pool`` None: a PC opponent's actions are PC-declared, not driven
       by an NPC threat pool (the model FK is nullable).
     """
-    vitals = getattr(sheet, "vitals", None)
-    max_health = vitals.max_health if vitals is not None and vitals.max_health else None
+    vitals = getattr(sheet, "vitals", None)  # noqa: GETATTR_LITERAL
+    max_health = (
+        vitals.max_health if vitals is not None and vitals.max_health else _DEFAULT_MAX_HEALTH
+    )
     return _OpponentKwargs(
         name=sheet.character.key,
         tier=_PVP_OPPONENT_TIER,
-        max_health=max_health if max_health else _DEFAULT_MAX_HEALTH,
+        max_health=max_health,
         threat_pool=None,
         existing_objectdb=sheet.character,
     )
@@ -98,6 +102,7 @@ def _caster_participant(
     return add_participant(encounter, caster_sheet)
 
 
+@transaction.atomic
 def seed_or_feed_encounter_from_cast(
     *,
     caster_sheet: CharacterSheet,
