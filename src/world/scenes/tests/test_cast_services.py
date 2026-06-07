@@ -1,5 +1,7 @@
 """Tests for cast_services: derive_cast_difficulty and request_technique_cast."""
 
+from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -7,17 +9,38 @@ from django.test import TestCase
 from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
+from evennia_extensions.factories import RoomProfileFactory
 from world.combat.constants import EncounterStatus
+from world.magic.constants import (
+    AffinityInteractionAggressor,
+    AffinityInteractionKind,
+    LedgerOp,
+    PowerStage,
+    ResonanceValence,
+)
 from world.magic.factories import (
+    AffinityFactory,
+    AffinityInteractionFactory,
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterAuraFactory,
     CharacterTechniqueFactory,
+    GiftFactory,
+    ResonanceFactory,
     TechniqueFactory,
 )
+from world.magic.services.gain import tag_room_resonance
+from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.magic.types.power_ledger import PowerLedgerBuilder
 from world.scenes.action_constants import ActionRequestStatus
-from world.scenes.cast_services import derive_cast_difficulty, request_technique_cast
+from world.scenes.cast_services import (
+    create_cast_outcome_pose,
+    derive_cast_difficulty,
+    request_technique_cast,
+)
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
 
@@ -219,3 +242,127 @@ class TestRequestTechniqueCastRouting(TestCase):
         cast.encounter.refresh_from_db()
         self.assertEqual(cast.encounter.status, EncounterStatus.DECLARING)
         self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+
+
+class TestImmediateCastSurfacesEnvironmentLedger(ResonanceCacheIsolationMixin, TestCase):
+    """A self-cast in an amplifying resonant room surfaces the environment clause.
+
+    Real integration: the caster's character stands in a room tagged with a
+    Celestial resonance whose AffinityInteraction with the working affinity is
+    AMPLIFY. ``use_technique`` evaluates the resonance environment, the
+    ENVIRONMENT power-shift stage adds a positive entry to the cast-level
+    ``PowerLedger``, and ``_route_immediate_cast`` threads that ledger into the
+    OUTCOME pose narration — so the pose ends with the environment clause.
+    """
+
+    def test_self_cast_outcome_pose_has_environment_clause(self) -> None:
+        CheckSystemSetupFactory.create()
+
+        # Amplifying place: a room tagged with a Celestial resonance whose
+        # self-interaction (Celestial × Celestial) is ALIGNED / AMPLIFY.
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+        celestial = AffinityFactory(name="Celestial")
+        resonance = ResonanceFactory(affinity=celestial)
+        mod = tag_room_resonance(room_profile, resonance)
+        mod.value = 40
+        mod.save(update_fields=["value"])
+        AffinityInteractionFactory(
+            source_affinity=celestial,
+            environment_affinity=celestial,
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.AMPLIFY,
+            aggressor=AffinityInteractionAggressor.ENVIRONMENT,
+            severity_multiplier=Decimal("1.00"),
+        )
+
+        # Caster: a persona whose character is highly Celestial-aligned and is
+        # physically standing in the resonant room.
+        initiator = PersonaFactory()
+        caster_char = initiator.character_sheet.character
+        caster_char.location = room
+        CharacterAuraFactory(
+            character=caster_char,
+            celestial=Decimal("80.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("10.00"),
+        )
+        CharacterAnimaFactory(character=caster_char, current=20, maximum=30)
+
+        # Benign, standalone-castable technique whose gift channels the resonance
+        # so the cast-time working affinity resolves to Celestial.
+        gift = GiftFactory()
+        gift.resonances.add(resonance)
+        technique = TechniqueFactory(
+            gift=gift,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        CharacterTechniqueFactory(character=initiator.character_sheet, technique=technique)
+
+        scene = SceneFactory(location=room)
+
+        with patch("world.scenes.action_services.award_kudos"):
+            cast = request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator,
+                technique=technique,
+            )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        pose = cast.outcome_interaction
+        self.assertIsNotNone(pose)
+        self.assertTrue(
+            pose.content.endswith("— the place's resonance swells the working."),
+            f"OUTCOME pose missing environment clause: {pose.content!r}",
+        )
+
+
+class TestCreateCastOutcomePoseLedgerClause(TestCase):
+    """Direct unit test: a hand-built amplification ledger yields the env clause.
+
+    Narrower companion to the integration test above. It bypasses the magic
+    pipeline and feeds ``create_cast_outcome_pose`` a PowerLedger with a positive
+    ENVIRONMENT ADD entry, proving the param is threaded into the narration.
+    """
+
+    def test_environment_add_ledger_appends_clause(self) -> None:
+        scene = SceneFactory()
+        caster = PersonaFactory()
+        technique = TechniqueFactory(intensity=1, damage_profile=False)
+
+        ledger = (
+            PowerLedgerBuilder(base=5)
+            .add(PowerStage.ENVIRONMENT, "resonance environment", 7)
+            .build()
+        )
+        # Sanity: the builder produced the entry the clause logic looks for.
+        self.assertTrue(
+            any(
+                e.stage == PowerStage.ENVIRONMENT and e.op == LedgerOp.ADD and e.amount > 0
+                for e in ledger.entries
+            )
+        )
+
+        # Minimal stub for the outcome-label extraction (main_result is None →
+        # outcome defaults to "Unknown"); the clause comes solely from the ledger.
+        action_resolution = SimpleNamespace(main_result=None)
+        result = EnhancedSceneActionResult(
+            action_resolution=action_resolution,  # type: ignore[arg-type]
+            action_key="cast",
+            technique_result=None,
+        )
+
+        pose = create_cast_outcome_pose(
+            scene=scene,
+            caster_persona=caster,
+            target_persona=None,
+            technique=technique,
+            result=result,
+            power_ledger=ledger,
+        )
+        self.assertTrue(
+            pose.content.endswith("— the place's resonance swells the working."),
+            f"OUTCOME pose missing environment clause: {pose.content!r}",
+        )

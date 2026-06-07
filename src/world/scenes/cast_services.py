@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.magic.models import Technique
+    from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona, Scene
 
 
@@ -59,7 +60,7 @@ def _resolve_cast(
     technique: Technique,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — mirrors _resolve_enhanced_action
     target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
-) -> EnhancedSceneActionResult:
+) -> tuple[EnhancedSceneActionResult, PowerLedger | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
     Mirrors ``action_services._resolve_enhanced_action`` so anima deduction,
@@ -67,6 +68,10 @@ def _resolve_cast(
     action pipeline. Differs only in sourcing the template from the technique
     itself (``technique.action_template``) and the difficulty from
     ``derive_cast_difficulty`` rather than a base-action difficulty choice.
+
+    Returns the ``EnhancedSceneActionResult`` plus the cast-level ``PowerLedger``
+    (BASE + ENVIRONMENT stages) captured from ``use_technique``'s ``resolve_fn``
+    so the caller can surface ward/environment clauses in the OUTCOME pose.
     """
     from world.magic.services import use_technique  # noqa: PLC0415
 
@@ -74,33 +79,42 @@ def _resolve_cast(
     difficulty = derive_cast_difficulty(technique)
     context = ResolutionContext(character=character, target=target)
 
-    technique_result = use_technique(
-        character=character,
-        technique=technique,
-        resolve_fn=lambda *, power, ledger: start_action_resolution(  # noqa: ARG005
+    captured: dict[str, object] = {}
+
+    def _resolve_fn(*, power, ledger):  # noqa: ARG001 — power is the pipeline's, not ours
+        captured["ledger"] = ledger
+        return start_action_resolution(
             character=character,
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-        ),
+        )
+
+    technique_result = use_technique(
+        character=character,
+        technique=technique,
+        resolve_fn=_resolve_fn,
         confirm_soulfray_risk=True,
     )
 
     resolution_result = technique_result.resolution_result  # type: ignore[assignment]
-    return EnhancedSceneActionResult(
+    result = EnhancedSceneActionResult(
         action_resolution=resolution_result,
         action_key=CAST_ACTION_KEY,
         technique_result=technique_result,
     )
+    power_ledger = captured.get("ledger")  # type: ignore[assignment]
+    return result, power_ledger
 
 
-def create_cast_outcome_pose(
+def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; cohesive
     *,
     scene: Scene,
     caster_persona: Persona,
     target_persona: Persona | None,
     technique: Technique,
     result: EnhancedSceneActionResult,
+    power_ledger: PowerLedger | None = None,
 ) -> Interaction:
     """Author the Narrator OUTCOME pose describing a resolved standalone cast."""
     main_result = result.action_resolution.main_result
@@ -114,7 +128,7 @@ def create_cast_outcome_pose(
         target_label=target_persona.name if target_persona is not None else None,
         outcome_label=outcome_label,
         success_level=success_level,
-        power_ledger=None,
+        power_ledger=power_ledger,
     )
 
     return create_interaction(
@@ -251,7 +265,9 @@ def _route_immediate_cast(
     target = target_persona.character_sheet.character if target_persona is not None else None
 
     with transaction.atomic():
-        result = _resolve_cast(technique=technique, character=character, target=target)
+        result, power_ledger = _resolve_cast(
+            technique=technique, character=character, target=target
+        )
 
         request = SceneActionRequest.objects.create(
             scene=scene,
@@ -269,6 +285,7 @@ def _route_immediate_cast(
             target_persona=target_persona,
             technique=technique,
             result=result,
+            power_ledger=power_ledger,
         )
 
         request.result_interaction = pose
