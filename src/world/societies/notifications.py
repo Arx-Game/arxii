@@ -14,9 +14,10 @@ deeds happen to NPCs and don't surface to a player inbox.
 Body intent: natural-language framing per the #676 spec. Magnitude
 maps to a qualitative descriptor ("minor", "moderate", "significant",
 "renowned"); raw point deltas stay off the chat line (per the
-"hidden mechanics stay tribal" project rule). The expander UX —
-clickable per-axis breakdown — is a follow-up that will read the same
-``RenownAwardResult`` we already pass around.
+"hidden mechanics stay tribal" project rule). The notification's job is
+"something happened — go look"; the player's standing (fame, prestige,
+reputation, deeds) lives on the Renown tab on the character sheet, which
+is the home for per-axis detail. No inbox expander duplicates it.
 """
 
 from __future__ import annotations
@@ -102,8 +103,8 @@ def _build_deed_body(
 ) -> str:
     """Spec-style chat line for the deed itself.
 
-    Format: ``"✦ {title} earns {magnitude_word} renown. (details)"``,
-    with a risk clause appended when risk is non-NONE.
+    Format: ``"✦ {title} earns {magnitude_word} renown."``, with a risk
+    clause appended when risk is non-NONE.
 
     When neither magnitude nor risk fires (admin-fired bare event), the
     body falls back to a minimal recognition line.
@@ -112,7 +113,7 @@ def _build_deed_body(
     risk_word = _RISK_DESCRIPTORS.get(risk) if risk else None
 
     if mag_word is None and risk_word is None:
-        return f"✦ {title} is quietly recognised. (details)"
+        return f"✦ {title} is quietly recognised."
 
     parts = [f"✦ {title}"]
     if mag_word:
@@ -122,7 +123,7 @@ def _build_deed_body(
     elif risk_word:
         # Risk-only event: legend without fame/prestige.
         parts.append(f"survives {risk_word} risk")
-    return " ".join(parts) + ". (details)"
+    return " ".join(parts) + "."
 
 
 def _build_tier_transition_body(persona: Persona) -> str:

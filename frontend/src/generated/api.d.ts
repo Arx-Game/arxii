@@ -15170,6 +15170,7 @@ export interface components {
      *     * `happenstance` - Happenstance
      *     * `system` - System
      *     * `covenant` - Covenant
+     *     * `renown` - Renown
      * @enum {string}
      */
     NarrativeMessageCategoryEnum:
@@ -15178,7 +15179,8 @@ export interface components {
       | 'visions'
       | 'happenstance'
       | 'system'
-      | 'covenant';
+      | 'covenant'
+      | 'renown';
     NarrativeMessageDelivery: {
       readonly id: number;
       readonly message: components['schemas']['NarrativeMessage'];
