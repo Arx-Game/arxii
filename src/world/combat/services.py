@@ -334,11 +334,23 @@ class CombatTechniqueResolver:
         pull bonuses from the current round are added on top inside this method
         so the final effective intensity = power + pull intensity bumps.
 
-        ``ledger`` is the per-cast :class:`PowerLedger`; it is wired into
-        per-target penetration-vs-resistance resolution in #639 Task 6.
+        ``ledger`` is the per-cast :class:`PowerLedger` carrying all stages up
+        to and including the environment power-shift.  The resolver appends a
+        ``COMBAT_PULL`` stage for the INTENSITY_BUMP bonuses sourced from active
+        :class:`~world.combat.models.CombatPull` rows and builds a per-target
+        ledger whose ``total`` equals the final effective intensity forwarded to
+        damage and condition resolution.
         """
-        pull_intensity = self._sum_intensity_bump_pulls()
-        eff_intensity = power + pull_intensity
+        from world.magic.constants import PowerStage  # noqa: PLC0415
+        from world.magic.types.power_ledger import PowerLedgerBuilder  # noqa: PLC0415
+
+        pull_bonus = self._sum_intensity_bump_pulls()
+        combat_ledger = (
+            PowerLedgerBuilder.from_ledger(ledger)
+            .add(PowerStage.COMBAT_PULL, "combat pulls", pull_bonus)
+            .build()
+        )
+        eff_intensity = combat_ledger.total
         check_result = self._roll_check()
         damage_results = self._apply_damage(check_result, eff_intensity=eff_intensity)
         applied_conditions = self._apply_conditions(check_result, eff_intensity=eff_intensity)
@@ -348,6 +360,7 @@ class CombatTechniqueResolver:
             applied_conditions=applied_conditions,
             pull_flat_bonus=self.pull_flat_bonus,
             scaled_damage=sum(r.damage_dealt for r in damage_results),
+            power_ledger=combat_ledger,
         )
 
 

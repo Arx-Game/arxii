@@ -800,3 +800,130 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         check = MagicMock(success_level=2)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
+
+
+class CombatPullLedgerTests(TestCase):
+    """CombatTechniqueResolver.__call__ threads a PowerLedger through the resolver.
+
+    Verifies:
+    1. The result carries a ``power_ledger`` field.
+    2. With active INTENSITY_BUMP pulls, the ledger has a COMBAT_PULL entry
+       whose amount equals the sum of scaled_values.
+    3. ``power_ledger.total`` equals the effective intensity actually used
+       (power + pull_bonus).
+    4. With no pulls, COMBAT_PULL entry is absent (builder.add(0) no-ops)
+       and ``power_ledger.total == power``.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
+    def _call_resolver(self, resolver: CombatTechniqueResolver, power: int):
+        ledger = _ledger(power)
+        with patch("world.combat.services.perform_check") as mock_check:
+            mock_check.return_value = MagicMock(success_level=2)
+            return resolver(power=power, ledger=ledger)
+
+    def test_result_carries_power_ledger_field(self) -> None:
+        """Sanity: result.power_ledger is a PowerLedger instance."""
+        from world.magic.types.power_ledger import PowerLedger
+
+        resolver = _build_resolver(base_power=10)
+        result = self._call_resolver(resolver, power=10)
+        self.assertIsInstance(result.power_ledger, PowerLedger)
+
+    def test_no_pulls_combat_pull_entry_absent(self) -> None:
+        """With no INTENSITY_BUMP pulls, add(0) no-ops and COMBAT_PULL stage is absent."""
+        from world.magic.constants import PowerStage
+
+        resolver = _build_resolver(base_power=10)
+        result = self._call_resolver(resolver, power=10)
+        stages = [e.stage for e in result.power_ledger.entries]
+        self.assertNotIn(PowerStage.COMBAT_PULL, stages)
+
+    def test_no_pulls_ledger_total_equals_power(self) -> None:
+        """With no pulls, power_ledger.total == the injected power."""
+        resolver = _build_resolver(base_power=10)
+        result = self._call_resolver(resolver, power=10)
+        self.assertEqual(result.power_ledger.total, 10)
+
+    def test_intensity_bump_pull_appends_combat_pull_entry(self) -> None:
+        """An INTENSITY_BUMP pull appends a COMBAT_PULL entry with the correct amount."""
+        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.magic.constants import EffectKind, PowerStage
+
+        resolver = _build_resolver(base_power=10)
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            round_number=resolver.participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=5)
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        result = self._call_resolver(resolver, power=10)
+
+        stages = [e.stage for e in result.power_ledger.entries]
+        self.assertIn(PowerStage.COMBAT_PULL, stages)
+        pull_entry = next(
+            e for e in result.power_ledger.entries if e.stage == PowerStage.COMBAT_PULL
+        )
+        self.assertEqual(pull_entry.amount, 5)
+
+    def test_intensity_bump_pull_total_equals_power_plus_bump(self) -> None:
+        """power_ledger.total == power + sum(INTENSITY_BUMP scaled_values)."""
+        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.magic.constants import EffectKind
+
+        resolver = _build_resolver(base_power=10)
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            round_number=resolver.participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=3)
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=7)
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        result = self._call_resolver(resolver, power=10)
+        # total should be 10 + 3 + 7 = 20
+        self.assertEqual(result.power_ledger.total, 20)
+
+    def test_ledger_total_matches_eff_intensity_used_for_damage(self) -> None:
+        """power_ledger.total equals the eff_intensity forwarded to _apply_damage.
+
+        We verify indirectly: a profile with damage_intensity_multiplier=1.0 and
+        base_damage=0 produces damage == round(budget × multiplier) == eff_intensity.
+        Since power_ledger.total == eff_intensity, scaled_damage must reflect it.
+        """
+        from decimal import Decimal
+
+        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.magic.constants import EffectKind
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=0)
+        resolver.action.focused_action.damage_profiles.all().delete()
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=0,
+            damage_intensity_multiplier=Decimal("1.0"),
+            minimum_success_level=1,
+        )
+
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            round_number=resolver.participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=8)
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        result = self._call_resolver(resolver, power=0)
+
+        # ledger total == 0 + 8 == 8; budget = 8 × 1.0 = 8; scaled = 8 × 1.0 = 8
+        self.assertEqual(result.power_ledger.total, 8)
+        self.assertGreater(result.scaled_damage, 0)
