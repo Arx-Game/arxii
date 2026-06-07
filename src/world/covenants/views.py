@@ -18,6 +18,7 @@ from world.covenants.exceptions import (
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
     CovenantFilter,
+    CovenantRiteFilter,
     CovenantRoleFilter,
     GearArchetypeCompatibilityFilter,
 )
@@ -26,6 +27,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -33,6 +35,7 @@ from world.covenants.permissions import IsOwnMembership
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
     CovenantLevelThresholdSerializer,
+    CovenantRiteSerializer,
     CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
@@ -204,6 +207,24 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
             memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+
+class CovenantRiteViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for CovenantRite authored definitions.
+
+    Rites are authored/public content — any authenticated user may read.
+    No per-user scoping needed.
+    """
+
+    serializer_class = CovenantRiteSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CovenantsPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CovenantRiteFilter
+    queryset = CovenantRite.objects.select_related("ritual", "granted_condition").all()
+
+    def get_queryset(self) -> QuerySet[CovenantRite]:
+        return CovenantRite.objects.select_related("ritual", "granted_condition").all()
 
 
 class CovenantLevelThresholdViewSet(viewsets.ReadOnlyModelViewSet):

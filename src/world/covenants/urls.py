@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from world.covenants.views import (
     CharacterCovenantRoleViewSet,
     CovenantLevelThresholdViewSet,
+    CovenantRiteViewSet,
     CovenantRoleViewSet,
     CovenantViewSet,
     GearArchetypeCompatibilityViewSet,
@@ -41,6 +42,13 @@ router.register(
     "level-thresholds",
     CovenantLevelThresholdViewSet,
     basename="covenant-level-threshold",
+)
+
+# Authored rite definitions: any authenticated user may read.
+router.register(
+    "rites",
+    CovenantRiteViewSet,
+    basename="covenant-rite",
 )
 
 urlpatterns = router.urls
