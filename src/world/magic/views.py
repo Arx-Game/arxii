@@ -26,7 +26,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -39,6 +39,8 @@ from world.magic.exceptions import (
     InvalidImbueAmount,
     ResonanceInsufficient,
     RitualComponentError,
+    TechniqueAuthoringNotPermitted,
+    TechniqueBudgetExceeded,
     XPInsufficient,
 )
 from world.magic.filters import (
@@ -105,6 +107,7 @@ from world.magic.serializers import (
     RitualSessionDraftSerializer,
     RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
+    TechniqueDesignSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
     ThreadApplicabilitySerializer,
@@ -124,6 +127,13 @@ from world.magic.services import (
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
+from world.magic.services.technique_builder import (
+    PlayerPolicy,
+    StaffPolicy,
+    author_staff_technique,
+    author_technique,
+    enforce_policy,
+)
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -285,11 +295,29 @@ class GiftViewSet(viewsets.ModelViewSet):
         return GiftSerializer
 
 
+def _breakdown_to_dict(breakdown) -> dict:
+    """Serialize a TechniqueCostBreakdown to a plain dict for API responses."""
+    return {
+        "tier": breakdown.tier,
+        "budget": breakdown.budget,
+        "gross_cost": breakdown.gross_cost,
+        "refund": breakdown.refund,
+        "total_cost": breakdown.total_cost,
+        "within_budget": breakdown.within_budget,
+        "lines": [
+            {"dimension": line.dimension, "label": line.label, "power_cost": line.power_cost}
+            for line in breakdown.lines
+        ],
+    }
+
+
 class TechniqueViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Technique records.
 
     Provides CRUD access to techniques for character creation.
+    The base create/update/destroy are staff-only; players and GMs
+    author techniques through the budget-enforced ``author`` action.
     """
 
     queryset = (
@@ -309,6 +337,88 @@ class TechniqueViewSet(viewsets.ModelViewSet):
     filterset_fields = ["gift", "style", "effect_type"]
     ordering_fields = ["name", "level"]
     pagination_class = StandardResultsSetPagination
+
+    def get_permissions(self):
+        """Base create/update/destroy are staff-only raw admin; authoring goes
+        through the budget-enforced ``author`` action."""
+        if self.action in {"create", "update", "partial_update", "destroy"}:
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def _resolve_policy_and_character(self, request):
+        if request.user.is_staff:
+            return StaffPolicy(), None
+        sheet = self._resolve_owned_character(request)
+        return PlayerPolicy(), sheet
+
+    def _resolve_owned_character(self, request):
+        """Resolve the player's acting CharacterSheet via the canonical
+        RosterEntry.for_account() path. Prefers an explicit owned id when
+        provided; raises PermissionDenied when no match is found."""
+        character_id = request.data.get("character_id")
+        character_ids = RosterEntry.objects.for_account(
+            cast(AccountDB, request.user)
+        ).character_ids()
+        qs = CharacterSheet.objects.filter(pk__in=character_ids)
+        if character_id is not None:
+            qs = qs.filter(pk=character_id)
+        sheet = qs.first()
+        if sheet is None:
+            _no_character = "No acting character for this account."
+            raise PermissionDenied(_no_character)
+        return sheet
+
+    @action(detail=False, methods=["post"])
+    def price(self, request):
+        """Dry-run: price a design and return the cost breakdown (no rows created)."""
+        policy, character = self._resolve_policy_and_character(request)
+        ser = TechniqueDesignSerializer(
+            data=request.data,
+            context={"policy": policy, "character": character, "request": request},
+        )
+        ser.is_valid(raise_exception=True)
+        design = ser.validated_data["_design"]
+        try:
+            breakdown = enforce_policy(design, policy, character)
+        except TechniqueBudgetExceeded as exc:
+            # Even when over-budget (enforced policy), return the breakdown.
+            breakdown = exc.breakdown
+        return Response(_breakdown_to_dict(breakdown))
+
+    @action(detail=False, methods=["post"])
+    def author(self, request):
+        """Author a technique via the budget policy layer.
+
+        Player path: enforces budget, binds CharacterTechnique.
+        Staff path: advisory budget, no character binding.
+        Returns 201 with the Technique + breakdown on success;
+        400 with breakdown when a player exceeds budget.
+        """
+        policy, character = self._resolve_policy_and_character(request)
+        ser = TechniqueDesignSerializer(
+            data=request.data,
+            context={"policy": policy, "character": character, "request": request},
+        )
+        ser.is_valid(raise_exception=True)
+        design = ser.validated_data["_design"]
+        try:
+            if isinstance(policy, StaffPolicy):
+                tech, breakdown = author_staff_technique(design)
+            else:
+                tech, breakdown = author_technique(character, design)
+        except TechniqueBudgetExceeded as exc:
+            return Response(
+                {
+                    "detail": exc.user_message,
+                    "breakdown": _breakdown_to_dict(exc.breakdown),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except TechniqueAuthoringNotPermitted as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        data = TechniqueSerializer(tech).data
+        data["breakdown"] = _breakdown_to_dict(breakdown)
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 # =============================================================================
