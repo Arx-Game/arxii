@@ -8,12 +8,10 @@ Covers:
 
 from django.test import SimpleTestCase
 
-from world.combat.interaction_services import (
-    _power_outcome_clause,
-    render_action_outcome_narration,
-)
+from world.combat.interaction_services import render_action_outcome_narration
 from world.combat.types import ActionOutcome, OpponentDamageResult
 from world.magic.constants import PowerStage
+from world.magic.narration import power_outcome_clause as _power_outcome_clause
 from world.magic.types.power_ledger import PowerLedger, PowerLedgerBuilder
 
 # ---------------------------------------------------------------------------
