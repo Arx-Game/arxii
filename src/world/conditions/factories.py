@@ -449,3 +449,25 @@ class DamageSuccessLevelMultiplierFactory(DjangoModelFactory):
     min_success_level = 2
     multiplier = Decimal("1.00")
     label = "Full"
+
+
+class OathboundResolveConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Oathbound Resolve' beneficial buff condition.
+
+    Applied to covenant members who participate in the Renew the Oath rite.
+    Uses UNTIL_END_OF_COMBAT so the buff expires naturally when the encounter
+    ends (no manual cleanup required). Minimal ConditionTemplate — no stages,
+    no modifier wiring beyond the default factory; severity is the scaling
+    surface (see CovenantRite.base_severity / severity_per_extra_participant).
+    """
+
+    name = "Oathbound Resolve"
+    description = (
+        "Renewed by oath and comradeship, this character fights with heightened resolve. "
+        "The bond of covenant fortifies them against doubt and fatigue."
+    )
+    default_duration_type = DurationType.UNTIL_END_OF_COMBAT
+    # default_duration_value is unused for UNTIL_END_OF_COMBAT but the column is
+    # NOT NULL; keep the parent's default of 3 (irrelevant at runtime).
+    is_stackable = False
+    can_be_dispelled = False

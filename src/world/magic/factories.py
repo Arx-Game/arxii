@@ -2141,6 +2141,37 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     )
 
 
+class RenewTheOathRitualFactory(factory.django.DjangoModelFactory):
+    """Seed factory for the canonical 'Renew the Oath' covenant rite ritual.
+
+    SERVICE-dispatched (invokes perform_covenant_rite). Multi-participant via
+    FORMATION participation rule (≥2 accepts required). Uses django_get_or_create
+    so repeated calls in tests and seed scripts return the same row.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Renew the Oath"
+    description = (
+        "A covenant rite performed by engaged members in the heat of battle. "
+        "By reaffirming their sacred oath together, participants renew the bond "
+        "that grants them supernatural resolve."
+    )
+    narrative_prose = (
+        "The members of the covenant gather, voices joined in the words they swore at "
+        "formation. The oath-magic stirs between them, recognising the bond that was "
+        "forged in blood and will. As the last word falls, a wave of clarity and "
+        "purpose settles over each participant — Oathbound Resolve, the covenant's gift "
+        "to those who honour its demands."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.perform_covenant_rite"
+    flow = None
+    participation_rule = ParticipationRule.FORMATION
+
+
 # =============================================================================
 # Issue #526: Scar-gated MOVED trigger authored content
 # =============================================================================
