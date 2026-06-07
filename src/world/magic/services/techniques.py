@@ -509,6 +509,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
         targets=effective_targets,
         intensity=stats.intensity,
         power=seed_ledger.total,
+        ledger=seed_ledger,
     )
     if caster_room is not None:
         stack = emit_event(
@@ -528,11 +529,22 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     # and the post-hook value when the emit path ran.
     effective_power = pre_payload.power
 
+    # Stage 6 (REACTIVE): if a pre-cast MODIFY_PAYLOAD hook edited payload.power,
+    # reconcile the ledger so its running total matches the post-hook power. The
+    # signed delta becomes a single REACTIVE entry.
+    effective_ledger = pre_payload.ledger
+    if pre_payload.power != effective_ledger.total:
+        effective_ledger = (
+            PowerLedgerBuilder.from_ledger(effective_ledger)
+            .add(PowerStage.REACTIVE, "pre-cast edit", pre_payload.power - effective_ledger.total)
+            .build()
+        )
+
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)
 
     # Steps 5 + 6: Resolution
-    resolution_result = resolve_fn(power=effective_power)
+    resolution_result = resolve_fn(power=effective_power, ledger=effective_ledger)
 
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
@@ -651,6 +663,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
                 targets=effective_targets,
                 intensity=stats.intensity,
                 power=effective_power,
+                ledger=effective_ledger,
                 result=resolution_result,
             ),
             location=caster_room,
@@ -667,6 +680,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
                     technique=technique,
                     target=affected_target,
                     power=effective_power,
+                    ledger=effective_ledger,
                     effect=resolution_result,
                 ),
                 location=target_room,

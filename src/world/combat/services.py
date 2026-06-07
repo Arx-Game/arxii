@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
+    from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -324,7 +325,7 @@ class CombatTechniqueResolver:
             )
         return out
 
-    def __call__(self, *, power: int) -> CombatTechniqueResolution:
+    def __call__(self, *, power: int, ledger: PowerLedger) -> CombatTechniqueResolution:  # noqa: ARG002
         """Resolve the combat technique inner step.
 
         ``power`` is injected by ``use_technique`` after the PRE_CAST envelope
@@ -332,6 +333,9 @@ class CombatTechniqueResolver:
         been further modified by a pre-cast MODIFY_PAYLOAD hook).  INTENSITY_BUMP
         pull bonuses from the current round are added on top inside this method
         so the final effective intensity = power + pull intensity bumps.
+
+        ``ledger`` is the per-cast :class:`PowerLedger`; it is wired into
+        per-target penetration-vs-resistance resolution in #639 Task 6.
         """
         pull_intensity = self._sum_intensity_bump_pulls()
         eff_intensity = power + pull_intensity

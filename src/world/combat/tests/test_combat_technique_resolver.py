@@ -26,6 +26,12 @@ from world.combat.services import CombatTechniqueResolver
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.types.power_ledger import PowerLedger
+
+
+def _ledger(power: int) -> PowerLedger:
+    """Minimal cast-level ledger whose total matches the injected power."""
+    return PowerLedger(entries=(), total=power)
 
 
 def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
@@ -394,7 +400,7 @@ class CombatTechniqueResolverCallTests(TestCase):
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
-            result = resolver(power=5)
+            result = resolver(power=5, ledger=_ledger(5))
 
         self.assertGreater(result.scaled_damage, 0)
         self.assertEqual(result.pull_flat_bonus, 2)
@@ -508,14 +514,14 @@ class ResolverConsumesPowerTests(TestCase):
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
-            low_result = resolver(power=0)
+            low_result = resolver(power=0, ledger=_ledger(0))
 
         # Rebuild to get a fresh opponent with full health.
         resolver_hi = self._build_resolver_with_intensity_profile()
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
-            high_result = resolver_hi(power=20)
+            high_result = resolver_hi(power=20, ledger=_ledger(20))
 
         self.assertGreater(
             high_result.scaled_damage,
@@ -529,7 +535,7 @@ class ResolverConsumesPowerTests(TestCase):
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
-            result = resolver(power=0)
+            result = resolver(power=0, ledger=_ledger(0))
 
         # base_damage=10, intensity part=0×1.0=0 → budget=10 → damage > 0 after soak.
         self.assertGreater(result.scaled_damage, 0)

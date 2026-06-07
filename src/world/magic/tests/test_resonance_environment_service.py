@@ -895,7 +895,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             result = use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
             )
 
         # use_technique should complete successfully
@@ -932,7 +932,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
         )
 
         self.assertTrue(result.confirmed)
@@ -969,7 +969,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
             use_technique(
                 character=self.character,
                 technique=self.technique,
-                resolve_fn=lambda *, power: "resolved",  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
             )
 
         # The orchestrator (techniques.py Step 10) calls it once, and feeds the
