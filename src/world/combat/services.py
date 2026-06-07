@@ -531,7 +531,15 @@ def add_participant(
     *,
     covenant_role: CovenantRole | None = None,
 ) -> CombatParticipant:
-    """Create a CombatParticipant linking a PC to an encounter."""
+    """Create a CombatParticipant linking a PC to an encounter.
+
+    When no role is supplied, default to the character's combat-precedence role
+    (Battle wins over Durance — Slice E).
+    """
+    if covenant_role is None:
+        from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
+
+        covenant_role = precedence_role_for_combat(character_sheet)
     return CombatParticipant.objects.create(
         encounter=encounter,
         character_sheet=character_sheet,
@@ -565,6 +573,10 @@ def join_encounter(
         msg = "Already participating in this encounter."
         raise ValueError(msg)
 
+    if covenant_role is None:
+        from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
+
+        covenant_role = precedence_role_for_combat(character_sheet)
     return CombatParticipant.objects.create(
         encounter=encounter,
         character_sheet=character_sheet,

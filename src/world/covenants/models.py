@@ -15,7 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import BattleBinding, CovenantType, RoleArchetype
 from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
@@ -66,6 +66,24 @@ class Covenant(SharedMemoryModel):
     )
     formed_at = models.DateTimeField(auto_now_add=True)
     dissolved_at = models.DateTimeField(null=True, blank=True)
+    battle_binding = models.CharField(
+        max_length=20,
+        choices=BattleBinding.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Battle covenants only (Slice E). STANDING can rise again; CAMPAIGN "
+            "dissolves when its objective concludes. Empty for DURANCE covenants."
+        ),
+    )
+    is_dormant = models.BooleanField(
+        default=False,
+        help_text=(
+            "Battle covenants only: True when a STANDING covenant has stood down "
+            "and awaits a 'call the banners' rise ritual. A dormant covenant "
+            "cannot be engaged. Never True for DURANCE or CAMPAIGN covenants."
+        ),
+    )
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.organization_id is None:
@@ -100,6 +118,23 @@ class Covenant(SharedMemoryModel):
                 super().save(*args, **kwargs)
             return
         super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.covenant_type == CovenantType.BATTLE:
+            if not self.battle_binding:
+                raise ValidationError(
+                    {"battle_binding": "Battle covenants require a battle_binding."}
+                )
+        else:
+            if self.battle_binding:
+                raise ValidationError(
+                    {"battle_binding": "Only Battle covenants may set battle_binding."}
+                )
+            if self.is_dormant:
+                raise ValidationError({"is_dormant": "Only Battle covenants may be dormant."})
+        if self.is_dormant and self.battle_binding != BattleBinding.STANDING:
+            raise ValidationError({"is_dormant": "Only STANDING battle covenants may be dormant."})
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:

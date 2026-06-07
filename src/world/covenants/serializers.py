@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from world.covenants.handlers import can_engage_durance_membership
+from world.covenants.handlers import can_engage_membership
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -65,11 +65,17 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
         return obj.left_at is None
 
     def get_can_engage(self, obj: CharacterCovenantRole) -> bool:
-        return can_engage_durance_membership(obj)
+        return can_engage_membership(obj)
 
     def get_engage_blocked_reason(self, obj: CharacterCovenantRole) -> str | None:
-        if can_engage_durance_membership(obj):
+        if can_engage_membership(obj):
             return None
+        from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+        if obj.covenant.covenant_type == CovenantType.BATTLE and obj.covenant.is_dormant:
+            return (
+                "This battle covenant is dormant — it must be raised again before you can engage."
+            )
         return "No covenant members present in this scene."
 
 

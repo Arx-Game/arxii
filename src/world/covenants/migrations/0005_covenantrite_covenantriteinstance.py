@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0005_charactersheet_max_active_npc_missions"),
         ("combat", "0004_strainconfig_fatigue_ratios"),
         ("conditions", "0005_conditionmodifiereffect"),
-        ("covenants", "0003_covenant_organization_link"),
+        ("covenants", "0004_covenant_battle_binding_covenant_is_dormant"),
         ("magic", "0013_affinityinteraction_caster_dominance_defiles_and_more"),
         ("scenes", "0009_alter_persona_fame_tier"),
     ]

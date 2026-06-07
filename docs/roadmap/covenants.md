@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice F covenant rites shipped; per-role powers (#751) + dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped; per-role powers (#751) + dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -94,8 +94,10 @@ denormalizing the type onto the membership row would violate the project's
   ANY-match against engaged memberships; mismatch raises
   `CovenantRoleNotEngagedError`.
 - Combat speed_rank stays encounter-scoped via `CombatParticipant.covenant_role`
-  (set at combat setup); Slice E will decide combat-side precedence between
-  Durance and Battle for war contexts.
+  (set at combat setup). Slice E implemented combat-side precedence:
+  `precedence_role_for_combat` returns the engaged Battle role over the Durance
+  role whenever both are active — Battle wins unconditionally (no war-context
+  flag). This is set as the default in combat `add_participant`/`join_encounter`.
 
 **Surfaces NOT gated by engagement** (persistent character properties):
 - Thread anchor cap — `max(covenant.level across all CCR rows for this role) × 10`.
@@ -288,8 +290,10 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `CombatParticipant.covenant_role` FK → `CovenantRole`.
   - Combat resolution order sorts by `speed_rank`; characters without a
     role fall back to `NO_ROLE_SPEED_RANK = 20`.
-  - Combat-side precedence between Durance and Battle for war contexts is
-    Slice E (not yet authored).
+  - Combat-side precedence between Durance and Battle is implemented (Slice E):
+    `precedence_role_for_combat` returns the engaged Battle role over Durance
+    whenever both are active; this feeds `CombatParticipant.covenant_role` in
+    `add_participant`/`join_encounter`. Modifier bonuses still stack additively.
 
 ### What Slice B Added
 
@@ -461,13 +465,52 @@ decision above.
 
 **Group-ability unlocks** at covenant level remain in Slice F.
 
-### Slice E — Battle Covenants + Durance × Battle stacking
+### Slice E — Battle Covenants + Durance × Battle stacking (SHIPPED)
 
-- **Type-specific data** — `durance_focus_FK`, `battle_encounter_FK`,
-  etc., on Covenant. Discriminator + typed FK pattern.
-- **Combat-side precedence** between Durance and Battle for war contexts.
-  Spec implies Battle takes precedence in war contexts but this is not yet
-  authored.
+Battle covenants gained their own lifecycle primitives and the combat-side
+precedence rule was implemented. A character can be simultaneously engaged
+in a Durance covenant and a risen Battle covenant; modifier bonuses sum
+additively while combat speed precedence goes to the Battle role.
+
+**What landed:**
+
+- **Type-gated Battle-only fields on `Covenant`** — `battle_binding`
+  (`BattleBinding` TextChoices: `STANDING` = banner/unit covenant that can
+  rise again; `CAMPAIGN` = one-time event covenant that dissolves when
+  concluded) and `is_dormant` (bool). `Covenant.clean()` enforces: BATTLE
+  requires a binding; DURANCE forbids binding/dormancy; only STANDING
+  covenants may be dormant.
+- **"Call the Banners" rise ritual** — `BattleCovenantRiseRitualFactory`
+  (a `Ritual` reusing the Slice-B `RitualSession` primitive,
+  `ParticipationRule.FORMATION`, SERVICE dispatch) + service
+  `rise_battle_covenant_via_session` (flips a dormant STANDING battle
+  covenant risen and auto-engages accepted participants, fires a
+  `NarrativeMessage`). Complementary `stand_down_battle_covenant` service
+  sets dormancy and clears participant engagement.
+- **Dormancy-aware engagement gate** — `can_engage_durance_membership`
+  renamed to `can_engage_membership` (`world.covenants.handlers`); a BATTLE
+  membership is only engageable when its covenant is risen (not dormant).
+- **Combat-side precedence** — `precedence_role_for_combat(character_sheet)`
+  (`world.covenants.services`) returns the engaged Battle role over the
+  Durance role. Feeds `CombatParticipant.covenant_role` as the default in
+  combat `add_participant`/`join_encounter`, which is the FK that
+  `get_resolution_order` already reads. Battle wins unconditionally whenever
+  both types are engaged — there is no war-context flag. Modifier bonuses
+  continue to stack additively (unchanged).
+- **Integration test** —
+  `src/world/combat/tests/test_covenant_stacking_integration.py`: character
+  engaged in both a Durance and a risen Battle covenant; covers simultaneous
+  engagement, Battle speed precedence, dormancy blocking, and Durance fallback.
+
+**Deferred (future seams):**
+
+- Structured `Story` link for CAMPAIGN dissolution — `Story.covenant` FK
+  and `Story.status`/`completed_at` exist as the hook; auto-dissolve on
+  story completion is not wired.
+- Battle auto-engage on roster join (Slice B §629 hook).
+- Advanced dissolution flows.
+- Battle covenant frontend (#518).
+- Group abilities (#516, Slice F).
 
 ### Slice F — Covenant Rites (group-activated buff rituals)
 

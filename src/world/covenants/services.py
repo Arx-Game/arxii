@@ -51,6 +51,7 @@ def create_covenant(
     covenant_type: str,
     sworn_objective: str,
     founders: Sequence[CovenantFounder],
+    battle_binding: str = "",
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
 
@@ -66,10 +67,23 @@ def create_covenant(
     if len(set(sheet_pks)) != len(sheet_pks):
         raise DuplicateFounderError
 
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import (  # noqa: PLC0415
+        BattleBindingNotAllowedError,
+        BattleBindingRequiredError,
+    )
+
+    if covenant_type == CovenantType.BATTLE:
+        if not battle_binding:
+            raise BattleBindingRequiredError
+    elif battle_binding:
+        raise BattleBindingNotAllowedError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
+        battle_binding=battle_binding,
     )
     for founder in founders:
         CharacterCovenantRole.objects.create(
@@ -241,6 +255,27 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     character_sheet.character.covenant_roles.invalidate()
 
 
+def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
+    """Pick the single covenant role that governs combat for a character.
+
+    Slice E precedence: when a character is engaged with both a Durance and a
+    Battle covenant, the Battle role wins (it sets speed_rank / resolution
+    order). Modifier bonuses still stack additively elsewhere
+    (mechanics.covenant_role_bonus); this only chooses the one role attached to
+    the CombatParticipant. At most one engaged role per type, so the result is
+    deterministic.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    engaged = character_sheet.character.covenant_roles.currently_engaged_roles()
+    if not engaged:
+        return None
+    for role in engaged:
+        if role.covenant_type == CovenantType.BATTLE:
+            return role
+    return engaged[0]
+
+
 def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     """Return True if a row exists in GearArchetypeCompatibility for this pair.
 
@@ -271,6 +306,7 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
     name: str = session.session_kwargs["name"]
     covenant_type: str = session.session_kwargs["covenant_type"]
     sworn_objective: str = session.session_kwargs["sworn_objective"]
+    battle_binding: str = session.session_kwargs.get("battle_binding", "")
 
     founders: list[CovenantFounder] = []
     for p in session.participants.filter(state=ParticipantState.ACCEPTED):
@@ -289,6 +325,7 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
             covenant_type=covenant_type,
             sworn_objective=sworn_objective,
             founders=founders,
+            battle_binding=battle_binding,
         )
     except IntegrityError as e:
         # Translate the DB-level uniqueness violation to a typed,
@@ -355,6 +392,86 @@ def _emit_level_change_message(covenant: Covenant, new_level: int) -> None:
     )
 
 
+@transaction.atomic
+def rise_battle_covenant_via_session(*, session: RitualSession) -> Covenant:
+    """Dispatched on a 'call the banners' rise ritual fire.
+
+    Flips a dormant STANDING battle covenant to risen and engages the accepted
+    participants who hold an active role there (Slice E). Mirrors
+    create_covenant_via_session's session-unpacking shape.
+    """
+    from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import (  # noqa: PLC0415
+        CovenantNotDormantError,
+        NotAStandingBattleCovenantError,
+    )
+
+    ref = session.references.filter(kind=ReferenceKind.COVENANT).first()
+    if ref is None or ref.ref_covenant is None:
+        raise RequiredReferenceMissingError
+    covenant = ref.ref_covenant
+    if (
+        covenant.covenant_type != CovenantType.BATTLE
+        or covenant.battle_binding != BattleBinding.STANDING
+    ):
+        raise NotAStandingBattleCovenantError
+    if not covenant.is_dormant:
+        raise CovenantNotDormantError
+    covenant.is_dormant = False
+    covenant.save(update_fields=["is_dormant"])
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        membership = CharacterCovenantRole.objects.filter(
+            character_sheet=p.character_sheet,
+            covenant=covenant,
+            left_at__isnull=True,
+        ).first()
+        if membership is not None:
+            set_engaged_membership(membership=membership)
+    _emit_rise_message(covenant)
+    return covenant
+
+
+@transaction.atomic
+def stand_down_battle_covenant(*, covenant: Covenant) -> None:
+    """Stand a STANDING battle covenant down to dormant; clear engagement."""
+    from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import NotAStandingBattleCovenantError  # noqa: PLC0415
+
+    if (
+        covenant.covenant_type != CovenantType.BATTLE
+        or covenant.battle_binding != BattleBinding.STANDING
+    ):
+        raise NotAStandingBattleCovenantError
+    covenant.is_dormant = True
+    covenant.save(update_fields=["is_dormant"])
+    for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
+        engaged=True, left_at__isnull=True
+    ).select_related("character_sheet"):
+        m.engaged = False
+        m.save(update_fields=["engaged"])
+        m.character_sheet.character.covenant_roles.invalidate()
+
+
+def _emit_rise_message(covenant: Covenant) -> None:
+    """Fire one NarrativeMessage to engaged members when the banners are called."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    sheets = [
+        m.character_sheet
+        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY
+            engaged=True, left_at__isnull=True
+        ).select_related("character_sheet")
+    ]
+    if not sheets:
+        return
+    send_narrative_message(
+        recipients=sheets,
+        body=f"The banners are called — {covenant.name} rises to war once more.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+
 def evaluate_scene_engagement(
     *,
     character_sheet: CharacterSheet,
@@ -382,7 +499,7 @@ def _auto_engage_durance(
     engaged for the Durance type. See Slice B spec §3.6, §4.10.
     """
     from world.covenants.constants import CovenantType  # noqa: PLC0415
-    from world.covenants.handlers import can_engage_durance_membership  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
 
     if (
         character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
@@ -393,7 +510,7 @@ def _auto_engage_durance(
     for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
         CovenantType.DURANCE
     ):
-        if not can_engage_durance_membership(membership):
+        if not can_engage_membership(membership):
             continue
         co_present = _co_present_member_count(membership, room)
         if co_present > 0:

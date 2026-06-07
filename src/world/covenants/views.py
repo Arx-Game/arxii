@@ -22,7 +22,7 @@ from world.covenants.filters import (
     CovenantRoleFilter,
     GearArchetypeCompatibilityFilter,
 )
-from world.covenants.handlers import can_engage_durance_membership
+from world.covenants.handlers import can_engage_membership
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -94,7 +94,7 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         IC prerequisite is not met (no covenant members present in scene).
         """
         membership = self.get_object()
-        if not can_engage_durance_membership(membership):
+        if not can_engage_membership(membership):
             return Response(
                 {"detail": CovenantEngagementPrerequisiteNotMetError.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
