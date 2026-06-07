@@ -1,180 +1,179 @@
-# Issue 0 — Pre-cast Power Read-back Design (#524)
+# Power Derivation Pipeline (#524 → #639 / Direction B)
 
-**Status:** approved design, pre-implementation.
-**Companion research:** `docs/architecture/power-intensity-research.md` (landscape + 4 candidate directions) and `...-critique.md`. This spec implements the report's **Issue 0/1** and the leading edge of **Direction C** (unify the two effective-intensity computations into one derived power value).
-
----
-
-## 1. Problem
-
-`use_technique` (`src/world/magic/services/techniques.py`) emits `TECHNIQUE_PRE_CAST` with a mutable payload, but **discards any edits**: after the emit it keeps using the pre-event `stats.intensity` for resolution. A reactive pre-cast trigger that does `MODIFY_PAYLOAD` (a ward weakening an incoming working, an amp strengthening it) therefore has **no effect on what actually lands**. The cancel path works; the modify path is a no-op. This is the #524 gap.
-
-Fixing it cleanly requires naming the thing being modified correctly. Per the research and the user's framing:
-
-- **Intensity** = what the caster *channels*. Caster-side. Drives anima cost, mishap (`control_deficit`), resonance/corruption attribution, Soulfray. **A defender's ward must never reduce this.**
-- **Power** = the *effective magnitude the working carries into the world*. World/target-side. Drives damage budgets, condition severity/duration, capability grants. **This is the modifiable lever** (pre-cast wards/amps now; persistent buffs, Audere spikes, environment shifts later).
-
-**Load-bearing invariant (user):** *Power is always a **derived** value, never stored.* It is recomputed each cast as the sum of the caster's intensity + (later) level, threads, aura/resonance, and applicable modifiers. Modifiers *contribute to* power; they are never *stored as* power. This spec introduces power as a derived value seeded from intensity; later issues add the other input terms. No persisted power column, ever.
+**Status:** fully built and wired (Issues #524–#639).
+**Companion docs:** `docs/architecture/power-intensity-research.md` (landscape + candidate
+directions), `docs/architecture/power-intensity-research-critique.md`.
 
 ---
 
-## 2. Scope
+## 1. Problem and invariant
 
-### In scope (PR1)
-1. Add a derived `power` to the pre-cast payload, seeded from the caster's channeled intensity.
-2. Read the post-hook `power` back in `use_technique` and feed it to resolution + the world-side event payloads.
-3. Extend the `resolve_fn` contract to receive `power`; the combat resolver **consumes** it for damage/severity/duration/capability, unifying it with the combat pull bumps. Clash and scenes accept-and-ignore (their resolution is intensity-independent today).
-4. Reduce `compute_effective_intensity` to its pull-summing role and route combat scaling through the injected `power + pulls` (the front edge of Direction C).
-5. Tests proving the intensity/power split: a ward reduces landed effect but not anima/mishap/Soulfray.
+`use_technique` emits `TECHNIQUE_PRE_CAST` with a mutable payload. Before #524 a
+`MODIFY_PAYLOAD` trigger's edit to `power` had no effect because the code kept using
+`stats.intensity` downstream — the modify path was a no-op. #524 closed that gap.
 
-### Out of scope (later issues, tracked separately)
-- `power` as a `ModifierTarget` category + persistent buffs ("+power to fire spells").
-- Level / thread / aura terms in the power derivation.
-- Audere / Audere Majora power spike (a derivation term).
-- Environment power shift; penetration-vs-resistance contest; the player-facing "power ledger".
-- The full ordered pipeline (Direction B).
-
-These will be filed as follow-on issues during the broader decomposition.
+**Load-bearing invariant (never relaxed):** *Power is always a **derived** value, never
+stored.* It is recomputed each cast. No persisted `power` column exists; none will be
+added. Modifiers *contribute to* power; they are never *stored as* power.
 
 ---
 
-## 3. Current code (verified anchors)
+## 2. Intensity vs power
 
-- `use_technique` — `src/world/magic/services/techniques.py:241-428`. Step 2 computes anima cost from `stats.intensity` (caster-side, stays). Lines 289-309 emit `TECHNIQUE_PRE_CAST` then check only `was_cancelled()`. Line 315 calls `resolve_fn()` (no args). Lines 348/357/407 reuse `stats.intensity`.
-- `TechniquePreCastPayload` — `src/flows/events/payloads.py:188-194`: `caster, technique, targets, intensity`. Non-frozen (mutable). `TechniqueCastPayload` (frozen) and `TechniqueAffectedPayload` carry the world-side result.
-- `MODIFY_PAYLOAD` — `src/flows/models/flows.py` `_execute_modify_payload`: ops `set/multiply/add/min/max` via `setattr` on the payload field.
-- `resolve_fn` call sites (3 production):
-  - `src/world/combat/services.py:485` — passes a `CombatTechniqueResolver` instance (callable). The resolver calls `compute_effective_intensity(self.participant, self.action)` in `_apply_damage` (`:206`) and `_apply_conditions` (`:251`).
-  - `src/world/combat/clash.py:233` — passes a local no-arg `resolve_fn` doing a strain-based `perform_check`; intensity-independent.
-  - `src/world/scenes/action_services.py:328` — passes `lambda: start_action_resolution(...)`; difficulty-based; intensity-independent.
-- `compute_effective_intensity` — `src/world/combat/services.py:332-358`: `technique.intensity + Σ INTENSITY_BUMP pull scaled_values`. Does NOT consult identity modifiers (that lives only in `get_runtime_technique_stats`).
-- `get_runtime_technique_stats` — `src/world/magic/services/techniques.py:156-208`: the full caster envelope (base + identity `CharacterModifier` + engagement + tier penalty) → `RuntimeTechniqueStats(intensity, control)`.
+- **Intensity** — what the caster *channels*. Drives anima cost, mishap (`control_deficit`),
+  resonance attribution, and Soulfray. A ward must never reduce this.
+- **Power** — the *effective magnitude the working carries into the world*. Drives damage
+  budgets, condition severity/duration, and capability grants. This is the modifiable lever.
 
----
-
-## 4. Design
-
-### 4.1 Payload: add derived `power`
-
-`TechniquePreCastPayload` (`payloads.py`) gains `power: int`, alongside the retained `intensity: int`:
-
-```python
-@dataclass
-class TechniquePreCastPayload:
-    caster: Character
-    technique: Technique
-    targets: list[Character | ObjectDB]
-    intensity: int   # channeled — immutable; what the caster put in
-    power: int       # derived effective magnitude — the editable lever
-```
-
-`intensity` stays so triggers can *read* the channeled value (e.g. "ward scales with how hard they pushed") while editing only `power`. `TechniqueCastPayload` and `TechniqueAffectedPayload` each gain a `power: int` field carrying the post-hook value to observers/downstream triggers.
-
-### 4.2 `use_technique`: seed, read back, thread through
-
-In `use_technique`, the seed is the **derived power**. For PR1 the derivation is `power = stats.intensity` (the full caster envelope). A small private helper marks the extension point for later input terms (level/threads/aura/modifiers):
-
-```python
-def _derive_power(*, channeled_intensity: int, technique: Technique, character: ObjectDB) -> int:
-    """Derive effective power. NEVER stored — recomputed each cast.
-
-    PR1: power == channeled intensity. Later issues add level, threads,
-    aura/resonance, and power-scoped modifier terms here (Direction C/B).
-    """
-    return channeled_intensity
-```
-
-Flow changes (all in `use_technique`):
-1. Seed `pre_payload.power = _derive_power(channeled_intensity=stats.intensity, technique=technique, character=character)` (and keep `intensity=stats.intensity`).
-2. After the emit (non-cancelled), read `effective_power = pre_payload.power` (a trigger may have edited it).
-3. Call resolution with it: `resolution_result = resolve_fn(power=effective_power)`.
-4. Use `effective_power` in the `TECHNIQUE_CAST` and `TECHNIQUE_AFFECTED` payloads.
-5. **Unchanged:** anima cost (Step 2, already computed pre-hook from `stats.intensity`), `control_deficit` mishap (`stats.intensity - stats.control`), resonance involvements (`stats.intensity`), Soulfray (deficit-based). The caster-side family never reads `power`.
-
-### 4.3 `resolve_fn` contract: `(*, power: int)`
-
-All resolvers become keyword-callable with `power`:
-
-- **clash** (`clash.py`): `def resolve_fn(*, power: int) -> object:` — ignores `power` (`# noqa: ARG001` with a comment: clash check is strain-driven, not power-scaled). Body unchanged.
-- **scenes** (`action_services.py`): change `resolve_fn=lambda: start_action_resolution(...)` to `resolve_fn=lambda *, power: start_action_resolution(...)` — ignores `power` (difficulty-driven). Body unchanged.
-- **combat** (`CombatTechniqueResolver.__call__`): becomes `def __call__(self, *, power: int) -> CombatTechniqueResolution:` and threads `power` into `_apply_damage(check_result, power=power)` and `_apply_conditions(check_result, power=power)`.
-
-### 4.4 Combat: consume injected power (front edge of Direction C)
-
-The combat resolver currently calls `compute_effective_intensity(participant, action)` in two places and uses the result as `effective_intensity=` for damage budget, severity, and duration. Change those to use the **injected power plus the combat pull bumps**:
-
-- Split `compute_effective_intensity` so the pull-summation is reusable:
-
-```python
-def sum_intensity_bump_pulls(participant: CombatParticipant) -> int:
-    """Σ of active INTENSITY_BUMP pull scaled_values for this participant's encounter."""
-    total = 0
-    character = participant.character_sheet.character
-    for pull in character.combat_pulls.active_for_encounter(participant.encounter):
-        for eff in pull.resolved_effects_cached:
-            if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
-                total += eff.scaled_value
-    return total
-
-
-def compute_effective_intensity(participant: CombatParticipant, action: CombatRoundAction) -> int:
-    """DEPRECATED scaling entry point — retained for the clash intensity floor only.
-
-    Equals technique.intensity + INTENSITY_BUMP pulls. Damage/severity/duration now
-    scale on the power injected by use_technique (which already folds in the caster's
-    full intensity envelope) plus sum_intensity_bump_pulls. See Direction C.
-    """
-    technique = action.focused_action
-    if technique is None:
-        return 0
-    return technique.intensity + sum_intensity_bump_pulls(participant)
-```
-
-- In `_apply_damage` / `_apply_conditions`, replace `eff_intensity = compute_effective_intensity(...)` with:
-
-```python
-eff_power = power + sum_intensity_bump_pulls(self.participant)
-```
-
-and pass `effective_intensity=eff_power` into `compute_damage_budget` / `compute_severity` / `compute_duration_rounds` (the profile/condition method parameter name stays `effective_intensity` for PR1 — renaming those formula params to `effective_power` is a follow-on cleanup to avoid churn here).
-
-**Consequence (intended):** combat damage now reflects the caster's identity intensity modifiers (carried by `power`←`stats.intensity`), which `compute_effective_intensity` previously ignored. With no production data and a disposable dev DB, there is no balance to preserve; this is the correct unification. Combat tests that asserted exact damage numbers will be updated to the new derivation.
-
-- The **clash intensity floor** (`clash.py:1176`, `compute_effective_intensity(...) < intensity_floor`) keeps calling `compute_effective_intensity` — it is a gameplay gate on channeled+pull intensity, not a power consumer. Left as-is.
-
-### 4.5 Why this honors the "power is always derived" invariant
-
-`power` exists only as: a transient payload field (seeded by `_derive_power`, editable by triggers) and a `resolve_fn` parameter. It is never written to a model column. Each cast recomputes it. Later issues extend `_derive_power` with more input terms — the derivation point is centralized so those additions are one-place changes.
+The two values are separately carried on `TechniquePreCastPayload` (`intensity`, `power`).
+Caster-side calculations always read `stats.intensity`; world-side calculations read `power`
+(post-hook, from the resolved ledger).
 
 ---
 
-## 5. Testing
+## 3. `_derive_power` — the ledger pipeline
 
-All on the SQLite inner loop where possible (`flows`, `magic` is PG-tier — use `just test-parity` for magic/combat).
+`_derive_power` (`world/magic/services/techniques.py`) returns a transient
+**`PowerLedger`** (`world/magic/types/power_ledger.py`). The ledger is an ordered tuple of
+**`PowerLedgerEntry`** records, each tagged with a `PowerStage` constant, an `op`
+(`LedgerOp`: `ADD / MULTIPLY / SET`), an `amount`, and a running total. `ledger.total`
+is the effective power (floored at 0).
 
-1. **Magic envelope (magic tier):** pre-cast trigger that does `MODIFY_PAYLOAD {field: power, op: multiply, value: 0.5}` →
-   - resolution receives halved power (assert via a resolver spy / the `TECHNIQUE_CAST` payload `power`),
-   - anima cost unchanged, mishap pool selection unchanged, Soulfray severity unchanged (assert the caster-side outputs equal a no-trigger control run).
-2. **No-edit identity:** with no pre-cast trigger, `power == stats.intensity` and every downstream number equals today's behavior for the magic path.
-3. **Combat (combat tier):** pre-cast amp `{field: power, op: add, value: N}` → opponent damage rises by the budget delta; a ward `{op: multiply, value: 0.5}` → damage falls; anima/mishap/Soulfray unchanged. Confirm pull bumps still add on top (`eff_power = power + pulls`).
-4. **Contract:** clash and scenes resolvers accept `power=` and behave identically to today (their outputs are power-independent).
-5. **Regression:** full `just test-fast flows`; `just test-parity world.magic`; `just test-parity world.combat`; `just test-parity world.scenes`. Update combat damage-number assertions to the unified derivation.
+### 3.1 Stage ordering (build order inside `_derive_power`)
+
+| # | Stage | Source | How applied |
+|---|-------|--------|-------------|
+| 1 | **BASE** | `stats.intensity` from `get_runtime_technique_stats` (identity + process modifiers, Audere intensity, tier penalty, social safety) | `SET` to channeled intensity |
+| 2 | **MULTIPLIER** | `power_multiplier` `ModifierTarget` via `get_modifier_breakdown` + `get_condition_modifier_breakdown`. Immunity-blocked sources excluded. | Single aggregate `×(1 + Σ%/100)` applied to BASE only — one `multiply` call, never per-source, to avoid repeated rounding drift |
+| 3 | **FLAT_MODIFIER** | Per-source additive power modifiers via `get_modifier_breakdown` (immunity-blocked excluded) + per-condition rows via `get_condition_modifier_breakdown` | `ADD` per non-zero source |
+| 4 | **TERM** | `get_power_term_providers()` — level live; aura/thread stubs | `ADD` per provider |
+| 5 | **ENVIRONMENT** | Cast-time `evaluate_resonance_environment` AMPLIFY magnitude only | `ADD` if `kind == AMPLIFY and magnitude > 0` |
+
+Then, in the combat resolver (`CombatTechniqueResolver.__call__`):
+
+| # | Stage | Source | How applied |
+|---|-------|--------|-------------|
+| 6 | **COMBAT_PULL** | INTENSITY_BUMP pulls via `_sum_intensity_bump_pulls` | `ADD` |
+| 7 | **PENETRATION** | `get_penetration_factor(pen_result.success_level)` from the authored `PenetrationOutcomeFactor` ladder (see §4) | `SET 0` (bounce), `SET total` (clean penetration), or `multiply` by `(factor−1)×100` pct |
+| — | **REACTIVE** | A pre-cast `MODIFY_PAYLOAD` edit to `payload.power` (appended after the emit, outside `_derive_power`) | `ADD` delta between hook output and seed ledger total |
+| — | **CLAMP** | Floor at 0 | `SET 0` if total < 0 |
+
+### 3.2 Stacking model
+
+Stacking is entirely delegated to `get_modifier_breakdown` and `get_condition_modifier_breakdown`.
+`_derive_power` does not contain multiplicative-math or stacking logic of its own: the
+MULTIPLIER pool is additive-% aggregated first (Σ%), then applied as a single `×(1+Σ%/100)` to
+BASE. FLAT stage sources are additive. No special stacking code was added to the pipeline;
+the existing modifier system's immunity handling and source attribution carry through.
+
+### 3.3 ENVIRONMENT stage — evaluate-once, AMPLIFY only, double-count guard
+
+`evaluate_resonance_environment` is called **once per cast**, before `_derive_power`, and the
+result is passed in as the `environment` argument. This evaluate-once pattern (#639/#722
+guard) prevents the primitive from running twice (once for power, once for backfire).
+
+Only AMPLIFY (ALIGNED diagonal) adds power here. Double-count guards:
+
+- **OPPOSED** (REJECT/REPEL/CORRUPT): no power change. The opposition penalty is already the
+  Step 10 backfire (`resonance_environment_for_cast`). Subtracting power here would double-count.
+- **ALIGNED persistent presence boon**: applied as a `ConditionInstance` on room entry via
+  `refresh_resonance_alignment`. That condition's modifier rows already flow through the
+  FLAT/condition stage above. Adding it again here would double-count.
+
+### 3.4 REACTIVE entry
+
+After `TECHNIQUE_PRE_CAST` is emitted, `use_technique` reads `pre_payload.power`. If a trigger
+edited it via `MODIFY_PAYLOAD`, the signed delta is appended as a `REACTIVE` entry so the ledger
+stays internally consistent (`ledger.total == effective_power`). The ledger's floor (≥0) then
+becomes the canonical `effective_power`, ensuring a ward-driven 0 is honoured even if the hook
+pushed power negative.
 
 ---
 
-## 6. Risks & coordination
+## 4. Penetration-vs-resistance contest
 
-- **Combat-instance overlap:** PR1 edits `src/world/combat/services.py` (`compute_effective_intensity`, `CombatTechniqueResolver`) and `clash.py` (signature only) — territory the parallel combat instance has worked in. Coordinate / flag at PR time; rebase before pushing. No `frontend/` or `api.d.ts` involvement.
-- **`resolve_fn` signature is a breaking contract change** — all 3 production call sites + every test that builds a `resolve_fn`/resolver are updated in the same PR (the research listed them; `test_magic_story_pipeline`, `test_corruption_per_cast_pipeline`, `test_alteration_pipeline`, `test_use_technique`, etc. use `MagicMock`/`lambda: ...` and must become `lambda *, power: ...` or accept the kwarg).
-- **Formula param name:** keeping `effective_intensity=` on `compute_damage_budget`/`compute_severity`/`compute_duration_rounds` in PR1 (passing power into it) is a deliberate small inconsistency to bound scope; renamed in a Direction-C follow-on.
+When the focused opponent has a `barrier_strength > 0` (a ward), the combat resolver runs a
+**penetration check** (`perform_check` against `barrier_strength` as the difficulty) before
+damage and condition resolution.
+
+The result's `success_level` is looked up against the authored `PenetrationOutcomeFactor` ladder
+via `get_penetration_factor(success_level)` (`world/conditions/services.py`). The ladder is a
+queryset of `PenetrationOutcomeFactor` rows ordered by `min_success_level`; the highest
+matching row's `factor` is returned (default `Decimal("1.00")` when no row matches — an
+unauthored ladder must never accidentally zero out a working).
+
+**Outcomes by factor value:**
+
+| Factor | Ledger entry | Effect |
+|--------|-------------|--------|
+| `0` | `PENETRATION SET 0` `"ward (bounced)"` | `bounced=True` — damage/conditions short-circuited; the ledger records the bounce for narration |
+| `1.00` (exactly) | `PENETRATION SET total` `"ward (penetrated)"` | `bounced=False`, power unchanged. The entry distinguishes a warded-but-cleanly-penetrated cast from an unwarded one (which records no PENETRATION entry at all). |
+| `0 < factor < 1` | `PENETRATION multiply (factor−1)×100 pct` (negative) | Partial — power reduced |
+| `factor > 1` | `PENETRATION multiply (factor−1)×100 pct` (positive) | Overpenetration — power amplified |
+
+**No double-counting with resistance/soak:** `barrier_strength` is the ward gate only.
+Damage-type resistance is soaked once, downstream, in `apply_damage_to_opponent`. The
+penetration contest does not touch resistance; resistance does not interfere with the
+penetration roll.
 
 ---
 
-## 7. Follow-on issues to file (decomposition)
+## 5. Snapshot vs recompute decision: RECOMPUTE
 
-- Power as a `ModifierTarget` category + `_derive_power` reads power-scoped `CharacterModifier` totals (reuse existing `target_resonance`/`target_damage_type` scoping FKs).
-- Persistent "+power to fire spells" buffs (data, via the modifier system).
-- Audere / Audere Majora power-spike term in `_derive_power` (gated on Audere state) — ties to #543.
-- Level / thread / aura terms in `_derive_power`.
-- Rename `effective_intensity=` → `effective_power=` across the three scaling formulas; collapse `compute_effective_intensity` fully.
-- Environment power shift; penetration-vs-resistance; player-facing power ledger; the full ordered pipeline (Direction B).
+Power is **never stored**. Each call to `use_technique` recomputes it via `_derive_power` from
+the current character state. There is no persisted `power` column anywhere. Later issues
+may add more input terms to `_derive_power`; the derivation point is centralised so those
+additions are one-place changes.
+
+---
+
+## 6. Ledger surfacing — payloads and narration
+
+The ledger rides the event payloads throughout the pipeline:
+
+- `TechniquePreCastPayload` — carries `intensity`, `power` (seed total), and `ledger` (seed
+  ledger). Mutable; a `MODIFY_PAYLOAD` trigger may edit `power`.
+- `TechniqueCastPayload` — frozen; carries `power` (effective) and `ledger` (effective, with
+  REACTIVE entry appended if any hook edited it).
+- `TechniqueAffectedPayload` — frozen; carries `power` (effective) and `ledger` (effective).
+
+Combat narration reads the ledger via `_power_outcome_clause(power_ledger)` in
+`world/combat/interaction_services.py`, which folds a concise ward/environment outcome clause
+into the `render_action_outcome_narration` line:
+
+- Full bounce → `"— the ward turns it aside"`
+- Partial penetration → `"— the ward bleeds off much of its force"`
+- Clean/over-penetration → `"— it tears through the ward"`
+- Environment amplification (no PENETRATION entry, positive ENVIRONMENT ADD) →
+  `"— the place's resonance swells the working"`
+- Plain unwarded, non-magic, or combo path → no clause (backward compatible)
+
+---
+
+## 7. Key symbols (where to find the code)
+
+| Symbol | Module |
+|--------|--------|
+| `PowerLedger`, `PowerLedgerEntry`, `PowerLedgerBuilder` | `world/magic/types/power_ledger.py` |
+| `PowerStage`, `LedgerOp` | `world/magic/constants.py` |
+| `_derive_power` | `world/magic/services/techniques.py` |
+| `get_modifier_breakdown` | `world/mechanics/services.py` |
+| `get_condition_modifier_breakdown` | `world/conditions/services.py` |
+| `get_penetration_factor`, `PenetrationOutcomeFactor` | `world/conditions/services.py`, `world/conditions/models.py` |
+| `CombatTechniqueResolver._apply_penetration` | `world/combat/services.py` |
+| `_power_outcome_clause`, `render_action_outcome_narration` | `world/combat/interaction_services.py` |
+| `evaluate_resonance_environment` | `world/magic/services/resonance_environment.py` |
+
+---
+
+## 8. History
+
+- **#524** — introduced `power` as a derived, never-stored value seeded from `stats.intensity`;
+  wired the pre-cast `MODIFY_PAYLOAD` path so trigger edits to `power` reach resolution; closed
+  the discard-on-emit gap; split caster-side from world-side effects. `_derive_power` returned
+  a scalar at this stage.
+- **#634–#638** — added modifier/level/thread/aura/Audere terms to the derivation.
+- **#639 (Direction B)** — rewrote `_derive_power` to return a `PowerLedger`; added the
+  MULTIPLIER/FLAT/TERM/ENVIRONMENT/REACTIVE stages; introduced the penetration-vs-resistance
+  contest and the `PenetrationOutcomeFactor` ladder; wired the ledger through combat resolution
+  and narration; evaluate-once environment guard.

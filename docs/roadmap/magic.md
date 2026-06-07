@@ -480,16 +480,41 @@ examine-decoration `sections` on the mutable `ExaminePrePayload` + render-back i
 (scar presence-escalation), and wiring `TriggerHandler.reset_scene_counts` to a
 scene-boundary event.
 
-**Power vs Intensity (epic #633, Issue 0 = #524):** introduced a derived, never-stored
-`power` value distinct from channeled `intensity`. A pre-cast `TECHNIQUE_PRE_CAST`
-`MODIFY_PAYLOAD` on `power` now reaches resolution (the discarded-edit gap is closed);
-combat scales damage/conditions on the injected power (folding in the caster's full
-intensity envelope + pull bumps — front edge of Direction C). Intensity still solely
-drives anima cost, mishap, resonance attribution, and Soulfray (a ward never reduces it).
-Power is recomputed each cast via `_derive_power` (`world/magic/services/techniques.py`);
-later issues #634-#639 add modifier/level/thread/aura/Audere terms, the persistent-buff
-surface, Direction-C consolidation, and the Direction-B pipeline. Research +
-candidate-directions report: `docs/architecture/power-intensity-research.md`.
+**Power vs Intensity (epic #633, Issue 0 = #524 — Direction B complete via #639):**
+Introduced a derived, never-stored `power` value distinct from channeled `intensity`. The
+pre-cast `TECHNIQUE_PRE_CAST` `MODIFY_PAYLOAD` path closes the discarded-edit gap (#524).
+Intensity still solely drives anima cost, mishap, resonance attribution, and Soulfray (a
+ward never reduces it). Power is recomputed each cast via `_derive_power`
+(`world/magic/services/techniques.py`).
+
+**#639 — Direction B ordered pipeline + power ledger (DONE):**
+
+What was built: `_derive_power` now returns a transient **`PowerLedger`**
+(`world/magic/types/power_ledger.py` — `PowerLedger` / `PowerLedgerEntry` /
+`PowerLedgerBuilder`) instead of a scalar. The ledger records every contribution as an
+attributed, ordered stage; `ledger.total` is the effective power. The pipeline builds in
+this order: **BASE** (channeled intensity from `get_runtime_technique_stats`, which folds
+identity + process modifiers, Audere, and tier) → **MULTIPLIER** (the `power_multiplier`
+pool, applied as a single aggregate `×(1+Σ%/100)` to BASE; immunity-blocked sources
+excluded) → **FLAT** (per-source additive power modifiers via `get_modifier_breakdown` +
+per-condition rows via `get_condition_modifier_breakdown`; immunity-blocked excluded) →
+**TERM** (`get_power_term_providers()`; level live, aura/thread stubs) → **ENVIRONMENT**
+(cast-time `evaluate_resonance_environment` AMPLIFY magnitude only; OPPOSED penalty stays
+in the existing Step 10 backfire; ALIGNED persistent boon flows through FLAT/condition —
+double-count guards in both cases; evaluate-once per cast). In the combat resolver:
+**COMBAT_PULL** (INTENSITY_BUMP pulls added on top) → **PENETRATION** (a graded check
+vs the target's `barrier_strength`; `get_penetration_factor` looks up the authored
+`PenetrationOutcomeFactor` ladder: `factor=0` → power set to 0 with "ward (bounced)",
+`factor=1.00` → clean penetration recorded without power change, partial/overpen →
+`multiply` entry; damage-type resistance is soaked once downstream, never here) →
+**CLAMP** (floor at 0). A pre-cast reactive `MODIFY_PAYLOAD` edit to `payload.power`
+appends a **REACTIVE** entry to reconcile the ledger. The ledger rides the
+`TechniquePreCastPayload` / `TechniqueCastPayload` / `TechniqueAffectedPayload` event
+payloads, and combat narration folds a concise ward/environment outcome clause via
+`render_action_outcome_narration` (`world/combat/interaction_services.py`). The recompute
+invariant is preserved — power is never stored. Research + candidate-directions report:
+`docs/architecture/power-intensity-research.md`. Architecture reference (as-built):
+`docs/architecture/power-derivation.md`.
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
