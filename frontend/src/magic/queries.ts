@@ -21,6 +21,7 @@ import type {
   SineatingRequest,
   SineatingRespondRequest,
   StageAdvanceRespondRequest,
+  TechniqueDesignRequest,
   WeaveThreadRequest,
 } from './types';
 
@@ -487,5 +488,40 @@ export function useApplicablePulls(context: ApplicablePullsRequest | null) {
     queryFn: () => api.fetchApplicablePulls(context!),
     enabled: context !== null,
     staleTime: 5_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Technique builder mutation hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * Dry-run pricing mutation for the technique builder live budget meter.
+ *
+ * Returns TechniqueCostBreakdown (tier, budget, total_cost, within_budget, lines).
+ * Not wired to cache invalidation — pricing is ephemeral and read-only.
+ * The form component should debounce calls rather than firing on every keystroke.
+ */
+export function usePriceTechnique() {
+  return useMutation({
+    mutationFn: (body: TechniqueDesignRequest) => api.priceTechnique(body),
+  });
+}
+
+/**
+ * Author a technique via the budget policy layer.
+ *
+ * Invalidates the technique list on success so any downstream technique
+ * lists refresh. magicKeys does not have a techniqueList key, so we use
+ * a literal ['techniques'] queryKey to match any technique list query.
+ */
+export function useAuthorTechnique() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TechniqueDesignRequest) => api.authorTechnique(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['techniques'] });
+      void qc.invalidateQueries({ queryKey: magicKeys.all });
+    },
   });
 }
