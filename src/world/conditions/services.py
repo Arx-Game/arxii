@@ -10,6 +10,7 @@ Design principles:
 - Bidirectional modifiers (conditions can be good or bad depending on context)
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
@@ -849,6 +850,7 @@ def remove_condition(
     condition: ConditionTemplate,
     *,
     remove_all_stacks: bool = True,
+    include_suppressed: bool = False,
 ) -> bool:
     """
     Remove a condition from a target.
@@ -857,6 +859,8 @@ def remove_condition(
         target: The ObjectDB instance
         condition: ConditionTemplate instance
         remove_all_stacks: If False, only remove one stack
+        include_suppressed: Also remove the condition if it is currently
+            suppressed (default skips suppressed instances)
 
     Returns:
         True if condition was removed
@@ -864,7 +868,7 @@ def remove_condition(
     Emits reactive events:
     - CONDITION_REMOVED (post-delete, frozen)
     """
-    instance = get_condition_instance(target, condition)
+    instance = get_condition_instance(target, condition, include_suppressed=include_suppressed)
     if not instance:
         return False
 
@@ -971,6 +975,48 @@ def remove_conditions_by_category(
     _invalidate_condition_handler(target)
     for template in removed:
         _notify_stories_condition_expired(target, template)
+    return removed
+
+
+@transaction.atomic
+def expire_end_of_combat_conditions(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM
+) -> list[ConditionTemplate]:
+    """Remove all UNTIL_END_OF_COMBAT conditions from the given targets.
+
+    Called when a combat encounter completes (see
+    ``world.combat.services.cleanup_completed_encounter``). The duration
+    countdown in ``_process_duration_and_progression`` only decrements ROUNDS
+    instances, so nothing else expires end-of-combat conditions — without this
+    sweep they would persist indefinitely after combat ends.
+
+    Reuses ``remove_condition`` per instance so the full teardown fires
+    (CONDITION_REMOVED reactive event, stories notification, deferred-death
+    resolution). Suppressed instances are included. Idempotent: targets with
+    no such conditions are no-ops, so it composes safely with system-specific
+    sweeps that already removed their own buffs (e.g. covenant rites).
+
+    Args:
+        targets: ObjectDB instances to sweep (encounter participants and
+            opponents). ``None`` entries are ignored.
+
+    Returns:
+        The list of removed ConditionTemplates.
+    """
+    target_list = [t for t in targets if t is not None]
+    if not target_list:
+        return []
+
+    instances = ConditionInstance.objects.filter(
+        target_id__in=[t.pk for t in target_list],
+        condition__default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+    ).select_related("condition", "target")
+
+    removed: list[ConditionTemplate] = []
+    for instance in instances:
+        was_removed = remove_condition(instance.target, instance.condition, include_suppressed=True)
+        if was_removed:
+            removed.append(instance.condition)
     return removed
 
 

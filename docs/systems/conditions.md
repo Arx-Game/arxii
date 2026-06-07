@@ -90,9 +90,10 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 from world.conditions.services import (
     # Core operations
     apply_condition,               # Apply with stacking/interaction handling (atomic)
-    remove_condition,              # Remove condition (optionally just one stack)
+    remove_condition,              # Remove condition (optionally just one stack / incl. suppressed)
     remove_conditions_by_category, # Remove all in a category
     clear_all_conditions,          # Bulk removal with filters
+    expire_end_of_combat_conditions, # Sweep UNTIL_END_OF_COMBAT conds on targets at combat end
 
     # Queries
     get_active_conditions,         # QuerySet of active instances on target
