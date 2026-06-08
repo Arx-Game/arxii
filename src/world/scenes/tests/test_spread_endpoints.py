@@ -62,3 +62,27 @@ class SpreadEndpointTest(APITestCase):
         url = reverse("persona-spread", args=[other.pk])
         resp = self.client.post(url, {"scene": self.scene.pk, "deed": self.deed.pk}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_spread_with_valid_specialization(self) -> None:
+        from world.societies.spread_services import get_spread_specializations
+
+        spec = get_spread_specializations().first()
+        url = reverse("persona-spread", args=[self.persona.pk])
+        resp = self.client.post(
+            url,
+            {"scene": self.scene.pk, "deed": self.deed.pk, "specialization": spec.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+    def test_spread_rejects_non_performance_specialization(self) -> None:
+        from world.skills.factories import SpecializationFactory
+
+        other = SpecializationFactory()  # under a different parent skill
+        url = reverse("persona-spread", args=[self.persona.pk])
+        resp = self.client.post(
+            url,
+            {"scene": self.scene.pk, "deed": self.deed.pk, "specialization": other.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

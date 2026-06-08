@@ -56,6 +56,7 @@ from world.societies.spread_serializers import (
     SpreadableDeedSerializer,
     SpreadInputSerializer,
     SpreadResultSerializer,
+    SpreadSpecializationSerializer,
 )
 
 
@@ -313,11 +314,20 @@ class PersonaViewSet(viewsets.ModelViewSet):
         deeds = get_spreadable_deeds(persona)
         return Response(SpreadableDeedSerializer(deeds, many=True).data)
 
+    @extend_schema(responses=SpreadSpecializationSerializer(many=True), tags=["personas"])
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="spread-specializations")
+    def spread_specializations(self, request: Request) -> Response:
+        """#745 — Performance specializations a teller may optionally apply."""
+        from world.societies.spread_services import get_spread_specializations  # noqa: PLC0415
+
+        specs = get_spread_specializations()
+        return Response(SpreadSpecializationSerializer(specs, many=True).data)
+
     @extend_schema(
         request=SpreadInputSerializer, responses=SpreadResultSerializer, tags=["personas"]
     )
     @action(detail=True, methods=[HTTPMethod.POST])
-    def spread(self, request: Request, pk: int | None = None) -> Response:
+    def spread(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
         """#745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona."""
         from django.core.exceptions import ValidationError  # noqa: PLC0415
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
@@ -329,7 +339,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
         from world.societies.spread_services import (  # noqa: PLC0415
             SPREAD_TALE_ACTION_KEY,
             get_or_create_spread_a_tale_template,
+            get_spread_specializations,
             get_spreadable_deeds,
+            spread_check_modifiers,
         )
 
         persona = self.get_object()
@@ -361,6 +373,20 @@ class PersonaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        specialization = None
+        specialization_id = data.get("specialization")
+        if specialization_id:
+            from world.skills.models import Specialization  # noqa: PLC0415
+
+            valid_ids = set(get_spread_specializations().values_list("pk", flat=True))
+            if specialization_id not in valid_ids:
+                return Response(
+                    {"detail": "That form can't be used to spread a tale."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            specialization = Specialization.objects.get(pk=specialization_id)
+        extra_modifiers = spread_check_modifiers(persona.character_sheet.character, specialization)
+
         template = get_or_create_spread_a_tale_template()
         try:
             result = create_and_resolve_area_action(
@@ -371,6 +397,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
                 pose_text=data["pose_text"],
                 effort_level=data["effort_level"],
                 spread_deed_target=deed,
+                extra_modifiers=extra_modifiers,
             )
         except ValidationError as exc:
             return Response({"detail": exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)

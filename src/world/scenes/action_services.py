@@ -419,13 +419,17 @@ def create_and_resolve_area_action(  # noqa: PLR0913
     effort_level: str = "medium",
     difficulty_choice: str = DifficultyChoice.NORMAL,
     spread_deed_target: object | None = None,
+    extra_modifiers: int = 0,
 ) -> EnhancedSceneActionResult:
     """Create and immediately resolve an area (to-the-room) scene action.
 
     Area actions have no target and no consent round-trip — the telling resolves
     on the spot. Charges the template's action points + social fatigue (scaled by
-    effort), resolves the check (higher effort = easier), echoes the pose + the
-    outcome, and runs any registered resolver (e.g. spread_a_tale).
+    effort), resolves the check, echoes the pose + the outcome, and runs any
+    registered resolver (e.g. spread_a_tale).
+
+    Effort and ``extra_modifiers`` (a caller-supplied roller bonus, e.g. a chosen
+    specialization) are applied as check modifiers, not difficulty deltas.
 
     Raises:
         ValidationError: if the initiator lacks the template's action-point cost.
@@ -439,14 +443,10 @@ def create_and_resolve_area_action(  # noqa: PLR0913
 
     character = initiator_persona.character_sheet.character
 
-    base_difficulty = DIFFICULTY_VALUES.get(
+    difficulty = DIFFICULTY_VALUES.get(
         difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
-    # NOTE (#745): effort is applied as a target-difficulty delta here (a tunable
-    # Phase-1 approximation). Refining it to a roller-side check modifier is a
-    # Phase-3 calibration item.
-    effort_mod = EFFORT_CHECK_MODIFIER.get(effort_level, 0)
-    difficulty = max(0, base_difficulty - effort_mod)
+    check_modifiers = EFFORT_CHECK_MODIFIER.get(effort_level, 0) + extra_modifiers
 
     with transaction.atomic():
         # AP spend lives INSIDE the atomic (as a savepoint) so a failed
@@ -475,6 +475,7 @@ def create_and_resolve_area_action(  # noqa: PLR0913
             template=action_template,
             target_difficulty=difficulty,
             context=context,
+            extra_modifiers=check_modifiers,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution, action_key=action_key

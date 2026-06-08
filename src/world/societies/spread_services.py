@@ -34,20 +34,140 @@ def compute_spread_value(*, base_value: int, success_level: int, multiplier: flo
     return round(base_value * payoff * multiplier)
 
 
+# Spreading a tale ("story-weaving") takes a FORM, modelled as a specialization
+# under a parent skill (#745). The chosen form sets which SKILL the check rolls
+# (its parent — Performance for the artistic forms, Persuasion for propaganda);
+# no form rolls plain Performance. A form the teller HAS stacks its value.
+PERFORMANCE_SKILL_NAME = "Performance"
+PERSUASION_SKILL_NAME = "Persuasion"
+
+# (form name, parent skill name, description)
+SPREAD_FORMS: list[tuple[str, str, str]] = [
+    ("Oratory", PERFORMANCE_SKILL_NAME, "Telling the deed aloud — a rousing speech."),
+    ("Prose", PERFORMANCE_SKILL_NAME, "Telling the deed in writing."),
+    ("Singing", PERFORMANCE_SKILL_NAME, "Telling the deed in song."),
+    ("Propaganda", PERSUASION_SKILL_NAME, "Bending the deed's telling toward a cause."),
+]
+
+_SKILL_DESCRIPTIONS = {
+    PERFORMANCE_SKILL_NAME: "Captivating an audience through music, oration, or storytelling.",
+    PERSUASION_SKILL_NAME: "Swaying others through argument, charm, and rhetoric.",
+}
+
+
+def _ensure_skill(name: str):
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    trait, _ = Trait.objects.get_or_create(
+        name=name,
+        defaults={
+            "trait_type": TraitType.SKILL,
+            "category": TraitCategory.SOCIAL,
+            "description": _SKILL_DESCRIPTIONS.get(name, ""),
+        },
+    )
+    skill, _ = Skill.objects.get_or_create(trait=trait)
+    return skill
+
+
+def ensure_spread_skills() -> None:
+    """Idempotently ensure the spread skills (Performance, Persuasion) + their
+    form specializations exist."""
+    from world.skills.models import Specialization  # noqa: PLC0415
+
+    skills_by_name = {
+        PERFORMANCE_SKILL_NAME: _ensure_skill(PERFORMANCE_SKILL_NAME),
+        PERSUASION_SKILL_NAME: _ensure_skill(PERSUASION_SKILL_NAME),
+    }
+    for form_name, parent_name, description in SPREAD_FORMS:
+        Specialization.objects.get_or_create(
+            parent_skill=skills_by_name[parent_name],
+            name=form_name,
+            defaults={"description": description},
+        )
+
+
+def get_spread_specializations():
+    """The forms a teller may apply when spreading (across Performance + Persuasion)."""
+    from world.skills.models import Specialization  # noqa: PLC0415
+
+    ensure_spread_skills()
+    form_names = [name for name, _, _ in SPREAD_FORMS]
+    return Specialization.objects.filter(name__in=form_names, is_active=True).order_by(
+        "display_order", "name"
+    )
+
+
+def _value_points(value) -> int:
+    from world.traits.models import PointConversionRange, TraitType  # noqa: PLC0415
+
+    if not value:
+        return 0
+    return PointConversionRange.calculate_points(TraitType.SKILL, value)
+
+
+def spread_check_modifiers(character, specialization=None) -> int:
+    """Roller-point bonus for a spread: the form's parent skill + the form itself.
+
+    No form rolls plain Performance. A form/skill the character lacks contributes
+    nothing for that part (you may attempt a form you're unskilled in).
+    """
+    from world.skills.models import (  # noqa: PLC0415
+        CharacterSkillValue,
+        CharacterSpecializationValue,
+    )
+
+    ensure_spread_skills()
+    skill = specialization.parent_skill if specialization else _ensure_skill(PERFORMANCE_SKILL_NAME)
+    skill_value = (
+        CharacterSkillValue.objects.filter(character=character, skill=skill)
+        .values_list("value", flat=True)
+        .first()
+    )
+    total = _value_points(skill_value)
+    if specialization is not None:
+        spec_value = (
+            CharacterSpecializationValue.objects.filter(
+                character=character, specialization=specialization
+            )
+            .values_list("value", flat=True)
+            .first()
+        )
+        total += _value_points(spec_value)
+    return total
+
+
 def get_or_create_spread_a_tale_template():
     """Ensure the 'Spread a Tale' ActionTemplate exists, returning it.
 
-    Idempotent. Uses the existing 'Performance' CheckType as the **placeholder**
-    approach (the real bard/influence approach catalog is a flagged skill-audit
-    decision — see #745 §9). Area action; charges 20 AP + light social fatigue.
+    Idempotent. The base check is a light presence read; the form's SKILL +
+    specialization are added as roller modifiers by the spread flow (so the skill
+    flexes with the chosen form — Performance or Persuasion). Area action; charges
+    20 AP + light social fatigue.
     """
+    from decimal import Decimal  # noqa: PLC0415
+
     from actions.constants import ActionTargetType, Pipeline  # noqa: PLC0415
     from actions.models.action_templates import ActionTemplate  # noqa: PLC0415
-    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
+    ensure_spread_skills()
     category, _ = CheckCategory.objects.get_or_create(name="Social")
     check_type, _ = CheckType.objects.get_or_create(
-        name="Performance", defaults={"category": category}
+        name="Spread a Tale",
+        defaults={
+            "category": category,
+            "description": "Telling a deed's tale to a crowd.",
+        },
+    )
+    presence, _ = Trait.objects.get_or_create(
+        name="presence",
+        defaults={"trait_type": TraitType.STAT, "category": TraitCategory.SOCIAL},
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=presence, defaults={"weight": Decimal("0.5")}
     )
     template, _ = ActionTemplate.objects.get_or_create(
         name="Spread a Tale",

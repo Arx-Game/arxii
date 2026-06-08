@@ -21,6 +21,17 @@ class SpreadInputSerializer(serializers.Serializer):
     deed = serializers.IntegerField()
     pose_text = serializers.CharField(max_length=2000, allow_blank=True, required=False, default="")
     effort_level = serializers.ChoiceField(choices=EffortLevel.choices, default=EffortLevel.MEDIUM)
+    specialization = serializers.IntegerField(
+        required=False, allow_null=True, help_text="Optional Performance specialization id."
+    )
+
+
+class SpreadSpecializationSerializer(serializers.Serializer):
+    """A Performance specialization a teller may apply (Story-weaving / Propaganda)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
 
 
 class SpreadResultSerializer(serializers.Serializer):
