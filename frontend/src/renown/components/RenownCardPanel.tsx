@@ -47,10 +47,16 @@ function CardBody({
       </div>
     );
   }
-  return <CardLayout card={card} />;
+  return <CardLayout card={card} viewerPersonaId={viewerPersonaId} />;
 }
 
-function CardLayout({ card }: { card: RenownCardPayload }) {
+function CardLayout({
+  card,
+  viewerPersonaId,
+}: {
+  card: RenownCardPayload;
+  viewerPersonaId: number | null;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
@@ -67,7 +73,7 @@ function CardLayout({ card }: { card: RenownCardPayload }) {
         </CardContent>
       </Card>
       <ReputationListCard reputation={card.visible_reputation} />
-      <DeedsLogCard deeds={card.visible_deeds} />
+      <DeedsLogCard deeds={card.visible_deeds} personaId={viewerPersonaId} />
     </div>
   );
 }

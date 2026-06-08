@@ -87,6 +87,47 @@ class SpreadEndpointTest(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_save_deed_story_creates_and_is_listed(self) -> None:
+        save_url = reverse("persona-deed-story", args=[self.persona.pk])
+        resp = self.client.post(
+            save_url, {"deed": self.deed.pk, "text": "I sang of it."}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["text"], "I sang of it.")
+        self.assertEqual(resp.data["author_name"], self.persona.name)
+
+        list_url = reverse("persona-deed-stories", args=[self.persona.pk])
+        list_resp = self.client.get(list_url, {"deed": self.deed.pk})
+        self.assertEqual(list_resp.status_code, status.HTTP_200_OK, list_resp.data)
+        self.assertEqual([s["text"] for s in list_resp.data["results"]], ["I sang of it."])
+
+    def test_save_deed_story_upserts_one_per_author(self) -> None:
+        url = reverse("persona-deed-story", args=[self.persona.pk])
+        self.client.post(url, {"deed": self.deed.pk, "text": "First take."}, format="json")
+        resp = self.client.post(url, {"deed": self.deed.pk, "text": "Revised take."}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+        list_url = reverse("persona-deed-stories", args=[self.persona.pk])
+        list_resp = self.client.get(list_url, {"deed": self.deed.pk})
+        self.assertEqual([s["text"] for s in list_resp.data["results"]], ["Revised take."])
+
+    def test_save_deed_story_unaware_deed_forbidden(self) -> None:
+        unknown = LegendEntryFactory(persona=PersonaFactory(), base_value=10)
+        url = reverse("persona-deed-story", args=[self.persona.pk])
+        resp = self.client.post(url, {"deed": unknown.pk, "text": "Hearsay."}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_save_deed_story_unowned_persona_forbidden(self) -> None:
+        other = PersonaFactory()
+        url = reverse("persona-deed-story", args=[other.pk])
+        resp = self.client.post(url, {"deed": self.deed.pk, "text": "Nope."}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_deed_stories_requires_deed_param(self) -> None:
+        url = reverse("persona-deed-stories", args=[self.persona.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_scene_activity_returns_a_band(self) -> None:
         url = reverse("scene-activity", args=[self.scene.pk])
         resp = self.client.get(url)

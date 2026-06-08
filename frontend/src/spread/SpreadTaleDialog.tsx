@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAppSelector } from '@/store/hooks';
 
 import {
+  useSaveDeedStoryMutation,
   useSceneActivityQuery,
   useSpreadableDeedsQuery,
   useSpreadMutation,
@@ -65,7 +66,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           </p>
         ) : (
           <SpreadForm
-            key={sceneId}
+            key={`${sceneId}-${open}`}
             personaId={personaId}
             sceneId={sceneId}
             open={open}
@@ -94,6 +95,7 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   const [formId, setFormId] = useState<string>(NO_FORM);
   const [result, setResult] = useState<SpreadResult | null>(null);
   const mutation = useSpreadMutation(personaId);
+  const saveStory = useSaveDeedStoryMutation(personaId);
 
   if (isLoading) {
     return (
@@ -112,12 +114,31 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   }
 
   if (result) {
+    const canSaveAccount = deedId !== null && pose.trim().length > 0;
     return (
       <div className="space-y-4">
         <p className="text-sm">
           The telling lands: <strong>{result.outcome}</strong>, in a {result.band.toLowerCase()}{' '}
           room.
         </p>
+        {canSaveAccount &&
+          (saveStory.isSuccess ? (
+            <p className="text-sm text-muted-foreground">Saved to this deed&apos;s accounts.</p>
+          ) : (
+            <div className="space-y-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saveStory.isPending}
+                onClick={() => saveStory.mutate({ deed: deedId, text: pose })}
+              >
+                {saveStory.isPending ? 'Saving…' : 'Save this telling as your account'}
+              </Button>
+              {saveStory.isError && (
+                <p className="text-sm text-destructive">{(saveStory.error as Error).message}</p>
+              )}
+            </div>
+          ))}
         <DialogFooter>
           <Button onClick={onDone}>Done</Button>
         </DialogFooter>

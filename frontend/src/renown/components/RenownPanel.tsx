@@ -47,18 +47,18 @@ function PanelBody({ personaId }: { personaId: number }) {
       <div className="flex justify-end">
         <SpreadTaleDialog personaId={personaId} />
       </div>
-      <CardLayout renown={renown} />
+      <CardLayout renown={renown} personaId={personaId} />
     </div>
   );
 }
 
-function CardLayout({ renown }: { renown: RenownPayload }) {
+function CardLayout({ renown, personaId }: { renown: RenownPayload; personaId: number }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <FameCard fame={renown.fame} />
       <PrestigeBreakdownCard prestige={renown.prestige} />
       <ReputationListCard reputation={renown.reputation} />
-      <DeedsLogCard deeds={renown.recent_deeds} />
+      <DeedsLogCard deeds={renown.recent_deeds} personaId={personaId} />
       <OwnedDwellingsCard dwellings={renown.owned_dwellings} />
       <TenantedRoomsCard rooms={renown.tenanted_rooms} />
     </div>
