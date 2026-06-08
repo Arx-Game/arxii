@@ -719,6 +719,124 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     return True, ""
 
 
+def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Step 1: create Gift + CharacterGift + Technique + CharacterTechnique.
+
+    No-op when the draft has no selected cantrip.
+    """
+    from world.magic.models import (  # noqa: PLC0415
+        Cantrip,
+        CharacterGift,
+        CharacterTechnique,
+        Gift,
+    )
+
+    cantrip_id = draft.draft_data.get("selected_cantrip_id")
+    if not cantrip_id:
+        return
+
+    try:
+        cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
+    except Cantrip.DoesNotExist:
+        logger.exception("Cantrip %s not found or inactive during finalization", cantrip_id)
+        raise
+
+    custom_name = draft.draft_data.get("custom_gift_name") or cantrip.name
+    custom_description = draft.draft_data.get("custom_gift_description") or cantrip.description
+    gift = Gift.objects.create(
+        name=custom_name,
+        description=custom_description,
+        creator=sheet,
+    )
+    CharacterGift.objects.create(character=sheet, gift=gift)
+
+    # The technique's action arena derives from the character's Path — no
+    # off-path picks (noobtrap prevention). Falls back to the model default
+    # if the path has no authored category.
+    selected_path = draft.selected_path
+    derived_category = (
+        selected_path.action_category
+        if selected_path and selected_path.action_category
+        else ActionCategory.PHYSICAL
+    )
+
+    # Create a real Technique from the cantrip template
+    from world.magic.services.technique_builder import create_technique  # noqa: PLC0415
+
+    technique = create_technique(
+        creator=sheet,
+        name=custom_name,
+        gift=gift,
+        style=cantrip.style,
+        effect_type=cantrip.effect_type,
+        intensity=cantrip.base_intensity,
+        control=cantrip.base_control,
+        anima_cost=cantrip.base_anima_cost,
+        level=1,
+        action_category=derived_category,
+        description=custom_description,
+        source_cantrip=cantrip,
+    )
+    CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+
+def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Step 3: apply tradition codex grants. No-op without a selected tradition."""
+    if not draft.selected_tradition:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import (  # noqa: PLC0415
+        CharacterCodexKnowledge,
+        TraditionCodexGrant,
+    )
+
+    grant_entry_ids = list(
+        TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
+            "entry_id", flat=True
+        )
+    )
+    if not grant_entry_ids:
+        return
+
+    roster_entry = sheet.roster_entry
+    for entry_id in grant_entry_ids:
+        CharacterCodexKnowledge.objects.get_or_create(
+            roster_entry=roster_entry,
+            entry_id=entry_id,
+            defaults={"status": CodexKnowledgeStatus.KNOWN},
+        )
+
+
+def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Step 5: create player anima Ritual + sidecar + CharacterRitualKnowledge.
+
+    The Ritual is authored by the player's account and uses their highest CG
+    skill + Willpower as defaults (customisable post-CG). CharacterRitualKnowledge
+    is created so the ritual gate in the scene action menu is satisfied.
+    Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
+    call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
+    be created without a roster_entry FK. finalize_character always creates the
+    RosterEntry before calling this, so this guard only fires in test-only paths.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        roster_entry = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return
+
+    from world.magic.services.anima import provision_player_anima_ritual  # noqa: PLC0415
+
+    character_name = draft.draft_data.get("first_name", "Character")
+    provision_player_anima_ritual(
+        account=draft.account,
+        character_sheet=sheet,
+        roster_entry=roster_entry,
+        ritual_name=f"{character_name}'s Anima Ritual",
+    )
+
+
 @transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Create magic models from cantrip selection during finalization.
@@ -729,59 +847,12 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     grants, and creates CharacterAura.
     """
     from world.magic.models import (  # noqa: PLC0415
-        Cantrip,
         CharacterAura,
-        CharacterGift,
-        CharacterTechnique,
         CharacterTradition,
-        Gift,
     )
 
     # 1. Create Gift and Technique from cantrip
-    cantrip_id = draft.draft_data.get("selected_cantrip_id")
-    if cantrip_id:
-        try:
-            cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
-        except Cantrip.DoesNotExist:
-            logger.exception("Cantrip %s not found or inactive during finalization", cantrip_id)
-            raise
-        custom_name = draft.draft_data.get("custom_gift_name") or cantrip.name
-        custom_description = draft.draft_data.get("custom_gift_description") or cantrip.description
-        gift = Gift.objects.create(
-            name=custom_name,
-            description=custom_description,
-            creator=sheet,
-        )
-        CharacterGift.objects.create(character=sheet, gift=gift)
-
-        # The technique's action arena derives from the character's Path — no
-        # off-path picks (noobtrap prevention). Falls back to the model default
-        # if the path has no authored category.
-        selected_path = draft.selected_path
-        derived_category = (
-            selected_path.action_category
-            if selected_path and selected_path.action_category
-            else ActionCategory.PHYSICAL
-        )
-
-        # Create a real Technique from the cantrip template
-        from world.magic.services.technique_builder import create_technique  # noqa: PLC0415
-
-        technique = create_technique(
-            creator=sheet,
-            name=custom_name,
-            gift=gift,
-            style=cantrip.style,
-            effect_type=cantrip.effect_type,
-            intensity=cantrip.base_intensity,
-            control=cantrip.base_control,
-            anima_cost=cantrip.base_anima_cost,
-            level=1,
-            action_category=derived_category,
-            description=custom_description,
-            source_cantrip=cantrip,
-        )
-        CharacterTechnique.objects.create(character=sheet, technique=technique)
+    _finalize_cantrip_gift_and_technique(draft, sheet)
 
     # 2. Create CharacterTradition (optional)
     if draft.selected_tradition:
@@ -791,26 +862,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         )
 
     # 3. Apply tradition codex grants
-    if draft.selected_tradition:
-        from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-        from world.codex.models import (  # noqa: PLC0415
-            CharacterCodexKnowledge,
-            TraditionCodexGrant,
-        )
-
-        grant_entry_ids = list(
-            TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
-                "entry_id", flat=True
-            )
-        )
-        if grant_entry_ids:
-            roster_entry = sheet.roster_entry
-            for entry_id in grant_entry_ids:
-                CharacterCodexKnowledge.objects.get_or_create(
-                    roster_entry=roster_entry,
-                    entry_id=entry_id,
-                    defaults={"status": CodexKnowledgeStatus.KNOWN},
-                )
+    _finalize_tradition_codex_grants(draft, sheet)
 
     # 4. Create CharacterAura with defaults
     glimpse_story = draft.draft_data.get("glimpse_story", "")
@@ -822,30 +874,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     aura.save()
 
     # 5. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
-    # The Ritual is authored by the player's account and uses their highest CG
-    # skill + Willpower as defaults (customisable post-CG). CharacterRitualKnowledge
-    # is created so the ritual gate in the scene action menu is satisfied.
-    # Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
-    # call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
-    # be created without a roster_entry FK. finalize_character always creates the
-    # RosterEntry before calling this, so this guard only fires in test-only paths.
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-
-    try:
-        _roster_entry_for_ritual = sheet.roster_entry
-    except RosterEntry.DoesNotExist:
-        _roster_entry_for_ritual = None
-
-    if _roster_entry_for_ritual is not None:
-        from world.magic.services.anima import provision_player_anima_ritual  # noqa: PLC0415
-
-        character_name = draft.draft_data.get("first_name", "Character")
-        provision_player_anima_ritual(
-            account=draft.account,
-            character_sheet=sheet,
-            roster_entry=_roster_entry_for_ritual,
-            ritual_name=f"{character_name}'s Anima Ritual",
-        )
+    _finalize_anima_ritual(draft, sheet)
 
 
 def _grant_beginnings_ritual_knowledge(draft: CharacterDraft, roster_entry: RosterEntry) -> None:
