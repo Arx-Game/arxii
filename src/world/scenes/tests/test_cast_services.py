@@ -34,6 +34,7 @@ from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.cast_services import (
     create_cast_outcome_pose,
@@ -422,7 +423,7 @@ class TestRespondToActionRequestStandaloneCast(TestCase):
     def tearDown(self) -> None:
         self.award_kudos_patcher.stop()
 
-    def _make_pending_standalone_request(self) -> object:
+    def _make_pending_standalone_request(self) -> SceneActionRequest:
         """Create a PENDING standalone cast request via request_technique_cast."""
         technique = TechniqueFactory(
             effect_type=BinaryEffectTypeFactory(),

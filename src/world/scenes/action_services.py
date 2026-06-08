@@ -203,7 +203,9 @@ def respond_to_action_request(
         EnhancedSceneActionResult if accepted and resolved, None if denied.
 
     Raises:
-        ValueError: If the request has no action_template set.
+        ValueError: If the request is a non-standalone-cast with no action_template
+            set (standalone cast requests resolve via the cast pipeline and do not
+            require an action_template).
     """
     if action_request.status != ActionRequestStatus.PENDING:
         return None
