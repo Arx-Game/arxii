@@ -6907,6 +6907,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     get: operations['magic_techniques_list'];
     put?: never;
@@ -6914,6 +6916,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     post: operations['magic_techniques_create'];
     delete?: never;
@@ -6933,12 +6937,16 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     get: operations['magic_techniques_retrieve'];
     /**
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     put: operations['magic_techniques_update'];
     post?: never;
@@ -6946,6 +6954,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     delete: operations['magic_techniques_destroy'];
     options?: never;
@@ -6954,8 +6964,51 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     patch: operations['magic_techniques_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/techniques/author/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Author a technique via the budget policy layer.
+     *
+     *     Player path: enforces budget, binds CharacterTechnique.
+     *     Staff path: advisory budget, no character binding.
+     *     Returns 201 with the Technique + breakdown on success;
+     *     400 with breakdown when a player exceeds budget.
+     */
+    post: operations['magic_techniques_author_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/techniques/price/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dry-run: price a design and return the cost breakdown (no rows created). */
+    post: operations['magic_techniques_price_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/thread-hub-summary/': {
@@ -30076,6 +30129,52 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedTechniqueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Technique'];
+        };
+      };
+    };
+  };
+  magic_techniques_author_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TechniqueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Technique'];
+        };
+      };
+    };
+  };
+  magic_techniques_price_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TechniqueRequest'];
       };
     };
     responses: {

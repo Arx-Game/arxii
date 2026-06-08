@@ -49,9 +49,35 @@ The magic system for Arx II. Power flows from identity and connection.
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
-- `Technique` - Player-created magical abilities with level, style, effect type
+- `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
 - `CharacterGift` - Links characters to known Gifts
 - `CharacterTechnique` - Links characters to known Techniques
+- `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
+- `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
+
+### Technique authoring (budget builder)
+
+`services/technique_builder.py` provides a three-layer authoring stack:
+
+**Unrestricted core** — `build_technique(design, *, creator)` writes a `Technique` + payload rows (`TechniqueCapabilityGrant`, `TechniqueDamageProfile`, `TechniqueAppliedCondition`) + restriction attachments in one `transaction.atomic`. No gating, no character binding. `create_technique(...)` is the extracted low-level row writer shared with cantrip finalization.
+
+**Policy layer** — `price_design(design, *, config, budget)` is a pure function that itemizes power cost per dimension and subtracts restriction refunds, returning a `TechniqueCostBreakdown`. It always runs for every author — the breakdown is informational for staff and a gate for players. `AuthoringPolicy` subclasses answer three knobs:
+- `StaffPolicy` — `enforced=False`; budget is advisory; any tier allowed.
+- `PlayerPolicy` — `enforced=True`; budget is enforced; allowed tiers come from the research-unlock seam (permissive `TODO` today).
+- `GMPolicy` — `enforced=True`; calibration is a staff-tunable `TODO` (no grounded GM-level concept yet).
+
+`enforce_policy(design, policy, character)` always prices and returns the breakdown; raises `TechniqueBudgetExceeded(breakdown)` only when `policy.enforced and not within_budget`, or `TechniqueAuthoringNotPermitted` when the tier is disallowed.
+
+**Context wrappers**:
+- `author_technique(character, design)` — player path: `PlayerPolicy` (enforced) → build → bind `CharacterTechnique`.
+- `author_staff_technique(design, *, creator=None)` — staff path: `StaffPolicy` (advisory) → build; no character binding.
+
+**API endpoints** on `TechniqueViewSet` (`/api/magic/techniques/`):
+- `POST .../author/` — resolves policy from the requesting user (staff → `StaffPolicy`; otherwise `PlayerPolicy`); returns 201 with `TechniqueSerializer` + breakdown, or 400 with breakdown when a player is over-budget.
+- `POST .../price/` — dry-run; returns the `TechniqueCostBreakdown` for any author without creating rows.
+- Base `create`/`update`/`destroy` are staff-only raw admin CRUD (`IsAdminUser` permission).
+
+**Frontend** — `TechniqueBuilderForm` with `mode: "staff" | "player"`. Staff mode shows the budget meter informationally without blocking; player mode gates submit on `within_budget`. `usePriceTechnique` (debounced `POST .../price/`) drives the live budget meter; `useAuthorTechnique` handles submission.
 
 ### Anima Recovery
 - `CharacterAnimaRitual` - Personalized recovery ritual (stat + skill + resonance)

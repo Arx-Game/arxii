@@ -180,6 +180,12 @@ const WeavingTeachingOffersPage = lazy(() =>
   }))
 );
 
+const TechniqueBuilderPage = lazy(() =>
+  import('@/magic/pages/TechniqueBuilderPage').then((m) => ({
+    default: m.TechniqueBuilderPage,
+  }))
+);
+
 // ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
@@ -696,6 +702,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <SanctumDashboardPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Technique builder                                                   */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/techniques/build"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <TechniqueBuilderPage />
               </ProtectedRoute>
             </Suspense>
           }

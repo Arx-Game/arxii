@@ -111,6 +111,10 @@ from world.magic.models.soul_tether import (
     SoulTetherRescue,
 )
 from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
+from world.magic.models.technique_builder import (
+    TechniqueBudgetConfig,
+    TechniqueTierBudget,
+)
 from world.magic.models.techniques import (
     CharacterTechnique,
     EffectType,
@@ -230,12 +234,15 @@ __all__ = [
     "SoulfrayConfig",
     "Technique",
     "TechniqueAppliedCondition",
+    # technique builder config (#537)
+    "TechniqueBudgetConfig",
     "TechniqueCapabilityGrant",
     "TechniqueCapabilityRequirement",
     "TechniqueDamageProfile",
     "TechniqueOutcomeModifier",
     "TechniqueStyle",
     "TechniqueStyleManager",
+    "TechniqueTierBudget",
     # threads
     "Thread",
     "ThreadLevelUnlock",
