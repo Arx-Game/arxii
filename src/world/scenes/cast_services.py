@@ -107,12 +107,13 @@ def _resolve_cast(
     )
 
     resolution_result = technique_result.resolution_result  # type: ignore[assignment]
+    power_ledger = captured.get("ledger")  # type: ignore[assignment]
     result = EnhancedSceneActionResult(
         action_resolution=resolution_result,
         action_key=CAST_ACTION_KEY,
         technique_result=technique_result,
+        power_ledger=power_ledger,
     )
-    power_ledger = captured.get("ledger")  # type: ignore[assignment]
     return result, power_ledger
 
 
@@ -194,7 +195,7 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
         action_request.result_interaction = pose
         action_request.save(update_fields=["result_interaction"])
 
-    return result
+    return result  # result.power_ledger is already set from _resolve_cast
 
 
 def request_technique_cast(

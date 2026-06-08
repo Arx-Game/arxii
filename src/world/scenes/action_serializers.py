@@ -250,9 +250,13 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
     anima_recovery = serializers.SerializerMethodField()
     power_ledger = serializers.SerializerMethodField()
 
-    def get_power_ledger(self, obj: object) -> dict | None:  # noqa: ARG002
-        """Return the power ledger injected via serializer context, if present."""
-        ledger = self.context.get("power_ledger")
+    def get_power_ledger(self, obj: object) -> dict | None:
+        """Return the power ledger attached to the result object, if present."""
+        from world.scenes.types import EnhancedSceneActionResult  # noqa: PLC0415
+
+        if not isinstance(obj, EnhancedSceneActionResult):
+            return None
+        ledger = obj.power_ledger
         if ledger is None:
             return None
         return PowerLedgerSerializer(ledger).data

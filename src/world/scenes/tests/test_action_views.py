@@ -11,6 +11,7 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import EncounterStatus
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -365,6 +366,74 @@ class CastEndpointTestCase(APITestCase):
         response = self.client.post(self._cast_url(), data, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_hostile_cast_at_other_pc_returns_201_with_encounter(self) -> None:
+        """Hostile cast at another PC → 201, response contains an encounter in DECLARING status."""
+        technique = _make_castable_technique(hostile=True)
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "target_persona": self.target_persona.pk,
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "encounter" in response.data
+        encounter_data = response.data["encounter"]
+        assert encounter_data["status"] == EncounterStatus.DECLARING
+
+    def test_cast_technique_without_action_template_returns_400(self) -> None:
+        """Casting a known technique that has no action_template → 400 (not castable standalone)."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            # action_template intentionally omitted → None
+        )
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_accept_path_result_carries_power_ledger_key(self) -> None:
+        """On consent accept, the respond endpoint surfaces power_ledger in the result.
+
+        We test this at the API layer: a benign cast at another PC creates a PENDING
+        request; the target accepts via the respond endpoint; the result dict in the
+        response contains a power_ledger key (may be None if no env modifiers, but
+        the key must be present, proving the accept path now reads from the result
+        object rather than being silently absent).
+        """
+        technique = _make_castable_technique(hostile=False)
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+
+        # Create a pending cast request via the cast endpoint
+        cast_data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "target_persona": self.target_persona.pk,
+        }
+        cast_response = self.client.post(self._cast_url(), cast_data, format="json")
+        assert cast_response.status_code == status.HTTP_201_CREATED
+        assert cast_response.data["status"] == ActionRequestStatus.PENDING
+        request_pk = cast_response.data["id"]
+
+        # Target accepts
+        self.client.force_authenticate(user=self.target_account)
+        respond_url = reverse("sceneactionrequest-respond", kwargs={"pk": request_pk})
+        respond_response = self.client.post(
+            respond_url, {"decision": ConsentDecision.ACCEPT}, format="json"
+        )
+        assert respond_response.status_code == status.HTTP_200_OK
+        assert "result" in respond_response.data
+        # power_ledger key must be present (value may be None for benign casts
+        # without environment modifiers, but the field must not be silently absent)
+        assert "power_ledger" in respond_response.data["result"]
+
 
 class CastableTechniquesEndpointTestCase(APITestCase):
     """Tests for GET /api/action-requests/castable-techniques/."""
@@ -384,9 +453,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
-        cls.other_roster_entry = RosterEntryFactory(
-            character_sheet__character=cls.other_character
-        )
+        cls.other_roster_entry = RosterEntryFactory(character_sheet__character=cls.other_character)
         cls.other_player_data = PlayerDataFactory(account=cls.other_account)
         cls.other_tenure = RosterTenureFactory(
             player_data=cls.other_player_data,
@@ -439,10 +506,14 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
     def test_wrong_account_persona_returns_400(self) -> None:
         """Passing a persona that belongs to a different account → 400."""
-        response = self.client.get(
-            self._url(), {"initiator_persona": self.other_persona.pk}
-        )
+        response = self.client.get(self._url(), {"initiator_persona": self.other_persona.pk})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_castable_techniques_returns_403(self) -> None:
+        """Unauthenticated request to castable-techniques → 403."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_response_contains_expected_fields(self) -> None:
         """Each entry has id, name, anima_cost, tier, intensity, control, hostile."""

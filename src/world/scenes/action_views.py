@@ -5,6 +5,7 @@ from __future__ import annotations
 from http import HTTPMethod
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -182,8 +183,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         - benign at another PC → PENDING consent request (201, no result yet)
         - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
         """
-        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
-
         from world.magic.models import Technique  # noqa: PLC0415
 
         serializer = TechniqueCastCreateSerializer(data=request.data)
@@ -244,7 +243,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         if cast_result.result is not None:
             response_data["result"] = EnhancedSceneActionResultSerializer(
                 cast_result.result,
-                context={"request": request, "power_ledger": cast_result.power_ledger},
+                context={"request": request},
             ).data
 
         if cast_result.encounter is not None:

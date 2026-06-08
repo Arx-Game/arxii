@@ -53,6 +53,7 @@ class EnhancedSceneActionResult:
     action_resolution: PendingActionResolution
     action_key: str
     technique_result: TechniqueUseResult | None = None
+    power_ledger: PowerLedger | None = None
 
 
 @dataclass(frozen=True)
