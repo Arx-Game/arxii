@@ -2879,6 +2879,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/rites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRite authored definitions.
+     *
+     *     Rites are authored/public content — any authenticated user may read.
+     *     No per-user scoping needed.
+     */
+    get: operations['covenants_rites_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/rites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRite authored definitions.
+     *
+     *     Rites are authored/public content — any authenticated user may read.
+     *     No per-user scoping needed.
+     */
+    get: operations['covenants_rites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/roles/': {
     parameters: {
       query?: never;
@@ -6817,6 +6861,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     get: operations['magic_techniques_list'];
     put?: never;
@@ -6824,6 +6870,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     post: operations['magic_techniques_create'];
     delete?: never;
@@ -6843,12 +6891,16 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     get: operations['magic_techniques_retrieve'];
     /**
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     put: operations['magic_techniques_update'];
     post?: never;
@@ -6856,6 +6908,8 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     delete: operations['magic_techniques_destroy'];
     options?: never;
@@ -6864,8 +6918,51 @@ export interface paths {
      * @description ViewSet for Technique records.
      *
      *     Provides CRUD access to techniques for character creation.
+     *     The base create/update/destroy are staff-only; players and GMs
+     *     author techniques through the budget-enforced ``author`` action.
      */
     patch: operations['magic_techniques_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/techniques/author/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Author a technique via the budget policy layer.
+     *
+     *     Player path: enforces budget, binds CharacterTechnique.
+     *     Staff path: advisory budget, no character binding.
+     *     Returns 201 with the Technique + breakdown on success;
+     *     400 with breakdown when a player exceeds budget.
+     */
+    post: operations['magic_techniques_author_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/techniques/price/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dry-run: price a design and return the cost breakdown (no rows created). */
+    post: operations['magic_techniques_price_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/thread-hub-summary/': {
@@ -12544,6 +12641,27 @@ export interface components {
       level: number;
       required_legend: number;
     };
+    /** @description Read-only serializer for CovenantRite authored definitions. */
+    CovenantRite: {
+      readonly id: number;
+      readonly ritual: number;
+      /**
+       * @description Restrict to this covenant type; blank = any.
+       *
+       *     * `durance` - Covenant of the Durance
+       *     * `battle` - Covenant of Battle
+       */
+      readonly covenant_type: components['schemas']['CovenantTypeEnum'];
+      readonly covenant_type_display: string;
+      readonly min_covenant_level: number;
+      readonly min_engaged_present: number;
+      readonly granted_condition: number;
+      readonly base_severity: number;
+      readonly severity_per_extra_participant: number;
+      readonly max_severity: number | null;
+      /** @description Override; blank uses the condition's UNTIL_END_OF_COMBAT default. */
+      readonly duration_rounds: number | null;
+    };
     /** @description Read-only serializer for CovenantRole lookup data. */
     CovenantRole: {
       readonly id: number;
@@ -15579,6 +15697,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Covenant'][];
+    };
+    PaginatedCovenantRiteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CovenantRite'][];
     };
     PaginatedDraftApplicationList: {
       /** @example 123 */
@@ -24248,6 +24381,57 @@ export interface operations {
       };
     };
   };
+  covenants_rites_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Restrict to this covenant type; blank = any.
+         *
+         *     * `durance` - Covenant of the Durance
+         *     * `battle` - Covenant of Battle
+         */
+        covenant_type?: 'battle' | 'durance';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCovenantRiteList'];
+        };
+      };
+    };
+  };
+  covenants_rites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Covenant Rite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRite'];
+        };
+      };
+    };
+  };
   covenants_roles_list: {
     parameters: {
       query?: {
@@ -29857,6 +30041,52 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedTechniqueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Technique'];
+        };
+      };
+    };
+  };
+  magic_techniques_author_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TechniqueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Technique'];
+        };
+      };
+    };
+  };
+  magic_techniques_price_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TechniqueRequest'];
       };
     };
     responses: {

@@ -59,11 +59,13 @@ from world.magic.models import (
     SoulfrayConfig,
     Technique,
     TechniqueAppliedCondition,
+    TechniqueBudgetConfig,
     TechniqueCapabilityGrant,
     TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
     TechniqueOutcomeModifier,
     TechniqueStyle,
+    TechniqueTierBudget,
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
@@ -2296,3 +2298,22 @@ def wire_scar_escalation_trigger(
 
     scar_template.reactive_triggers.add(trigger_def)  # type: ignore[union-attr]
     return trigger_def
+
+
+class TechniqueBudgetConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TechniqueBudgetConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
+class TechniqueTierBudgetFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TechniqueTierBudget
+        django_get_or_create = ("tier",)
+
+    tier = 1
+    power_budget = 20
+    representative_level = 1
+    label = factory.LazyAttribute(lambda o: f"Tier {o.tier}")

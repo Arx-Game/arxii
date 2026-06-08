@@ -1037,7 +1037,7 @@ See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-
 
 ### Other MVP Needs
 - **Post-CG magic progression UI** — level-gated unlocks for resonances, threads, techniques, motifs, gifts
-- **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
+- **Budget-based technique builder** — DONE (#537): unrestricted core (`build_technique`/`create_technique`), `AuthoringPolicy` layer (staff advisory, player enforced), `price_design` + `TechniqueBudgetConfig`/`TechniqueTierBudget` config models, `author`/`price` viewset actions, and `TechniqueBuilderForm` with staff/player modes. GM calibration and multi-alt character picker deferred.
 - **Thread system UI — DONE (branch `thread-spending-ui-design`):**
 
   What was built:

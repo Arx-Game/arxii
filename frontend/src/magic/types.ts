@@ -311,3 +311,62 @@ export type ApplicablePullsRequest = components['schemas']['ApplicablePullsReque
 
 /** One row in the applicable-pulls response: per-thread applicability status. */
 export type ThreadApplicability = components['schemas']['ThreadApplicability'];
+
+// ---------------------------------------------------------------------------
+// Technique Builder — price/author request + cost breakdown response
+//
+// POST /api/magic/techniques/price/ and /api/magic/techniques/author/
+// The generated schema uses TechniqueRequest for the request body and
+// Technique for the response. The price endpoint returns a cost breakdown
+// (a superset of Technique). We type the breakdown manually since the
+// generated schema for these endpoints only shows Technique as response.
+// ---------------------------------------------------------------------------
+
+/** One dimension of the technique cost breakdown. */
+export interface TechniqueCostLine {
+  dimension: string;
+  label: string;
+  power_cost: number;
+}
+
+/** Full cost breakdown returned by the price endpoint and bundled into the author response. */
+export interface TechniqueCostBreakdown {
+  tier: number;
+  budget: number;
+  gross_cost: number;
+  refund: number;
+  total_cost: number;
+  within_budget: boolean;
+  lines: TechniqueCostLine[];
+}
+
+/** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
+export interface TechniqueDesignRequest {
+  name: string;
+  description: string;
+  gift_id: number;
+  style_id: number;
+  effect_type_id: number;
+  action_category: string;
+  tier: number;
+  intensity: number;
+  control: number;
+  anima_cost: number;
+  restriction_ids?: number[];
+  capability_grants?: {
+    capability_id: number;
+    base_value?: number;
+    intensity_multiplier?: number;
+  }[];
+  damage_profiles?: {
+    damage_type_id: number | null;
+    base_damage?: number;
+    damage_intensity_multiplier?: number;
+  }[];
+  applied_conditions?: {
+    condition_id: number;
+    base_severity?: number;
+    base_duration_rounds?: number | null;
+  }[];
+  character_id?: number;
+}

@@ -45,6 +45,8 @@ import type {
   SoulTetherDetail,
   StageAdvanceBonusResult,
   StageAdvanceRespondRequest,
+  TechniqueCostBreakdown,
+  TechniqueDesignRequest,
   TetherBond,
   Thread,
   ThreadApplicability,
@@ -684,6 +686,55 @@ export async function getTechnique(id: number): Promise<Technique> {
   const res = await apiFetch(`${TECHNIQUES_URL}/${id}/`);
   if (!res.ok) throw new Error(`Failed to load technique ${id}`);
   return res.json() as Promise<Technique>;
+}
+
+// ---------------------------------------------------------------------------
+// Technique price + author
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/magic/techniques/price/
+ *
+ * Dry-run: prices a technique design and returns the cost breakdown.
+ * No rows are created. Use for live budget meter; debounce at call site.
+ */
+export async function priceTechnique(
+  body: TechniqueDesignRequest
+): Promise<TechniqueCostBreakdown> {
+  const res = await apiFetch(`${TECHNIQUES_URL}/price/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to price technique');
+  }
+  return res.json() as Promise<TechniqueCostBreakdown>;
+}
+
+/**
+ * POST /api/magic/techniques/author/
+ *
+ * Author a technique via the budget policy layer.
+ * Player path: enforces budget, binds CharacterTechnique.
+ * Staff path: advisory budget, no character binding.
+ *
+ * Returns the created Technique; on a 400 the error body may include a
+ * `breakdown` field alongside `detail` — `parseErrorDetail` surfaces the
+ * `detail` message so callers receive a human-readable error.
+ */
+export async function authorTechnique(
+  body: TechniqueDesignRequest
+): Promise<Technique & { breakdown: TechniqueCostBreakdown }> {
+  const res = await apiFetch(`${TECHNIQUES_URL}/author/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to author technique');
+  }
+  return res.json() as Promise<Technique & { breakdown: TechniqueCostBreakdown }>;
 }
 
 // ---------------------------------------------------------------------------

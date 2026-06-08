@@ -246,3 +246,17 @@ class InapplicabilityReason(models.TextChoices):
     LOCATION_MISMATCH = "location_mismatch", "Location/property mismatch"
     THREAD_RETIRED = "thread_retired", "Thread is retired"
     OTHER = "other", "Other (see details)"
+
+
+class AuthoringContext(models.TextChoices):
+    """Who is authoring a technique, which selects the AuthoringPolicy.
+
+    STAFF = unrestricted (budget advisory). PLAYER = research-unlocked,
+    budget enforced. GM = level-scaled, enforced (calibration is a seam).
+    CG = reserved for future character-creation from-scratch design.
+    """
+
+    STAFF = "staff", "Staff"
+    GM = "gm", "Game Master"
+    PLAYER = "player", "Player"
+    CG = "cg", "Character Creation"

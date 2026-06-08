@@ -198,6 +198,7 @@ class TechniqueViewSetTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
+        cls.staff_user = AccountFactory(is_staff=True)
         cls.gift = GiftFactory(name="Test Gift")
         cls.style = TechniqueStyleFactory(name="Test Style")
         cls.effect_type = EffectTypeFactory(name="Test Effect")
@@ -253,8 +254,8 @@ class TechniqueViewSetTest(APITestCase):
         self.assertEqual(response.data["name"], "Test Shadow Strike")
 
     def test_create_technique(self):
-        """Test creating a technique via API."""
-        self.client.force_authenticate(user=self.user)
+        """Test that staff can create a technique via base CRUD."""
+        self.client.force_authenticate(user=self.staff_user)
         url = reverse("magic:technique-list")
         data = {
             "name": "Test New Technique",
@@ -270,9 +271,26 @@ class TechniqueViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["name"], "Test New Technique")
 
-    def test_create_technique_with_restrictions(self):
-        """Test creating a technique with restrictions."""
+    def test_create_technique_non_staff_forbidden(self):
+        """Test that non-staff cannot create a technique via base CRUD."""
         self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-list")
+        data = {
+            "name": "Test Forbidden Technique",
+            "gift": self.gift.pk,
+            "style": self.style.pk,
+            "effect_type": self.effect_type.pk,
+            "level": 1,
+            "anima_cost": 2,
+            "description": "Should be rejected",
+            "restriction_ids": [],
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_technique_with_restrictions(self):
+        """Test that staff can create a technique with restrictions."""
+        self.client.force_authenticate(user=self.staff_user)
         restriction = RestrictionFactory(allowed_effect_types=[self.effect_type])
         url = reverse("magic:technique-list")
         data = {
@@ -289,9 +307,27 @@ class TechniqueViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn(restriction.pk, response.data["restriction_ids"])
 
-    def test_update_technique(self):
-        """Test updating a technique via API."""
+    def test_create_technique_with_restrictions_non_staff_forbidden(self):
+        """Test that non-staff cannot create a technique with restrictions via base CRUD."""
         self.client.force_authenticate(user=self.user)
+        restriction = RestrictionFactory(allowed_effect_types=[self.effect_type])
+        url = reverse("magic:technique-list")
+        data = {
+            "name": "Test Forbidden Restricted Technique",
+            "gift": self.gift.pk,
+            "style": self.style.pk,
+            "effect_type": self.effect_type.pk,
+            "level": 1,
+            "anima_cost": 2,
+            "description": "Should be rejected",
+            "restriction_ids": [restriction.pk],
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_technique(self):
+        """Test that staff can update a technique via base CRUD."""
+        self.client.force_authenticate(user=self.staff_user)
         url = reverse("magic:technique-detail", args=[self.technique.pk])
         data = {
             "name": "Test Updated Technique",
@@ -308,13 +344,38 @@ class TechniqueViewSetTest(APITestCase):
         self.assertEqual(response.data["name"], "Test Updated Technique")
         self.assertEqual(response.data["level"], 5)
 
-    def test_delete_technique(self):
-        """Test deleting a technique via API."""
+    def test_update_technique_non_staff_forbidden(self):
+        """Test that non-staff cannot update a technique via base CRUD."""
         self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-detail", args=[self.technique.pk])
+        data = {
+            "name": "Test Forbidden Update",
+            "gift": self.gift.pk,
+            "style": self.style.pk,
+            "effect_type": self.effect_type.pk,
+            "level": 5,
+            "anima_cost": 3,
+            "description": "Should be rejected",
+            "restriction_ids": [],
+        }
+        response = self.client.put(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_technique(self):
+        """Test that staff can delete a technique via base CRUD."""
+        self.client.force_authenticate(user=self.staff_user)
         technique = TechniqueFactory()
         url = reverse("magic:technique-detail", args=[technique.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_delete_technique_non_staff_forbidden(self):
+        """Test that non-staff cannot delete a technique via base CRUD."""
+        self.client.force_authenticate(user=self.user)
+        technique = TechniqueFactory()
+        url = reverse("magic:technique-detail", args=[technique.pk])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class FacetViewSetTest(APITestCase):

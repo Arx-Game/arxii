@@ -735,7 +735,6 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         CharacterTechnique,
         CharacterTradition,
         Gift,
-        Technique,
     )
 
     # 1. Create Gift and Technique from cantrip
@@ -766,7 +765,10 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         )
 
         # Create a real Technique from the cantrip template
-        technique = Technique.objects.create(
+        from world.magic.services.technique_builder import create_technique  # noqa: PLC0415
+
+        technique = create_technique(
+            creator=sheet,
             name=custom_name,
             gift=gift,
             style=cantrip.style,
@@ -778,7 +780,6 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             action_category=derived_category,
             description=custom_description,
             source_cantrip=cantrip,
-            creator=sheet,
         )
         CharacterTechnique.objects.create(character=sheet, technique=technique)
 
