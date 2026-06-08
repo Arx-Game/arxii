@@ -151,6 +151,51 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     )
 
 
+def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast resolution; cohesive
+    *,
+    request: SceneActionRequest,
+    scene: Scene,
+    caster_persona: Persona,
+    target_persona: Persona | None,
+    technique: Technique,
+    strain_commitment: int,
+) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
+    """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
+
+    Shared by the immediate path (request just created) and the consent-accept path
+    (an existing PENDING request). The caller MUST wrap this in ``transaction.atomic()``.
+    """
+    character = caster_persona.character_sheet.character
+    target = target_persona.character_sheet.character if target_persona is not None else None
+    difficulty = derive_cast_difficulty(technique)
+
+    result, power_ledger = _resolve_cast(
+        technique=technique,
+        character=character,
+        target=target,
+        difficulty=difficulty,
+        strain_commitment=strain_commitment,
+    )
+
+    request.status = ActionRequestStatus.RESOLVED
+    request.resolved_at = timezone.now()
+    request.resolved_difficulty = difficulty
+    request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+
+    pose = create_cast_outcome_pose(
+        scene=scene,
+        caster_persona=caster_persona,
+        target_persona=target_persona,
+        technique=technique,
+        result=result,
+        power_ledger=power_ledger,
+    )
+    request.result_interaction = pose
+    request.save(update_fields=["result_interaction"])
+
+    return result, power_ledger, pose
+
+
 def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneActionResult:
     """Resolve a PENDING standalone cast on consent acceptance.
 
@@ -163,39 +208,15 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
     Returns:
         The resolved EnhancedSceneActionResult from the cast pipeline.
     """
-    technique = action_request.technique
-    caster_persona = action_request.initiator_persona
-    target_persona = action_request.target_persona
-    character = caster_persona.character_sheet.character
-    target = target_persona.character_sheet.character if target_persona is not None else None
-    difficulty = derive_cast_difficulty(technique)
-
     with transaction.atomic():
-        result, power_ledger = _resolve_cast(
-            technique=technique,
-            character=character,
-            target=target,
-            difficulty=difficulty,
+        result, _power_ledger, _pose = _resolve_and_pose_cast(
+            request=action_request,
+            scene=action_request.scene,
+            caster_persona=action_request.initiator_persona,
+            target_persona=action_request.target_persona,
+            technique=action_request.technique,
             strain_commitment=action_request.strain_commitment,
         )
-
-        action_request.status = ActionRequestStatus.RESOLVED
-        action_request.resolved_at = timezone.now()
-        action_request.resolved_difficulty = difficulty
-        action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
-
-        pose = create_cast_outcome_pose(
-            scene=action_request.scene,
-            caster_persona=caster_persona,
-            target_persona=target_persona,
-            technique=technique,
-            result=result,
-            power_ledger=power_ledger,
-        )
-
-        action_request.result_interaction = pose
-        action_request.save(update_fields=["result_interaction"])
-
     return result  # result.power_ledger is already set from _resolve_cast
 
 
@@ -321,41 +342,23 @@ def _route_immediate_cast(
     strain_commitment: int = 0,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
-    character = initiator_persona.character_sheet.character
-    target = target_persona.character_sheet.character if target_persona is not None else None
-    difficulty = derive_cast_difficulty(technique)
-
     with transaction.atomic():
-        result, power_ledger = _resolve_cast(
-            technique=technique,
-            character=character,
-            target=target,
-            difficulty=difficulty,
-            strain_commitment=strain_commitment,
-        )
-
         request = SceneActionRequest.objects.create(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,
             technique=technique,
-            status=ActionRequestStatus.RESOLVED,
-            resolved_at=timezone.now(),
-            resolved_difficulty=difficulty,
+            status=ActionRequestStatus.PENDING,
             strain_commitment=strain_commitment,
         )
-
-        pose = create_cast_outcome_pose(
+        result, power_ledger, pose = _resolve_and_pose_cast(
+            request=request,
             scene=scene,
             caster_persona=initiator_persona,
             target_persona=target_persona,
             technique=technique,
-            result=result,
-            power_ledger=power_ledger,
+            strain_commitment=strain_commitment,
         )
-
-        request.result_interaction = pose
-        request.save(update_fields=["result_interaction"])
 
     return CastResult(
         request=request,
