@@ -82,7 +82,7 @@ export function useDeleteOutfit() {
     mutationFn: ({ id }: { id: number; characterSheetId: number }) => deleteOutfit(id),
     onSuccess: (_void, variables) => {
       qc.invalidateQueries({ queryKey: outfitKeys.list(variables.characterSheetId) }).catch(() => {});
-      qc.removeQueries({ queryKey: outfitKeys.detail(variables.id) }).catch(() => {});
+      qc.removeQueries({ queryKey: outfitKeys.detail(variables.id) });
     },
   });
 }
