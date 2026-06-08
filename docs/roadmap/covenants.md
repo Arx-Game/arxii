@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped; per-role powers (#751) + dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751) + dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -512,29 +512,77 @@ additively while combat speed precedence goes to the Battle role.
 - Battle covenant frontend (#518).
 - Group abilities (#516, Slice F).
 
-### Slice F — Covenant Rites (group-activated buff rituals)
+### Slice F — Covenant Rites (group-activated buff rituals) — SHIPPED
 
 Group-activated covenant **rites**: authored rituals gated by **covenant level
 ≥N** AND **≥N engaged members present**, where the gathered members renew their
-vows and each participant gains a temporary shared buff for the coming battle —
-stacking on top of their individual covenant role bonuses, scaled by turnout. A
-member who arrives mid-battle is **folded into the active rite and re-empowers
-everyone** (severity recomputed upward for all participants, ratchet-only). The
-buff is swept when the combat encounter ends.
+vows and each participant gains a temporary **role-aware, level-banded** buff for
+the coming battle — stacking on top of their individual covenant role bonuses,
+scaled by turnout. A member who arrives mid-battle is **folded into the active
+rite and re-empowers everyone** (severity recomputed upward for all participants,
+ratchet-only). The buff is swept when the combat encounter ends.
 
 Reuses the Slice B `Ritual`/`RitualSession` substrate (the rite is a SERVICE
 ritual; the session coordinates) + the conditions system (`apply_condition`,
-`UNTIL_END_OF_COMBAT`). The only new models are `CovenantRite` (authored sidecar
-O2O on `Ritual`, carrying the gate + buff config) and `CovenantRiteInstance`
-(the live fired rite, scoped to a combat encounter). Reference rite authored as
-a factory seed: **"Renew the Oath"**.
+`UNTIL_END_OF_COMBAT`). Models:
+
+- **`CovenantRite`** — authored sidecar O2O on `Ritual`, carrying the gate + buff
+  config (`min_covenant_level`, `min_members_present`, `base_severity`,
+  `severity_per_extra_participant`, `max_severity`). Has a `package_for(role,
+  covenant_level)` method that returns the correct `ConditionTemplate` for a given
+  role/level combination.
+- **`CovenantRiteRolePackage`** (#753) — through model binding a `ConditionTemplate`
+  to a `(rite, covenant_role, min_covenant_level)` triple. `package_for` selects
+  the highest band whose `min_covenant_level ≤ covenant.level`; falls back to
+  `rite.granted_condition` when no band matches (unmapped role or level too low).
+- **`CovenantRiteInstance`** — the live fired rite, scoped to a combat encounter.
+- **`CovenantRiteParticipant`** (#753) — through model (M2M between
+  `CovenantRiteInstance` and `CharacterSheet`) that records each participant's own
+  `granted_condition`. Late-join rescale and combat-end sweep act on each
+  participant's OWN recorded condition rather than a single shared template.
+
+`wire_covenant_rite_content()` seeds the "Renew the Oath" reference rite plus the
+following role/level-banded stat packages (all effects `scales_with_severity=True`):
+
+| Role | Level band | Condition | Stats buffed |
+|---|---|---|---|
+| (default / unmapped) | any | Oathbound Resolve | willpower, composure, stability |
+| Sword Vanguard (`sword-vanguard`) | ≥1 | Oathbound Fury I | strength, presence |
+| Sword Vanguard (`sword-vanguard`) | ≥4 | Oathbound Fury II | strength, presence, wits |
+| Shield Bulwark (`shield-bulwark`) | ≥1 | Oathbound Bulwark | stability, stamina |
+| Crown Luminary (`crown-luminary`) | ≥1 | Oathbound Grace | composure, charm |
+
+The `ConditionModifierEffect.scales_with_severity` flag (also added in #753)
+causes `get_condition_modifier_total` to multiply each effect's `value` by the
+condition's `effective_severity`, so higher turnout → higher modifier totals for
+everyone.
+
+**What the buff pipeline looks like end-to-end:**
+
+1. `fire_session(session)` → `perform_covenant_rite(session)` — resolves each
+   beneficiary's role via their active `CharacterCovenantRole`; calls
+   `rite.package_for(role, covenant.level)` to select the right template; creates
+   one `CovenantRiteParticipant` row per beneficiary; calls
+   `bulk_apply_conditions(applications)`.
+2. Mid-combat arrival → `evaluate_scene_engagement` → `fold_arrival_into_active_rites`
+   — newcomer's template is selected by role/level; all prior participants'
+   conditions are rescaled upward via `advance_condition_severity`.
+3. Combat end → `cleanup_completed_encounter` → `complete_rites_for_encounter`
+   — iterates `participant_records` (each with its own `granted_condition`);
+   removes that specific template via `remove_condition`.
+
+**Consumption note:** `get_condition_modifier_total` is consumed by the magic
+power-resolution pipeline (`world/magic/services/techniques.py` line ~303) for
+the multiplier stage of technique casting. Covenant rite buffs therefore
+mechanically amplify a character's next spell/technique — the buff is live, not
+computed-but-unconsumed. A follow-up issue (#TBD) should verify this path is
+exercised in combat integration tests.
 
 This is deliberately **not** "every member is granted an identical castable
-power at covenant level N" (rejected as anti-individualization), and **not**
-per-**role** unique powers. That role-scoped axis — each `CovenantRole` granting
-its own castable techniques and tier-0 passive abilities — is tracked separately
-in **#751** and is delivered through the existing `Thread`-on-`COVENANT_ROLE` +
-`ThreadPullEffect` machinery, not here.
+power at covenant level N" (rejected as anti-individualization). Per-**role**
+unique castable techniques and tier-0 passives remain tracked separately in
+**#751** via the existing `Thread`-on-`COVENANT_ROLE` + `ThreadPullEffect`
+machinery.
 
 ### Slice G — Use-based Thread mechanics
 
