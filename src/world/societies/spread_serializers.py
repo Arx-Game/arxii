@@ -40,3 +40,20 @@ class SpreadResultSerializer(serializers.Serializer):
     resolved = serializers.BooleanField(read_only=True)
     outcome = serializers.CharField(read_only=True)
     band = serializers.CharField(read_only=True)
+
+
+class DeedStorySerializer(serializers.Serializer):
+    """A persona's written account of a deed (#745 Phase 4 lore)."""
+
+    id = serializers.IntegerField(read_only=True)
+    author_name = serializers.CharField(source="author.name", read_only=True)
+    text = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class SaveDeedStoryInputSerializer(serializers.Serializer):
+    """POST body to save (or replace) the caller's account of a deed."""
+
+    deed = serializers.IntegerField()
+    text = serializers.CharField(max_length=4000)

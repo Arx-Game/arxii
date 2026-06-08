@@ -206,6 +206,29 @@ def get_spreadable_deeds(persona) -> QuerySet[LegendEntry]:
     )
 
 
+def save_deed_story(*, author_persona, deed, text: str):
+    """Upsert ``author_persona``'s written account of ``deed`` (#745 Phase 4).
+
+    One account per (deed, author) — re-saving replaces the prior text. The
+    caller is responsible for awareness/ownership gating; this is a pure write.
+    """
+    from world.societies.models import LegendDeedStory  # noqa: PLC0415
+
+    story, _ = LegendDeedStory.objects.update_or_create(
+        deed=deed, author=author_persona, defaults={"text": text}
+    )
+    return story
+
+
+def get_deed_stories(deed):
+    """The written accounts of ``deed``, newest-edited first (#745 Phase 4)."""
+    from world.societies.models import LegendDeedStory  # noqa: PLC0415
+
+    return (
+        LegendDeedStory.objects.filter(deed=deed).select_related("author").order_by("-updated_at")
+    )
+
+
 def _resolve_spread_tale(action_request, result) -> None:
     """Post-resolution side-effect for the ``spread_a_tale`` scene action.
 

@@ -8458,6 +8458,51 @@ export interface paths {
     patch: operations['personas_partial_update'];
     trace?: never;
   };
+  '/api/personas/{id}/deed-stories/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #745 Phase 4 — Written accounts of a deed this persona knows of.
+     *
+     *     Requires ``?deed=<id>`` and that the persona's societies are aware of
+     *     the deed (same awareness gate as spreading), so lore about unknown
+     *     deeds isn't leaked.
+     */
+    get: operations['personas_deed_stories_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/{id}/deed-story/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #745 Phase 4 — Save (or replace) this persona's account of a deed.
+     *
+     *     Gated on persona control + awareness of the deed. One account per
+     *     (deed, author); re-saving overwrites the prior text.
+     */
+    post: operations['personas_deed_story_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/{id}/renown/': {
     parameters: {
       query?: never;
@@ -12910,6 +12955,16 @@ export interface components {
       readonly color_hex: string;
       readonly icon: string;
     };
+    /** @description A persona's written account of a deed (#745 Phase 4 lore). */
+    DeedStory: {
+      readonly id: number;
+      readonly author_name: string;
+      readonly text: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
     /**
      * @description * `rounds` - Rounds
      *     * `until_cured` - Until Cured
@@ -15818,6 +15873,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedDeedStoryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DeedStory'][];
     };
     PaginatedDraftApplicationList: {
       /** @example 123 */
@@ -19232,6 +19302,11 @@ export interface components {
       readonly pending_weaving: number;
       readonly pending_owner_bonus: number;
       readonly is_founder: boolean;
+    };
+    /** @description POST body to save (or replace) the caller's account of a deed. */
+    SaveDeedStoryInputRequest: {
+      deed: number;
+      text: string;
     };
     SceneActionRequest: {
       readonly id: number;
@@ -33260,6 +33335,65 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_deed_stories_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona_type?: string;
+        scene?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDeedStoryList'];
+        };
+      };
+    };
+  };
+  personas_deed_story_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveDeedStoryInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeedStory'];
         };
       };
     };
