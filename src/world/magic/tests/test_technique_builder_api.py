@@ -9,6 +9,7 @@ Covers:
 - Staff over-budget authoring returns 201 unbound with advisory breakdown
 - Server-resolved policy (non-staff cannot escalate via client-sent context)
 - representative_level stamping on authored technique
+- §9: invalid payload FK → 400 (not 500), no rows created
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
@@ -258,3 +260,77 @@ class TechniqueBuilderAPITests(APITestCase):
         assert "within_budget" in res.data
         assert res.data["within_budget"] is False  # over budget
         assert Technique.objects.count() == 0  # dry run, no rows
+
+
+# =============================================================================
+# §9 payload FK validation tests
+# =============================================================================
+
+
+class TechniqueBuilderPayloadFKTests(APITestCase):
+    """§9: invalid payload FK id → 400, no rows (not an IntegrityError/500)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory(username="pk_fk_player")
+        cls.character = CharacterFactory(db_key="PKFKChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        _link_account_to_sheet(cls.account, cls.character, cls.sheet)
+
+        cls.gift = GiftFactory(creator=cls.sheet)
+        CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+
+        cls.style = TechniqueStyleFactory()
+        cls.effect = EffectTypeFactory()
+
+        cls.capability = CapabilityTypeFactory()
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(user=self.account)
+
+    def _base_payload(self, **override):
+        body = {
+            "name": "Test",
+            "description": "",
+            "gift_id": self.gift.id,
+            "style_id": self.style.id,
+            "effect_type_id": self.effect.id,
+            "action_category": "physical",
+            "tier": 1,
+            "intensity": 3,
+            "control": 2,
+            "anima_cost": 2,
+            "character_id": self.sheet.pk,
+        }
+        body.update(override)
+        return body
+
+    def test_invalid_capability_id_returns_400_no_rows(self):
+        """A capability_grants entry with a nonexistent capability_id must yield 400,
+        not an IntegrityError/500, and must not create any Technique rows."""
+        url = reverse("magic:technique-author")
+        before = Technique.objects.count()
+        payload = self._base_payload(
+            capability_grants=[
+                {"capability_id": 999999, "base_value": 0, "intensity_multiplier": 0.0}
+            ]
+        )
+        res = self.client.post(url, payload, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST, res.data
+        assert Technique.objects.count() == before
+
+    def test_valid_capability_id_succeeds(self):
+        """A capability_grants entry with a real capability_id must create the technique."""
+        url = reverse("magic:technique-author")
+        payload = self._base_payload(
+            capability_grants=[
+                {
+                    "capability_id": self.capability.id,
+                    "base_value": 1,
+                    "intensity_multiplier": 0.0,
+                }
+            ]
+        )
+        res = self.client.post(url, payload, format="json")
+        assert res.status_code == status.HTTP_201_CREATED, res.data
