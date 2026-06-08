@@ -243,21 +243,28 @@ entry, or consent. Drama is opt-in and foreseeable (per "Risk is a conscious
 player choice") — never sprung on a player as a non-consented consequence.
 Within those bounds, lean in.
 
-### Exact numbers for currencies and progression
+### Exact numbers in the ledger, descriptive labels in the fiction
 
-Default-to-narrative has one firm exception: a quantity the player *spends* or
-*races toward* is shown as an exact number, never softened into a tier word or a
-mood. Legend is the case in point — it is the currency of renown and the gate on
-path advancement, so a player needs a precise, visceral sense of how much a deed
-earned them and how far they sit from the next threshold. Numbers a player makes
-decisions on — is this worth my action points, am I close to leveling — are not
-texture; they're the ledger, and the ledger is exact.
+Show-the-number and default-to-narrative aren't really in tension — they live in
+different registers, and the line between "a currency" and "a merely descriptive
+quantity" is genuinely fuzzy, so don't try to sort every number into one bin. The
+rule that actually holds: **the player's own decision-making surface shows the
+exact quantity; the IC fiction renders that same quantity with adjectives and
+labels.** Keep the figure precise wherever a player budgets or races on it; never
+let an IC mouth or a piece of prose emit a raw number.
 
-Narrative description and tier labels still wrap these quantities *elsewhere*, so
-RP about reputation stays human and the table doesn't read like a spreadsheet —
-but they supplement the number, never replace it. The test: if a player would
-act differently knowing the quantity, show the quantity. Abstract the texture,
-not the ledger.
+A player weighing whether a deed was worth the action points, or how close they
+are to a path threshold, needs legend as an exact figure — that's the ledger, and
+the ledger is exact. But an NPC never *says* "nineteen resonance" in character;
+they say "two knights less a pawn." Legend, resonance, how hard a blow lands, how
+much power stands behind a working — all are exact where the player acts and
+qualitative where the world speaks them.
+
+A sketch we're carrying for that descriptive register (well past MVP, noted so it
+stays consistent as it comes up): resonance magnitudes map onto chess pieces —
+~1 a pawn, ~10 a knight, ~100 a bishop, ~1,000 a rook, ~10,000 a king, ~100,000 a
+queen — so "19 resonance" is spoken as "two knights less a pawn." A scale to grow
+into, not a committed system.
 
 ## Designing systems
 
