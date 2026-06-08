@@ -68,6 +68,18 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         help_text="Grouping category (e.g., 'magic', 'combat', 'exploration').",
     )
+    accepts_pose_text = models.BooleanField(
+        default=False,
+        help_text="If true, dispatch may carry freeform pose_text echoed with the outcome.",
+    )
+    ap_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Action points charged on resolution (abstracted time).",
+    )
+    social_fatigue_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Base social fatigue charged on resolution, scaled by effort_level.",
+    )
 
     class Meta:
         verbose_name = "Action Template"
