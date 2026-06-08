@@ -62,5 +62,10 @@ export function useSpreadMutation(personaId: number) {
       queryClient.invalidateQueries({ queryKey: ['spreadable-deeds', personaId] });
       queryClient.invalidateQueries({ queryKey: ['renown', personaId] });
     },
+    onError: () => {
+      // A deed may have been deactivated mid-flight — refresh the picker so a
+      // stale tale drops out rather than re-failing on retry.
+      queryClient.invalidateQueries({ queryKey: ['spreadable-deeds', personaId] });
+    },
   });
 }

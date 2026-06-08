@@ -57,6 +57,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           </p>
         ) : (
           <SpreadForm
+            key={sceneId}
             personaId={personaId}
             sceneId={sceneId}
             open={open}
@@ -126,7 +127,7 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   return (
     <div className="space-y-4">
       <Select value={deedId?.toString() ?? ''} onValueChange={(v) => setDeedId(Number(v))}>
-        <SelectTrigger>
+        <SelectTrigger aria-label="Tale to spread">
           <SelectValue placeholder="Choose a tale to tell" />
         </SelectTrigger>
         <SelectContent>
@@ -142,12 +143,13 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
         value={pose}
         onChange={(e) => setPose(e.target.value)}
         placeholder="How do you tell it? A song, a rousing speech, a whispered rumor..."
+        aria-label="How you tell it"
         maxLength={2000}
         rows={4}
       />
 
       <Select value={effort} onValueChange={setEffort}>
-        <SelectTrigger>
+        <SelectTrigger aria-label="Effort">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
