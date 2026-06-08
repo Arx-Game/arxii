@@ -73,6 +73,7 @@ case "$state" in
     echo "$state"
     exit 5
     ;;
+  *) ;;  # PENDING (or unexpected): fall through to the cadence loop.
 esac
 
 # Pending: walk the cadence.
@@ -87,6 +88,7 @@ for delay in "${CADENCE[@]}"; do
   case "$state" in
     PASS) echo "OK"; exit 0 ;;
     FAIL*) echo "$state"; exit 5 ;;
+    *) ;;  # PENDING (or unexpected): keep walking the cadence.
   esac
 done
 
@@ -100,6 +102,7 @@ while (( elapsed < HARD_CAP )); do
   case "$state" in
     PASS) echo "OK"; exit 0 ;;
     FAIL*) echo "$state"; exit 5 ;;
+    *) ;;  # PENDING (or unexpected): keep polling until the hard cap.
   esac
 done
 

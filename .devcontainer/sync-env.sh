@@ -10,11 +10,11 @@ src_env="${repo_root}/src/.env"
 dev_env="${repo_root}/.devcontainer/dev.env"
 db_url="postgres://arxii:arxii@db:5432/arxiidev"
 
-if [ -f "$dev_env" ]; then
+if [[ -f "$dev_env" ]]; then
   exit 0
 fi
 
-if [ ! -f "$src_env" ]; then
+if [[ ! -f "$src_env" ]]; then
   cat > "$dev_env" <<EOF
 DEBUG=True
 SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 50)
