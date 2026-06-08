@@ -13,9 +13,12 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.covenants.constants import RoleArchetype
 from world.covenants.factories import (
     CharacterSheetFactory,
     CovenantFactory,
+    CovenantRiteFactory,
+    CovenantRiteRolePackageFactory,
     CovenantRoleFactory,
     make_engaged_member,
 )
@@ -629,3 +632,40 @@ class CompleteRitesForEncounterTests(_RiteSceneTestCase):
                 live,
                 f"Expected buff removed from {mem.character_sheet} after cleanup",
             )
+
+
+# ---------------------------------------------------------------------------
+# Task 5 (new model): CovenantRiteRolePackage + package_for
+# ---------------------------------------------------------------------------
+
+
+class CovenantRiteRolePackageTests(TestCase):
+    """Unit tests for CovenantRiteRolePackage and CovenantRite.package_for."""
+
+    def setUp(self) -> None:
+        # Minimal rite; granted_condition acts as the fallback.
+        self.rite = CovenantRiteFactory()
+
+    def test_package_for_selects_highest_band_and_falls_back(self) -> None:
+        """package_for returns the highest matching band or falls back to granted_condition."""
+        sword = CovenantRoleFactory(
+            name="Sword", slug="sword-pkg-test", archetype=RoleArchetype.SWORD
+        )
+        low = ConditionTemplateFactory(name="fury_i")
+        high = ConditionTemplateFactory(name="fury_ii")
+        CovenantRiteRolePackageFactory(
+            rite=self.rite, covenant_role=sword, min_covenant_level=1, condition_template=low
+        )
+        CovenantRiteRolePackageFactory(
+            rite=self.rite, covenant_role=sword, min_covenant_level=4, condition_template=high
+        )
+
+        self.assertEqual(self.rite.package_for(sword, 1), low)  # exactly the low band
+        self.assertEqual(self.rite.package_for(sword, 5), high)  # highest band <= level
+        # Below lowest band → fallback to granted_condition.
+        self.assertEqual(self.rite.package_for(sword, 0), self.rite.granted_condition)
+        # Unmapped role → fallback to granted_condition.
+        other = CovenantRoleFactory(
+            name="Crown", slug="crown-pkg-test", archetype=RoleArchetype.CROWN
+        )
+        self.assertEqual(self.rite.package_for(other, 5), self.rite.granted_condition)

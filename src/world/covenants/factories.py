@@ -10,6 +10,7 @@ from world.covenants.models import (
     Covenant,
     CovenantLevelThreshold,
     CovenantRite,
+    CovenantRiteRolePackage,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -136,6 +137,23 @@ class CovenantRiteFactory(factory_django.DjangoModelFactory):
     severity_per_extra_participant = 1
     max_severity = None
     duration_rounds = None
+
+
+class CovenantRiteRolePackageFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRiteRolePackage — a role/level-gated stat package on a rite.
+
+    No django_get_or_create — the unique constraint is (rite, covenant_role,
+    min_covenant_level); callers that need the same band should query directly
+    rather than relying on silent get-or-create merges.
+    """
+
+    class Meta:
+        model = CovenantRiteRolePackage
+
+    rite = factory.SubFactory(CovenantRiteFactory)
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    min_covenant_level = 1
+    condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
 
 
 def wire_covenant_rite_content() -> CovenantRite:
