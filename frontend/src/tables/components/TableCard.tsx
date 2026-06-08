@@ -47,7 +47,7 @@ export function TableCard({ table }: TableCardProps) {
   const navigate = useNavigate();
 
   function handleView() {
-    void navigate(`/tables/${table.id}`);
+    navigate(`/tables/${table.id}`);
   }
 
   return (

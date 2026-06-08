@@ -89,7 +89,7 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
     return (
       <div className="py-16 text-center">
         <p className="text-muted-foreground">Story not found.</p>
-        <Button variant="outline" className="mt-4" onClick={() => void navigate('/stories')}>
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/stories')}>
           Back to My Stories
         </Button>
       </div>
@@ -106,7 +106,7 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
     <div className="space-y-6">
       {/* Back link */}
       <button
-        onClick={() => void navigate('/stories')}
+        onClick={() => navigate('/stories')}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

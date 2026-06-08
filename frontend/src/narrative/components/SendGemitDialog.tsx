@@ -107,7 +107,7 @@ export function SendGemitDialog() {
             return;
           }
           if (fetchErr.response) {
-            void fetchErr.response
+            fetchErr.response
               .json()
               .then((data: unknown) => {
                 if (data && typeof data === 'object') {

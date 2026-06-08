@@ -30,7 +30,7 @@ export function ThreadRetireDialog({ thread, open, onOpenChange }: ThreadRetireD
     mutate(thread.id, {
       onSuccess: () => {
         onOpenChange(false);
-        void navigate('/threads');
+        navigate('/threads');
       },
     });
   };

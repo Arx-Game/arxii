@@ -98,7 +98,7 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
             return;
           }
           if (fetchErr.response) {
-            void fetchErr.response
+            fetchErr.response
               .json()
               .then((data: unknown) => {
                 if (data && typeof data === 'object') {

@@ -184,7 +184,7 @@ function OfferStep({ story, onSuccess, onCancel }: OfferStepProps) {
           if (err && typeof err === 'object') {
             const asError = err as Error;
             // Try to extract DRF field errors from response body.
-            void Promise.resolve()
+            Promise.resolve()
               .then(async () => {
                 const fetchErr = err as { response?: Response };
                 if (fetchErr.response) {

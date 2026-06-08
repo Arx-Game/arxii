@@ -198,8 +198,8 @@ export function useCreateStory() {
   return useMutation({
     mutationFn: (data: StoryCreateBody) => api.createStory(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -210,9 +210,9 @@ export function useUpdateStory() {
     mutationFn: ({ id, data }: { id: number; data: Partial<StoryCreateBody> }) =>
       api.updateStory(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.story(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -222,10 +222,10 @@ export function useDeleteStory() {
   return useMutation({
     mutationFn: (id: number) => api.deleteStory(id),
     onSuccess: (_, id) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
       // Invalidate the deleted story's cache; the refetch will 404 and clear it.
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(id) });
+      qc.invalidateQueries({ queryKey: storiesKeys.story(id) }).catch(() => {});
     },
   });
 }
@@ -255,8 +255,8 @@ export function useCreateChapter() {
   return useMutation({
     mutationFn: (data: ChapterCreateBody) => api.createChapter(data),
     onSuccess: (_, { story }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.chapterList({ story }) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(story) });
+      qc.invalidateQueries({ queryKey: storiesKeys.chapterList({ story }) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.story(story) }).catch(() => {});
     },
   });
 }
@@ -267,8 +267,8 @@ export function useUpdateChapter() {
     mutationFn: ({ id, data }: { id: number; data: Partial<ChapterCreateBody> }) =>
       api.updateChapter(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.chapter(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.chapterList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.chapter(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.chapterList() }).catch(() => {});
     },
   });
 }
@@ -278,7 +278,7 @@ export function useDeleteChapter() {
   return useMutation({
     mutationFn: (id: number) => api.deleteChapter(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.chapterList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.chapterList() }).catch(() => {});
     },
   });
 }
@@ -308,8 +308,8 @@ export function useCreateEpisode() {
   return useMutation({
     mutationFn: (data: EpisodeCreateBody) => api.createEpisode(data),
     onSuccess: (_, { chapter }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.episodeList({ chapter }) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.chapter(chapter) });
+      qc.invalidateQueries({ queryKey: storiesKeys.episodeList({ chapter }) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.chapter(chapter) }).catch(() => {});
     },
   });
 }
@@ -320,8 +320,8 @@ export function useUpdateEpisode() {
     mutationFn: ({ id, data }: { id: number; data: Partial<EpisodeCreateBody> }) =>
       api.updateEpisode(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.episode(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.episodeList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.episode(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.episodeList() }).catch(() => {});
     },
   });
 }
@@ -331,7 +331,7 @@ export function useDeleteEpisode() {
   return useMutation({
     mutationFn: (id: number) => api.deleteEpisode(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.episodeList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.episodeList() }).catch(() => {});
     },
   });
 }
@@ -361,7 +361,7 @@ export function useCreateBeat() {
   return useMutation({
     mutationFn: (data: Parameters<typeof api.createBeat>[0]) => api.createBeat(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
     },
   });
 }
@@ -372,8 +372,8 @@ export function useUpdateBeat() {
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.updateBeat>[1] }) =>
       api.updateBeat(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.beat(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.beat(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
     },
   });
 }
@@ -383,7 +383,7 @@ export function useDeleteBeat() {
   return useMutation({
     mutationFn: (id: number) => api.deleteBeat(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
     },
   });
 }
@@ -479,12 +479,12 @@ export function useResolveEpisode() {
     }: { episodeId: number; storyId: number } & ResolveEpisodeBody) =>
       api.resolveEpisode(episodeId, body),
     onSuccess: (_, { episodeId, storyId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.groupProgress() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.globalProgress() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
+      qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.groupProgress() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.globalProgress() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) }).catch(() => {});
     },
   });
 }
@@ -499,9 +499,9 @@ export function usePromoteEpisode() {
     }: { episodeId: number; storyId: number } & PromoteEpisodeBody) =>
       api.promoteEpisode(episodeId, body),
     onSuccess: (_, { episodeId, storyId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.episodeList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.episodeList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) }).catch(() => {});
     },
   });
 }
@@ -515,11 +515,11 @@ export function useMarkBeat() {
       ...body
     }: { beatId: number; storyId: number } & MarkBeatBody) => api.markBeat(beatId, body),
     onSuccess: (_, { beatId, storyId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
+      qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) }).catch(() => {});
     },
   });
 }
@@ -530,9 +530,9 @@ export function useContributeToBeat() {
     mutationFn: ({ beatId, ...body }: { beatId: number } & ContributeBeatBody) =>
       api.contributeToBeat(beatId, body),
     onSuccess: (_, { beatId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.contributions() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.contributions() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -542,8 +542,8 @@ export function useRequestClaim() {
   return useMutation({
     mutationFn: (body: RequestClaimBody) => api.requestClaim(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -554,9 +554,9 @@ export function useApproveClaim() {
     mutationFn: ({ claimId, ...body }: { claimId: number } & ApproveClaimBody) =>
       api.approveClaim(claimId, body),
     onSuccess: (_, { claimId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -567,9 +567,9 @@ export function useRejectClaim() {
     mutationFn: ({ claimId, ...body }: { claimId: number } & RejectClaimBody) =>
       api.rejectClaim(claimId, body),
     onSuccess: (_, { claimId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -579,8 +579,8 @@ export function useCancelClaim() {
   return useMutation({
     mutationFn: (claimId: number) => api.cancelClaim(claimId),
     onSuccess: (_, claimId) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() });
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
     },
   });
 }
@@ -590,9 +590,9 @@ export function useCompleteClaim() {
   return useMutation({
     mutationFn: (claimId: number) => api.completeClaim(claimId),
     onSuccess: (_, claimId) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -603,10 +603,10 @@ export function useCreateEventFromSessionRequest() {
     mutationFn: ({ requestId, ...body }: { requestId: number } & CreateEventBody) =>
       api.createEventFromSessionRequest(requestId, body),
     onSuccess: (_, { requestId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -616,9 +616,9 @@ export function useCancelSessionRequest() {
   return useMutation({
     mutationFn: (requestId: number) => api.cancelSessionRequest(requestId),
     onSuccess: (_, requestId) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -628,10 +628,10 @@ export function useResolveSessionRequest() {
   return useMutation({
     mutationFn: (requestId: number) => api.resolveSessionRequest(requestId),
     onSuccess: (_, requestId) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -656,9 +656,9 @@ export function useSendStoryOOC() {
       api.sendStoryOOC(storyId, data),
     onSuccess: (_, { storyId }) => {
       // Invalidate narrative messages so the recipient inbox refreshes.
-      void qc.invalidateQueries({ queryKey: ['narrative'] });
+      qc.invalidateQueries({ queryKey: ['narrative'] }).catch(() => {});
       // Invalidate the story log so the sent notice appears there.
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) }).catch(() => {});
     },
   });
 }
@@ -671,10 +671,10 @@ export function useExpireOverdueBeats() {
       // Expire affects beats across all stories/episodes; invalidate beat lists,
       // dashboards, and workload view. Story/chapter/episode detail queries are
       // left untouched — beat expiry doesn't change episode or story structure.
-      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.staffWorkload() });
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.staffWorkload() }).catch(() => {});
     },
   });
 }
@@ -697,7 +697,7 @@ export function useCreateStoryNote() {
   return useMutation({
     mutationFn: (body: StoryNoteRequest) => api.createStoryNote(body),
     onSuccess: (_, { story }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyNotes(story) });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyNotes(story) }).catch(() => {});
     },
   });
 }
@@ -719,7 +719,7 @@ export function useCreateTransition() {
   return useMutation({
     mutationFn: (data: Parameters<typeof api.createTransition>[0]) => api.createTransition(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
     },
   });
 }
@@ -730,8 +730,8 @@ export function useUpdateTransition() {
     mutationFn: ({ id, data }: { id: number; data: Partial<Transition> }) =>
       api.updateTransition(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.transition(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.transition(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
     },
   });
 }
@@ -741,7 +741,7 @@ export function useDeleteTransition() {
   return useMutation({
     mutationFn: (id: number) => api.deleteTransition(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
     },
   });
 }
@@ -752,8 +752,8 @@ export function useSaveTransitionWithOutcomes() {
   return useMutation({
     mutationFn: (body: SaveTransitionWithOutcomesBody) => api.saveTransitionWithOutcomes(body),
     onSuccess: (transition) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.transition(transition.id) });
+      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.transition(transition.id) }).catch(() => {});
     },
   });
 }
@@ -777,9 +777,9 @@ export function useCreateProgressionRequirement() {
     mutationFn: (data: Omit<EpisodeProgressionRequirement, 'id'>) =>
       api.createProgressionRequirement(data),
     onSuccess: (_, { episode }) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: storiesKeys.progressionRequirements({ episode }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -790,9 +790,9 @@ export function useDeleteProgressionRequirement() {
     mutationFn: ({ id, episodeId: _episodeId }: { id: number; episodeId: number }) =>
       api.deleteProgressionRequirement(id),
     onSuccess: (_, { episodeId }) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: storiesKeys.progressionRequirements({ episode: episodeId }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -816,9 +816,9 @@ export function useCreateTransitionRequiredOutcome() {
     mutationFn: (data: Omit<TransitionRequiredOutcome, 'id'>) =>
       api.createTransitionRequiredOutcome(data),
     onSuccess: (_, { transition }) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: storiesKeys.transitionRequiredOutcomes({ transition }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -829,9 +829,9 @@ export function useDeleteTransitionRequiredOutcome() {
     mutationFn: ({ id, transitionId: _transitionId }: { id: number; transitionId: number }) =>
       api.deleteTransitionRequiredOutcome(id),
     onSuccess: (_, { transitionId }) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: storiesKeys.transitionRequiredOutcomes({ transition: transitionId }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -854,10 +854,10 @@ export function useAssignStory() {
     mutationFn: ({ storyId, ...body }: { storyId: number } & AssignStoryBody) =>
       api.assignStory(storyId, body),
     onSuccess: (_, { storyId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -867,9 +867,9 @@ export function useDetachStoryFromTable() {
   return useMutation({
     mutationFn: (storyId: number) => api.detachStoryFromTable(storyId),
     onSuccess: (_, storyId) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
     },
   });
 }
@@ -880,9 +880,9 @@ export function useOfferStoryToGM() {
     mutationFn: ({ storyId, ...body }: { storyId: number } & OfferStoryToGMBody) =>
       api.offerStoryToGM(storyId, body),
     onSuccess: (_, { storyId }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+      qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
     },
   });
 }
@@ -893,9 +893,9 @@ export function useAcceptOffer() {
     mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
       api.acceptOffer(offerId, body),
     onSuccess: (updated) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.story(updated.story) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.story(updated.story) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
     },
   });
 }
@@ -906,7 +906,7 @@ export function useDeclineOffer() {
     mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
       api.declineOffer(offerId, body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
     },
   });
 }
@@ -916,7 +916,7 @@ export function useWithdrawOffer() {
   return useMutation({
     mutationFn: (offerId: number) => api.withdrawOffer(offerId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+      qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
     },
   });
 }
@@ -958,7 +958,7 @@ export function useCreateEra() {
   return useMutation({
     mutationFn: (data: EraCreateBody) => api.createEra(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
     },
   });
 }
@@ -969,8 +969,8 @@ export function useUpdateEra() {
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.updateEra>[1] }) =>
       api.updateEra(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.era(id) });
-      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.era(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
     },
   });
 }
@@ -980,7 +980,7 @@ export function useDeleteEra() {
   return useMutation({
     mutationFn: (id: number) => api.deleteEra(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
     },
   });
 }
@@ -990,8 +990,8 @@ export function useAdvanceEra() {
   return useMutation({
     mutationFn: (id: number) => api.advanceEra(id),
     onSuccess: (updated) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+      qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) }).catch(() => {});
     },
   });
 }
@@ -1001,8 +1001,8 @@ export function useArchiveEra() {
   return useMutation({
     mutationFn: (id: number) => api.archiveEra(id),
     onSuccess: (updated) => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
-      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+      qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) }).catch(() => {});
     },
   });
 }

@@ -19,7 +19,7 @@ export function ChatWindow({ messages }: ChatWindowProps) {
   useEffect(() => {
     const hasNarrative = messages.some((m) => m.type === GAME_MESSAGE_TYPE.NARRATIVE);
     if (hasNarrative) {
-      void queryClient.invalidateQueries({ queryKey: narrativeKeys.all });
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.all }).catch(() => {});
     }
   }, [messages, queryClient]);
 
@@ -28,7 +28,7 @@ export function ChatWindow({ messages }: ChatWindowProps) {
   useEffect(() => {
     const hasGemit = messages.some((m) => m.type === GAME_MESSAGE_TYPE.GEMIT);
     if (hasGemit) {
-      void queryClient.invalidateQueries({ queryKey: gemitKeys.all });
+      queryClient.invalidateQueries({ queryKey: gemitKeys.all }).catch(() => {});
     }
   }, [messages, queryClient]);
 

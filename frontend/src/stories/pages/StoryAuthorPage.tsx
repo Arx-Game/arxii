@@ -386,7 +386,7 @@ export function StoryAuthorPage() {
               story={selectedStory}
               onEdited={() => {
                 setStoryVersion((v) => v + 1);
-                void refetchSelected();
+                refetchSelected().catch(() => {});
               }}
               onDeleted={() => {
                 setSelectedStoryId(null);

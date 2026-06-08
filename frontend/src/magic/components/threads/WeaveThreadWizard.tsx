@@ -333,7 +333,7 @@ export function WeaveThreadWizard({
       {
         onSuccess: (newThread) => {
           resetAndClose();
-          void navigate(`/threads/${newThread.id}`);
+          navigate(`/threads/${newThread.id}`);
         },
       }
     );
@@ -387,7 +387,7 @@ export function WeaveThreadWizard({
                 data-testid={`kind-button-${kind}`}
                 disabled={disabled}
                 title={tooltipText || undefined}
-                onClick={() => void selectKind(kind)}
+                onClick={() => selectKind(kind).catch(() => {})}
                 className={[
                   'flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors',
                   disabled

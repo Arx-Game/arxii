@@ -66,8 +66,8 @@ export function usePerformRitual() {
     onSuccess: () => {
       // Invalidate ritual list in case ritual state changes are reflected there,
       // and the broad 'all' key so any downstream ritual-affected data refreshes.
-      void qc.invalidateQueries({ queryKey: ritualKeys.list() });
-      void qc.invalidateQueries({ queryKey: ritualKeys.all });
+      qc.invalidateQueries({ queryKey: ritualKeys.list() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualKeys.all }).catch(() => {});
     },
   });
 }
@@ -78,8 +78,8 @@ export function usePatchRitual() {
     mutationFn: ({ id, body }: { id: number; body: AnimaRitualPatchBody }) =>
       api.patchRitual(id, body),
     onSuccess: (data: Ritual) => {
-      void qc.invalidateQueries({ queryKey: ritualKeys.detail(data.id) });
-      void qc.invalidateQueries({ queryKey: ritualKeys.list() });
+      qc.invalidateQueries({ queryKey: ritualKeys.detail(data.id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualKeys.list() }).catch(() => {});
     },
   });
 }
@@ -142,8 +142,8 @@ export function useDraftRitualSession() {
   return useMutation({
     mutationFn: (body: RitualSessionDraftRequest) => api.draftRitualSession(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() });
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() });
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() }).catch(() => {});
     },
   });
 }
@@ -154,8 +154,8 @@ export function useAcceptRitualSession() {
     mutationFn: ({ id, body }: { id: number; body: RitualSessionAcceptRequest }) =>
       api.acceptRitualSession(id, body),
     onSuccess: (_data, { id }) => {
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() });
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() }).catch(() => {});
     },
   });
 }
@@ -165,8 +165,8 @@ export function useDeclineRitualSession() {
   return useMutation({
     mutationFn: (id: number) => api.declineRitualSession(id),
     onSuccess: (_data, id) => {
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() });
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.inbox() }).catch(() => {});
     },
   });
 }
@@ -176,12 +176,12 @@ export function useFireRitualSession() {
   return useMutation({
     mutationFn: (id: number) => api.fireRitualSession(id),
     onSuccess: (_data, id) => {
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() });
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() }).catch(() => {});
       // Broad covenant invalidation — the fire may have created a covenant or
       // inducted a new member. We don't know which covenant is affected without
       // a result_kind/result_id envelope, so invalidate the full covenants tree.
-      void qc.invalidateQueries({ queryKey: ['covenants'] });
+      qc.invalidateQueries({ queryKey: ['covenants'] }).catch(() => {});
     },
   });
 }
@@ -191,8 +191,8 @@ export function useCancelRitualSession() {
   return useMutation({
     mutationFn: (id: number) => api.cancelRitualSession(id),
     onSuccess: (_data, id) => {
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() });
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() }).catch(() => {});
     },
   });
 }

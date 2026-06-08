@@ -206,7 +206,7 @@ export function ProgressionRequirementsEditor({ episodeId }: ProgressionRequirem
         </ul>
       )}
 
-      <AddRequirementRow episodeId={episodeId} onAdded={() => void refetch()} />
+      <AddRequirementRow episodeId={episodeId} onAdded={() => refetch().catch(() => {})} />
     </div>
   );
 }

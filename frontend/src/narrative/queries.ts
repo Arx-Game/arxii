@@ -53,7 +53,7 @@ export function useAcknowledgeDelivery() {
   return useMutation({
     mutationFn: acknowledgeDelivery,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: narrativeKeys.all });
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.all }).catch(() => {});
     },
   });
 }
@@ -80,7 +80,7 @@ export function useBroadcastGemit() {
   return useMutation({
     mutationFn: (data: BroadcastGemitBody) => broadcastGemit(data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: gemitKeys.all });
+      queryClient.invalidateQueries({ queryKey: gemitKeys.all }).catch(() => {});
     },
   });
 }
@@ -102,7 +102,7 @@ export function useMuteStory() {
   return useMutation({
     mutationFn: (data: UserStoryMuteCreateBody) => muteStory(data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() });
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() }).catch(() => {});
     },
   });
 }
@@ -112,7 +112,7 @@ export function useUnmuteStory() {
   return useMutation({
     mutationFn: (muteId: number) => unmuteStory(muteId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() });
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() }).catch(() => {});
     },
   });
 }

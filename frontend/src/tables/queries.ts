@@ -84,7 +84,7 @@ export function useCreateTable() {
   return useMutation({
     mutationFn: (data: GMTableCreateBody) => api.createTable(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+      qc.invalidateQueries({ queryKey: tablesKeys.list() }).catch(() => {});
     },
   });
 }
@@ -95,8 +95,8 @@ export function useUpdateTable() {
     mutationFn: ({ id, data }: { id: number; data: GMTableUpdateBody }) =>
       api.updateTable(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.list() }).catch(() => {});
     },
   });
 }
@@ -106,8 +106,8 @@ export function useArchiveTable() {
   return useMutation({
     mutationFn: (id: number) => api.archiveTable(id),
     onSuccess: (_, id) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.list() }).catch(() => {});
     },
   });
 }
@@ -118,8 +118,8 @@ export function useTransferOwnership() {
     mutationFn: ({ id, data }: { id: number; data: GMTableTransferBody }) =>
       api.transferOwnership(id, data),
     onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.list() }).catch(() => {});
     },
   });
 }
@@ -133,8 +133,8 @@ export function useInviteToTable() {
   return useMutation({
     mutationFn: (data: GMTableMembershipCreateBody) => api.inviteToTable(data),
     onSuccess: (membership) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.members(membership.table) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(membership.table) });
+      qc.invalidateQueries({ queryKey: tablesKeys.members(membership.table) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(membership.table) }).catch(() => {});
     },
   });
 }
@@ -145,8 +145,8 @@ export function useRemoveMembership() {
     mutationFn: ({ membershipId, tableId: _tableId }: { membershipId: number; tableId: number }) =>
       api.removeMembership(membershipId),
     onSuccess: (_, { tableId }) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.members(tableId) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(tableId) });
+      qc.invalidateQueries({ queryKey: tablesKeys.members(tableId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(tableId) }).catch(() => {});
     },
   });
 }
@@ -157,9 +157,9 @@ export function useLeaveTable() {
     mutationFn: ({ membershipId, tableId: _tableId }: { membershipId: number; tableId: number }) =>
       api.leaveTable(membershipId),
     onSuccess: (_, { tableId }) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.members(tableId) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.detail(tableId) });
-      void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+      qc.invalidateQueries({ queryKey: tablesKeys.members(tableId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.detail(tableId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.list() }).catch(() => {});
     },
   });
 }
@@ -205,9 +205,9 @@ export function useCreateBulletinPost() {
   return useMutation({
     mutationFn: (data: BulletinPostCreateBody) => api.createBulletinPost(data),
     onSuccess: (post) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: tablesKeys.bulletinPosts({ table: post.table }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -218,9 +218,9 @@ export function useUpdateBulletinPost() {
     mutationFn: ({ id, data }: { id: number; data: BulletinPostUpdateBody; tableId: number }) =>
       api.updateBulletinPost(id, data),
     onSuccess: (post) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: tablesKeys.bulletinPosts({ table: post.table }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -231,7 +231,7 @@ export function useDeleteBulletinPost() {
     mutationFn: ({ id, tableId: _tableId }: { id: number; tableId: number }) =>
       api.deleteBulletinPost(id),
     onSuccess: (_, { tableId }) => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) });
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) }).catch(() => {});
     },
   });
 }
@@ -246,10 +246,10 @@ export function useCreateBulletinReply() {
     mutationFn: (data: BulletinReplyCreateBody) => api.createBulletinReply(data),
     onSuccess: (reply) => {
       // Invalidate the post list so the embedded replies_cached refreshes.
-      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
-      void qc.invalidateQueries({
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
+      qc.invalidateQueries({
         queryKey: tablesKeys.bulletinReplies({ post: reply.post }),
-      });
+      }).catch(() => {});
     },
   });
 }
@@ -267,7 +267,7 @@ export function useUpdateBulletinReply() {
       postId: number;
     }) => api.updateBulletinReply(id, data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
     },
   });
 }
@@ -278,7 +278,7 @@ export function useDeleteBulletinReply() {
     mutationFn: ({ id, postId: _postId }: { id: number; postId: number }) =>
       api.deleteBulletinReply(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
     },
   });
 }

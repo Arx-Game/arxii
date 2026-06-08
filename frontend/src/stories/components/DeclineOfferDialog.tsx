@@ -78,7 +78,7 @@ export function DeclineOfferDialog({ offer, storyTitle }: DeclineOfferDialogProp
           toast.success('Offer declined');
         },
         onError: (err: unknown) => {
-          void Promise.resolve()
+          Promise.resolve()
             .then(async () => {
               const fetchErr = err as { response?: Response };
               if (fetchErr.response) {

@@ -112,14 +112,16 @@ export function CommandInput({
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
       // to avoid creating two POSE Interactions for the same pose.
-      void submitPose({
+      submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
         action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
-      }).then(() => {
-        onPoseSubmitted?.();
-      });
+      })
+        .then(() => {
+          onPoseSubmitted?.();
+        })
+        .catch(() => {});
     } else {
       // WebSocket path: existing behavior. Server-side auto-link will attach
       // any pending ACTION interactions when the POSE is created.

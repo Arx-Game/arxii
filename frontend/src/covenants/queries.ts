@@ -58,8 +58,8 @@ export function useEngageMembership(covenantId: number) {
   return useMutation({
     mutationFn: (membershipId: number) => api.engageMembership(membershipId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) });
-      void qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) });
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
     },
   });
 }
@@ -69,8 +69,8 @@ export function useDisengageMembership(covenantId: number) {
   return useMutation({
     mutationFn: (membershipId: number) => api.disengageMembership(membershipId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) });
-      void qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) });
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
     },
   });
 }
