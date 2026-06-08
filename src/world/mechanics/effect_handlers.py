@@ -185,7 +185,7 @@ def _deal_damage(
     vitals.save(update_fields=["health"])
 
     process_damage_consequences(
-        character=target,
+        character_sheet=target.sheet_data,
         damage_dealt=effect.damage_amount,
         damage_type=effect.damage_type,
     )

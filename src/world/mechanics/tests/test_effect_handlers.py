@@ -90,7 +90,7 @@ class DealDamageHandlerTests(TestCase):
         CharacterVitals.objects.filter(pk=self.vitals.pk).update(health=100)
         self.vitals.refresh_from_db()
 
-    @patch("world.mechanics.effect_handlers.process_damage_consequences")
+    @patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True)
     def test_applies_damage_to_vitals(self, mock_pipeline: MagicMock) -> None:
         """DEAL_DAMAGE handler reduces health on CharacterVitals."""
         context = ResolutionContext(character=self.character)
@@ -99,14 +99,16 @@ class DealDamageHandlerTests(TestCase):
         assert result.applied is True
         assert self.vitals.health == 70
         mock_pipeline.assert_called_once_with(
-            character=self.character,
+            character_sheet=self.sheet,
             damage_dealt=30,
             damage_type=self.damage_type,
         )
 
     def test_returns_applied_true_with_description(self) -> None:
         """Successful damage returns applied=True with a descriptive message."""
-        with patch("world.mechanics.effect_handlers.process_damage_consequences"):
+        with patch(
+            "world.mechanics.effect_handlers.process_damage_consequences", autospec=True
+        ):
             context = ResolutionContext(character=self.character)
             result = apply_effect(self.effect, context)
         assert result.applied is True
