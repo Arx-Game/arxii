@@ -61,6 +61,82 @@ function cooldownToISO(amount: number, unit: CooldownUnit): string {
   return `P${amount}D`;
 }
 
+interface CreateMissionFormValues {
+  name: string;
+  summary: string;
+  levelMin: number;
+  levelMax: number;
+  riskTier: number;
+  baseWeight: number;
+  cooldownAmount: number;
+  percentReplace: number;
+}
+
+/**
+ * Returns a user-facing error message for the first invalid form value, or
+ * null when the values pass client-side validation.
+ *
+ * Reject any non-finite numeric input (e.g., user pasted text or cleared a
+ * number field — Number('') is 0 which is OK; Number('abc') is NaN).
+ */
+function validateMissionForm(values: CreateMissionFormValues): string | null {
+  const numericFields: Record<string, number> = {
+    'Level band min': values.levelMin,
+    'Level band max': values.levelMax,
+    'Risk tier': values.riskTier,
+    'Base weight': values.baseWeight,
+    'Cooldown amount': values.cooldownAmount,
+    'Percent replace': values.percentReplace,
+  };
+  for (const [label, value] of Object.entries(numericFields)) {
+    if (!Number.isFinite(value)) {
+      return `${label} must be a number.`;
+    }
+  }
+
+  if (!values.name.trim() || !values.summary.trim()) {
+    return 'Name and summary are required.';
+  }
+  if (values.levelMin > values.levelMax) {
+    return 'Level band min cannot exceed max.';
+  }
+  if (values.cooldownAmount <= 0) {
+    return 'Cooldown must be a positive number.';
+  }
+  return null;
+}
+
+interface ParsedValidationError {
+  fieldErrors: Record<string, string>;
+  bannerMessage: string | null;
+}
+
+/**
+ * Splits a DRF validation error into per-field messages and a banner message.
+ * DRF's top-level "detail" and "non_field_errors" don't map to any form field
+ * — they (and the empty-field-errors fallback) surface as a banner instead.
+ */
+function parseValidationError(err: ApiValidationError): ParsedValidationError {
+  const fieldErrors: Record<string, string> = {};
+  const nonFieldMessages: string[] = [];
+  for (const [key, msgs] of Object.entries(err.fieldErrors)) {
+    const message = flattenErrorMessage(msgs);
+    if (key === 'detail' || key === 'non_field_errors') {
+      nonFieldMessages.push(message);
+    } else if (message) {
+      fieldErrors[key] = message;
+    }
+  }
+
+  const needsBanner = nonFieldMessages.length > 0 || Object.keys(fieldErrors).length === 0;
+  let bannerMessage: string | null = null;
+  if (needsBanner) {
+    bannerMessage =
+      nonFieldMessages.length > 0 ? nonFieldMessages.join(' ') : 'Could not create mission.';
+  }
+  return { fieldErrors, bannerMessage };
+}
+
 export function CreateMissionPage() {
   const navigate = useNavigate();
   const create = useCreateMissionTemplate();
@@ -87,33 +163,18 @@ export function CreateMissionPage() {
     setFieldErrors({});
     setLocalError(null);
 
-    // Reject any non-finite numeric input (e.g., user pasted text or
-    // cleared a number field — Number('') is 0 which is OK; Number('abc') is NaN).
-    const numericFields: Record<string, number> = {
-      'Level band min': levelMin,
-      'Level band max': levelMax,
-      'Risk tier': riskTier,
-      'Base weight': baseWeight,
-      'Cooldown amount': cooldownAmount,
-      'Percent replace': percentReplace,
-    };
-    for (const [label, value] of Object.entries(numericFields)) {
-      if (!Number.isFinite(value)) {
-        setLocalError(`${label} must be a number.`);
-        return;
-      }
-    }
-
-    if (!name.trim() || !summary.trim()) {
-      setLocalError('Name and summary are required.');
-      return;
-    }
-    if (levelMin > levelMax) {
-      setLocalError('Level band min cannot exceed max.');
-      return;
-    }
-    if (cooldownAmount <= 0) {
-      setLocalError('Cooldown must be a positive number.');
+    const validationError = validateMissionForm({
+      name,
+      summary,
+      levelMin,
+      levelMax,
+      riskTier,
+      baseWeight,
+      cooldownAmount,
+      percentReplace,
+    });
+    if (validationError) {
+      setLocalError(validationError);
       return;
     }
 
@@ -140,23 +201,10 @@ export function CreateMissionPage() {
       navigate(`/staff/missions/${created.id}/canvas`);
     } catch (err) {
       if (err instanceof ApiValidationError) {
-        const flat: Record<string, string> = {};
-        const nonFieldMessages: string[] = [];
-        for (const [key, msgs] of Object.entries(err.fieldErrors)) {
-          const message = flattenErrorMessage(msgs);
-          // DRF's top-level "detail" and "non_field_errors" don't map to
-          // any form field — surface them as a banner instead.
-          if (key === 'detail' || key === 'non_field_errors') {
-            nonFieldMessages.push(message);
-          } else if (message) {
-            flat[key] = message;
-          }
-        }
-        setFieldErrors(flat);
-        if (nonFieldMessages.length > 0 || Object.keys(flat).length === 0) {
-          setLocalError(
-            nonFieldMessages.length > 0 ? nonFieldMessages.join(' ') : 'Could not create mission.'
-          );
+        const { fieldErrors: parsedFieldErrors, bannerMessage } = parseValidationError(err);
+        setFieldErrors(parsedFieldErrors);
+        if (bannerMessage) {
+          setLocalError(bannerMessage);
         }
       } else {
         setLocalError('Could not create mission.');
