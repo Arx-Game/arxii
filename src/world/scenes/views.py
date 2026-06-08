@@ -52,6 +52,11 @@ from world.societies.renown_serializers import (
     build_renown_card_payload,
     build_renown_payload,
 )
+from world.societies.spread_serializers import (
+    SpreadableDeedSerializer,
+    SpreadInputSerializer,
+    SpreadResultSerializer,
+)
 
 
 class SceneViewSet(viewsets.ModelViewSet):
@@ -297,6 +302,79 @@ class PersonaViewSet(viewsets.ModelViewSet):
         payload = build_renown_payload(persona)
         serializer = RenownSerializer(payload)
         return Response(serializer.data)
+
+    @extend_schema(responses=SpreadableDeedSerializer(many=True), tags=["personas"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="spreadable-deeds")
+    def spreadable_deeds(self, request: Request, pk: int | None = None) -> Response:
+        """#745 — Deeds this persona may spread (societies_aware ∩ memberships)."""
+        from world.societies.spread_services import get_spreadable_deeds  # noqa: PLC0415
+
+        persona = self.get_object()
+        deeds = get_spreadable_deeds(persona)
+        return Response(SpreadableDeedSerializer(deeds, many=True).data)
+
+    @extend_schema(
+        request=SpreadInputSerializer, responses=SpreadResultSerializer, tags=["personas"]
+    )
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def spread(self, request: Request, pk: int | None = None) -> Response:
+        """#745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona."""
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+        from world.scenes.action_services import create_and_resolve_area_action  # noqa: PLC0415
+        from world.scenes.models import Scene  # noqa: PLC0415
+        from world.societies.models import LegendEntry  # noqa: PLC0415
+        from world.societies.spread_services import (  # noqa: PLC0415
+            SPREAD_TALE_ACTION_KEY,
+            get_or_create_spread_a_tale_template,
+            get_spreadable_deeds,
+        )
+
+        persona = self.get_object()
+        owns_persona = Persona.objects.filter(
+            pk=persona.pk,
+            character_sheet__roster_entry__tenures__player_data__account=request.user,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+        ).exists()
+        if not owns_persona:
+            return Response(
+                {"detail": "You do not control this persona."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        input_serializer = SpreadInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        scene = get_object_or_404(Scene, pk=data["scene"])
+        deed = get_object_or_404(LegendEntry, pk=data["deed"])
+        if not get_spreadable_deeds(persona).filter(pk=deed.pk).exists():
+            return Response(
+                {"detail": "This persona cannot spread that deed."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        template = get_or_create_spread_a_tale_template()
+        try:
+            result = create_and_resolve_area_action(
+                scene=scene,
+                initiator_persona=persona,
+                action_template=template,
+                action_key=SPREAD_TALE_ACTION_KEY,
+                pose_text=data["pose_text"],
+                effort_level=data["effort_level"],
+                spread_deed_target=deed,
+            )
+        except ValidationError as exc:
+            return Response({"detail": exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+        main = result.action_resolution.main_result
+        outcome = main.check_result.outcome_name if main and main.check_result else "Unknown"
+        band = room_activity_band(scene.location).label
+        payload = {"resolved": True, "outcome": outcome, "band": band}
+        return Response(SpreadResultSerializer(payload).data)
 
     @extend_schema(
         responses=RenownCardSerializer,

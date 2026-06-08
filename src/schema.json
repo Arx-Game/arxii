@@ -14239,6 +14239,91 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenownCard'
           description: ''
+  /api/personas/{id}/spread/:
+    post:
+      operationId: personas_spread_create
+      description: '#745 — Spread a tale: resolve an area ''Spread a Tale'' action
+        for this persona.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpreadInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpreadResult'
+          description: ''
+  /api/personas/{id}/spreadable-deeds/:
+    get:
+      operationId: personas_spreadable_deeds_list
+      description: '#745 — Deeds this persona may spread (societies_aware ∩ memberships).'
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: integer
+      - in: query
+        name: character_sheet
+        schema:
+          type: number
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: persona_type
+        schema:
+          type: string
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - personas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSpreadableDeedList'
+          description: ''
   /api/places/:
     get:
       operationId: places_list
@@ -23333,6 +23418,20 @@ components:
       - has_power_scaling
       - id
       - name
+    EffortLevelEnum:
+      enum:
+      - very_low
+      - low
+      - medium
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `very_low` - Very Low Effort
+        * `low` - Low Effort
+        * `medium` - Medium Effort
+        * `high` - High Effort
+        * `extreme` - Extreme Effort
     EncounterDetail:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -30074,6 +30173,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SocietySearch'
+    PaginatedSpreadableDeedList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpreadableDeed'
     PaginatedStoryFeedbackList:
       type: object
       required:
@@ -34653,7 +34775,8 @@ components:
           readOnly: true
         target_persona:
           type: integer
-          description: The persona being targeted
+          nullable: true
+          description: The persona being targeted. Null for area actions (to the room).
         target_name:
           type: string
           readOnly: true
@@ -34721,7 +34844,6 @@ components:
       - scene
       - status
       - target_name
-      - target_persona
     SceneActionRequestRequest:
       type: object
       properties:
@@ -34733,7 +34855,8 @@ components:
           description: The persona performing the action
         target_persona:
           type: integer
-          description: The persona being targeted
+          nullable: true
+          description: The persona being targeted. Null for area actions (to the room).
         action_key:
           type: string
           description: Key identifying the action type (e.g., 'intimidate', 'persuade')
@@ -34766,7 +34889,6 @@ components:
       required:
       - initiator_persona
       - scene
-      - target_persona
     SceneActionStatusEnum:
       enum:
       - pending
@@ -35592,6 +35714,64 @@ components:
           description: Parent species for subspecies (e.g., Rex'alfar.parent = Elven)
       required:
       - name
+    SpreadInputRequest:
+      type: object
+      description: 'POST body to spread a tale: which deed, in which scene, how told.'
+      properties:
+        scene:
+          type: integer
+        deed:
+          type: integer
+        pose_text:
+          type: string
+          default: ''
+          maxLength: 2000
+        effort_level:
+          allOf:
+          - $ref: '#/components/schemas/EffortLevelEnum'
+          default: medium
+      required:
+      - deed
+      - scene
+    SpreadResult:
+      type: object
+      description: Immediate ack of a spread (qualitative only — no point deltas).
+      properties:
+        resolved:
+          type: boolean
+          readOnly: true
+        outcome:
+          type: string
+          readOnly: true
+        band:
+          type: string
+          readOnly: true
+      required:
+      - band
+      - outcome
+      - resolved
+    SpreadableDeed:
+      type: object
+      description: A deed the persona may spread (deed picker row).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        base_value:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - base_value
+      - created_at
+      - id
+      - title
     StageEnum:
       enum:
       - 1

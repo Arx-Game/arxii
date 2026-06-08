@@ -8466,6 +8466,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/{id}/spread/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona. */
+    post: operations['personas_spread_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/{id}/spreadable-deeds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description #745 — Deeds this persona may spread (societies_aware ∩ memberships). */
+    get: operations['personas_spreadable_deeds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/places/': {
     parameters: {
       query?: never;
@@ -13066,6 +13100,15 @@ export interface components {
       /** @description Whether this effect type uses power scaling. */
       readonly has_power_scaling: boolean;
     };
+    /**
+     * @description * `very_low` - Very Low Effort
+     *     * `low` - Low Effort
+     *     * `medium` - Medium Effort
+     *     * `high` - High Effort
+     *     * `extreme` - Extreme Effort
+     * @enum {string}
+     */
+    EffortLevelEnum: 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetail: {
       readonly id: number;
@@ -16621,6 +16664,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SocietySearch'][];
     };
+    PaginatedSpreadableDeedList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SpreadableDeed'][];
+    };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
       count: number;
@@ -19104,8 +19162,8 @@ export interface components {
       /** @description The persona performing the action */
       initiator_persona: number;
       readonly initiator_name: string;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted. Null for area actions (to the room). */
+      target_persona?: number | null;
       readonly target_name: string;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
@@ -19143,8 +19201,8 @@ export interface components {
       scene: number;
       /** @description The persona performing the action */
       initiator_persona: number;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted. Null for area actions (to the room). */
+      target_persona?: number | null;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
       /** @description Data-driven action template if applicable */
@@ -19563,6 +19621,29 @@ export interface components {
       description?: string;
       /** @description Parent species for subspecies (e.g., Rex'alfar.parent = Elven) */
       parent?: number | null;
+    };
+    /** @description POST body to spread a tale: which deed, in which scene, how told. */
+    SpreadInputRequest: {
+      scene: number;
+      deed: number;
+      /** @default  */
+      pose_text: string;
+      /** @default medium */
+      effort_level: components['schemas']['EffortLevelEnum'];
+    };
+    /** @description Immediate ack of a spread (qualitative only — no point deltas). */
+    SpreadResult: {
+      readonly resolved: boolean;
+      readonly outcome: string;
+      readonly band: string;
+    };
+    /** @description A deed the persona may spread (deed picker row). */
+    SpreadableDeed: {
+      readonly id: number;
+      readonly title: string;
+      readonly base_value: number;
+      /** Format: date-time */
+      readonly created_at: string;
     };
     /**
      * @description * `1` - Prospect
@@ -33098,6 +33179,65 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RenownCard'];
+        };
+      };
+    };
+  };
+  personas_spread_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpreadInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpreadResult'];
+        };
+      };
+    };
+  };
+  personas_spreadable_deeds_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona_type?: string;
+        scene?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSpreadableDeedList'];
         };
       };
     };

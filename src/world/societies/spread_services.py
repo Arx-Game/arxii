@@ -31,6 +31,37 @@ def compute_spread_value(*, base_value: int, success_level: int, multiplier: flo
     return round(base_value * payoff * multiplier)
 
 
+def get_or_create_spread_a_tale_template():
+    """Ensure the 'Spread a Tale' ActionTemplate exists, returning it.
+
+    Idempotent. Uses the existing 'Performance' CheckType as the **placeholder**
+    approach (the real bard/influence approach catalog is a flagged skill-audit
+    decision — see #745 §9). Area action; charges 20 AP + light social fatigue.
+    """
+    from actions.constants import ActionTargetType, Pipeline  # noqa: PLC0415
+    from actions.models.action_templates import ActionTemplate  # noqa: PLC0415
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+
+    category, _ = CheckCategory.objects.get_or_create(name="Social")
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Performance", defaults={"category": category}
+    )
+    template, _ = ActionTemplate.objects.get_or_create(
+        name="Spread a Tale",
+        defaults={
+            "check_type": check_type,
+            "target_type": ActionTargetType.AREA,
+            "category": "social",
+            "pipeline": Pipeline.SINGLE,
+            "ap_cost": 20,
+            "social_fatigue_cost": 3,
+            "accepts_pose_text": True,
+            "icon": "megaphone",
+        },
+    )
+    return template
+
+
 def get_spreadable_deeds(persona) -> QuerySet[LegendEntry]:
     """Active deeds whose ``societies_aware`` intersects the persona's societies.
 
@@ -104,7 +135,7 @@ def _notify_spread_subject(deed) -> None:
     send_narrative_message(
         recipients=[sheet],
         body="✦ A tale of your deed spreads — your legend grows.",
-        category=NarrativeCategory.RENOWN.value,
+        category=NarrativeCategory.RENOWN,
     )
 
 
