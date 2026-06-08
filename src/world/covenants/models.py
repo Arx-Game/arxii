@@ -419,7 +419,7 @@ class CovenantRite(SharedMemoryModel):
         help_text="Restrict to this covenant type; blank = any.",
     )
     min_covenant_level = models.PositiveSmallIntegerField(default=1)
-    min_engaged_present = models.PositiveSmallIntegerField(default=2)
+    min_members_present = models.PositiveSmallIntegerField(default=2)
     granted_condition = models.ForeignKey(
         "conditions.ConditionTemplate",
         on_delete=models.PROTECT,
@@ -435,7 +435,7 @@ class CovenantRite(SharedMemoryModel):
     )
 
     def severity_for(self, *, present_count: int) -> int:
-        extras = max(0, present_count - self.min_engaged_present)
+        extras = max(0, present_count - self.min_members_present)
         value = self.base_severity + self.severity_per_extra_participant * extras
         return min(value, self.max_severity) if self.max_severity is not None else value
 

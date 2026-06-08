@@ -12700,7 +12700,7 @@ export interface components {
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
       readonly covenant_type_display: string;
       readonly min_covenant_level: number;
-      readonly min_engaged_present: number;
+      readonly min_members_present: number;
       readonly granted_condition: number;
       readonly base_severity: number;
       readonly severity_per_extra_participant: number;

@@ -772,7 +772,7 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     1. Covenant ref present on the session.
     2. Covenant level ≥ rite.min_covenant_level.
     3. Active CombatEncounter present in the initiator's room.
-    4. At least rite.min_engaged_present engaged members in the room.
+    4. At least rite.min_members_present engaged members in the room.
 
     On success, creates a CovenantRiteInstance, sets participants, applies the
     scaled condition buff to each via bulk_apply_conditions, and emits a
@@ -815,7 +815,7 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
 
     # 4c. Gate: enough engaged members present.
     beneficiaries = engaged_members_present(covenant=covenant, room=room)
-    if len(beneficiaries) < rite.min_engaged_present:
+    if len(beneficiaries) < rite.min_members_present:
         raise NotEnoughEngagedPresentError
 
     # 5. Compute scaled severity.

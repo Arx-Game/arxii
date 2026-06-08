@@ -49,7 +49,7 @@ def _make_rite(*, covenant, ritual, condition_template) -> CovenantRite:
         ritual=ritual,
         covenant_type=covenant.covenant_type,
         min_covenant_level=1,
-        min_engaged_present=2,
+        min_members_present=2,
         granted_condition=condition_template,
         base_severity=2,
         severity_per_extra_participant=1,
@@ -240,7 +240,7 @@ class PerformCovenantRiteHappyPathTests(_RiteSceneTestCase):
     def test_condition_severity_scaled_by_present_count(self) -> None:
         """Condition severity matches rite.severity_for(present_count=3).
 
-        With base_severity=2, severity_per_extra=1, min_engaged_present=2:
+        With base_severity=2, severity_per_extra=1, min_members_present=2:
         severity = 2 + (3 - 2) * 1 = 3.
         """
         perform_covenant_rite(session=self.session)
@@ -304,7 +304,7 @@ class PerformCovenantRiteGateTests(_RiteSceneTestCase):
         )
 
     def test_not_enough_engaged_present_raises_and_rolls_back(self) -> None:
-        """Fewer engaged present than min_engaged_present → NotEnoughEngagedPresentError."""
+        """Fewer engaged present than min_members_present → NotEnoughEngagedPresentError."""
         from world.covenants.exceptions import NotEnoughEngagedPresentError
 
         # Remove mem_b from the room so only 1 engaged member is present.
@@ -345,7 +345,7 @@ class FoldArrivalIntoActiveRitesTests(_RiteSceneTestCase):
     """Tests for the late-arrival fold-in service function.
 
     Rite params: base_severity=2, severity_per_extra_participant=1,
-    min_engaged_present=2 → severity_for(2)=2, severity_for(3)=3.
+    min_members_present=2 → severity_for(2)=2, severity_for(3)=3.
     """
 
     _room_key = "FoldRoom"

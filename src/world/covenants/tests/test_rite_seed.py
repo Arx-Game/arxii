@@ -42,10 +42,10 @@ class CovenantRiteFactoryTests(TestCase):
         )
 
     def test_gate_fields(self) -> None:
-        """min_covenant_level, min_engaged_present, base_severity defaults."""
+        """min_covenant_level, min_members_present, base_severity defaults."""
         rite = CovenantRiteFactory()
         self.assertEqual(rite.min_covenant_level, 2)
-        self.assertEqual(rite.min_engaged_present, 2)
+        self.assertEqual(rite.min_members_present, 2)
         self.assertEqual(rite.base_severity, 2)
         self.assertEqual(rite.severity_per_extra_participant, 1)
         self.assertIsNone(rite.max_severity)

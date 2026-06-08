@@ -323,7 +323,7 @@ class CovenantRiteSeverityForTests(TestCase):
         from world.covenants.models import CovenantRite
 
         return CovenantRite(
-            min_engaged_present=2,
+            min_members_present=2,
             base_severity=3,
             severity_per_extra_participant=2,
             max_severity=10,
@@ -349,7 +349,7 @@ class CovenantRiteSeverityForTests(TestCase):
         from world.covenants.models import CovenantRite
 
         rite = CovenantRite(
-            min_engaged_present=2,
+            min_members_present=2,
             base_severity=1,
             severity_per_extra_participant=5,
             max_severity=None,

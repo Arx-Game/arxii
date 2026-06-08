@@ -32,7 +32,7 @@ class CovenantRiteAdmin(admin.ModelAdmin):
         "ritual",
         "covenant_type",
         "min_covenant_level",
-        "min_engaged_present",
+        "min_members_present",
         "granted_condition",
         "base_severity",
         "severity_per_extra_participant",

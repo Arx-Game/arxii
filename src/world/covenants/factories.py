@@ -118,7 +118,7 @@ class CovenantRiteFactory(factory_django.DjangoModelFactory):
     duration so the buff expires naturally at encounter end.
 
     Gate defaults mirror the reference spec:
-        min_covenant_level=2, min_engaged_present=2, base_severity=2,
+        min_covenant_level=2, min_members_present=2, base_severity=2,
         severity_per_extra_participant=1, max_severity=None.
     """
 
@@ -131,7 +131,7 @@ class CovenantRiteFactory(factory_django.DjangoModelFactory):
     )
     covenant_type = CovenantType.DURANCE
     min_covenant_level = 2
-    min_engaged_present = 2
+    min_members_present = 2
     base_severity = 2
     severity_per_extra_participant = 1
     max_severity = None
@@ -181,7 +181,7 @@ def wire_covenant_rite_content() -> CovenantRite:
             "granted_condition": condition,
             "covenant_type": CovenantType.DURANCE,
             "min_covenant_level": 2,
-            "min_engaged_present": 2,
+            "min_members_present": 2,
             "base_severity": 2,
             "severity_per_extra_participant": 1,
             "max_severity": None,
