@@ -9755,6 +9755,23 @@ export interface paths {
     patch: operations['scenes_partial_update'];
     trace?: never;
   };
+  '/api/scenes/{id}/activity/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description #745 — The scene room's current activity band (qualitative, time-aware). */
+    get: operations['scenes_activity_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/{id}/finish/': {
     parameters: {
       query?: never;
@@ -19385,6 +19402,10 @@ export interface components {
      * @enum {string}
      */
     SceneActionStatusEnum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
+    /** @description A scene room's current activity band (shown before a teller commits). */
+    SceneActivity: {
+      readonly band: string;
+    };
     /** @description Full scene representation with personas */
     SceneDetail: {
       readonly id: number;
@@ -35533,6 +35554,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_activity_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActivity'];
         };
       };
     };

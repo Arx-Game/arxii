@@ -127,3 +127,21 @@ class SpreadEndpointTest(APITestCase):
         url = reverse("persona-deed-stories", args=[self.persona.pk])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_scene_activity_returns_a_band(self) -> None:
+        url = reverse("scene-activity", args=[self.scene.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertIn("band", resp.data)
+
+    def test_scene_activity_private_scene_blocks_non_participant(self) -> None:
+        from world.scenes.constants import ScenePrivacyMode
+
+        private_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PRIVATE)
+        # self.account is not a participant of private_scene.
+        url = reverse("scene-activity", args=[private_scene.pk])
+        resp = self.client.get(url)
+        self.assertIn(
+            resp.status_code,
+            (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND),
+        )

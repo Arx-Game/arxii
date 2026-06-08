@@ -57,3 +57,9 @@ class SaveDeedStoryInputSerializer(serializers.Serializer):
 
     deed = serializers.IntegerField()
     text = serializers.CharField(max_length=4000)
+
+
+class SceneActivitySerializer(serializers.Serializer):
+    """A scene room's current activity band (shown before a teller commits)."""
+
+    band = serializers.CharField(read_only=True)

@@ -16714,6 +16714,29 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/scenes/{id}/activity/:
+    get:
+      operationId: scenes_activity_retrieve
+      description: '#745 — The scene room''s current activity band (qualitative, time-aware).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActivity'
+          description: ''
   /api/scenes/{id}/finish/:
     post:
       operationId: scenes_finish_create
@@ -35181,6 +35204,15 @@ components:
         * `denied` - Denied
         * `resolved` - Resolved
         * `expired` - Expired
+    SceneActivity:
+      type: object
+      description: A scene room's current activity band (shown before a teller commits).
+      properties:
+        band:
+          type: string
+          readOnly: true
+      required:
+      - band
     SceneDetail:
       type: object
       description: Full scene representation with personas

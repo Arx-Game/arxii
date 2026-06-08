@@ -64,6 +64,26 @@ export function useSpreadSpecializationsQuery(enabled = true) {
   });
 }
 
+export interface SceneActivity {
+  band: string;
+}
+
+async function fetchSceneActivity(sceneId: number): Promise<SceneActivity> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/activity/`);
+  if (!res.ok) {
+    throw new Error('Failed to read the room.');
+  }
+  return res.json() as Promise<SceneActivity>;
+}
+
+export function useSceneActivityQuery(sceneId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['scene-activity', sceneId],
+    queryFn: () => fetchSceneActivity(sceneId as number),
+    enabled: sceneId !== null && enabled,
+  });
+}
+
 async function fetchSpreadableDeeds(personaId: number): Promise<SpreadableDeed[]> {
   const res = await apiFetch(`/api/personas/${personaId}/spreadable-deeds/`);
   if (!res.ok) {

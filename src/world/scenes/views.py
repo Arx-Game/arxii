@@ -55,6 +55,7 @@ from world.societies.renown_serializers import (
 from world.societies.spread_serializers import (
     DeedStorySerializer,
     SaveDeedStoryInputSerializer,
+    SceneActivitySerializer,
     SpreadableDeedSerializer,
     SpreadInputSerializer,
     SpreadResultSerializer,
@@ -190,9 +191,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         elif self.action in ["update", "partial_update", "destroy"]:
             # Only scene owners or staff can modify/delete scenes
             permission_classes = [IsSceneOwnerOrStaff]
-        elif self.action == "retrieve":
-            # For retrieving scenes, use both authentication and
-            # private scene access checks
+        elif self.action in ["retrieve", "activity"]:
+            # Retrieving a scene or reading its activity band must respect
+            # private/ephemeral-scene access (participants/staff only).
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight
@@ -262,6 +263,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         broadcast_scene_message(scene, SceneAction.END)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
+
+    @extend_schema(responses=SceneActivitySerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def activity(self, request: Request, pk: int | None = None) -> Response:
+        """#745 — The scene room's current activity band (qualitative, time-aware)."""
+        from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+
+        scene = self.get_object()
+        band = room_activity_band(scene.location)
+        return Response(SceneActivitySerializer({"band": band.label}).data)
 
 
 class PersonaViewSet(viewsets.ModelViewSet):
