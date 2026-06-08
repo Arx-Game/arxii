@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django.db.models import QuerySet
 
+from world.scenes.action_resolvers import register_resolver
 from world.societies.models import LegendEntry, OrganizationMembership
 
 SPREAD_TALE_ACTION_KEY = "spread_a_tale"
@@ -45,3 +46,66 @@ def get_spreadable_deeds(persona) -> QuerySet[LegendEntry]:
         .distinct()
         .order_by("-created_at")
     )
+
+
+def _resolve_spread_tale(action_request, result) -> None:
+    """Post-resolution side-effect for the ``spread_a_tale`` scene action.
+
+    On a successful check, adds traffic-scaled legend to the deed (clamped to
+    its cap by ``spread_deed``), bumps the subject's fame, and notifies them.
+    No-op on failure, missing deed, or no check outcome.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+    from world.societies.renown import apply_spread_fame_bump  # noqa: PLC0415
+    from world.societies.services import spread_deed  # noqa: PLC0415
+
+    deed = action_request.spread_deed_target
+    main = result.action_resolution.main_result
+    if deed is None or main is None or main.check_result is None:
+        return
+    success_level = main.check_result.success_level
+    if success_level <= 0:
+        return
+
+    room = action_request.scene.location if action_request.scene else None
+    band = room_activity_band(room)
+    value = compute_spread_value(
+        base_value=deed.base_value, success_level=success_level, multiplier=band.multiplier
+    )
+    if value <= 0:
+        return
+
+    spread_deed(
+        deed=deed,
+        spreader_persona=action_request.initiator_persona,
+        value_added=value,
+        description=action_request.pose_text,
+        method=action_request.action_key,
+        audience_factor=Decimal(str(band.multiplier)),
+        scene=action_request.scene,
+    )
+    apply_spread_fame_bump(
+        deed, npc_audience=int(band.multiplier * 10), success_level=success_level
+    )
+    _notify_spread_subject(deed)
+
+
+def _notify_spread_subject(deed) -> None:
+    """Tell the deed's player-owned subject that their legend is spreading."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.societies.notifications import _has_active_player  # noqa: PLC0415
+
+    sheet = deed.persona.character_sheet
+    if sheet is None or not _has_active_player(sheet):
+        return
+    send_narrative_message(
+        recipients=[sheet],
+        body="✦ A tale of your deed spreads — your legend grows.",
+        category=NarrativeCategory.RENOWN.value,
+    )
+
+
+register_resolver(SPREAD_TALE_ACTION_KEY, _resolve_spread_tale)

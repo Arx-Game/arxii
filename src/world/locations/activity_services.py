@@ -8,6 +8,10 @@ word ("Bustling"); the multiplier feeds the legend-spread math under the hood.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from evennia.objects.objects import DefaultObject
 
 # (TRAFFIC threshold, band label, spread multiplier), ascending by threshold.
 # The highest threshold <= the value wins. Tunable.
@@ -39,3 +43,19 @@ def band_for_traffic(traffic: int) -> ActivityBand:
         if traffic >= threshold:
             chosen = (threshold, label, multiplier)
     return ActivityBand(label=chosen[1], multiplier=chosen[2])
+
+
+def room_activity_band(room: DefaultObject | None) -> ActivityBand:
+    """Activity band for an Evennia room object (e.g. ``scene.location``).
+
+    Reads the room's cascade-resolved TRAFFIC stat. Rooms with no profile (or a
+    None room) fall through to the TRAFFIC default (Busy baseline).
+    """
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import effective_stats_for_rooms  # noqa: PLC0415
+
+    if room is None:
+        return band_for_traffic(50)
+    stats = effective_stats_for_rooms([room], [StatKey.TRAFFIC])
+    traffic = stats.get(room.pk, {}).get(StatKey.TRAFFIC, 50)
+    return band_for_traffic(traffic)
