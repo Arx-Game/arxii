@@ -17,6 +17,7 @@ from django.utils import timezone
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
@@ -27,8 +28,6 @@ if TYPE_CHECKING:
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Persona
-
-    from typeclasses.characters import Character
 
     PerformCheckFn = Callable[..., CheckResult]
 

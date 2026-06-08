@@ -106,9 +106,7 @@ class DealDamageHandlerTests(TestCase):
 
     def test_returns_applied_true_with_description(self) -> None:
         """Successful damage returns applied=True with a descriptive message."""
-        with patch(
-            "world.mechanics.effect_handlers.process_damage_consequences", autospec=True
-        ):
+        with patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True):
             context = ResolutionContext(character=self.character)
             result = apply_effect(self.effect, context)
         assert result.applied is True

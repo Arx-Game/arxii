@@ -231,7 +231,9 @@ export function useDeleteBulletinPost() {
     mutationFn: ({ id, tableId: _tableId }: { id: number; tableId: number }) =>
       api.deleteBulletinPost(id),
     onSuccess: (_, { tableId }) => {
-      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) }).catch(
+        () => {}
+      );
     },
   });
 }

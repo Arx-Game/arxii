@@ -59,7 +59,9 @@ export function useCreateOutfit() {
   return useMutation({
     mutationFn: (payload: CreateOutfitPayload) => createOutfit(payload),
     onSuccess: (_outfit, variables) => {
-      qc.invalidateQueries({ queryKey: outfitKeys.list(variables.character_sheet) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: outfitKeys.list(variables.character_sheet) }).catch(
+        () => {}
+      );
     },
   });
 }
@@ -81,7 +83,9 @@ export function useDeleteOutfit() {
   return useMutation({
     mutationFn: ({ id }: { id: number; characterSheetId: number }) => deleteOutfit(id),
     onSuccess: (_void, variables) => {
-      qc.invalidateQueries({ queryKey: outfitKeys.list(variables.characterSheetId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: outfitKeys.list(variables.characterSheetId) }).catch(
+        () => {}
+      );
       qc.removeQueries({ queryKey: outfitKeys.detail(variables.id) });
     },
   });

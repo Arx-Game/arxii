@@ -31,8 +31,7 @@ function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string 
   if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
     return `whisper ${composerMode.targets[0]}=${trimmed}`;
   }
-  const targetStr =
-    composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
+  const targetStr = composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
   return `${composerMode.command}${targetStr}${trimmed}`;
 }
 
