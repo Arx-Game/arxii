@@ -180,3 +180,36 @@ export interface Place {
   name: string;
   description: string;
 }
+
+// ---------------------------------------------------------------------------
+// Standalone technique cast types
+// ---------------------------------------------------------------------------
+
+/**
+ * A technique the persona can cast standalone.
+ * Mirrors the CastableTechniqueSerializer shape from the backend.
+ */
+export interface CastableTechnique {
+  id: number;
+  name: string;
+  anima_cost: number;
+  tier: number;
+  intensity: number;
+  control: number;
+  /** True if casting this against another PC will seed/feed a combat encounter. */
+  hostile: boolean;
+}
+
+export interface CastRequestBody {
+  scene: number;
+  initiator_persona: number;
+  technique_id: number;
+  target_persona?: number | null;
+  strain_commitment?: number;
+}
+
+export interface CastResponse {
+  /** The created SceneActionRequest id. */
+  id: number;
+  status: string;
+}

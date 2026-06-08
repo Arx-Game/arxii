@@ -142,6 +142,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-requests/cast/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Submit a standalone technique cast.
+     *
+     *     Routes per the consent/combat/immediate matrix:
+     *     - self/room/no-target → resolves immediately (201 with result + power_ledger)
+     *     - benign at another PC → PENDING consent request (201, no result yet)
+     *     - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
+     */
+    post: operations['action_requests_cast_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/castable-techniques/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List techniques the given persona can cast standalone.
+     *
+     *     Requires ?initiator_persona=<id> query param. Returns only techniques
+     *     with an action_template (castable standalone) known by that character.
+     */
+    get: operations['action_requests_castable_techniques_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -19104,8 +19150,8 @@ export interface components {
       /** @description The persona performing the action */
       initiator_persona: number;
       readonly initiator_name: string;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted (null for standalone technique casts) */
+      target_persona?: number | null;
       readonly target_name: string;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
@@ -19143,8 +19189,8 @@ export interface components {
       scene: number;
       /** @description The persona performing the action */
       initiator_persona: number;
-      /** @description The persona being targeted */
-      target_persona: number;
+      /** @description The persona being targeted (null for standalone technique casts) */
+      target_persona?: number | null;
       /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
       action_key?: string;
       /** @description Data-driven action template if applicable */
@@ -20973,6 +21019,48 @@ export interface operations {
         'application/json': components['schemas']['SceneActionRequestRequest'];
       };
     };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_cast_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneActionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_castable_techniques_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

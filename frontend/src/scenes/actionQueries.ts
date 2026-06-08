@@ -1,9 +1,13 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   PlayerActionsResponse,
   ActionRequest,
   ActionRequestResponse,
   Place,
+  CastableTechnique,
+  CastRequestBody,
+  CastResponse,
 } from './actionTypes';
 
 /**
@@ -97,4 +101,69 @@ export async function joinPlace(_sceneId: string, placeId: number): Promise<void
 export async function leavePlace(_sceneId: string, placeId: number): Promise<void> {
   const res = await apiFetch(`/api/places/${placeId}/leave/`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to leave place');
+}
+
+/**
+ * POST /api/action-requests/cast/ — submit a standalone technique cast.
+ *
+ * Routes per the consent/combat/immediate matrix:
+ *   - self/room/no-target → resolves immediately (result in response)
+ *   - benign at another PC → PENDING consent request (no result yet)
+ *   - hostile at another PC → seeds/feeds a combat encounter
+ */
+export async function castTechnique(
+  sceneId: string,
+  params: {
+    initiator_persona: number;
+    technique_id: number;
+    target_persona?: number | null;
+    strain_commitment?: number;
+  }
+): Promise<CastResponse> {
+  const body: CastRequestBody = {
+    scene: Number(sceneId),
+    initiator_persona: params.initiator_persona,
+    technique_id: params.technique_id,
+  };
+  if (params.target_persona !== undefined) {
+    body.target_persona = params.target_persona;
+  }
+  if (params.strain_commitment !== undefined) {
+    body.strain_commitment = params.strain_commitment;
+  }
+  const res = await apiFetch('/api/action-requests/cast/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to cast technique');
+  return res.json();
+}
+
+/**
+ * Fetch castable techniques for a given initiator persona.
+ *
+ * Calls GET /api/action-requests/castable-techniques/?initiator_persona=<id>
+ * Returns only techniques with an action_template (castable standalone)
+ * known by that character.
+ */
+export async function fetchCastableTechniques(
+  initiatorPersonaId: number
+): Promise<CastableTechnique[]> {
+  const res = await apiFetch(
+    `/api/action-requests/castable-techniques/?initiator_persona=${initiatorPersonaId}`
+  );
+  if (!res.ok) throw new Error('Failed to load castable techniques');
+  return res.json() as Promise<CastableTechnique[]>;
+}
+
+/**
+ * TanStack Query hook for castable techniques.
+ * Mirrors the pattern used by fetchAvailableActions.
+ */
+export function useCastableTechniques(initiatorPersonaId: number | null) {
+  return useQuery({
+    queryKey: ['castable-techniques', initiatorPersonaId],
+    queryFn: () => fetchCastableTechniques(initiatorPersonaId!),
+    enabled: initiatorPersonaId !== null,
+  });
 }

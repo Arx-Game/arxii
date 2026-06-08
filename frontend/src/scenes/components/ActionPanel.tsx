@@ -1,13 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Swords, Zap, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Swords, Zap, AlertTriangle, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import {
+  fetchAvailableActions,
+  createActionRequest,
+  castTechnique,
+  useCastableTechniques,
+} from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
-import type { PlayerAction, AvailableEnhancement } from '../actionTypes';
+import type { PlayerAction, AvailableEnhancement, CastableTechnique } from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
@@ -35,15 +40,24 @@ export function ActionPanel({ sceneId }: Props) {
   const [targetingAction, setTargetingAction] = useState<PlayerAction | null>(null);
   // Per-action strain commitment — keyed by the action's stable display key.
   const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
+
+  // Cast section state
+  const [castOpen, setCastOpen] = useState(false);
+  const [selectedTechnique, setSelectedTechnique] = useState<CastableTechnique | null>(null);
+  const [castTargetPersonaId, setCastTargetPersonaId] = useState<number | null>(null);
+  const [castPickingTarget, setCastPickingTarget] = useState(false);
+
   const queryClient = useQueryClient();
 
-  // Resolve the active character name to its numeric ObjectDB pk.
+  // Resolve the active character name to its numeric ObjectDB pk and primary persona.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+  const activeEntry = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName) ?? null,
     [myRosterEntries, activeCharacterName]
   );
+  const characterId = activeEntry?.character_id ?? null;
+  const initiatorPersonaId = activeEntry?.primary_persona_id ?? null;
 
   const { data, isLoading } = useQuery({
     queryKey: ['available-actions', characterId],
@@ -56,6 +70,32 @@ export function ActionPanel({ sceneId }: Props) {
     queryKey: sceneKeys.detail(sceneId),
     queryFn: () => fetchScene(sceneId),
     enabled: open,
+  });
+
+  // Castable techniques for the standalone cast flow.
+  const { data: castableTechniques = [], isLoading: isCastLoading } = useCastableTechniques(
+    open ? initiatorPersonaId : null
+  );
+
+  const performCast = useMutation({
+    mutationFn: (params: {
+      technique_id: number;
+      target_persona?: number | null;
+      strain_commitment?: number;
+    }) =>
+      castTechnique(sceneId, {
+        initiator_persona: initiatorPersonaId!,
+        ...params,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
+      setOpen(false);
+      setCastOpen(false);
+      setSelectedTechnique(null);
+      setCastTargetPersonaId(null);
+      setCastPickingTarget(false);
+    },
   });
 
   const performAction = useMutation({
@@ -162,6 +202,32 @@ export function ActionPanel({ sceneId }: Props) {
 
   function handleTargetCancel() {
     setTargetingAction(null);
+  }
+
+  // ------------------------------------------------------------------------
+  // Cast flow handlers
+  // ------------------------------------------------------------------------
+
+  function handleTechniqueSelect(technique: CastableTechnique) {
+    setSelectedTechnique(technique);
+    setCastTargetPersonaId(null);
+  }
+
+  function handleCastCommit() {
+    if (!selectedTechnique || initiatorPersonaId === null) return;
+    performCast.mutate({
+      technique_id: selectedTechnique.id,
+      target_persona: castTargetPersonaId ?? null,
+    });
+  }
+
+  function handleCastTargetConfirm(ids: number[]) {
+    setCastTargetPersonaId(ids[0] ?? null);
+    setCastPickingTarget(false);
+  }
+
+  function handleCastTargetCancel() {
+    setCastPickingTarget(false);
   }
 
   // ------------------------------------------------------------------------
@@ -289,6 +355,133 @@ export function ActionPanel({ sceneId }: Props) {
                 onCancel={handleWarningCancel}
               />
             )}
+
+            {/* ----------------------------------------------------------------
+                Standalone Cast section
+            ---------------------------------------------------------------- */}
+            <div className="border-t border-muted pt-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-sm font-semibold"
+                onClick={() => {
+                  setCastOpen((prev) => !prev);
+                  if (castOpen) {
+                    setSelectedTechnique(null);
+                    setCastTargetPersonaId(null);
+                    setCastPickingTarget(false);
+                  }
+                }}
+                aria-expanded={castOpen}
+                aria-controls="cast-section"
+              >
+                <span className="flex items-center gap-1">
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Cast
+                </span>
+                {castOpen ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+              </button>
+
+              {castOpen && (
+                <div id="cast-section" className="mt-2 space-y-2">
+                  {isCastLoading && (
+                    <p className="text-xs text-muted-foreground">Loading techniques...</p>
+                  )}
+
+                  {!isCastLoading && castableTechniques.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No castable techniques.</p>
+                  )}
+
+                  {!isCastLoading && castableTechniques.length > 0 && (
+                    <div className="space-y-1">
+                      {castableTechniques.map((tech) => {
+                        const isSelected = selectedTechnique?.id === tech.id;
+                        return (
+                          <button
+                            key={tech.id}
+                            type="button"
+                            onClick={() => handleTechniqueSelect(tech)}
+                            className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 ${
+                              isSelected ? 'bg-muted font-semibold ring-1 ring-primary/40' : ''
+                            }`}
+                          >
+                            <span className="flex items-center gap-1">
+                              {tech.hostile && (
+                                <AlertTriangle
+                                  aria-label="Hostile — may trigger combat"
+                                  className="h-3 w-3 shrink-0 text-amber-400"
+                                />
+                              )}
+                              {tech.name}
+                            </span>
+                            <span className="ml-2 shrink-0 text-muted-foreground">
+                              {tech.anima_cost} anima
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {selectedTechnique && (
+                    <div className="space-y-2 rounded border border-muted p-2">
+                      <p className="text-xs font-medium">{selectedTechnique.name}</p>
+
+                      {selectedTechnique.hostile && (
+                        <p className="flex items-center gap-1 text-xs text-amber-500">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          Hostile — casting at another character may start combat.
+                        </p>
+                      )}
+
+                      {/* Target selector */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">Target:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCastTargetPersonaId(null);
+                          }}
+                          className={`rounded px-2 py-0.5 text-xs ${
+                            castTargetPersonaId === null && !castPickingTarget
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          Self / Room
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCastPickingTarget(true)}
+                          className={`rounded px-2 py-0.5 text-xs ${
+                            castTargetPersonaId !== null || castPickingTarget
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          {castTargetPersonaId !== null
+                            ? (candidates.find((c) => c.id === castTargetPersonaId)?.name ??
+                              'Persona')
+                            : 'Choose persona…'}
+                        </button>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={performCast.isPending || initiatorPersonaId === null}
+                        onClick={handleCastCommit}
+                      >
+                        {performCast.isPending ? 'Casting…' : `Cast ${selectedTechnique.name}`}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </PopoverContent>
       </Popover>
@@ -299,6 +492,24 @@ export function ActionPanel({ sceneId }: Props) {
           candidates={candidates}
           onConfirm={handleTargetConfirm}
           onCancel={handleTargetCancel}
+        />
+      )}
+
+      {castPickingTarget && selectedTechnique && (
+        <TargetPicker
+          spec={{
+            kind: 'persona',
+            cardinality: 'single',
+            filters: {
+              in_same_scene: true,
+              in_same_zone: false,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          }}
+          candidates={candidates}
+          onConfirm={handleCastTargetConfirm}
+          onCancel={handleCastTargetCancel}
         />
       )}
     </div>
