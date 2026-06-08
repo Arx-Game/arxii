@@ -73,8 +73,22 @@ def _ensure_skill(name: str):
 
 def ensure_spread_skills() -> None:
     """Idempotently ensure the spread skills (Performance, Persuasion) + their
-    form specializations exist."""
+    form specializations exist.
+
+    Called several times per spread (template build, modifiers, form list). The
+    repo bans data migrations / seed commands pre-production, so this is the
+    seed-on-first-use path — but the fast-path keeps the steady state at a single
+    count query instead of re-running the get_or_creates every request.
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
+
+    form_names = [name for name, _, _ in SPREAD_FORMS]
+    already_seeded = Specialization.objects.filter(
+        name__in=form_names,
+        parent_skill__trait__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
+    ).count() == len(SPREAD_FORMS)
+    if already_seeded:
+        return
 
     skills_by_name = {
         PERFORMANCE_SKILL_NAME: _ensure_skill(PERFORMANCE_SKILL_NAME),
@@ -156,6 +170,12 @@ def get_or_create_spread_a_tale_template():
     from actions.models.action_templates import ActionTemplate  # noqa: PLC0415
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    # Fast-path: once seeded, the template (and its skills) exist, so a single
+    # fetch per spread suffices instead of replaying every get_or_create below.
+    existing = ActionTemplate.objects.filter(name="Spread a Tale").first()
+    if existing is not None:
+        return existing
 
     ensure_spread_skills()
     category, _ = CheckCategory.objects.get_or_create(name="Social")
