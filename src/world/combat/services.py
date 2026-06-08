@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Persona
 
+    from typeclasses.characters import Character
+
     PerformCheckFn = Callable[..., CheckResult]
 
 from actions.errors import ActionDispatchError
@@ -151,7 +153,7 @@ def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTD
     ).exists()
 
 
-def _emit_death_gate(character: ObjectDB, room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+def _emit_death_gate(character: Character, room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
     """Fire the death gate: defer when death-deferred is active, else CHARACTER_KILLED."""
     if _character_has_death_deferred(character):
         from world.vitals.models import CharacterVitals  # noqa: PLC0415
