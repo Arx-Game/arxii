@@ -73,7 +73,7 @@ class CastableTechniqueSerializer(serializers.Serializer):
         if isinstance(obj, Technique):
             return is_technique_hostile(obj)
         # obj may be a CharacterTechnique — fall back to its technique.
-        technique = getattr(obj, "technique", None)
+        technique = getattr(obj, "technique", None)  # noqa: GETATTR_LITERAL
         if isinstance(technique, Technique):
             return is_technique_hostile(technique)
         return False

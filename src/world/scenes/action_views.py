@@ -266,7 +266,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         """
         from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
 
-        initiator_persona_id_str = request.query_params.get("initiator_persona")
+        initiator_persona_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
         if not initiator_persona_id_str:
             return Response(
                 {"detail": "initiator_persona query parameter is required."},
