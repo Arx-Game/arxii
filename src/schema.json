@@ -22418,7 +22418,7 @@ components:
         min_covenant_level:
           type: integer
           readOnly: true
-        min_engaged_present:
+        min_members_present:
           type: integer
           readOnly: true
         granted_condition:
@@ -22448,7 +22448,7 @@ components:
       - id
       - max_severity
       - min_covenant_level
-      - min_engaged_present
+      - min_members_present
       - ritual
       - severity_per_extra_participant
     CovenantRole:

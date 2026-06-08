@@ -21,7 +21,7 @@ def _make_rite(name: str, **overrides) -> CovenantRite:
     defaults = {
         "covenant_type": CovenantType.DURANCE,
         "min_covenant_level": 1,
-        "min_engaged_present": 2,
+        "min_members_present": 2,
         "base_severity": 1,
         "severity_per_extra_participant": 0,
     }
@@ -63,7 +63,7 @@ class CovenantRiteListTests(CovenantRiteViewTestCase):
             "rite-views-battle",
             covenant_type=CovenantType.BATTLE,
             min_covenant_level=2,
-            min_engaged_present=3,
+            min_members_present=3,
             base_severity=2,
             severity_per_extra_participant=1,
             max_severity=5,
@@ -120,7 +120,7 @@ class CovenantRiteDetailTests(CovenantRiteViewTestCase):
         cls.rite = _make_rite(
             "rite-detail",
             min_covenant_level=3,
-            min_engaged_present=2,
+            min_members_present=2,
             base_severity=2,
             severity_per_extra_participant=1,
             max_severity=8,
@@ -141,7 +141,7 @@ class CovenantRiteDetailTests(CovenantRiteViewTestCase):
         self.assertEqual(data["ritual"], self.rite.ritual.pk)
         self.assertEqual(data["covenant_type"], CovenantType.DURANCE)
         self.assertEqual(data["min_covenant_level"], 3)
-        self.assertEqual(data["min_engaged_present"], 2)
+        self.assertEqual(data["min_members_present"], 2)
         self.assertEqual(data["granted_condition"], self.rite.granted_condition.pk)
         self.assertEqual(data["base_severity"], 2)
         self.assertEqual(data["severity_per_extra_participant"], 1)

@@ -1195,7 +1195,9 @@ def get_condition_modifier_total(
 
         for effect in effects:
             value = effect.value
-            if instance.current_stage:
+            if effect.scales_with_severity:
+                value = int(value * instance.effective_severity)
+            elif instance.current_stage:
                 value = int(value * instance.current_stage.severity_multiplier)
             total += value
 
@@ -1226,7 +1228,9 @@ def get_condition_modifier_breakdown(
 
         for effect in effects:
             value = effect.value
-            if instance.current_stage:
+            if effect.scales_with_severity:
+                value = int(value * instance.effective_severity)
+            elif instance.current_stage:
                 value = int(value * instance.current_stage.severity_multiplier)
             rows.append((instance.condition.name, value))
 

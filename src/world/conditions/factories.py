@@ -160,6 +160,7 @@ class ConditionModifierEffectFactory(DjangoModelFactory):
     stage = None
     modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     value = 0
+    scales_with_severity = False
 
 
 class ConditionCheckModifierFactory(DjangoModelFactory):
@@ -470,6 +471,75 @@ class OathboundResolveConditionFactory(ConditionTemplateFactory):
     default_duration_type = DurationType.UNTIL_END_OF_COMBAT
     # default_duration_value is unused for UNTIL_END_OF_COMBAT but the column is
     # NOT NULL; keep the parent's default of 3 (irrelevant at runtime).
+    is_stackable = False
+    can_be_dispelled = False
+
+
+# =============================================================================
+# Covenant rite role-package condition factories (#753 Task 10)
+# =============================================================================
+
+
+class OathboundFuryIConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Oathbound Fury I' Sword-role buff (level 1+ band).
+
+    Offensive package: strength + presence, scaling with severity.
+    """
+
+    name = "Oathbound Fury I"
+    description = (
+        "The covenant's oath sharpens the Sword's edge. This character strikes harder "
+        "and commands the field with renewed purpose."
+    )
+    default_duration_type = DurationType.UNTIL_END_OF_COMBAT
+    is_stackable = False
+    can_be_dispelled = False
+
+
+class OathboundFuryIIConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Oathbound Fury II' Sword-role buff (level 4+ band).
+
+    Richer offensive package: strength + presence + wits, scaling with severity.
+    """
+
+    name = "Oathbound Fury II"
+    description = (
+        "A veteran Sword's oath burns brighter still. Strength, commanding presence, "
+        "and razor-sharp instincts combine into a formidable battlefield force."
+    )
+    default_duration_type = DurationType.UNTIL_END_OF_COMBAT
+    is_stackable = False
+    can_be_dispelled = False
+
+
+class OathboundBulwarkConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Oathbound Bulwark' Shield-role buff (level 1+ band).
+
+    Defensive package: stability + stamina, scaling with severity.
+    """
+
+    name = "Oathbound Bulwark"
+    description = (
+        "The covenant's oath fortifies the Shield's resolve. This character endures more, "
+        "holds the line longer, and resists punishment that would fell lesser warriors."
+    )
+    default_duration_type = DurationType.UNTIL_END_OF_COMBAT
+    is_stackable = False
+    can_be_dispelled = False
+
+
+class OathboundGraceConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the 'Oathbound Grace' Crown-role buff (level 1+ band).
+
+    Support package: composure + charm, scaling with severity.
+    """
+
+    name = "Oathbound Grace"
+    description = (
+        "The covenant's oath lends the Crown a serene authority. This character steadies "
+        "allies with poise and draws their trust in the heat of battle."
+    )
+    default_duration_type = DurationType.UNTIL_END_OF_COMBAT
     is_stackable = False
     can_be_dispelled = False
 

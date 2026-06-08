@@ -19,6 +19,7 @@ from world.covenants.constants import BattleBinding, CovenantType, RoleArchetype
 from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
+    from world.conditions.models import ConditionTemplate
     from world.covenants.handlers import CovenantMembershipHandler
 
 
@@ -419,7 +420,7 @@ class CovenantRite(SharedMemoryModel):
         help_text="Restrict to this covenant type; blank = any.",
     )
     min_covenant_level = models.PositiveSmallIntegerField(default=1)
-    min_engaged_present = models.PositiveSmallIntegerField(default=2)
+    min_members_present = models.PositiveSmallIntegerField(default=2)
     granted_condition = models.ForeignKey(
         "conditions.ConditionTemplate",
         on_delete=models.PROTECT,
@@ -435,13 +436,71 @@ class CovenantRite(SharedMemoryModel):
     )
 
     def severity_for(self, *, present_count: int) -> int:
-        extras = max(0, present_count - self.min_engaged_present)
+        extras = max(0, present_count - self.min_members_present)
         value = self.base_severity + self.severity_per_extra_participant * extras
         return min(value, self.max_severity) if self.max_severity is not None else value
+
+    def package_for(self, role: CovenantRole | None, covenant_level: int) -> ConditionTemplate:
+        """Return the ConditionTemplate for *role* at *covenant_level*.
+
+        Selects the highest ``min_covenant_level`` band whose threshold does not
+        exceed *covenant_level*. Falls back to ``self.granted_condition`` when no
+        matching band exists (role unmapped or level below all authored bands).
+        """
+        match: CovenantRiteRolePackage | None = (
+            self.role_packages.filter(
+                covenant_role=role,
+                min_covenant_level__lte=covenant_level,
+            )
+            .order_by("-min_covenant_level")
+            .first()
+        )
+        return match.condition_template if match is not None else self.granted_condition
 
     class Meta:
         verbose_name = "Covenant Rite"
         verbose_name_plural = "Covenant Rites"
+
+
+class CovenantRiteRolePackage(SharedMemoryModel):
+    """Role- and level-gated stat package for a covenant rite.
+
+    Staff can author a different ConditionTemplate for each (role, level-band)
+    combination. ``CovenantRite.package_for`` selects the highest band whose
+    ``min_covenant_level`` does not exceed the covenant's current level. If no
+    matching band exists the rite falls back to ``CovenantRite.granted_condition``.
+
+    Unique constraint: only one band per (rite, role, level) triple — prevents
+    ambiguous selection.
+    """
+
+    rite = models.ForeignKey(
+        "covenants.CovenantRite",
+        on_delete=models.CASCADE,
+        related_name="role_packages",
+    )
+    covenant_role = models.ForeignKey(
+        "covenants.CovenantRole",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    min_covenant_level = models.PositiveSmallIntegerField(default=1)
+    condition_template = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rite", "covenant_role", "min_covenant_level"],
+                name="covenant_rite_role_package_unique_band",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.rite} / {self.covenant_role.name} (level ≥ {self.min_covenant_level})"
 
 
 class CovenantRiteInstance(SharedMemoryModel):
@@ -471,7 +530,45 @@ class CovenantRiteInstance(SharedMemoryModel):
     )
     participants = models.ManyToManyField(
         "character_sheets.CharacterSheet",
+        through="covenants.CovenantRiteParticipant",
         related_name="covenant_rite_instances",
     )
     fired_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class CovenantRiteParticipant(SharedMemoryModel):
+    """Through model recording each participant's own granted condition in a rite instance.
+
+    Each participant receives the ConditionTemplate chosen by their CovenantRole +
+    the covenant's level (via CovenantRite.package_for). This record is used by the
+    late-join rescale and combat-end sweep to act on each participant's OWN condition
+    rather than a single shared granted_condition.
+    """
+
+    instance = models.ForeignKey(
+        "covenants.CovenantRiteInstance",
+        on_delete=models.CASCADE,
+        related_name="participant_records",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    granted_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "character_sheet"],
+                name="covenant_rite_participant_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} in rite #{self.instance_id} ({self.granted_condition})"

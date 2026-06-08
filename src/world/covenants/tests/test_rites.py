@@ -1,6 +1,8 @@
-"""Tests for Tasks 3 + 4: engaged_members_present helper and perform_covenant_rite service.
+"""Tests for Tasks 3 + 4: covenant_members_present helper and perform_covenant_rite service.
 Tests for Task 5: fold_arrival_into_active_rites (late-arrival fold-in).
 Tests for Task 6: complete_rites_for_encounter (combat-end buff sweep).
+Tests for Tasks 6-9: CovenantRiteParticipant through model — role-aware fire, late-join,
+and per-participant sweep.
 
 Uses setUp (not setUpTestData) because Evennia typeclasses (ObjectDB subclasses)
 are not deepcopy-safe, which Django's setUpTestData mechanism requires.
@@ -13,16 +15,19 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.covenants.constants import RoleArchetype
 from world.covenants.factories import (
     CharacterSheetFactory,
     CovenantFactory,
+    CovenantRiteFactory,
+    CovenantRiteRolePackageFactory,
     CovenantRoleFactory,
     make_engaged_member,
 )
 from world.covenants.models import CovenantRite, CovenantRiteInstance
 from world.covenants.services import (
     complete_rites_for_encounter,
-    engaged_members_present,
+    covenant_members_present,
     evaluate_scene_engagement,
     fold_arrival_into_active_rites,
     perform_covenant_rite,
@@ -49,7 +54,7 @@ def _make_rite(*, covenant, ritual, condition_template) -> CovenantRite:
         ritual=ritual,
         covenant_type=covenant.covenant_type,
         min_covenant_level=1,
-        min_engaged_present=2,
+        min_members_present=2,
         granted_condition=condition_template,
         base_severity=2,
         severity_per_extra_participant=1,
@@ -128,8 +133,8 @@ class _RiteSceneTestCase(TestCase):
         )
 
 
-class EngagedMembersPresentTests(TestCase):
-    """Unit tests for the engaged_members_present helper."""
+class CovenantMembersPresentTests(TestCase):
+    """Unit tests for the covenant_members_present helper."""
 
     def setUp(self) -> None:
         from world.covenants.constants import CovenantType
@@ -140,44 +145,44 @@ class EngagedMembersPresentTests(TestCase):
         self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
 
     def test_returns_engaged_members_in_room(self) -> None:
-        """Members who are engaged AND in the room appear in results."""
+        """Engaged (active) members in the room appear in results."""
         mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         _place_character_in_room(mem_a.character_sheet.character, self.room)
         _place_character_in_room(mem_b.character_sheet.character, self.room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(mem_a.character_sheet.pk, sheet_ids)
         self.assertIn(mem_b.character_sheet.pk, sheet_ids)
         self.assertEqual(len(result), 2)
 
-    def test_excludes_unengaged_member_in_room(self) -> None:
-        """A member who is in the room but not engaged is excluded."""
+    def test_includes_non_engaged_active_member_in_room(self) -> None:
+        """A non-engaged but active member present in the room is now included."""
         from world.covenants.factories import CharacterCovenantRoleFactory
 
         engaged = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        unengaged_ccr = CharacterCovenantRoleFactory(
-            covenant=self.covenant, covenant_role=self.role, engaged=False
+        non_engaged_ccr = CharacterCovenantRoleFactory(
+            covenant=self.covenant, covenant_role=self.role, engaged=False, left_at=None
         )
         _place_character_in_room(engaged.character_sheet.character, self.room)
-        _place_character_in_room(unengaged_ccr.character_sheet.character, self.room)
+        _place_character_in_room(non_engaged_ccr.character_sheet.character, self.room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(engaged.character_sheet.pk, sheet_ids)
-        self.assertNotIn(unengaged_ccr.character_sheet.pk, sheet_ids)
+        self.assertIn(non_engaged_ccr.character_sheet.pk, sheet_ids)
 
-    def test_excludes_engaged_member_in_different_room(self) -> None:
-        """An engaged member who is in a different room is excluded."""
+    def test_excludes_active_member_in_different_room(self) -> None:
+        """An active member who is in a different room is excluded."""
         in_room = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         elsewhere = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         _place_character_in_room(in_room.character_sheet.character, self.room)
         _place_character_in_room(elsewhere.character_sheet.character, self.other_room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(in_room.character_sheet.pk, sheet_ids)
@@ -186,7 +191,7 @@ class EngagedMembersPresentTests(TestCase):
     def test_empty_room_returns_empty_list(self) -> None:
         """No one in the room means an empty list."""
         make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
         self.assertEqual(result, [])
 
 
@@ -240,7 +245,7 @@ class PerformCovenantRiteHappyPathTests(_RiteSceneTestCase):
     def test_condition_severity_scaled_by_present_count(self) -> None:
         """Condition severity matches rite.severity_for(present_count=3).
 
-        With base_severity=2, severity_per_extra=1, min_engaged_present=2:
+        With base_severity=2, severity_per_extra=1, min_members_present=2:
         severity = 2 + (3 - 2) * 1 = 3.
         """
         perform_covenant_rite(session=self.session)
@@ -303,15 +308,15 @@ class PerformCovenantRiteGateTests(_RiteSceneTestCase):
             ConditionInstance.objects.filter(condition=self.condition_template).exists()
         )
 
-    def test_not_enough_engaged_present_raises_and_rolls_back(self) -> None:
-        """Fewer engaged present than min_engaged_present → NotEnoughEngagedPresentError."""
-        from world.covenants.exceptions import NotEnoughEngagedPresentError
+    def test_not_enough_members_present_raises_and_rolls_back(self) -> None:
+        """Fewer members present than min_members_present → NotEnoughMembersPresentError."""
+        from world.covenants.exceptions import NotEnoughMembersPresentError
 
-        # Remove mem_b from the room so only 1 engaged member is present.
+        # Remove mem_b from the room so only 1 active member is present.
         other_room = _make_room("Elsewhere")
         _place_character_in_room(self.mem_b.character_sheet.character, other_room)
 
-        with self.assertRaises(NotEnoughEngagedPresentError):
+        with self.assertRaises(NotEnoughMembersPresentError):
             perform_covenant_rite(session=self.session)
 
         self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())
@@ -345,7 +350,7 @@ class FoldArrivalIntoActiveRitesTests(_RiteSceneTestCase):
     """Tests for the late-arrival fold-in service function.
 
     Rite params: base_severity=2, severity_per_extra_participant=1,
-    min_engaged_present=2 → severity_for(2)=2, severity_for(3)=3.
+    min_members_present=2 → severity_for(2)=2, severity_for(3)=3.
     """
 
     _room_key = "FoldRoom"
@@ -629,3 +634,198 @@ class CompleteRitesForEncounterTests(_RiteSceneTestCase):
                 live,
                 f"Expected buff removed from {mem.character_sheet} after cleanup",
             )
+
+
+# ---------------------------------------------------------------------------
+# Task 5 (new model): CovenantRiteRolePackage + package_for
+# ---------------------------------------------------------------------------
+
+
+class CovenantRiteRolePackageTests(TestCase):
+    """Unit tests for CovenantRiteRolePackage and CovenantRite.package_for."""
+
+    def setUp(self) -> None:
+        # Minimal rite; granted_condition acts as the fallback.
+        self.rite = CovenantRiteFactory()
+
+    def test_package_for_selects_highest_band_and_falls_back(self) -> None:
+        """package_for returns the highest matching band or falls back to granted_condition."""
+        sword = CovenantRoleFactory(
+            name="Sword", slug="sword-pkg-test", archetype=RoleArchetype.SWORD
+        )
+        low = ConditionTemplateFactory(name="fury_i")
+        high = ConditionTemplateFactory(name="fury_ii")
+        CovenantRiteRolePackageFactory(
+            rite=self.rite, covenant_role=sword, min_covenant_level=1, condition_template=low
+        )
+        CovenantRiteRolePackageFactory(
+            rite=self.rite, covenant_role=sword, min_covenant_level=4, condition_template=high
+        )
+
+        self.assertEqual(self.rite.package_for(sword, 1), low)  # exactly the low band
+        self.assertEqual(self.rite.package_for(sword, 5), high)  # highest band <= level
+        # Below lowest band → fallback to granted_condition.
+        self.assertEqual(self.rite.package_for(sword, 0), self.rite.granted_condition)
+        # Unmapped role → fallback to granted_condition.
+        other = CovenantRoleFactory(
+            name="Crown", slug="crown-pkg-test", archetype=RoleArchetype.CROWN
+        )
+        self.assertEqual(self.rite.package_for(other, 5), self.rite.granted_condition)
+
+
+# ---------------------------------------------------------------------------
+# Tasks 6-9: per-participant CovenantRiteParticipant through model
+# ---------------------------------------------------------------------------
+
+
+class _RiteTwoRoleTestCase(_RiteSceneTestCase):
+    """Extends _RiteSceneTestCase with a second role + role-specific packages.
+
+    self.role_a / self.mem_a get condition_a.
+    self.role_b / self.mem_b get condition_b.
+    Both are authored as CovenantRiteRolePackage rows on self.rite.
+    """
+
+    _room_key = "TwoRoleRoom"
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        # Run base setUp (creates self.role, self.mem_a, self.mem_b with same role).
+        super().setUp()
+
+        # Replace mem_b with a member that has a DIFFERENT role.
+        self.role_a = self.role  # alias for clarity
+        self.role_b = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+            archetype=RoleArchetype.SHIELD,
+            name="TwoRole-Shield",
+            slug="tworole-shield",
+        )
+
+        # Re-assign mem_b to role_b (close old membership, create new one).
+        from world.covenants.services import change_role
+
+        self.mem_b = change_role(membership=self.mem_b, new_role=self.role_b)
+
+        # Re-engage mem_b after role change (change_role closes the old row, opens new one).
+        from world.covenants.services import set_engaged_membership
+
+        set_engaged_membership(membership=self.mem_b)
+
+        # Author role-specific packages on the rite.
+        self.condition_a = ConditionTemplateFactory(name="fury_role_a")
+        self.condition_b = ConditionTemplateFactory(name="fury_role_b")
+        CovenantRiteRolePackageFactory(
+            rite=self.rite,
+            covenant_role=self.role_a,
+            min_covenant_level=1,
+            condition_template=self.condition_a,
+        )
+        CovenantRiteRolePackageFactory(
+            rite=self.rite,
+            covenant_role=self.role_b,
+            min_covenant_level=1,
+            condition_template=self.condition_b,
+        )
+
+
+class RoleAwareFireTests(_RiteTwoRoleTestCase):
+    """Task 7: fire path assigns role-specific packages per participant."""
+
+    def test_fire_assigns_different_conditions_by_role(self) -> None:
+        """Two members of different roles receive different recorded granted_condition."""
+        result = perform_covenant_rite(session=self.session)
+
+        rec_a = result.participant_records.filter(
+            character_sheet=self.mem_a.character_sheet
+        ).first()
+        rec_b = result.participant_records.filter(
+            character_sheet=self.mem_b.character_sheet
+        ).first()
+
+        self.assertIsNotNone(rec_a, "Expected participant record for mem_a")
+        self.assertIsNotNone(rec_b, "Expected participant record for mem_b")
+        self.assertEqual(rec_a.granted_condition, self.condition_a)
+        self.assertEqual(rec_b.granted_condition, self.condition_b)
+
+    def test_fire_participant_records_count_matches_beneficiaries(self) -> None:
+        """One CovenantRiteParticipant row per beneficiary."""
+        result = perform_covenant_rite(session=self.session)
+        self.assertEqual(result.participant_records.count(), 2)
+        self.assertEqual(result.participants.count(), 2)
+
+
+class RoleAwareLateJoinTests(_RiteTwoRoleTestCase):
+    """Task 8: late-join assigns the newcomer's role package and rescales prior participants."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Fire the rite for the two initial members (different roles).
+        self.rite_instance = perform_covenant_rite(session=self.session)
+
+        # Third member with role_a (same as mem_a).
+        self.mem_c = make_engaged_member(covenant=self.covenant, covenant_role=self.role_a)
+
+    def test_late_join_newcomer_gets_role_package(self) -> None:
+        """Newcomer (role_a) is folded in and their participant record uses condition_a."""
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        rec_c = self.rite_instance.participant_records.filter(
+            character_sheet=self.mem_c.character_sheet
+        ).first()
+        self.assertIsNotNone(rec_c, "Expected participant record for mem_c after late join")
+        self.assertEqual(rec_c.granted_condition, self.condition_a)
+
+    def test_late_join_prior_participants_rescaled_up(self) -> None:
+        """Prior participants' severity rises when a newcomer joins."""
+        from world.conditions.services import get_condition_instance
+
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        # severity_for(2)=2, severity_for(3)=3 with rite params base=2,extra=1,min=2.
+        old_severity = self.rite.severity_for(present_count=2)
+        new_severity = self.rite.severity_for(present_count=3)
+        self.assertGreater(new_severity, old_severity)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        # mem_a's condition is condition_a; verify it was rescaled.
+        live_a = get_condition_instance(self.mem_a.character_sheet.character, self.condition_a)
+        self.assertIsNotNone(live_a, "Expected live condition on mem_a after late join")
+        self.assertEqual(live_a.severity, new_severity)
+
+        # mem_b's condition is condition_b; verify it was rescaled.
+        live_b = get_condition_instance(self.mem_b.character_sheet.character, self.condition_b)
+        self.assertIsNotNone(live_b, "Expected live condition on mem_b after late join")
+        self.assertEqual(live_b.severity, new_severity)
+
+
+class PerParticipantSweepTests(_RiteTwoRoleTestCase):
+    """Task 9: sweep removes each participant's OWN recorded condition."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.rite_instance = perform_covenant_rite(session=self.session)
+
+    def test_sweep_removes_own_conditions(self) -> None:
+        """complete_rites_for_encounter removes each participant's own granted_condition."""
+        from world.conditions.services import get_condition_instance
+
+        complete_rites_for_encounter(encounter=self.encounter)
+
+        self.rite_instance.refresh_from_db()
+        self.assertIsNotNone(self.rite_instance.completed_at)
+
+        # mem_a had condition_a; it should be gone.
+        self.assertIsNone(
+            get_condition_instance(self.mem_a.character_sheet.character, self.condition_a),
+            "Expected condition_a removed from mem_a after sweep",
+        )
+        # mem_b had condition_b; it should be gone.
+        self.assertIsNone(
+            get_condition_instance(self.mem_b.character_sheet.character, self.condition_b),
+            "Expected condition_b removed from mem_b after sweep",
+        )
