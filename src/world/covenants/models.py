@@ -530,7 +530,45 @@ class CovenantRiteInstance(SharedMemoryModel):
     )
     participants = models.ManyToManyField(
         "character_sheets.CharacterSheet",
+        through="covenants.CovenantRiteParticipant",
         related_name="covenant_rite_instances",
     )
     fired_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class CovenantRiteParticipant(SharedMemoryModel):
+    """Through model recording each participant's own granted condition in a rite instance.
+
+    Each participant receives the ConditionTemplate chosen by their CovenantRole +
+    the covenant's level (via CovenantRite.package_for). This record is used by the
+    late-join rescale and combat-end sweep to act on each participant's OWN condition
+    rather than a single shared granted_condition.
+    """
+
+    instance = models.ForeignKey(
+        "covenants.CovenantRiteInstance",
+        on_delete=models.CASCADE,
+        related_name="participant_records",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    granted_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "character_sheet"],
+                name="covenant_rite_participant_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} in rite #{self.instance_id} ({self.granted_condition})"

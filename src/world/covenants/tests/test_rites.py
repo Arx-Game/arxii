@@ -1,6 +1,8 @@
 """Tests for Tasks 3 + 4: covenant_members_present helper and perform_covenant_rite service.
 Tests for Task 5: fold_arrival_into_active_rites (late-arrival fold-in).
 Tests for Task 6: complete_rites_for_encounter (combat-end buff sweep).
+Tests for Tasks 6-9: CovenantRiteParticipant through model — role-aware fire, late-join,
+and per-participant sweep.
 
 Uses setUp (not setUpTestData) because Evennia typeclasses (ObjectDB subclasses)
 are not deepcopy-safe, which Django's setUpTestData mechanism requires.
@@ -669,3 +671,161 @@ class CovenantRiteRolePackageTests(TestCase):
             name="Crown", slug="crown-pkg-test", archetype=RoleArchetype.CROWN
         )
         self.assertEqual(self.rite.package_for(other, 5), self.rite.granted_condition)
+
+
+# ---------------------------------------------------------------------------
+# Tasks 6-9: per-participant CovenantRiteParticipant through model
+# ---------------------------------------------------------------------------
+
+
+class _RiteTwoRoleTestCase(_RiteSceneTestCase):
+    """Extends _RiteSceneTestCase with a second role + role-specific packages.
+
+    self.role_a / self.mem_a get condition_a.
+    self.role_b / self.mem_b get condition_b.
+    Both are authored as CovenantRiteRolePackage rows on self.rite.
+    """
+
+    _room_key = "TwoRoleRoom"
+
+    def setUp(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        # Run base setUp (creates self.role, self.mem_a, self.mem_b with same role).
+        super().setUp()
+
+        # Replace mem_b with a member that has a DIFFERENT role.
+        self.role_a = self.role  # alias for clarity
+        self.role_b = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+            archetype=RoleArchetype.SHIELD,
+            name="TwoRole-Shield",
+            slug="tworole-shield",
+        )
+
+        # Re-assign mem_b to role_b (close old membership, create new one).
+        from world.covenants.services import change_role
+
+        self.mem_b = change_role(membership=self.mem_b, new_role=self.role_b)
+
+        # Re-engage mem_b after role change (change_role closes the old row, opens new one).
+        from world.covenants.services import set_engaged_membership
+
+        set_engaged_membership(membership=self.mem_b)
+
+        # Author role-specific packages on the rite.
+        self.condition_a = ConditionTemplateFactory(name="fury_role_a")
+        self.condition_b = ConditionTemplateFactory(name="fury_role_b")
+        CovenantRiteRolePackageFactory(
+            rite=self.rite,
+            covenant_role=self.role_a,
+            min_covenant_level=1,
+            condition_template=self.condition_a,
+        )
+        CovenantRiteRolePackageFactory(
+            rite=self.rite,
+            covenant_role=self.role_b,
+            min_covenant_level=1,
+            condition_template=self.condition_b,
+        )
+
+
+class RoleAwareFireTests(_RiteTwoRoleTestCase):
+    """Task 7: fire path assigns role-specific packages per participant."""
+
+    def test_fire_assigns_different_conditions_by_role(self) -> None:
+        """Two members of different roles receive different recorded granted_condition."""
+        result = perform_covenant_rite(session=self.session)
+
+        rec_a = result.participant_records.filter(
+            character_sheet=self.mem_a.character_sheet
+        ).first()
+        rec_b = result.participant_records.filter(
+            character_sheet=self.mem_b.character_sheet
+        ).first()
+
+        self.assertIsNotNone(rec_a, "Expected participant record for mem_a")
+        self.assertIsNotNone(rec_b, "Expected participant record for mem_b")
+        self.assertEqual(rec_a.granted_condition, self.condition_a)
+        self.assertEqual(rec_b.granted_condition, self.condition_b)
+
+    def test_fire_participant_records_count_matches_beneficiaries(self) -> None:
+        """One CovenantRiteParticipant row per beneficiary."""
+        result = perform_covenant_rite(session=self.session)
+        self.assertEqual(result.participant_records.count(), 2)
+        self.assertEqual(result.participants.count(), 2)
+
+
+class RoleAwareLateJoinTests(_RiteTwoRoleTestCase):
+    """Task 8: late-join assigns the newcomer's role package and rescales prior participants."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Fire the rite for the two initial members (different roles).
+        self.rite_instance = perform_covenant_rite(session=self.session)
+
+        # Third member with role_a (same as mem_a).
+        self.mem_c = make_engaged_member(covenant=self.covenant, covenant_role=self.role_a)
+
+    def test_late_join_newcomer_gets_role_package(self) -> None:
+        """Newcomer (role_a) is folded in and their participant record uses condition_a."""
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        rec_c = self.rite_instance.participant_records.filter(
+            character_sheet=self.mem_c.character_sheet
+        ).first()
+        self.assertIsNotNone(rec_c, "Expected participant record for mem_c after late join")
+        self.assertEqual(rec_c.granted_condition, self.condition_a)
+
+    def test_late_join_prior_participants_rescaled_up(self) -> None:
+        """Prior participants' severity rises when a newcomer joins."""
+        from world.conditions.services import get_condition_instance
+
+        _place_character_in_room(self.mem_c.character_sheet.character, self.room)
+
+        # severity_for(2)=2, severity_for(3)=3 with rite params base=2,extra=1,min=2.
+        old_severity = self.rite.severity_for(present_count=2)
+        new_severity = self.rite.severity_for(present_count=3)
+        self.assertGreater(new_severity, old_severity)
+
+        fold_arrival_into_active_rites(character_sheet=self.mem_c.character_sheet, room=self.room)
+
+        # mem_a's condition is condition_a; verify it was rescaled.
+        live_a = get_condition_instance(self.mem_a.character_sheet.character, self.condition_a)
+        self.assertIsNotNone(live_a, "Expected live condition on mem_a after late join")
+        self.assertEqual(live_a.severity, new_severity)
+
+        # mem_b's condition is condition_b; verify it was rescaled.
+        live_b = get_condition_instance(self.mem_b.character_sheet.character, self.condition_b)
+        self.assertIsNotNone(live_b, "Expected live condition on mem_b after late join")
+        self.assertEqual(live_b.severity, new_severity)
+
+
+class PerParticipantSweepTests(_RiteTwoRoleTestCase):
+    """Task 9: sweep removes each participant's OWN recorded condition."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.rite_instance = perform_covenant_rite(session=self.session)
+
+    def test_sweep_removes_own_conditions(self) -> None:
+        """complete_rites_for_encounter removes each participant's own granted_condition."""
+        from world.conditions.services import get_condition_instance
+
+        complete_rites_for_encounter(encounter=self.encounter)
+
+        self.rite_instance.refresh_from_db()
+        self.assertIsNotNone(self.rite_instance.completed_at)
+
+        # mem_a had condition_a; it should be gone.
+        self.assertIsNone(
+            get_condition_instance(self.mem_a.character_sheet.character, self.condition_a),
+            "Expected condition_a removed from mem_a after sweep",
+        )
+        # mem_b had condition_b; it should be gone.
+        self.assertIsNone(
+            get_condition_instance(self.mem_b.character_sheet.character, self.condition_b),
+            "Expected condition_b removed from mem_b after sweep",
+        )
