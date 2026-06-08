@@ -265,9 +265,6 @@ class CharacterCodexKnowledge(SharedMemoryModel):
     not ticks remaining (allows for variable/chance-based advancement).
     """
 
-    # Alias for backward compatibility — canonical definition is in constants.py
-    Status = CodexKnowledgeStatus
-
     roster_entry = models.ForeignKey(
         RosterEntry,
         on_delete=models.CASCADE,
@@ -281,8 +278,8 @@ class CharacterCodexKnowledge(SharedMemoryModel):
     )
     status = models.CharField(
         max_length=20,
-        choices=Status.choices,
-        default=Status.UNCOVERED,
+        choices=CodexKnowledgeStatus.choices,
+        default=CodexKnowledgeStatus.UNCOVERED,
     )
     learning_progress = models.PositiveIntegerField(
         default=0,
@@ -327,12 +324,12 @@ class CharacterCodexKnowledge(SharedMemoryModel):
         instead when the caller needs CODEX_ENTRY_UNLOCKED beats to
         re-evaluate on completion.
         """
-        if self.status != self.Status.UNCOVERED:
+        if self.status != CodexKnowledgeStatus.UNCOVERED:
             return False
 
         self.learning_progress += amount
         if self.learning_progress >= self.entry.learn_threshold:
-            self.status = self.Status.KNOWN
+            self.status = CodexKnowledgeStatus.KNOWN
             self.learned_at = timezone.now()
             self.save(update_fields=["learning_progress", "status", "learned_at"])
             return True
@@ -342,7 +339,7 @@ class CharacterCodexKnowledge(SharedMemoryModel):
 
     def is_complete(self) -> bool:
         """Check if this knowledge is fully learned."""
-        return self.status == self.Status.KNOWN
+        return self.status == CodexKnowledgeStatus.KNOWN
 
 
 class CodexClue(NaturalKeyMixin, SharedMemoryModel):
@@ -477,7 +474,7 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
             entry=self.entry,
         ).first()
         if existing:
-            if existing.status == CharacterCodexKnowledge.Status.KNOWN:
+            if existing.status == CodexKnowledgeStatus.KNOWN:
                 return False, "You already know this entry."
             return False, "You are already learning this entry."
 
@@ -487,7 +484,7 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
             known_prereqs = CharacterCodexKnowledge.objects.filter(
                 roster_entry=learner.roster_entry,
                 entry_id__in=prereq_ids,
-                status=CharacterCodexKnowledge.Status.KNOWN,
+                status=CodexKnowledgeStatus.KNOWN,
             ).count()
             if known_prereqs < len(prereq_ids):
                 return False, "You don't meet the prerequisites for this entry."
@@ -531,7 +528,7 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
             return CharacterCodexKnowledge.objects.create(
                 roster_entry=learner.roster_entry,
                 entry=self.entry,
-                status=CharacterCodexKnowledge.Status.UNCOVERED,
+                status=CodexKnowledgeStatus.UNCOVERED,
                 learned_from=self.teacher,
             )
 

@@ -560,6 +560,7 @@ def _evaluate_codex_entry_unlocked(beat: Beat, sheet: CharacterSheet) -> BeatOut
     per-player). If the sheet has no RosterEntry, the character cannot have
     codex knowledge and the predicate is UNSATISFIED.
     """
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
     from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
 
     if beat.required_codex_entry is None:
@@ -573,7 +574,7 @@ def _evaluate_codex_entry_unlocked(beat: Beat, sheet: CharacterSheet) -> BeatOut
     known = CharacterCodexKnowledge.objects.filter(
         roster_entry=roster_entry,
         entry=beat.required_codex_entry,
-        status=CharacterCodexKnowledge.Status.KNOWN,
+        status=CodexKnowledgeStatus.KNOWN,
     ).exists()
     return BeatOutcome.SUCCESS if known else BeatOutcome.UNSATISFIED
 

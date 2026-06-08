@@ -3,6 +3,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import (
     BeginningsCodexGrant,
     CharacterClueKnowledge,
@@ -89,7 +90,7 @@ class CharacterCodexKnowledgeFactory(DjangoModelFactory):
 
     roster_entry = factory.SubFactory("world.roster.factories.RosterEntryFactory")
     entry = factory.SubFactory(CodexEntryFactory)
-    status = CharacterCodexKnowledge.Status.UNCOVERED
+    status = CodexKnowledgeStatus.UNCOVERED
     learning_progress = 0
 
 

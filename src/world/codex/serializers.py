@@ -7,8 +7,8 @@ DRF serializers for codex models with visibility-aware entry serialization.
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import (
-    CharacterCodexKnowledge,
     CodexCategory,
     CodexClue,
     CodexEntry,
@@ -166,7 +166,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
 
     def _can_see_content(self, obj: CodexEntry) -> bool:
         """Check if full content should be visible to the user."""
-        return obj.is_public or obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN
+        return obj.is_public or obj.knowledge_status == CodexKnowledgeStatus.KNOWN
 
     def get_lore_content(self, obj: CodexEntry) -> str | None:
         """Return lore content only if public or KNOWN."""

@@ -30,8 +30,8 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
-from world.codex.models import CharacterCodexKnowledge
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
@@ -317,7 +317,7 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=roster_entry1,
             entry=codex_entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
 
         evaluate_auto_beats(group_progress)
