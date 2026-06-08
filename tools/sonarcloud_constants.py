@@ -30,10 +30,15 @@ def is_skip_path(component: str) -> bool:
     """Return True if this component should never produce a GitHub issue."""
     path_str = file_path(component)
     path = PurePosixPath(path_str)
+    # Frontend test/spec files (e.g. Foo.test.tsx, bar.spec.ts) are marked as tests
+    # in sonar-project.properties but live alongside source, not under a tests/ dir.
+    suffixes = path.suffixes
+    is_fe_test = len(suffixes) >= 2 and suffixes[-2] in (".test", ".spec")  # noqa: PLR2004
     return (
         "tests" in path.parts
         or path.name == "tests.py"
         or path.name.startswith("test_")
+        or is_fe_test
         or "migrations" in path.parts
         or path_str == "src/cli/arx.py"
     )
