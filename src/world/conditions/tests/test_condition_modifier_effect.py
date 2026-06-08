@@ -22,14 +22,17 @@ from world.mechanics.factories import ModifierTargetFactory
 
 
 class ConditionModifierEffectModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = ModifierTargetFactory()
+
     def test_can_create_condition_level_modifier_effect(self):
         condition = ConditionTemplateFactory()
-        target = ModifierTargetFactory()
         effect = ConditionModifierEffect.objects.create(
-            condition=condition, modifier_target=target, value=35
+            condition=condition, modifier_target=self.target, value=35
         )
         self.assertEqual(effect.value, 35)
-        self.assertEqual(effect.modifier_target_id, target.pk)
+        self.assertEqual(effect.modifier_target_id, self.target.pk)
         self.assertEqual(effect.get_condition_template(), condition)
 
     def test_factory_builds_condition_modifier_effect(self):
@@ -38,6 +41,15 @@ class ConditionModifierEffectModelTests(TestCase):
         self.assertIsNotNone(effect.modifier_target_id)
         self.assertIsNotNone(effect.condition_id)
         self.assertIsNone(effect.stage)
+
+    def test_modifier_effect_has_scales_with_severity_field(self):
+        eff = ConditionModifierEffectFactory(
+            condition=ConditionTemplateFactory(name="scaletest"),
+            modifier_target=self.target,
+            value=10,
+            scales_with_severity=True,
+        )
+        self.assertTrue(eff.scales_with_severity)
 
 
 class GetConditionModifierTotalTests(TestCase):

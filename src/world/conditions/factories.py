@@ -160,6 +160,7 @@ class ConditionModifierEffectFactory(DjangoModelFactory):
     stage = None
     modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     value = 0
+    scales_with_severity = False
 
 
 class ConditionCheckModifierFactory(DjangoModelFactory):
