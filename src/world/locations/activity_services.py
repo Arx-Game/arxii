@@ -10,8 +10,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from world.game_clock.constants import TimePhase
+
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
+
+# IC time-of-day multiplier on a room's traffic before banding (#745 Phase 3).
+# A place waxes busier toward evening and empties at night/dawn. Tunable.
+PHASE_TRAFFIC_FACTOR: dict[TimePhase, float] = {
+    TimePhase.DAWN: 0.6,
+    TimePhase.DAY: 1.0,
+    TimePhase.DUSK: 1.15,
+    TimePhase.NIGHT: 0.5,
+}
 
 # (TRAFFIC threshold, band label, spread multiplier), ascending by threshold.
 # The highest threshold <= the value wins. Tunable.
@@ -45,17 +56,27 @@ def band_for_traffic(traffic: int) -> ActivityBand:
     return ActivityBand(label=chosen[1], multiplier=chosen[2])
 
 
-def room_activity_band(room: DefaultObject | None) -> ActivityBand:
+def room_activity_band(
+    room: DefaultObject | None, *, ic_phase: TimePhase | None = None
+) -> ActivityBand:
     """Activity band for an Evennia room object (e.g. ``scene.location``).
 
-    Reads the room's cascade-resolved TRAFFIC stat. Rooms with no profile (or a
-    None room) fall through to the TRAFFIC default (Busy baseline).
+    Reads the room's cascade-resolved TRAFFIC stat, then bends it by the IC
+    time-of-day (a market reads Busy by day, Bustling at dusk, Quiet at dawn).
+    Rooms with no profile (or a None room) fall through to the TRAFFIC default.
+    ``ic_phase`` defaults to the live IC phase; pass it to override (tests).
     """
+    from world.game_clock.services import get_ic_phase  # noqa: PLC0415
     from world.locations.constants import StatKey  # noqa: PLC0415
     from world.locations.services import effective_stats_for_rooms  # noqa: PLC0415
 
     if room is None:
-        return band_for_traffic(50)
-    stats = effective_stats_for_rooms([room], [StatKey.TRAFFIC])
-    traffic = stats.get(room.pk, {}).get(StatKey.TRAFFIC, 50)
-    return band_for_traffic(traffic)
+        traffic = 50
+    else:
+        stats = effective_stats_for_rooms([room], [StatKey.TRAFFIC])
+        traffic = stats.get(room.pk, {}).get(StatKey.TRAFFIC, 50)
+
+    phase = ic_phase if ic_phase is not None else get_ic_phase()
+    factor = PHASE_TRAFFIC_FACTOR.get(phase, 1.0) if phase is not None else 1.0
+    effective = max(0, min(100, round(traffic * factor)))
+    return band_for_traffic(effective)

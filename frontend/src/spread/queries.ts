@@ -35,6 +35,19 @@ export interface SpreadInput {
   specialization?: number | null;
 }
 
+export interface DeedStory {
+  id: number;
+  author_name: string;
+  text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaveDeedStoryInput {
+  deed: number;
+  text: string;
+}
+
 async function fetchSpreadSpecializations(): Promise<SpreadForm[]> {
   const res = await apiFetch('/api/personas/spread-specializations/');
   if (!res.ok) {
@@ -48,6 +61,26 @@ export function useSpreadSpecializationsQuery(enabled = true) {
     queryKey: ['spread-specializations'],
     queryFn: fetchSpreadSpecializations,
     enabled,
+  });
+}
+
+export interface SceneActivity {
+  band: string;
+}
+
+async function fetchSceneActivity(sceneId: number): Promise<SceneActivity> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/activity/`);
+  if (!res.ok) {
+    throw new Error('Failed to read the room.');
+  }
+  return res.json() as Promise<SceneActivity>;
+}
+
+export function useSceneActivityQuery(sceneId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['scene-activity', sceneId],
+    queryFn: () => fetchSceneActivity(sceneId as number),
+    enabled: sceneId !== null && enabled,
   });
 }
 
@@ -89,6 +122,47 @@ export function useSpreadMutation(personaId: number) {
       // A deed may have been deactivated mid-flight — refresh the picker so a
       // stale tale drops out rather than re-failing on retry.
       queryClient.invalidateQueries({ queryKey: ['spreadable-deeds', personaId] });
+    },
+  });
+}
+
+async function fetchDeedStories(personaId: number, deedId: number): Promise<DeedStory[]> {
+  const res = await apiFetch(`/api/personas/${personaId}/deed-stories/?deed=${deedId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load accounts of this deed.');
+  }
+  const body = (await res.json()) as { results: DeedStory[] };
+  return body.results;
+}
+
+export function useDeedStoriesQuery(
+  personaId: number | null,
+  deedId: number | null,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['deed-stories', personaId, deedId],
+    queryFn: () => fetchDeedStories(personaId as number, deedId as number),
+    enabled: personaId !== null && deedId !== null && enabled,
+  });
+}
+
+export function useSaveDeedStoryMutation(personaId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SaveDeedStoryInput): Promise<DeedStory> => {
+      const res = await apiFetch(`/api/personas/${personaId}/deed-story/`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? 'Your account could not be saved.');
+      }
+      return res.json() as Promise<DeedStory>;
+    },
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: ['deed-stories', personaId, input.deed] });
     },
   });
 }

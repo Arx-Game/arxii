@@ -26,6 +26,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAppSelector } from '@/store/hooks';
 
 import {
+  useSaveDeedStoryMutation,
+  useSceneActivityQuery,
   useSpreadableDeedsQuery,
   useSpreadMutation,
   useSpreadSpecializationsQuery,
@@ -64,7 +66,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           </p>
         ) : (
           <SpreadForm
-            key={sceneId}
+            key={`${sceneId}-${open}`}
             personaId={personaId}
             sceneId={sceneId}
             open={open}
@@ -86,12 +88,14 @@ interface FormProps {
 function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   const { data: deeds, isLoading } = useSpreadableDeedsQuery(personaId, open);
   const { data: forms } = useSpreadSpecializationsQuery(open);
+  const { data: activity } = useSceneActivityQuery(sceneId, open);
   const [deedId, setDeedId] = useState<number | null>(null);
   const [pose, setPose] = useState('');
   const [effort, setEffort] = useState('medium');
   const [formId, setFormId] = useState<string>(NO_FORM);
   const [result, setResult] = useState<SpreadResult | null>(null);
   const mutation = useSpreadMutation(personaId);
+  const saveStory = useSaveDeedStoryMutation(personaId);
 
   if (isLoading) {
     return (
@@ -110,12 +114,31 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   }
 
   if (result) {
+    const canSaveAccount = deedId !== null && pose.trim().length > 0;
     return (
       <div className="space-y-4">
         <p className="text-sm">
           The telling lands: <strong>{result.outcome}</strong>, in a {result.band.toLowerCase()}{' '}
           room.
         </p>
+        {canSaveAccount &&
+          (saveStory.isSuccess ? (
+            <p className="text-sm text-muted-foreground">Saved to this deed&apos;s accounts.</p>
+          ) : (
+            <div className="space-y-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saveStory.isPending}
+                onClick={() => saveStory.mutate({ deed: deedId, text: pose })}
+              >
+                {saveStory.isPending ? 'Saving…' : 'Save this telling as your account'}
+              </Button>
+              {saveStory.isError && (
+                <p className="text-sm text-destructive">{(saveStory.error as Error).message}</p>
+              )}
+            </div>
+          ))}
         <DialogFooter>
           <Button onClick={onDone}>Done</Button>
         </DialogFooter>
@@ -141,6 +164,10 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
 
   return (
     <div className="space-y-4">
+      {activity && (
+        <p className="text-sm text-muted-foreground">The room is {activity.band.toLowerCase()}.</p>
+      )}
+
       <Select value={deedId?.toString() ?? ''} onValueChange={(v) => setDeedId(Number(v))}>
         <SelectTrigger aria-label="Tale to spread">
           <SelectValue placeholder="Choose a tale to tell" />

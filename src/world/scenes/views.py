@@ -53,6 +53,9 @@ from world.societies.renown_serializers import (
     build_renown_payload,
 )
 from world.societies.spread_serializers import (
+    DeedStorySerializer,
+    SaveDeedStoryInputSerializer,
+    SceneActivitySerializer,
     SpreadableDeedSerializer,
     SpreadInputSerializer,
     SpreadResultSerializer,
@@ -188,9 +191,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         elif self.action in ["update", "partial_update", "destroy"]:
             # Only scene owners or staff can modify/delete scenes
             permission_classes = [IsSceneOwnerOrStaff]
-        elif self.action == "retrieve":
-            # For retrieving scenes, use both authentication and
-            # private scene access checks
+        elif self.action in ["retrieve", "activity"]:
+            # Retrieving a scene or reading its activity band must respect
+            # private/ephemeral-scene access (participants/staff only).
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight
@@ -260,6 +263,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         broadcast_scene_message(scene, SceneAction.END)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
+
+    @extend_schema(responses=SceneActivitySerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def activity(self, request: Request, pk: int | None = None) -> Response:
+        """#745 — The scene room's current activity band (qualitative, time-aware)."""
+        from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+
+        scene = self.get_object()
+        band = room_activity_band(scene.location)
+        return Response(SceneActivitySerializer({"band": band.label}).data)
 
 
 class PersonaViewSet(viewsets.ModelViewSet):
@@ -345,12 +358,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
         )
 
         persona = self.get_object()
-        owns_persona = Persona.objects.filter(
-            pk=persona.pk,
-            character_sheet__roster_entry__tenures__player_data__account=request.user,
-            character_sheet__roster_entry__tenures__end_date__isnull=True,
-        ).exists()
-        if not owns_persona:
+        if not self._account_controls_persona(request, persona):
             return Response(
                 {"detail": "You do not control this persona."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -413,6 +421,88 @@ class PersonaViewSet(viewsets.ModelViewSet):
         band = room_activity_band(scene.location).label
         payload = {"resolved": True, "outcome": outcome, "band": band}
         return Response(SpreadResultSerializer(payload).data)
+
+    def _account_controls_persona(self, request: Request, persona: Persona) -> bool:
+        """True when the requesting account currently tenures this persona."""
+        return Persona.objects.filter(
+            pk=persona.pk,
+            character_sheet__roster_entry__tenures__player_data__account=request.user,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+        ).exists()
+
+    @extend_schema(responses=DeedStorySerializer(many=True), tags=["personas"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="deed-stories")
+    def deed_stories(self, request: Request, pk: int | None = None) -> Response:
+        """#745 Phase 4 — Written accounts of a deed this persona knows of.
+
+        Requires ``?deed=<id>``. Gated on control of this persona (enforced by
+        ``get_object``'s object permission) AND that the persona's societies are
+        aware of the deed, so lore about unknown deeds isn't leaked. Paginated —
+        a popular deed can accrue one account per aware persona.
+        """
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        from world.societies.models import LegendEntry  # noqa: PLC0415
+        from world.societies.spread_services import (  # noqa: PLC0415
+            get_deed_stories,
+            get_spreadable_deeds,
+        )
+
+        persona = self.get_object()
+        deed_id = request.query_params.get("deed")  # noqa: USE_FILTERSET
+        if not deed_id:
+            return Response(
+                {"detail": "A 'deed' query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        deed = get_object_or_404(LegendEntry, pk=deed_id)
+        if not get_spreadable_deeds(persona).filter(pk=deed.pk).exists():
+            return Response(
+                {"detail": "This persona is not aware of that deed."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        stories = get_deed_stories(deed)
+        page = self.paginate_queryset(stories)
+        if page is not None:
+            return self.get_paginated_response(DeedStorySerializer(page, many=True).data)
+        return Response(DeedStorySerializer(stories, many=True).data)
+
+    @extend_schema(
+        request=SaveDeedStoryInputSerializer, responses=DeedStorySerializer, tags=["personas"]
+    )
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="deed-story")
+    def deed_story(self, request: Request, pk: int | None = None) -> Response:
+        """#745 Phase 4 — Save (or replace) this persona's account of a deed.
+
+        Gated on persona control + awareness of the deed. One account per
+        (deed, author); re-saving overwrites the prior text.
+        """
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        from world.societies.models import LegendEntry  # noqa: PLC0415
+        from world.societies.spread_services import (  # noqa: PLC0415
+            get_spreadable_deeds,
+            save_deed_story,
+        )
+
+        persona = self.get_object()
+        if not self._account_controls_persona(request, persona):
+            return Response(
+                {"detail": "You do not control this persona."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        input_serializer = SaveDeedStoryInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        deed = get_object_or_404(LegendEntry, pk=data["deed"])
+        if not get_spreadable_deeds(persona).filter(pk=deed.pk).exists():
+            return Response(
+                {"detail": "This persona is not aware of that deed."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        story = save_deed_story(author_persona=persona, deed=deed, text=data["text"])
+        return Response(DeedStorySerializer(story).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         responses=RenownCardSerializer,

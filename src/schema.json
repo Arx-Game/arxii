@@ -14217,6 +14217,100 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/personas/{id}/deed-stories/:
+    get:
+      operationId: personas_deed_stories_list
+      description: |-
+        #745 Phase 4 — Written accounts of a deed this persona knows of.
+
+        Requires ``?deed=<id>``. Gated on control of this persona (enforced by
+        ``get_object``'s object permission) AND that the persona's societies are
+        aware of the deed, so lore about unknown deeds isn't leaked. Paginated —
+        a popular deed can accrue one account per aware persona.
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: integer
+      - in: query
+        name: character_sheet
+        schema:
+          type: number
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: persona_type
+        schema:
+          type: string
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - personas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeedStoryList'
+          description: ''
+  /api/personas/{id}/deed-story/:
+    post:
+      operationId: personas_deed_story_create
+      description: |-
+        #745 Phase 4 — Save (or replace) this persona's account of a deed.
+
+        Gated on persona control + awareness of the deed. One account per
+        (deed, author); re-saving overwrites the prior text.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDeedStoryInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeedStory'
+          description: ''
   /api/personas/{id}/renown/:
     get:
       operationId: personas_renown_retrieve
@@ -16620,6 +16714,29 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/scenes/{id}/activity/:
+    get:
+      operationId: scenes_activity_retrieve
+      description: '#745 — The scene room''s current activity band (qualitative, time-aware).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActivity'
+          description: ''
   /api/scenes/{id}/finish/:
     post:
       operationId: scenes_finish_create
@@ -22903,6 +23020,33 @@ components:
       - icon
       - id
       - name
+    DeedStory:
+      type: object
+      description: A persona's written account of a deed (#745 Phase 4 lore).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author_name
+      - created_at
+      - id
+      - text
+      - updated_at
     DefaultDurationTypeEnum:
       enum:
       - rounds
@@ -28829,6 +28973,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CovenantRite'
+    PaginatedDeedStoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeedStory'
     PaginatedDraftApplicationList:
       type: object
       required:
@@ -34877,6 +35044,19 @@ components:
       - resonance_type_id
       - resonance_type_name
       - room_profile_id
+    SaveDeedStoryInputRequest:
+      type: object
+      description: POST body to save (or replace) the caller's account of a deed.
+      properties:
+        deed:
+          type: integer
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      required:
+      - deed
+      - text
     SceneActionRequest:
       type: object
       properties:
@@ -35024,6 +35204,15 @@ components:
         * `denied` - Denied
         * `resolved` - Resolved
         * `expired` - Expired
+    SceneActivity:
+      type: object
+      description: A scene room's current activity band (shown before a teller commits).
+      properties:
+        band:
+          type: string
+          readOnly: true
+      required:
+      - band
     SceneDetail:
       type: object
       description: Full scene representation with personas
