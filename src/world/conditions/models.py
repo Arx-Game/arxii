@@ -591,6 +591,13 @@ class ConditionOrStageEffect(models.Model):
         related_name="%(class)s_set",
         help_text="Set for stage-specific effects",
     )
+    scales_with_severity = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, this effect's magnitude is multiplied by the condition "
+            "instance's effective severity."
+        ),
+    )
 
     class Meta:
         abstract = True
@@ -729,10 +736,6 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
-    scales_with_severity = models.BooleanField(
-        default=False,
-        help_text="If true, modifier is multiplied by condition severity",
-    )
 
     objects = NaturalKeyManager()
 
@@ -837,12 +840,18 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
       - Poison deals 2 poison damage per round, increasing each stage
     """
 
-    damage_type = models.ForeignKey(DamageType, on_delete=models.CASCADE)
-    base_damage = models.PositiveIntegerField(help_text="Base damage per tick")
+    # DoT effects scale with severity by default (a more severe affliction deals
+    # more damage); override the base's opt-in default=False to preserve behavior.
     scales_with_severity = models.BooleanField(
         default=True,
-        help_text="Multiply damage by condition severity?",
+        help_text=(
+            "When true, this effect's magnitude is multiplied by the condition "
+            "instance's effective severity."
+        ),
     )
+
+    damage_type = models.ForeignKey(DamageType, on_delete=models.CASCADE)
+    base_damage = models.PositiveIntegerField(help_text="Base damage per tick")
     scales_with_stacks = models.BooleanField(
         default=True,
         help_text="Multiply damage by stack count?",

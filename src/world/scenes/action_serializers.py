@@ -8,6 +8,83 @@ from world.scenes.action_constants import ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 
 
+def _cap_strain_by_anima(attrs: dict) -> dict:
+    """Reject a strain_commitment that exceeds the initiator's available anima.
+
+    Shared by the create + cast serializers. Looks up the
+    Persona → CharacterSheet → character → CharacterAnima chain; a missing anima
+    row means cap 0 (any non-zero strain rejects). Done in the serializer (not
+    the view) per the validation-in-serializer rule.
+    """
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    strain = attrs.get("strain_commitment", 0) or 0
+    if strain <= 0:
+        return attrs
+
+    initiator_persona_id = attrs["initiator_persona"]
+    try:
+        persona = Persona.objects.select_related("character_sheet__character").get(
+            pk=initiator_persona_id
+        )
+    except Persona.DoesNotExist:
+        raise serializers.ValidationError(
+            {"strain_commitment": "Initiator persona not found."}
+        ) from None
+
+    character = persona.character_sheet.character
+    try:
+        cap = CharacterAnima.objects.get(character=character).current
+    except CharacterAnima.DoesNotExist:
+        cap = 0
+
+    if strain > cap:
+        raise serializers.ValidationError(
+            {"strain_commitment": f"Strain commitment ({strain}) exceeds available anima ({cap})."}
+        )
+
+    return attrs
+
+
+class TechniqueCastCreateSerializer(serializers.Serializer):
+    """Validate input for the standalone technique cast endpoint."""
+
+    scene = serializers.IntegerField()
+    initiator_persona = serializers.IntegerField()
+    technique_id = serializers.IntegerField()
+    target_persona = serializers.IntegerField(required=False, allow_null=True)
+    strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+
+    def validate(self, attrs: dict) -> dict:
+        """Cap strain_commitment by the initiator's available anima (same rule as create)."""
+        return _cap_strain_by_anima(attrs)
+
+
+class CastableTechniqueSerializer(serializers.Serializer):
+    """Serializes a Technique for the castable-techniques list endpoint."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    anima_cost = serializers.IntegerField()
+    tier = serializers.IntegerField()
+    intensity = serializers.IntegerField()
+    control = serializers.IntegerField()
+    hostile = serializers.SerializerMethodField()
+
+    def get_hostile(self, obj: object) -> bool:
+        from world.magic.models.techniques import Technique  # noqa: PLC0415
+        from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
+
+        if isinstance(obj, Technique):
+            return is_technique_hostile(obj)
+        # obj may be a CharacterTechnique — fall back to its technique.
+        technique = getattr(obj, "technique", None)  # noqa: GETATTR_LITERAL
+        if isinstance(technique, Technique):
+            return is_technique_hostile(technique)
+        return False
+
+
 class SceneActionRequestSerializer(serializers.ModelSerializer):
     initiator_name = serializers.CharField(source="initiator_persona.name", read_only=True)
     target_name = serializers.CharField(source="target_persona.name", read_only=True)
@@ -54,44 +131,10 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         """Cap strain_commitment by the initiator's available anima.
 
-        Looks up the Persona → CharacterSheet → character → CharacterAnima chain;
-        if the row is missing, treat the cap as 0 (any non-zero strain rejects).
-        Done here (serializer), not in the view, per the validation-in-serializer rule.
+        Validation lives in the serializer (not the view) per the
+        validation-in-serializer rule; see ``_cap_strain_by_anima``.
         """
-        from world.magic.models import CharacterAnima  # noqa: PLC0415
-        from world.scenes.models import Persona  # noqa: PLC0415
-
-        strain = attrs.get("strain_commitment", 0) or 0
-        if strain <= 0:
-            return attrs
-
-        initiator_persona_id = attrs["initiator_persona"]
-        try:
-            persona = Persona.objects.select_related(
-                "character_sheet__character",
-            ).get(pk=initiator_persona_id)
-        except Persona.DoesNotExist:
-            raise serializers.ValidationError(
-                {"strain_commitment": "Initiator persona not found."}
-            ) from None
-
-        character = persona.character_sheet.character
-        try:
-            anima = CharacterAnima.objects.get(character=character)
-            cap = anima.current
-        except CharacterAnima.DoesNotExist:
-            cap = 0
-
-        if strain > cap:
-            raise serializers.ValidationError(
-                {
-                    "strain_commitment": (
-                        f"Strain commitment ({strain}) exceeds available anima ({cap})."
-                    )
-                }
-            )
-
-        return attrs
+        return _cap_strain_by_anima(attrs)
 
 
 class ConsentResponseSerializer(serializers.Serializer):
@@ -157,11 +200,40 @@ class AnimaRecoverySerializer(serializers.Serializer):
     new_pool = serializers.IntegerField()
 
 
+class PowerLedgerEntrySerializer(serializers.Serializer):
+    """Serializes a single PowerLedgerEntry for the API payload."""
+
+    stage = serializers.CharField()
+    source_label = serializers.CharField()
+    op = serializers.CharField()
+    amount = serializers.IntegerField()
+    running_total = serializers.IntegerField()
+
+
+class PowerLedgerSerializer(serializers.Serializer):
+    """Serializes a PowerLedger (entries + total) for the cast result payload."""
+
+    entries = PowerLedgerEntrySerializer(many=True)
+    total = serializers.IntegerField()
+
+
 class EnhancedSceneActionResultSerializer(serializers.Serializer):
     action_key = serializers.CharField()
     action_resolution = ActionResolutionSerializer()
     technique_result = TechniqueResultSerializer(allow_null=True)
     anima_recovery = serializers.SerializerMethodField()
+    power_ledger = serializers.SerializerMethodField()
+
+    def get_power_ledger(self, obj: object) -> dict | None:
+        """Return the power ledger attached to the result object, if present."""
+        from world.scenes.types import EnhancedSceneActionResult  # noqa: PLC0415
+
+        if not isinstance(obj, EnhancedSceneActionResult):
+            return None
+        ledger = obj.power_ledger
+        if ledger is None:
+            return None
+        return PowerLedgerSerializer(ledger).data
 
     def get_anima_recovery(self, obj: object) -> dict | None:
         """Return anima recovery payload for the initiator of an anima_ritual action.

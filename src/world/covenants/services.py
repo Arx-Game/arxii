@@ -16,7 +16,7 @@ from world.covenants.exceptions import (
     DuplicateFounderError,
     InsufficientFoundersError,
     NoActiveBattleError,
-    NotEnoughEngagedPresentError,
+    NotEnoughMembersPresentError,
     SubroleParentMismatchError,
     SubroleResonanceMismatchError,
     SubroleThreadLevelInsufficientError,
@@ -26,6 +26,7 @@ from world.covenants.models import (
     Covenant,
     CovenantRite,
     CovenantRiteInstance,
+    CovenantRiteParticipant,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -575,25 +576,44 @@ def fold_arrival_into_active_rites(
             continue  # already a participant — no-op
 
         # --- FOLD IN ---
-        instance.participants.add(character_sheet)
+        # Resolve the newcomer's role and pick their role-specific package.
+        newcomer_ccr = (
+            CharacterCovenantRole.objects.filter(
+                character_sheet=character_sheet,
+                covenant_id=covenant_id,
+                left_at__isnull=True,
+            )
+            .select_related("covenant_role")
+            .first()
+        )
+        newcomer_role = newcomer_ccr.covenant_role if newcomer_ccr is not None else None
+        covenant_obj = Covenant.objects.get(pk=covenant_id)
+        newcomer_template = instance.rite.package_for(newcomer_role, covenant_obj.level)
+
+        # Record the newcomer participant with their own template.
+        CovenantRiteParticipant.objects.create(
+            instance=instance,
+            character_sheet=character_sheet,
+            granted_condition=newcomer_template,
+        )
         new_count = instance.participants.count()
         new_severity = instance.rite.severity_for(present_count=new_count)
 
         # Apply the buff to the newcomer.
         apply_condition(
             character_sheet.character,
-            instance.rite.granted_condition,
+            newcomer_template,
             severity=new_severity,
             duration_rounds=instance.rite.duration_rounds,
             source_description="covenant rite",
         )
 
         # Rescale every OTHER existing participant's live buff upward if needed.
-        other_sheets = list(instance.participants.exclude(pk=character_sheet.pk))
-        for other_sheet in other_sheets:
-            live_inst = get_condition_instance(
-                other_sheet.character, instance.rite.granted_condition
-            )
+        other_records = instance.participant_records.exclude(
+            character_sheet=character_sheet
+        ).select_related("character_sheet", "granted_condition")
+        for rec in other_records:
+            live_inst = get_condition_instance(rec.character_sheet.character, rec.granted_condition)
             if live_inst is None:
                 continue
             delta = new_severity - live_inst.severity
@@ -633,21 +653,22 @@ def _co_present_member_count(
     return n
 
 
-def engaged_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
-    """CharacterSheets that are engaged with `covenant` AND present in `room`.
+def covenant_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
+    """CharacterSheets of active `covenant` members present in `room`.
 
-    Builds the engaged-member set from the DB once, then walks room.contents —
-    no per-object queries. The ≥N test is len(engaged_members_present(...)).
+    Builds the active-member set from the DB once, then walks room.contents —
+    no per-object queries. The ≥N test is len(covenant_members_present(...)).
+    Active means left_at__isnull=True; the engaged flag is not considered here.
     """
-    engaged_sheet_ids = set(
-        covenant.memberships.filter(engaged=True, left_at__isnull=True).values_list(
+    active_sheet_ids = set(
+        covenant.memberships.filter(left_at__isnull=True).values_list(
             "character_sheet_id", flat=True
         )
     )
     present: list[CharacterSheet] = []
     for obj in room.contents:
         sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
-        if sheet is not None and sheet.pk in engaged_sheet_ids:
+        if sheet is not None and sheet.pk in active_sheet_ids:
             present.append(sheet)
     return present
 
@@ -755,11 +776,13 @@ def complete_rites_for_encounter(*, encounter: CombatEncounter) -> None:
         CovenantRiteInstance.objects.filter(
             combat_encounter=encounter,
             completed_at__isnull=True,
-        ).select_related("rite__granted_condition")
+        )
     )
     for instance in active_instances:
-        for sheet in instance.participants.all():
-            remove_condition(sheet.character, instance.rite.granted_condition)
+        for rec in instance.participant_records.select_related(
+            "character_sheet", "granted_condition"
+        ):
+            remove_condition(rec.character_sheet.character, rec.granted_condition)
         instance.completed_at = timezone.now()
         instance.save(update_fields=["completed_at"])
 
@@ -772,7 +795,7 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     1. Covenant ref present on the session.
     2. Covenant level ≥ rite.min_covenant_level.
     3. Active CombatEncounter present in the initiator's room.
-    4. At least rite.min_engaged_present engaged members in the room.
+    4. At least rite.min_members_present active members in the room.
 
     On success, creates a CovenantRiteInstance, sets participants, applies the
     scaled condition buff to each via bulk_apply_conditions, and emits a
@@ -813,36 +836,46 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     if encounter is None:
         raise NoActiveBattleError
 
-    # 4c. Gate: enough engaged members present.
-    beneficiaries = engaged_members_present(covenant=covenant, room=room)
-    if len(beneficiaries) < rite.min_engaged_present:
-        raise NotEnoughEngagedPresentError
+    # 4c. Gate: enough active covenant members present.
+    beneficiaries = covenant_members_present(covenant=covenant, room=room)
+    if len(beneficiaries) < rite.min_members_present:
+        raise NotEnoughMembersPresentError
 
     # 5. Compute scaled severity.
     severity = rite.severity_for(present_count=len(beneficiaries))
 
-    # 6. Create instance and attach participants.
+    # 6. Create instance, record per-participant condition, and apply buffs.
     instance = CovenantRiteInstance.objects.create(
         rite=rite,
         covenant=covenant,
         scene=encounter.scene,
         combat_encounter=encounter,
     )
-    instance.participants.set(beneficiaries)
-
-    # 7. Apply the buff to each beneficiary.
-    bulk_apply_conditions(
-        [
+    role_by_sheet = {
+        m.character_sheet_id: m.covenant_role
+        for m in CharacterCovenantRole.objects.filter(
+            character_sheet__in=[s.pk for s in beneficiaries],
+            covenant=covenant,
+            left_at__isnull=True,
+        ).select_related("covenant_role")
+    }
+    applications = []
+    for s in beneficiaries:
+        template = rite.package_for(role_by_sheet[s.pk], covenant.level)
+        CovenantRiteParticipant.objects.create(
+            instance=instance, character_sheet=s, granted_condition=template
+        )
+        applications.append(
             BulkConditionApplication(
                 target=s.character,
-                template=rite.granted_condition,
+                template=template,
                 severity=severity,
                 duration_rounds=rite.duration_rounds,
             )
-            for s in beneficiaries
-        ],
-        source_description="covenant rite",
-    )
+        )
+
+    # 7. Apply the buff to each beneficiary.
+    bulk_apply_conditions(applications, source_description="covenant rite")
 
     # 8. Emit drama.
     send_narrative_message(

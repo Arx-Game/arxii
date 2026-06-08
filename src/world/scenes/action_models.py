@@ -36,7 +36,10 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="received_action_requests",
-        help_text="The persona being targeted. Null for area actions (to the room).",
+        help_text=(
+            "The persona being targeted. Null for area actions (to the room) "
+            "or standalone technique casts."
+        ),
     )
     pose_text = models.TextField(
         blank=True,
@@ -171,14 +174,17 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        target = self.target_persona.name if self.target_persona else "room"
-        return (
-            f"{self.initiator_persona.name} -> {target}: "
-            f"{self.action_key or 'template'} ({self.get_status_display()})"
-        )
+        target = self.target_persona.name if self.target_persona_id else "room"
+        action = self.action_key or "template"
+        return f"{self.initiator_persona.name} -> {target}: {action} ({self.get_status_display()})"
 
     def clean(self) -> None:
         super().clean()
-        if not self.action_key and not self.action_template_id:
-            msg = "Either action_key or action_template must be set."
+        if not self.action_key and not self.action_template_id and not self.technique_id:
+            msg = "A request needs one of: action_key, action_template, or technique."
             raise ValidationError(msg)
+
+    @property
+    def is_standalone_cast(self) -> bool:
+        """A technique cast with no enhanced base action (derived, not stored)."""
+        return bool(self.technique_id) and not self.action_template_id and not self.action_key

@@ -203,7 +203,9 @@ def respond_to_action_request(
         EnhancedSceneActionResult if accepted and resolved, None if denied.
 
     Raises:
-        ValueError: If the request has no action_template set.
+        ValueError: If the request is a non-standalone-cast with no action_template
+            set (standalone cast requests resolve via the cast pipeline and do not
+            require an action_template).
     """
     if action_request.status != ActionRequestStatus.PENDING:
         return None
@@ -215,74 +217,21 @@ def respond_to_action_request(
         return None
 
     if decision == ConsentDecision.ACCEPT:
-        difficulty = DIFFICULTY_VALUES.get(
-            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-        )
-
         with transaction.atomic():
-            action_template = action_request.action_template
-            if action_template is None:
-                msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
-                raise ValueError(msg)
+            # Standalone cast (no action_template, no action_key) — resolve via the cast
+            # pipeline; enhanced/plain actions go through the standard resolution path.
+            # The inner transaction.atomic() blocks in resolve_accepted_cast and
+            # _resolve_standard_action become savepoints inside this outer atomic — harmless
+            # and idiomatic Django. This outer block restores the pre-refactor guarantee:
+            # if the resolver or kudos award raises, the whole resolution rolls back.
+            if action_request.is_standalone_cast:
+                from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
 
-            character = action_request.initiator_persona.character_sheet.character
-            target_character = action_request.target_persona.character_sheet.character
-            context = ResolutionContext(character=character, target=target_character)
-
-            if action_request.technique is not None:
-                result = _resolve_enhanced_action(
-                    character=character,
-                    technique=action_request.technique,
-                    action_template=action_template,
-                    action_key=action_request.action_key,
-                    difficulty=difficulty,
-                    context=context,
-                    strain_commitment=action_request.strain_commitment,
-                )
+                result = resolve_accepted_cast(action_request)
             else:
-                action_resolution = start_action_resolution(
-                    character=character,
-                    template=action_template,
-                    target_difficulty=difficulty,
-                    context=context,
-                )
-                result = EnhancedSceneActionResult(
-                    action_resolution=action_resolution,
-                    action_key=action_request.action_key,
-                )
+                result = _resolve_standard_action(action_request)
 
-            action_request.status = ActionRequestStatus.RESOLVED
-            action_request.resolved_at = timezone.now()
-            action_request.resolved_difficulty = difficulty
-            action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
-
-            result_interaction = _create_result_interaction(
-                action_request=action_request,
-                result=result,
-                strain_committed=action_request.strain_commitment,
-            )
-            if result_interaction is not None:
-                action_request.result_interaction = result_interaction
-                action_request.save(update_fields=["result_interaction"])
-
-            # Award kudos to target for accepting the action request.
-            # Skip when the target has no linked account — NPC personas and
-            # established/temporary personas without an account are valid; the
-            # kudos award only applies to real player accounts.
-            target_character = action_request.target_persona.character_sheet.character
-            target_account = target_character.db_account
-            if target_account is not None:
-                category = _get_social_engagement_category()
-                initiator_character = action_request.initiator_persona.character_sheet.character
-                initiator_account = initiator_character.db_account
-                initiator_name = action_request.initiator_persona.name
-                award_kudos(
-                    account=target_account,
-                    amount=category.default_amount,
-                    source_category=category,
-                    description=f"Engaged with action request from {initiator_name}",
-                    awarded_by=initiator_account,
-                )
+            _award_acceptance_kudos(action_request)
 
             resolver = get_resolver(action_request.action_key)
             if resolver is not None:
@@ -291,6 +240,101 @@ def respond_to_action_request(
         return result
 
     return None
+
+
+def _resolve_standard_action(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult:
+    """Resolve an enhanced or plain action request inside a transaction.
+
+    Covers the two non-cast branches of ``respond_to_action_request``:
+    - Plain action (no technique): ``start_action_resolution`` directly.
+    - Technique-enhanced action: ``_resolve_enhanced_action`` wrapping use_technique.
+
+    Sets status=RESOLVED, resolved_at, resolved_difficulty, and result_interaction
+    on the request before returning.
+
+    Raises:
+        ValueError: If the request has no action_template set.
+    """
+    difficulty = DIFFICULTY_VALUES.get(
+        action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    )
+
+    with transaction.atomic():
+        action_template = action_request.action_template
+        if action_template is None:
+            msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
+            raise ValueError(msg)
+
+        character = action_request.initiator_persona.character_sheet.character
+        target_character = action_request.target_persona.character_sheet.character
+        context = ResolutionContext(character=character, target=target_character)
+
+        if action_request.technique is not None:
+            result = _resolve_enhanced_action(
+                character=character,
+                technique=action_request.technique,
+                action_template=action_template,
+                action_key=action_request.action_key,
+                difficulty=difficulty,
+                context=context,
+                strain_commitment=action_request.strain_commitment,
+            )
+        else:
+            action_resolution = start_action_resolution(
+                character=character,
+                template=action_template,
+                target_difficulty=difficulty,
+                context=context,
+            )
+            result = EnhancedSceneActionResult(
+                action_resolution=action_resolution,
+                action_key=action_request.action_key,
+            )
+
+        action_request.status = ActionRequestStatus.RESOLVED
+        action_request.resolved_at = timezone.now()
+        action_request.resolved_difficulty = difficulty
+        action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+
+        result_interaction = _create_result_interaction(
+            action_request=action_request,
+            result=result,
+            strain_committed=action_request.strain_commitment,
+        )
+        if result_interaction is not None:
+            action_request.result_interaction = result_interaction
+            action_request.save(update_fields=["result_interaction"])
+
+    return result
+
+
+def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
+    """Award kudos to the target for accepting an action request.
+
+    Skips the award when the target persona is absent (standalone casts allow
+    no-target) or when the target's character has no linked account (NPC personas
+    and established/temporary personas without an account are valid; the kudos
+    award only applies to real player accounts).
+    """
+    if action_request.target_persona is None:
+        return
+    target_character = action_request.target_persona.character_sheet.character
+    target_account = target_character.db_account
+    if target_account is None:
+        return
+    category = _get_social_engagement_category()
+    initiator_character = action_request.initiator_persona.character_sheet.character
+    initiator_account = initiator_character.db_account
+    initiator_name = action_request.initiator_persona.name
+    award_kudos(
+        account=target_account,
+        amount=category.default_amount,
+        source_category=category,
+        description=f"Engaged with action request from {initiator_name}",
+        awarded_by=initiator_account,
+    )
 
 
 def _resolve_enhanced_action(  # noqa: PLR0913

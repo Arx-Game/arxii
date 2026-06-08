@@ -8,7 +8,12 @@ from django.utils import timezone
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
-from world.covenants.models import Covenant, CovenantRole, GearArchetypeCompatibility
+from world.covenants.models import (
+    Covenant,
+    CovenantRiteParticipant,
+    CovenantRole,
+    GearArchetypeCompatibility,
+)
 from world.items.constants import GearArchetype
 
 
@@ -323,7 +328,7 @@ class CovenantRiteSeverityForTests(TestCase):
         from world.covenants.models import CovenantRite
 
         return CovenantRite(
-            min_engaged_present=2,
+            min_members_present=2,
             base_severity=3,
             severity_per_extra_participant=2,
             max_severity=10,
@@ -349,7 +354,7 @@ class CovenantRiteSeverityForTests(TestCase):
         from world.covenants.models import CovenantRite
 
         rite = CovenantRite(
-            min_engaged_present=2,
+            min_members_present=2,
             base_severity=1,
             severity_per_extra_participant=5,
             max_severity=None,
@@ -391,7 +396,12 @@ class CovenantRiteInstanceTests(TestCase):
             covenant=self.covenant,
             scene=self.scene,
         )
-        instance.participants.add(self.sheet)
+        # Through-model: create the participant record directly.
+        CovenantRiteParticipant.objects.create(
+            instance=instance,
+            character_sheet=self.sheet,
+            granted_condition=self.condition_template,
+        )
 
         self.assertEqual(instance.participants.count(), 1)
         self.assertIsNone(instance.completed_at)

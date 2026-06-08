@@ -1028,6 +1028,54 @@ See `docs/roadmap/combat.md` Phase 7 for the full unified interface spec. Magic-
   message now routes through the same `dispatch_player_action` function. ActionPanel and
   ActionAttachment both repointed to the unified endpoint.
 
+**Standalone technique cast — cast→pose→log→outcome (BUILT — branch `feature-772-standalone-technique-cast`, issue #772):**
+
+A PC can cast a standalone technique directly from a scene, outside of an enhanced social action.
+`request_technique_cast` in `world/scenes/cast_services.py` routes three ways per the
+consent/combat/immediate matrix:
+
+- **Self / no-target / same-persona** → resolves immediately via the full technique pipeline
+  (`use_technique` + `start_action_resolution`), persists a RESOLVED `SceneActionRequest`, and
+  authors a Narrator OUTCOME `Interaction` (mode=OUTCOME, persona.is_system=True) in the scene.
+  The cast-level `PowerLedger` (BASE + ENVIRONMENT stages) is surfaced in the OUTCOME pose
+  narration — amplifying resonant environments produce an "— the place's resonance swells the
+  working." clause.
+- **Benign technique at another PC** → creates a PENDING `SceneActionRequest` for consent.
+  `respond_to_action_request` (in `world/scenes/action_services.py`) dispatches to
+  `resolve_accepted_cast` on ACCEPT; the full pipeline resolves and a Narrator OUTCOME pose is
+  authored. DENY sets status=DENIED with no pose.
+- **Hostile (damage) technique at another PC** → calls `seed_or_feed_encounter_from_cast`
+  (in `world/combat/cast_seed.py`) to seed or feed a `CombatEncounter` in DECLARING status,
+  with the caster as an active participant and the technique as their opening
+  `CombatRoundAction.focused_action`.
+
+What was built (`src/` paths relative to repo root):
+- `world/scenes/cast_services.py` — `request_technique_cast`, `derive_cast_difficulty`,
+  `_route_immediate_cast`, `_route_benign_cast`, `_route_hostile_cast`,
+  `create_cast_outcome_pose`, `resolve_accepted_cast`.
+- `world/combat/cast_seed.py` — `seed_or_feed_encounter_from_cast` (reuses existing combat
+  services; no new combat machinery).
+- `world/magic/services/hostility.py` — `is_technique_hostile` classifier (damage profile
+  presence).
+- `world/scenes/types.py` — `CastResult` dataclass.
+- `world/magic/narration.py` — `render_cast_outcome_narration` + `power_outcome_clause`
+  (shared with future regular-cast paths).
+- `world/scenes/action_models.py` — `SceneActionRequest.technique` FK +
+  `is_standalone_cast` property; `respond_to_action_request` dispatch extended.
+- API: `GET /api/castable-techniques/` (castable-techniques endpoint) +
+  `POST /api/action-requests/cast/` (cast dispatch endpoint).
+- Frontend: cast flow wired into `ActionPanel` / `ActionAttachment` (branch `feature-772`).
+- `world/scenes/tests/test_cast_integration.py` — end-to-end SQLite-tier integration test
+  covering all three branches (self-cast RESOLVED + OUTCOME pose; benign ACCEPT/DENY;
+  hostile encounter seeded with `CombatRoundAction.focused_action`).
+
+Cross-references:
+- **#639 power ledger surfaced** — the `PowerLedger` built by `use_technique`'s ordered
+  resolution pipeline is now threaded into scene-cast OUTCOME poses. See "Scope #5.5" and
+  "#639" entries above for ledger internals.
+- **#766 ledger panel data seam** — the cast-result API payload carries `power_ledger` so
+  the full ledger panel (still to do) has its data source; the panel itself is a follow-up.
+
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
 - Risk is always explicit. Character death warnings use those exact words.
@@ -1286,11 +1334,14 @@ extension to `calculate_effective_anima_cost`. The diminishing-returns conversio
 The sole v1 consumer is Clash: `commit_to_clash` passes the PC's declared anima
 commitment as the strain amount when it calls `use_technique` in clash-commit mode.
 
-**Regular-cast Strain integration is deferred.** Wiring Strain into ordinary technique
-casts — where a player chooses to push harder on a normal Flame Lance outside a clash —
-requires the regular-cast action UI and a non-clash Strain audit record. That surface is
-broader than Clash and is not built in this branch. The `strain_commitment` kwarg exists
-and is exercised; the authored decision surface for non-clash casts is the follow-up.
+**Regular-cast Strain is UNBLOCKED but remains a deferred follow-up.** The
+standalone-technique-cast UI landed in #772 (`request_technique_cast`, `POST /api/action-requests/cast/`,
+`ActionPanel` cast flow) — the "regular-cast action UI" prerequisite that was blocking Strain
+integration is now satisfied. What remains is a non-clash Strain audit record and
+`StrainConfig` tuning for the standalone-cast path. The `strain_commitment` kwarg already
+threads through `_route_immediate_cast` / `resolve_accepted_cast`; the authored decision
+surface (a "commit extra anima" slider in the cast dialog) and the per-cast audit row are
+the follow-up items.
 
 ---
 

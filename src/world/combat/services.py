@@ -746,7 +746,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     name: str,
     tier: str,
     max_health: int,
-    threat_pool: ThreatPool,
+    threat_pool: ThreatPool | None,
     description: str = "",
     soak_value: int = 0,
     probing_threshold: int | None = None,

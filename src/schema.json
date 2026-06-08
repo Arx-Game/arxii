@@ -215,6 +215,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneActionRequest'
           description: ''
+  /api/action-requests/cast/:
+    post:
+      operationId: action_requests_cast_create
+      description: |-
+        Submit a standalone technique cast.
+
+        Routes per the consent/combat/immediate matrix:
+        - self/room/no-target → resolves immediately (201 with result + power_ledger)
+        - benign at another PC → PENDING consent request (201, no result yet)
+        - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
+      tags:
+      - action-requests
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SceneActionRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActionRequest'
+          description: ''
+  /api/action-requests/castable-techniques/:
+    get:
+      operationId: action_requests_castable_techniques_retrieve
+      description: |-
+        List techniques the given persona can cast standalone.
+
+        Requires ?initiator_persona=<id> query param. Returns only techniques
+        with an action_template (castable standalone) known by that character.
+      tags:
+      - action-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActionRequest'
+          description: ''
   /api/actions/characters/{character_id}/available/:
     get:
       operationId: actions_characters_available_list
@@ -22553,7 +22599,7 @@ components:
         min_covenant_level:
           type: integer
           readOnly: true
-        min_engaged_present:
+        min_members_present:
           type: integer
           readOnly: true
         granted_condition:
@@ -22583,7 +22629,7 @@ components:
       - id
       - max_severity
       - min_covenant_level
-      - min_engaged_present
+      - min_members_present
       - ritual
       - severity_per_extra_participant
     CovenantRole:
@@ -34849,7 +34895,8 @@ components:
         target_persona:
           type: integer
           nullable: true
-          description: The persona being targeted. Null for area actions (to the room).
+          description: The persona being targeted. Null for area actions (to the room)
+            or standalone technique casts.
         target_name:
           type: string
           readOnly: true
@@ -34929,7 +34976,8 @@ components:
         target_persona:
           type: integer
           nullable: true
-          description: The persona being targeted. Null for area actions (to the room).
+          description: The persona being targeted. Null for area actions (to the room)
+            or standalone technique casts.
         action_key:
           type: string
           description: Key identifying the action type (e.g., 'intimidate', 'persuade')
