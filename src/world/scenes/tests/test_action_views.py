@@ -7,7 +7,6 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from actions.constants import ResolutionPhase
-from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -25,6 +24,7 @@ from world.scenes.factories import (
     SceneActionRequestFactory,
     SceneFactory,
 )
+from world.scenes.tests.cast_test_helpers import make_castable_technique
 from world.scenes.types import EnhancedSceneActionResult
 
 
@@ -198,18 +198,6 @@ class PlaceViewSetTestCase(APITestCase):
         assert len(response.data["results"]) == 1
 
 
-def _make_castable_technique(hostile: bool = False):
-    """Return a technique with an action_template (castable standalone)."""
-    if hostile:
-        # Default EffectTypeFactory has base_power → auto-seeds damage profile
-        return TechniqueFactory(action_template=ActionTemplateFactory())
-    return TechniqueFactory(
-        effect_type=BinaryEffectTypeFactory(),
-        damage_profile=False,
-        action_template=ActionTemplateFactory(),
-    )
-
-
 class CastEndpointTestCase(APITestCase):
     """Tests for POST /api/action-requests/cast/."""
 
@@ -275,7 +263,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_immediate_cast_resolves_and_returns_result(self) -> None:
         """Self-cast (no target) resolves immediately; response includes result."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": self.scene.pk,
@@ -291,7 +279,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_immediate_cast_power_ledger_in_result(self) -> None:
         """Immediate cast includes power_ledger in the result payload."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": self.scene.pk,
@@ -306,7 +294,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
         """Benign cast at another PC returns PENDING request (consent flow)."""
-        technique = _make_castable_technique(hostile=False)
+        technique = make_castable_technique(hostile=False)
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": self.scene.pk,
@@ -321,7 +309,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_cast_unknown_technique_returns_400(self) -> None:
         """Casting a technique the initiator does not know → 400."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         # Do NOT grant the technique to the persona
         data = {
             "scene": self.scene.pk,
@@ -333,7 +321,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_cast_wrong_persona_returns_400(self) -> None:
         """Using a persona belonging to a different account → 400."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         data = {
             "scene": self.scene.pk,
             "initiator_persona": self.target_persona.pk,
@@ -344,7 +332,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_cast_missing_scene_returns_404(self) -> None:
         """Non-existent (or inactive) scene id → 404."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": 999999,
@@ -357,7 +345,7 @@ class CastEndpointTestCase(APITestCase):
     def test_unauthenticated_cast_returns_403(self) -> None:
         """Unauthenticated request → 403 (session auth returns forbidden, not 401)."""
         self.client.force_authenticate(user=None)
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         data = {
             "scene": self.scene.pk,
             "initiator_persona": self.persona.pk,
@@ -368,7 +356,7 @@ class CastEndpointTestCase(APITestCase):
 
     def test_hostile_cast_at_other_pc_returns_201_with_encounter(self) -> None:
         """Hostile cast at another PC → 201, response contains an encounter in DECLARING status."""
-        technique = _make_castable_technique(hostile=True)
+        technique = make_castable_technique(hostile=True)
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": self.scene.pk,
@@ -407,7 +395,7 @@ class CastEndpointTestCase(APITestCase):
         the key must be present, proving the accept path now reads from the result
         object rather than being silently absent).
         """
-        technique = _make_castable_technique(hostile=False)
+        technique = make_castable_technique(hostile=False)
         CharacterTechniqueFactory(character=self.identity, technique=technique)
 
         # Create a pending cast request via the cast endpoint
@@ -470,7 +458,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
     def test_returns_only_castable_techniques(self) -> None:
         """Only techniques with action_template (castable standalone) are returned."""
-        castable = _make_castable_technique()
+        castable = make_castable_technique()
         non_castable = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
         CharacterTechniqueFactory(character=self.identity, technique=castable)
         CharacterTechniqueFactory(character=self.identity, technique=non_castable)
@@ -482,7 +470,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
     def test_includes_hostile_flag(self) -> None:
         """Each technique in the list includes a boolean hostile field."""
-        benign = _make_castable_technique(hostile=False)
+        benign = make_castable_technique(hostile=False)
         CharacterTechniqueFactory(character=self.identity, technique=benign)
         response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
         assert response.status_code == status.HTTP_200_OK
@@ -492,7 +480,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
     def test_does_not_return_other_characters_techniques(self) -> None:
         """Techniques known only by another character do not appear."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         CharacterTechniqueFactory(character=self.other_identity, technique=technique)
         response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
         assert response.status_code == status.HTTP_200_OK
@@ -517,7 +505,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
 
     def test_response_contains_expected_fields(self) -> None:
         """Each entry has id, name, anima_cost, tier, intensity, control, hostile."""
-        technique = _make_castable_technique()
+        technique = make_castable_technique()
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
         assert response.status_code == status.HTTP_200_OK

@@ -286,6 +286,34 @@ def request_technique_cast(
     )
 
 
+def _create_cast_request(  # noqa: PLR0913
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    target_persona: Persona | None,
+    technique: Technique,
+    status: str,
+    strain_commitment: int = 0,
+    resolved_at=None,
+) -> SceneActionRequest:
+    """Create a SceneActionRequest for a standalone cast.
+
+    Shared by all three routing branches so the identical create() call is not
+    copy-pasted across ``_route_benign_cast``, ``_route_hostile_cast``, and
+    ``_route_immediate_cast``. The hostile branch passes ``resolved_at`` so the
+    audit timestamp is written in a single INSERT rather than a follow-up UPDATE.
+    """
+    return SceneActionRequest.objects.create(
+        scene=scene,
+        initiator_persona=initiator_persona,
+        target_persona=target_persona,
+        technique=technique,
+        status=status,
+        strain_commitment=strain_commitment,
+        resolved_at=resolved_at,
+    )
+
+
 def _route_hostile_cast(
     *,
     scene: Scene,
@@ -295,7 +323,7 @@ def _route_hostile_cast(
 ) -> CastResult:
     """Hostile cast at another PC → audit request + seed/feed a combat encounter."""
     with transaction.atomic():
-        request = SceneActionRequest.objects.create(
+        request = _create_cast_request(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,
@@ -322,7 +350,7 @@ def _route_benign_cast(
     strain_commitment: int,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept)."""
-    request = SceneActionRequest.objects.create(
+    request = _create_cast_request(
         scene=scene,
         initiator_persona=initiator_persona,
         target_persona=target_persona,
@@ -343,7 +371,7 @@ def _route_immediate_cast(
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
     with transaction.atomic():
-        request = SceneActionRequest.objects.create(
+        request = _create_cast_request(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,

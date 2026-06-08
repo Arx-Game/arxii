@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
-from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import RoomProfileFactory
@@ -29,7 +28,6 @@ from world.magic.factories import (
     ResonanceFactory,
     TechniqueFactory,
 )
-from world.magic.models import Technique
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
@@ -43,10 +41,15 @@ from world.scenes.cast_services import (
 )
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
-from world.scenes.models import Interaction, Persona
+from world.scenes.models import Interaction
+from world.scenes.tests.cast_test_helpers import (
+    CastScenarioMixin,
+    grant_technique,
+    make_benign_castable_technique,
+    make_hostile_castable_technique,
+)
 from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
-from world.vitals.models import CharacterVitals
 
 
 class TestDeriveCastDifficulty(TestCase):
@@ -111,27 +114,6 @@ class TestDeriveCastDifficulty(TestCase):
         assert derive_cast_difficulty(technique) == 15
 
 
-def _grant(persona: Persona, technique: Technique) -> None:
-    """Grant a technique to the persona's CharacterSheet so the knows-check passes."""
-    CharacterTechniqueFactory(character=persona.character_sheet, technique=technique)
-
-
-def _benign_castable_technique() -> Technique:
-    """A non-hostile, standalone-castable technique (no power, no damage, has template)."""
-    return TechniqueFactory(
-        effect_type=BinaryEffectTypeFactory(),
-        damage_profile=False,
-        action_template=ActionTemplateFactory(),
-    )
-
-
-def _hostile_castable_technique() -> Technique:
-    """A hostile (damage) standalone-castable technique."""
-    # Default EffectTypeFactory has base_power=10 → auto-seeds a damage profile →
-    # is_technique_hostile() is True.
-    return TechniqueFactory(action_template=ActionTemplateFactory())
-
-
 class TestRequestTechniqueCastValidation(TestCase):
     """request_technique_cast guards: must know the technique and it must be castable."""
 
@@ -141,7 +123,7 @@ class TestRequestTechniqueCastValidation(TestCase):
         cls.initiator = PersonaFactory()
 
     def test_unknown_technique_raises(self) -> None:
-        technique = _benign_castable_technique()  # not granted to the initiator
+        technique = make_benign_castable_technique()  # not granted to the initiator
         with self.assertRaises(ValidationError):
             request_technique_cast(
                 scene=self.scene,
@@ -154,7 +136,7 @@ class TestRequestTechniqueCastValidation(TestCase):
             effect_type=BinaryEffectTypeFactory(),
             damage_profile=False,
         )
-        _grant(self.initiator, technique)
+        grant_technique(self.initiator, technique)
         with self.assertRaises(ValidationError):
             request_technique_cast(
                 scene=self.scene,
@@ -163,41 +145,19 @@ class TestRequestTechniqueCastValidation(TestCase):
             )
 
 
-class TestRequestTechniqueCastRouting(TestCase):
+class TestRequestTechniqueCastRouting(CastScenarioMixin):
     """request_technique_cast routes self / benign-other / hostile-other correctly."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        CheckSystemSetupFactory.create()
-        room = create_object("typeclasses.rooms.Room", key="Cast Room", nohome=True)
-        cls.scene = SceneFactory(location=room)
-        cls.initiator = PersonaFactory()
-        cls.target = PersonaFactory()
-        # Anima + vitals so use_technique and combat seeding have real data.
-        CharacterAnimaFactory(
-            character=cls.initiator.character_sheet.character,
-            current=20,
-            maximum=30,
-        )
-        for persona in (cls.initiator, cls.target):
-            CharacterVitals.objects.create(
-                character_sheet=persona.character_sheet,
-                health=50,
-                max_health=50,
-                base_max_health=50,
-            )
-
-    def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
-
-    def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        super().setUpTestData()
+        # Alias so test bodies read naturally (caster = initiator in routing tests).
+        cls.initiator = cls.caster
 
     def test_self_cast_resolves_and_creates_outcome_pose(self) -> None:
         """No target → RESOLVED request with a Narrator OUTCOME pose."""
-        technique = _benign_castable_technique()
-        _grant(self.initiator, technique)
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
 
         cast = request_technique_cast(
             scene=self.scene,
@@ -216,8 +176,8 @@ class TestRequestTechniqueCastRouting(TestCase):
 
     def test_self_cast_persists_strain_commitment(self) -> None:
         """strain_commitment forwarded on the immediate path is stored on the request."""
-        technique = _benign_castable_technique()
-        _grant(self.initiator, technique)
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
 
         cast = request_technique_cast(
             scene=self.scene,
@@ -231,8 +191,8 @@ class TestRequestTechniqueCastRouting(TestCase):
 
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
         """Benign technique aimed at another PC → PENDING consent request."""
-        technique = _benign_castable_technique()
-        _grant(self.initiator, technique)
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
 
         cast = request_technique_cast(
             scene=self.scene,
@@ -247,8 +207,8 @@ class TestRequestTechniqueCastRouting(TestCase):
 
     def test_hostile_cast_at_other_pc_seeds_encounter(self) -> None:
         """Hostile technique aimed at another PC → combat encounter seeded (DECLARING)."""
-        technique = _hostile_castable_technique()
-        _grant(self.initiator, technique)
+        technique = make_hostile_castable_technique()
+        grant_technique(self.initiator, technique)
 
         cast = request_technique_cast(
             scene=self.scene,
@@ -387,7 +347,7 @@ class TestCreateCastOutcomePoseLedgerClause(TestCase):
         )
 
 
-class TestRespondToActionRequestStandaloneCast(TestCase):
+class TestRespondToActionRequestStandaloneCast(CastScenarioMixin):
     """respond_to_action_request accept/deny paths for a PENDING standalone technique cast.
 
     A benign technique aimed at another PC creates a PENDING SceneActionRequest
@@ -398,39 +358,13 @@ class TestRespondToActionRequestStandaloneCast(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        CheckSystemSetupFactory.create()
-        room = create_object("typeclasses.rooms.Room", key="Respond Cast Room", nohome=True)
-        cls.scene = SceneFactory(location=room)
-        cls.initiator = PersonaFactory()
-        cls.target = PersonaFactory()
-        CharacterAnimaFactory(
-            character=cls.initiator.character_sheet.character,
-            current=20,
-            maximum=30,
-        )
-        for persona in (cls.initiator, cls.target):
-            CharacterVitals.objects.create(
-                character_sheet=persona.character_sheet,
-                health=50,
-                max_health=50,
-                base_max_health=50,
-            )
-
-    def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
-
-    def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        super().setUpTestData()
+        cls.initiator = cls.caster
 
     def _make_pending_standalone_request(self) -> SceneActionRequest:
         """Create a PENDING standalone cast request via request_technique_cast."""
-        technique = TechniqueFactory(
-            effect_type=BinaryEffectTypeFactory(),
-            damage_profile=False,
-            action_template=ActionTemplateFactory(),
-        )
-        CharacterTechniqueFactory(character=self.initiator.character_sheet, technique=technique)
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
         cast = request_technique_cast(
             scene=self.scene,
             initiator_persona=self.initiator,
