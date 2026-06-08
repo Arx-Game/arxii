@@ -425,8 +425,24 @@ describe('ActionPanel', () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
     vi.mocked(useCastableTechniques).mockReturnValue({
       data: [
-        { id: 10, name: 'Ember Touch', anima_cost: 3, tier: 1, intensity: 2, control: 1, hostile: false },
-        { id: 11, name: 'Shadow Lash', anima_cost: 5, tier: 2, intensity: 4, control: 2, hostile: true },
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
+        {
+          id: 11,
+          name: 'Shadow Lash',
+          anima_cost: 5,
+          tier: 2,
+          intensity: 4,
+          control: 2,
+          hostile: true,
+        },
       ],
       isLoading: false,
     } as unknown as ReturnType<typeof useCastableTechniques>);
@@ -456,7 +472,15 @@ describe('ActionPanel', () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
     vi.mocked(useCastableTechniques).mockReturnValue({
       data: [
-        { id: 10, name: 'Ember Touch', anima_cost: 3, tier: 1, intensity: 2, control: 1, hostile: false },
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
       ],
       isLoading: false,
     } as unknown as ReturnType<typeof useCastableTechniques>);

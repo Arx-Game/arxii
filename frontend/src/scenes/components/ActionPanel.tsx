@@ -412,12 +412,12 @@ export function ActionPanel({ sceneId }: Props) {
                               {tech.hostile && (
                                 <AlertTriangle
                                   aria-label="Hostile — may trigger combat"
-                                  className="h-3 w-3 text-amber-400 shrink-0"
+                                  className="h-3 w-3 shrink-0 text-amber-400"
                                 />
                               )}
                               {tech.name}
                             </span>
-                            <span className="ml-2 text-muted-foreground shrink-0">
+                            <span className="ml-2 shrink-0 text-muted-foreground">
                               {tech.anima_cost} anima
                             </span>
                           </button>
