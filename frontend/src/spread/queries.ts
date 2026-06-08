@@ -1,0 +1,66 @@
+/**
+ * React Query hooks for the Spread a Tale flow (#745).
+ *
+ * - useSpreadableDeedsQuery: deeds the persona may spread (societies it knows).
+ * - useSpreadMutation: dispatch a telling in the current scene.
+ */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { apiFetch } from '@/evennia_replacements/api';
+
+export interface SpreadableDeed {
+  id: number;
+  title: string;
+  base_value: number;
+  created_at: string;
+}
+
+export interface SpreadResult {
+  resolved: boolean;
+  outcome: string;
+  band: string;
+}
+
+export interface SpreadInput {
+  scene: number;
+  deed: number;
+  pose_text: string;
+  effort_level: string;
+}
+
+async function fetchSpreadableDeeds(personaId: number): Promise<SpreadableDeed[]> {
+  const res = await apiFetch(`/api/personas/${personaId}/spreadable-deeds/`);
+  if (!res.ok) {
+    throw new Error('Failed to load deeds you can spread.');
+  }
+  return res.json() as Promise<SpreadableDeed[]>;
+}
+
+export function useSpreadableDeedsQuery(personaId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['spreadable-deeds', personaId],
+    queryFn: () => fetchSpreadableDeeds(personaId as number),
+    enabled: personaId !== null && enabled,
+  });
+}
+
+export function useSpreadMutation(personaId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SpreadInput): Promise<SpreadResult> => {
+      const res = await apiFetch(`/api/personas/${personaId}/spread/`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? 'The tale could not be spread.');
+      }
+      return res.json() as Promise<SpreadResult>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['spreadable-deeds', personaId] });
+      queryClient.invalidateQueries({ queryKey: ['renown', personaId] });
+    },
+  });
+}

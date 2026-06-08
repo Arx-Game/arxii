@@ -1,0 +1,173 @@
+/**
+ * Spread a Tale dialog (#745). Pick a deed you know of, write the telling,
+ * choose how hard you push, and tell it in your current scene. The telling +
+ * outcome echo into the scene feed; this dialog shows a qualitative ack.
+ */
+import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useAppSelector } from '@/store/hooks';
+
+import { useSpreadableDeedsQuery, useSpreadMutation, type SpreadResult } from './queries';
+
+const EFFORT_OPTIONS = [
+  { value: 'low', label: 'Lightly' },
+  { value: 'medium', label: 'Measured' },
+  { value: 'high', label: 'Pour yourself in' },
+  { value: 'extreme', label: 'Everything you have' },
+];
+
+export function SpreadTaleDialog({ personaId }: { personaId: number }) {
+  const [open, setOpen] = useState(false);
+  const active = useAppSelector((s) => s.game.active);
+  const scene = useAppSelector((s) => (active ? (s.game.sessions[active]?.scene ?? null) : null));
+  const sceneId = scene?.id ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          Spread a Tale
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Spread a Tale</DialogTitle>
+        </DialogHeader>
+        {sceneId === null ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            You must be in a scene to tell a tale. Step into a room and try again.
+          </p>
+        ) : (
+          <SpreadForm
+            personaId={personaId}
+            sceneId={sceneId}
+            open={open}
+            onDone={() => setOpen(false)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface FormProps {
+  personaId: number;
+  sceneId: number;
+  open: boolean;
+  onDone: () => void;
+}
+
+function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
+  const { data: deeds, isLoading } = useSpreadableDeedsQuery(personaId, open);
+  const [deedId, setDeedId] = useState<number | null>(null);
+  const [pose, setPose] = useState('');
+  const [effort, setEffort] = useState('medium');
+  const [result, setResult] = useState<SpreadResult | null>(null);
+  const mutation = useSpreadMutation(personaId);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!deeds || deeds.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        You know of no tales worth telling here.
+      </p>
+    );
+  }
+
+  if (result) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm">
+          The telling lands: <strong>{result.outcome}</strong>, in a {result.band.toLowerCase()}{' '}
+          room.
+        </p>
+        <DialogFooter>
+          <Button onClick={onDone}>Done</Button>
+        </DialogFooter>
+      </div>
+    );
+  }
+
+  const submit = () => {
+    if (deedId === null) {
+      return;
+    }
+    mutation.mutate(
+      { scene: sceneId, deed: deedId, pose_text: pose, effort_level: effort },
+      { onSuccess: setResult }
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <Select value={deedId?.toString() ?? ''} onValueChange={(v) => setDeedId(Number(v))}>
+        <SelectTrigger>
+          <SelectValue placeholder="Choose a tale to tell" />
+        </SelectTrigger>
+        <SelectContent>
+          {deeds.map((d) => (
+            <SelectItem key={d.id} value={d.id.toString()}>
+              {d.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Textarea
+        value={pose}
+        onChange={(e) => setPose(e.target.value)}
+        placeholder="How do you tell it? A song, a rousing speech, a whispered rumor..."
+        maxLength={2000}
+        rows={4}
+      />
+
+      <Select value={effort} onValueChange={setEffort}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {EFFORT_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {mutation.isError && (
+        <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
+      )}
+
+      <DialogFooter>
+        <Button onClick={submit} disabled={deedId === null || mutation.isPending}>
+          {mutation.isPending ? 'Telling…' : 'Tell the tale'}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}

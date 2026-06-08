@@ -7,6 +7,7 @@ import { DeedsLogCard } from './DeedsLogCard';
 import { OwnedDwellingsCard } from './OwnedDwellingsCard';
 import { TenantedRoomsCard } from './TenantedRoomsCard';
 import { PersonaSelectionShell } from './PersonaSelectionShell';
+import { SpreadTaleDialog } from '@/spread/SpreadTaleDialog';
 import type { RenownPayload } from '../types';
 
 interface Props {
@@ -41,7 +42,14 @@ function PanelBody({ personaId }: { personaId: number }) {
       </div>
     );
   }
-  return <CardLayout renown={renown} />;
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <SpreadTaleDialog personaId={personaId} />
+      </div>
+      <CardLayout renown={renown} />
+    </div>
+  );
 }
 
 function CardLayout({ renown }: { renown: RenownPayload }) {
