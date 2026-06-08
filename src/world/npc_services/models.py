@@ -22,6 +22,10 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.npc_services.constants import DrawMode, OfferKind
 
+# Cross-app FK string for the Persona model, referenced by several fields below.
+# Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
+_PERSONA_FK = "scenes.Persona"
+
 
 class NPCStanding(SharedMemoryModel):
     """Per-(PC persona, NPC persona) durable disposition.
@@ -34,13 +38,13 @@ class NPCStanding(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.PROTECT,
         related_name="npc_standings",
         help_text="The PC's persona that holds this standing.",
     )
     npc_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.PROTECT,
         related_name="standings_held_by",
         help_text="The NPC's persona the standing is with.",
@@ -263,7 +267,7 @@ class OfferCooldown(SharedMemoryModel):
         related_name="cooldowns",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.PROTECT,
         related_name="offer_cooldowns",
     )
@@ -304,7 +308,7 @@ class NPCRoleCooldown(SharedMemoryModel):
         related_name="role_cooldowns",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.PROTECT,
         related_name="role_cooldowns",
     )

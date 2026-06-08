@@ -46,6 +46,11 @@ _ERR_REWARD_NO_PARENT = "Exactly one of route or candidate must be set; both are
 _ERR_REWARD_BOTH_PARENTS = "Cannot set both route and candidate — pick one."
 _REWARD_BOTH_PARENTS_SET = 2
 
+# Cross-app FK string for the reusable consequence primitive (missions FK to
+# it by reference only). Centralized to avoid the duplicated-literal SonarCloud
+# smell (python:S1192).
+_CONSEQUENCE_FK = "checks.Consequence"
+
 
 # ---------------------------------------------------------------------------
 # Mission graph data model
@@ -254,7 +259,7 @@ class MissionNode(SharedMemoryModel):
     # future phase (e.g. per-approach riders) can wire them up without a
     # schema change.
     allowed_riders = models.ManyToManyField(
-        "checks.Consequence",
+        _CONSEQUENCE_FK,
         blank=True,
         related_name="+",
         help_text=(
@@ -592,7 +597,7 @@ class MissionOptionRoute(SharedMemoryModel):
         help_text="When true, destination is drawn from weighted candidates.",
     )
     consequence = models.ForeignKey(
-        "checks.Consequence",
+        _CONSEQUENCE_FK,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -660,7 +665,7 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
     )
     weight = models.PositiveSmallIntegerField(default=1)
     consequence = models.ForeignKey(
-        "checks.Consequence",
+        _CONSEQUENCE_FK,
         null=True,
         blank=True,
         on_delete=models.PROTECT,

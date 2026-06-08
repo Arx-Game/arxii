@@ -32,6 +32,11 @@ from world.scenes.cast_services import request_technique_cast
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
 
+# Repeated API error detail strings. Centralized to avoid the duplicated-literal
+# SonarCloud smell (python:S1192).
+_NO_PERSONAS_DETAIL = "No personas found for your account."
+_INITIATOR_NOT_FOUND_DETAIL = "Initiator persona not found for your account."
+
 
 class SceneActionRequestPagination(PageNumberPagination):
     page_size = 20
@@ -73,7 +78,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         persona_ids = get_account_personas(request)
         if not persona_ids:
             return Response(
-                {"detail": "No personas found for your account."},
+                {"detail": _NO_PERSONAS_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -96,7 +101,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         # Caller must explicitly specify which persona initiates the action.
         if initiator_persona_id not in persona_ids:
             return Response(
-                {"detail": "Initiator persona not found for your account."},
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
@@ -133,7 +138,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         persona_ids = get_account_personas(request)
         if not persona_ids:
             return Response(
-                {"detail": "No personas found for your account."},
+                {"detail": _NO_PERSONAS_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -191,7 +196,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         persona_ids = get_account_personas(request)
         if not persona_ids:
             return Response(
-                {"detail": "No personas found for your account."},
+                {"detail": _NO_PERSONAS_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -212,7 +217,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         if initiator_persona_id not in persona_ids:
             return Response(
-                {"detail": "Initiator persona not found for your account."},
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
@@ -284,7 +289,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         persona_ids = get_account_personas(request)
         if initiator_persona_id not in persona_ids:
             return Response(
-                {"detail": "Initiator persona not found for your account."},
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

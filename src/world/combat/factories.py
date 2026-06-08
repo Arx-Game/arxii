@@ -38,6 +38,11 @@ from world.combat.models import (
 )
 from world.magic.constants import EffectKind
 
+# Factory-path string for the CharacterSheet sub-factory, referenced by
+# multiple factories below. Centralized to avoid the duplicated-literal
+# SonarCloud smell (python:S1192).
+_CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class CombatEncounterFactory(factory_django.DjangoModelFactory):
     """Factory for CombatEncounter."""
@@ -154,7 +159,7 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
         model = CombatParticipant
 
     encounter = factory.SubFactory(CombatEncounterFactory)
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     status = ParticipantStatus.ACTIVE
 
 
@@ -189,7 +194,7 @@ class ComboLearningFactory(factory_django.DjangoModelFactory):
         model = ComboLearning
 
     combo = factory.SubFactory(ComboDefinitionFactory)
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     learned_via = ComboLearningMethod.TRAINING
 
 
@@ -382,7 +387,7 @@ class ClashContributionFactory(factory_django.DjangoModelFactory):
         model = ClashContribution
 
     clash_round = factory.SubFactory(ClashRoundFactory)
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     action_slot = ClashActionSlot.FOCUSED
     anima_committed = 10
     check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")

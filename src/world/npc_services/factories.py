@@ -17,6 +17,11 @@ from world.npc_services.models import (
     PermitOfferDetails,
 )
 
+# Factory-path string for the Persona sub-factory, referenced by multiple
+# factories below. Centralized to avoid the duplicated-literal SonarCloud
+# smell (python:S1192).
+_PERSONA_FACTORY = "world.scenes.factories.PersonaFactory"
+
 
 class NPCStandingFactory(DjangoModelFactory):
     """Per-(PC persona, NPC persona) affection row.
@@ -28,8 +33,8 @@ class NPCStandingFactory(DjangoModelFactory):
     class Meta:
         model = NPCStanding
 
-    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
-    npc_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    persona = factory.SubFactory(_PERSONA_FACTORY)
+    npc_persona = factory.SubFactory(_PERSONA_FACTORY)
     affection = 0
 
 
@@ -75,7 +80,7 @@ class OfferCooldownFactory(DjangoModelFactory):
         model = OfferCooldown
 
     offer = factory.SubFactory(NPCServiceOfferFactory)
-    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    persona = factory.SubFactory(_PERSONA_FACTORY)
     available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
 
 
@@ -93,7 +98,7 @@ class NPCRoleCooldownFactory(DjangoModelFactory):
         model = NPCRoleCooldown
 
     role = factory.SubFactory(NPCRoleFactory)
-    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    persona = factory.SubFactory(_PERSONA_FACTORY)
     available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
 
 

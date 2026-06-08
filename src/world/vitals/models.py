@@ -5,6 +5,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterLifeState
 
+# Cross-app FK string for the consequence pool model, referenced by several
+# fields below. Centralized to avoid the duplicated-literal SonarCloud smell
+# (python:S1192).
+_CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
+
 
 class CharacterVitals(SharedMemoryModel):
     """Persistent character mortality and health tracking.
@@ -83,7 +88,7 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     when a DamageType doesn't specify its own. Authored via admin."""
 
     knockout_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -91,7 +96,7 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         help_text="Global knockout consequence pool (damage-type-agnostic).",
     )
     default_wound_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -99,7 +104,7 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         help_text="Fallback permanent-wound pool when DamageType.wound_pool is null.",
     )
     default_death_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

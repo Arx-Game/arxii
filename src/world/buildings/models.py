@@ -30,6 +30,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 # code smell and gives a single grep target if the source model ever moves.
 _PROJECT_FK = "projects.Project"
 _POLISH_CATEGORY_FK = "buildings.PolishCategory"
+_PERSONA_FK = "scenes.Persona"
 
 
 class BuildingKind(SharedMemoryModel):
@@ -156,7 +157,7 @@ class Building(SharedMemoryModel):
     # buildings that haven't been formally deeded yet (intermediate state
     # the existing construction flow doesn't otherwise distinguish).
     owner_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -209,7 +210,7 @@ class Building(SharedMemoryModel):
     )
     constructed_at = models.DateTimeField(auto_now_add=True)
     constructed_by_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -321,7 +322,7 @@ class BuildingMaterial(SharedMemoryModel):
         help_text="Snapshotted ``ItemInstance.lore_value`` at contribution time.",
     )
     contributed_by_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -413,7 +414,7 @@ class BuildingPermitDetails(SharedMemoryModel):
         help_text="When the permit was activated and consumed by a construction project.",
     )
     consumed_by_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -469,7 +470,7 @@ class BuildingConstructionDetails(SharedMemoryModel):
     target_size = models.PositiveSmallIntegerField()
     target_grandeur = models.PositiveSmallIntegerField()
     constructed_by_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
