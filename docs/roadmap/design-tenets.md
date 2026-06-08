@@ -243,6 +243,22 @@ entry, or consent. Drama is opt-in and foreseeable (per "Risk is a conscious
 player choice") — never sprung on a player as a non-consented consequence.
 Within those bounds, lean in.
 
+### Exact numbers for currencies and progression
+
+Default-to-narrative has one firm exception: a quantity the player *spends* or
+*races toward* is shown as an exact number, never softened into a tier word or a
+mood. Legend is the case in point — it is the currency of renown and the gate on
+path advancement, so a player needs a precise, visceral sense of how much a deed
+earned them and how far they sit from the next threshold. Numbers a player makes
+decisions on — is this worth my action points, am I close to leveling — are not
+texture; they're the ledger, and the ledger is exact.
+
+Narrative description and tier labels still wrap these quantities *elsewhere*, so
+RP about reputation stays human and the table doesn't read like a spreadsheet —
+but they supplement the number, never replace it. The test: if a player would
+act differently knowing the quantity, show the quantity. Abstract the texture,
+not the ledger.
+
 ## Designing systems
 
 ### Walk every user's view, end to end
