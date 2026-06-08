@@ -151,6 +151,28 @@ def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTD
     ).exists()
 
 
+def _emit_death_gate(character: ObjectDB, room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+    """Fire the death gate: defer when death-deferred is active, else CHARACTER_KILLED."""
+    if _character_has_death_deferred(character):
+        from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+        try:
+            vitals = CharacterVitals.objects.get(character_sheet=character.sheet_data)
+            vitals.death_deferred_pending = True
+            vitals.save(update_fields=["death_deferred_pending"])
+        except CharacterVitals.DoesNotExist:
+            pass
+    else:
+        emit_event(
+            EventName.CHARACTER_KILLED,
+            CharacterKilledPayload(
+                character=character,
+                source_event=EventName.DAMAGE_PRE_APPLY,
+            ),
+            location=room,
+        )
+
+
 def get_penetration_check_type() -> CheckType:
     """Return the seeded 'penetration' CheckType for the ward contest (#639).
 
@@ -904,7 +926,82 @@ def expire_pulls_for_round(encounter: CombatEncounter) -> None:
         recompute_max_health_with_threads(p.character_sheet)
 
 
-def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration requires all slot fields
+def _validate_passive_slot(
+    focused_category: str | None,
+    *,
+    physical_passive: Technique | None,
+    social_passive: Technique | None,
+    mental_passive: Technique | None,
+) -> None:
+    """Raise if the passive slot matching ``focused_category`` is occupied."""
+    if focused_category is None:
+        return
+    passive_map = {
+        ActionCategory.PHYSICAL: physical_passive,
+        ActionCategory.SOCIAL: social_passive,
+        ActionCategory.MENTAL: mental_passive,
+    }
+    if passive_map.get(focused_category) is not None:
+        msg = (
+            f"Cannot declare action: {focused_category} passive must be "
+            f"None when focused_category is {focused_category}."
+        )
+        raise ValueError(msg)
+
+
+def _supplied_target_kind(
+    participant: CombatParticipant,
+    focused_ally_target: CombatParticipant | None,
+    focused_opponent_target: CombatOpponent | None,
+) -> object | None:
+    """Map the supplied target to its ConditionTargetKind, or None if no target."""
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    if focused_ally_target is not None:
+        if focused_ally_target == participant:
+            return ConditionTargetKind.SELF
+        return ConditionTargetKind.ALLY
+    if focused_opponent_target is not None:
+        return ConditionTargetKind.ENEMY
+    return None
+
+
+def _validate_target_kind_alignment(
+    participant: CombatParticipant,
+    focused_action: Technique,
+    focused_ally_target: CombatParticipant | None,
+    focused_opponent_target: CombatOpponent | None,
+) -> None:
+    """Raise if the supplied target's kind is not accepted by the technique."""
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    rows = list(focused_action.condition_applications.all())
+    has_base_power = focused_action.effect_type.base_power is not None
+
+    if rows:
+        kinds = {row.target_kind for row in rows}
+        target_supplied_kind = _supplied_target_kind(
+            participant, focused_ally_target, focused_opponent_target
+        )
+        # Accept SELF/ALLY interchangeably for ally-targets
+        accepted = kinds.copy()
+        if ConditionTargetKind.ALLY in accepted:
+            accepted.add(ConditionTargetKind.SELF)
+        if ConditionTargetKind.SELF in accepted:
+            accepted.add(ConditionTargetKind.ALLY)
+        if target_supplied_kind is not None and target_supplied_kind not in accepted:
+            msg = (
+                f"Technique target_kinds {sorted(kinds)} do not match supplied "
+                f"target kind '{target_supplied_kind}'."
+            )
+            raise ValueError(msg)
+
+    if has_base_power and not rows and focused_opponent_target is None:
+        msg = "Damage technique requires focused_opponent_target."
+        raise ValueError(msg)
+
+
+def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
     focused_action: Technique | None = None,
@@ -955,21 +1052,12 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
         raise ValueError(msg)
 
     # Passive slot validation (only when a focused category is declared)
-    if focused_category is not None:
-        passive_map = {
-            ActionCategory.PHYSICAL: physical_passive,
-            ActionCategory.SOCIAL: social_passive,
-            ActionCategory.MENTAL: mental_passive,
-        }
-        conflicting_passive = passive_map.get(focused_category)
-    else:
-        conflicting_passive = None
-    if conflicting_passive is not None:
-        msg = (
-            f"Cannot declare action: {focused_category} passive must be "
-            f"None when focused_category is {focused_category}."
-        )
-        raise ValueError(msg)
+    _validate_passive_slot(
+        focused_category,
+        physical_passive=physical_passive,
+        social_passive=social_passive,
+        mental_passive=mental_passive,
+    )
 
     if focused_opponent_target and focused_opponent_target.status != OpponentStatus.ACTIVE:
         msg = "Cannot target a defeated opponent."
@@ -982,36 +1070,12 @@ def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration require
 
     # Target-kind alignment with technique authoring
     if focused_action is not None:
-        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
-
-        rows = list(focused_action.condition_applications.all())
-        has_base_power = focused_action.effect_type.base_power is not None
-        if rows:
-            kinds = {row.target_kind for row in rows}
-            target_supplied_kind = None
-            if focused_ally_target is not None:
-                target_supplied_kind = (
-                    ConditionTargetKind.SELF
-                    if focused_ally_target == participant
-                    else ConditionTargetKind.ALLY
-                )
-            elif focused_opponent_target is not None:
-                target_supplied_kind = ConditionTargetKind.ENEMY
-            # Accept SELF/ALLY interchangeably for ally-targets
-            accepted = kinds.copy()
-            if ConditionTargetKind.ALLY in accepted:
-                accepted.add(ConditionTargetKind.SELF)
-            if ConditionTargetKind.SELF in accepted:
-                accepted.add(ConditionTargetKind.ALLY)
-            if target_supplied_kind is not None and target_supplied_kind not in accepted:
-                msg = (
-                    f"Technique target_kinds {sorted(kinds)} do not match supplied "
-                    f"target kind '{target_supplied_kind}'."
-                )
-                raise ValueError(msg)
-        if has_base_power and not rows and focused_opponent_target is None:
-            msg = "Damage technique requires focused_opponent_target."
-            raise ValueError(msg)
+        _validate_target_kind_alignment(
+            participant,
+            focused_action,
+            focused_ally_target,
+            focused_opponent_target,
+        )
 
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
@@ -1408,24 +1472,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
             )
 
         if death_eligible or force_death:
-            if _character_has_death_deferred(character):
-                from world.vitals.models import CharacterVitals  # noqa: PLC0415
-
-                try:
-                    vitals = CharacterVitals.objects.get(character_sheet=character.sheet_data)
-                    vitals.death_deferred_pending = True
-                    vitals.save(update_fields=["death_deferred_pending"])
-                except CharacterVitals.DoesNotExist:
-                    pass
-            else:
-                emit_event(
-                    EventName.CHARACTER_KILLED,
-                    CharacterKilledPayload(
-                        character=character,
-                        source_event=EventName.DAMAGE_PRE_APPLY,
-                    ),
-                    location=room,
-                )
+            _emit_death_gate(character, room)
 
     return ParticipantDamageResult(
         damage_dealt=effective_damage,
@@ -1639,7 +1686,55 @@ def _combo_passes_clash_prereqs(
     return True
 
 
-def detect_available_combos(  # noqa: C901
+def _build_available_combo(  # noqa: PLR0913 - prefetched availability inputs
+    combo: ComboDefinition,
+    *,
+    actions: list[CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
+    known_map: dict[int, set[int]],
+    participant_sheet_ids: set[int],
+    max_probing: int,
+    encounter_clash_flavors: set[str],
+    active_window_condition_template_ids: set[int],
+) -> AvailableCombo | None:
+    """Return an ``AvailableCombo`` if ``combo`` is fully available, else None.
+
+    Applies the availability gates in order: slots present, minimum probing,
+    known-or-discoverable, clash-state prerequisites, and slot matching.
+    """
+    slots: list[ComboSlot] = combo.cached_slots
+    if not slots:
+        return None
+
+    # Check minimum probing requirement
+    if combo.minimum_probing is not None and max_probing < combo.minimum_probing:
+        return None
+
+    # Determine if any participant knows the combo
+    knowers = known_map.get(combo.pk, set())
+    known_by_any = bool(knowers & participant_sheet_ids)
+    if not known_by_any and not combo.discoverable_via_combat:
+        return None
+
+    # Check clash-state prerequisites (flavor + window condition)
+    if not _combo_passes_clash_prereqs(
+        combo, encounter_clash_flavors, active_window_condition_template_ids
+    ):
+        return None
+
+    # Backtracking slot matching: each slot must be filled by a distinct action
+    slot_matches = _try_match_all_slots(slots, actions, gift_resonance_ids)
+    if slot_matches is None:
+        return None
+
+    return AvailableCombo(
+        combo=combo,
+        slot_matches=slot_matches,
+        known_by_participant=known_by_any,
+    )
+
+
+def detect_available_combos(
     encounter: CombatEncounter,
     round_number: int,
 ) -> list[AvailableCombo]:
@@ -1737,38 +1832,18 @@ def detect_available_combos(  # noqa: C901
     available: list[AvailableCombo] = []
 
     for combo in combos:
-        slots: list[ComboSlot] = combo.cached_slots
-        if not slots:
-            continue
-
-        # Check minimum probing requirement
-        if combo.minimum_probing is not None and max_probing < combo.minimum_probing:
-            continue
-
-        # Determine if any participant knows the combo
-        knowers = known_map.get(combo.pk, set())
-        known_by_any = bool(knowers & participant_sheet_ids)
-        if not known_by_any and not combo.discoverable_via_combat:
-            continue
-
-        # Check clash-state prerequisites (flavor + window condition)
-        if not _combo_passes_clash_prereqs(
-            combo, encounter_clash_flavors, active_window_condition_template_ids
-        ):
-            continue
-
-        # Backtracking slot matching: each slot must be filled by a distinct action
-        slot_matches = _try_match_all_slots(slots, actions, gift_resonance_ids)
-        if slot_matches is None:
-            continue
-
-        available.append(
-            AvailableCombo(
-                combo=combo,
-                slot_matches=slot_matches,
-                known_by_participant=known_by_any,
-            )
+        result = _build_available_combo(
+            combo,
+            actions=actions,
+            gift_resonance_ids=gift_resonance_ids,
+            known_map=known_map,
+            participant_sheet_ids=participant_sheet_ids,
+            max_probing=max_probing,
+            encounter_clash_flavors=encounter_clash_flavors,
+            active_window_condition_template_ids=active_window_condition_template_ids,
         )
+        if result is not None:
+            available.append(result)
 
     return available
 
