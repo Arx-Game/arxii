@@ -41,6 +41,7 @@ from world.scenes.types import CastResult, EnhancedSceneActionResult
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.types import PendingActionResolution
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona, Scene
@@ -87,9 +88,9 @@ def _resolve_cast(
     action_template = technique.action_template
     context = ResolutionContext(character=character, target=target)
 
-    captured: dict[str, object] = {}
+    captured: dict[str, PowerLedger] = {}
 
-    def _resolve_fn(*, power, ledger):  # noqa: ARG001 — power is the pipeline's, not ours
+    def _resolve_fn(*, power: int, ledger: PowerLedger):  # noqa: ARG001 — power is the pipeline's
         captured["ledger"] = ledger
         return start_action_resolution(
             character=character,
@@ -106,8 +107,8 @@ def _resolve_cast(
         strain_commitment=strain_commitment,
     )
 
-    resolution_result = technique_result.resolution_result  # type: ignore[assignment]
-    power_ledger = captured.get("ledger")  # type: ignore[assignment]
+    resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
+    power_ledger = captured.get("ledger")
     result = EnhancedSceneActionResult(
         action_resolution=resolution_result,
         action_key=CAST_ACTION_KEY,
@@ -234,20 +235,19 @@ def request_technique_cast(
         msg = "Technique is not castable standalone (no action template)."
         raise ValidationError(msg)
 
-    is_other_pc = (
+    # Inline the other-PC check (rather than a bool var) so the type checker can
+    # narrow ``target_persona`` to non-None inside the block.
+    if (
         target_persona is not None
         and target_persona.character_sheet_id != initiator_persona.character_sheet_id
-    )
-
-    if is_other_pc and is_technique_hostile(technique):
-        return _route_hostile_cast(
-            scene=scene,
-            initiator_persona=initiator_persona,
-            target_persona=target_persona,
-            technique=technique,
-        )
-
-    if is_other_pc:
+    ):
+        if is_technique_hostile(technique):
+            return _route_hostile_cast(
+                scene=scene,
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                technique=technique,
+            )
         return _route_benign_cast(
             scene=scene,
             initiator_persona=initiator_persona,
