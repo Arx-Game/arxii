@@ -8,6 +8,12 @@ import type { PlayerActionsResponse } from '../actionTypes';
 vi.mock('../actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
   createActionRequest: vi.fn(),
+  castTechnique: vi.fn(),
+  fetchCastableTechniques: vi.fn(),
+  useCastableTechniques: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+  })),
 }));
 
 vi.mock('../queries', async () => {
@@ -54,7 +60,12 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
-import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import {
+  fetchAvailableActions,
+  createActionRequest,
+  castTechnique,
+  useCastableTechniques,
+} from '../actionQueries';
 import { ActionPanel } from './ActionPanel';
 
 function createWrapper() {
@@ -386,6 +397,122 @@ describe('ActionPanel', () => {
       expect(screen.getByText('Gentle Wax')).toBeInTheDocument();
     });
     expect(screen.getByText('2 anima')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Cast section tests
+  // -------------------------------------------------------------------------
+
+  it('renders a Cast entry in the panel', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+  });
+
+  it('lists castable techniques when Cast section is opened', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        { id: 10, name: 'Ember Touch', anima_cost: 3, tier: 1, intensity: 2, control: 1, hostile: false },
+        { id: 11, name: 'Shadow Lash', anima_cost: 5, tier: 2, intensity: 4, control: 2, hostile: true },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Shadow Lash')).toBeInTheDocument();
+    // anima costs shown
+    expect(screen.getByText('3 anima')).toBeInTheDocument();
+    expect(screen.getByText('5 anima')).toBeInTheDocument();
+  });
+
+  it('selecting a technique then committing calls castTechnique with correct args', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        { id: 10, name: 'Ember Touch', anima_cost: 3, tier: 1, intensity: 2, control: 1, hostile: false },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+
+    // Override the roster mock to provide a primary_persona_id
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'TestChar',
+          character_id: 42,
+          profile_picture_url: null,
+          primary_persona_id: 77,
+        },
+      ],
+    } as ReturnType<typeof useMyRosterEntriesQuery>);
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    // Open the cast section
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+
+    // Select the technique
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    // Commit without specifying a target (defaults to Self / Room)
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          initiator_persona: 77,
+          technique_id: 10,
+          target_persona: null,
+        })
+      );
+    });
   });
 
   it('opens TargetPicker when a targeted action is clicked', async () => {
