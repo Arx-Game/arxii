@@ -108,6 +108,7 @@ def start_action_resolution(
             ),
         },
         current_phase=ResolutionPhase.GATE_PENDING,
+        extra_modifiers=extra_modifiers,
     )
 
     if template.pipeline == Pipeline.GATED:
@@ -191,7 +192,9 @@ def advance_resolution(
         # If gates passed (or no more gates), run main step
         if pending.main_result is None:
             pending.current_phase = ResolutionPhase.MAIN_PENDING
-            main_result = _run_main_step(character, template, pending.target_difficulty, context)
+            main_result = _run_main_step(
+                character, template, pending.target_difficulty, context, pending.extra_modifiers
+            )
             pending.main_result = main_result
             pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 

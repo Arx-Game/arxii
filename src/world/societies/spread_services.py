@@ -94,9 +94,13 @@ def get_spread_specializations():
 
     ensure_spread_skills()
     form_names = [name for name, _, _ in SPREAD_FORMS]
-    return Specialization.objects.filter(name__in=form_names, is_active=True).order_by(
-        "display_order", "name"
-    )
+    # Scope to the spread skills' parents — Specialization.name is unique only
+    # per parent_skill, so a same-named spec under another skill must not leak in.
+    return Specialization.objects.filter(
+        name__in=form_names,
+        parent_skill__trait__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
+        is_active=True,
+    ).order_by("display_order", "name")
 
 
 def _value_points(value) -> int:

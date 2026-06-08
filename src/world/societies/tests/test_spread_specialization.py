@@ -34,6 +34,14 @@ class SpreadFormsTest(TestCase):
         ensure_spread_skills()
         self.assertEqual(get_spread_specializations().count(), 4)
 
+    def test_excludes_same_named_specialization_under_a_foreign_skill(self) -> None:
+        from world.skills.factories import SpecializationFactory
+
+        ensure_spread_skills()
+        foreign = SpecializationFactory(name="Singing")  # under a different parent skill
+        spread_ids = set(get_spread_specializations().values_list("pk", flat=True))
+        self.assertNotIn(foreign.pk, spread_ids)
+
     def test_modifiers_zero_for_unskilled_character(self) -> None:
         ensure_spread_skills()
         character = PersonaFactory().character_sheet.character
