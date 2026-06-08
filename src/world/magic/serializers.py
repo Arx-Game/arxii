@@ -10,7 +10,7 @@ Affinities and Resonances are proper domain models in the magic app.
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
-from world.conditions.models import DamageType
+from world.conditions.models import CapabilityType, ConditionTemplate, DamageType
 from world.items.models import ItemInstance
 from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
 from world.magic.models import (
@@ -2756,19 +2756,21 @@ class ThreadApplicabilitySerializer(serializers.Serializer):
 
 
 class _CapabilityGrantSpecSerializer(serializers.Serializer):
-    capability_id = serializers.IntegerField()
+    capability_id = serializers.PrimaryKeyRelatedField(queryset=CapabilityType.objects.all())
     base_value = serializers.IntegerField(default=0)
     intensity_multiplier = serializers.FloatField(default=0.0)
 
 
 class _DamageProfileSpecSerializer(serializers.Serializer):
-    damage_type_id = serializers.IntegerField(allow_null=True, required=False)
+    damage_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=DamageType.objects.all(), allow_null=True, required=False
+    )
     base_damage = serializers.IntegerField(default=0)
     damage_intensity_multiplier = serializers.FloatField(default=0.0)
 
 
 class _AppliedConditionSpecSerializer(serializers.Serializer):
-    condition_id = serializers.IntegerField()
+    condition_id = serializers.PrimaryKeyRelatedField(queryset=ConditionTemplate.objects.all())
     base_severity = serializers.IntegerField(default=1)
     base_duration_rounds = serializers.IntegerField(allow_null=True, required=False)
 
@@ -2851,9 +2853,30 @@ class TechniqueDesignSerializer(serializers.Serializer):
             anima_cost=attrs["anima_cost"],
             level=level,
             restriction_ids=tuple(r.id for r in attrs["restriction_ids"]),
-            capability_grants=tuple(CapabilityGrantSpec(**c) for c in attrs["capability_grants"]),
-            damage_profiles=tuple(DamageProfileSpec(**d) for d in attrs["damage_profiles"]),
+            capability_grants=tuple(
+                CapabilityGrantSpec(
+                    capability_id=c["capability_id"].id,
+                    base_value=c["base_value"],
+                    intensity_multiplier=c["intensity_multiplier"],
+                )
+                for c in attrs["capability_grants"]
+            ),
+            damage_profiles=tuple(
+                DamageProfileSpec(
+                    damage_type_id=(
+                        d["damage_type_id"].id if d["damage_type_id"] is not None else None
+                    ),
+                    base_damage=d["base_damage"],
+                    damage_intensity_multiplier=d["damage_intensity_multiplier"],
+                )
+                for d in attrs["damage_profiles"]
+            ),
             applied_conditions=tuple(
-                AppliedConditionSpec(**a) for a in attrs["applied_conditions"]
+                AppliedConditionSpec(
+                    condition_id=a["condition_id"].id,
+                    base_severity=a["base_severity"],
+                    base_duration_rounds=a.get("base_duration_rounds"),
+                )
+                for a in attrs["applied_conditions"]
             ),
         )
