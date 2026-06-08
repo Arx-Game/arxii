@@ -795,7 +795,7 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     1. Covenant ref present on the session.
     2. Covenant level ≥ rite.min_covenant_level.
     3. Active CombatEncounter present in the initiator's room.
-    4. At least rite.min_members_present engaged members in the room.
+    4. At least rite.min_members_present active members in the room.
 
     On success, creates a CovenantRiteInstance, sets participants, applies the
     scaled condition buff to each via bulk_apply_conditions, and emits a

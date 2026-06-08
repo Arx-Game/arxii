@@ -440,7 +440,7 @@ class CovenantRite(SharedMemoryModel):
         value = self.base_severity + self.severity_per_extra_participant * extras
         return min(value, self.max_severity) if self.max_severity is not None else value
 
-    def package_for(self, role: CovenantRole, covenant_level: int) -> ConditionTemplate:
+    def package_for(self, role: CovenantRole | None, covenant_level: int) -> ConditionTemplate:
         """Return the ConditionTemplate for *role* at *covenant_level*.
 
         Selects the highest ``min_covenant_level`` band whose threshold does not
