@@ -83,6 +83,7 @@ def start_action_resolution(
     template: ActionTemplate,
     target_difficulty: int,
     context: ResolutionContext,
+    extra_modifiers: int = 0,
 ) -> PendingActionResolution:
     """Start an action resolution pipeline and run it to completion or pause.
 
@@ -92,6 +93,9 @@ def start_action_resolution(
     For GATED pipelines: processes gates in order, then main step. May pause
     with awaiting_confirmation=True if a gate pool contains character_loss
     consequences.
+
+    ``extra_modifiers`` is a roller-side point bonus applied to the main check
+    (e.g. effort level + a chosen specialization). Gates are unaffected.
     """
     pending = PendingActionResolution(
         template_id=template.pk,
@@ -104,6 +108,7 @@ def start_action_resolution(
             ),
         },
         current_phase=ResolutionPhase.GATE_PENDING,
+        extra_modifiers=extra_modifiers,
     )
 
     if template.pipeline == Pipeline.GATED:
@@ -128,7 +133,7 @@ def start_action_resolution(
                 return pending
 
     pending.current_phase = ResolutionPhase.MAIN_PENDING
-    main_result = _run_main_step(character, template, target_difficulty, context)
+    main_result = _run_main_step(character, template, target_difficulty, context, extra_modifiers)
     pending.main_result = main_result
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 
@@ -187,7 +192,9 @@ def advance_resolution(
         # If gates passed (or no more gates), run main step
         if pending.main_result is None:
             pending.current_phase = ResolutionPhase.MAIN_PENDING
-            main_result = _run_main_step(character, template, pending.target_difficulty, context)
+            main_result = _run_main_step(
+                character, template, pending.target_difficulty, context, pending.extra_modifiers
+            )
             pending.main_result = main_result
             pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 
@@ -239,9 +246,12 @@ def _run_main_step(
     template: ActionTemplate,
     difficulty: int,
     context: ResolutionContext,
+    extra_modifiers: int = 0,
 ) -> StepResult:
     """Run the main resolution step."""
-    check_result = perform_check(character, template.check_type, difficulty)
+    check_result = perform_check(
+        character, template.check_type, difficulty, extra_modifiers=extra_modifiers
+    )
 
     if template.consequence_pool is None:
         return _build_step_result(

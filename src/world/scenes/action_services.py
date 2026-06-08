@@ -411,28 +411,139 @@ def _create_result_interaction(
     outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
     initiator_name = action_request.initiator_persona.name
-    target_name = action_request.target_persona.name
     action_key = action_request.action_key
+    target_persona = action_request.target_persona
 
-    if result.technique_result is not None and action_request.technique is not None:
-        technique_name = action_request.technique.name
-        anima_spent = result.technique_result.anima_cost.effective_cost
+    if target_persona is None:
+        # Area action (e.g. a telling to the room): no target, optional pose
+        # text echoed above the outcome.
+        outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
         content = (
-            f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
-            f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
+            f"{action_request.pose_text}\n{outcome_line}"
+            if action_request.pose_text
+            else outcome_line
         )
+        receivers: list[Persona] = []
+        target_personas: list[Persona] = []
     else:
-        content = (
-            f"{initiator_name} attempts to {action_key} {target_name}: "
-            f"{status_word} ({outcome_name})"
-        )
+        target_name = target_persona.name
+        if result.technique_result is not None and action_request.technique is not None:
+            technique_name = action_request.technique.name
+            anima_spent = result.technique_result.anima_cost.effective_cost
+            content = (
+                f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
+                f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
+            )
+        else:
+            content = (
+                f"{initiator_name} attempts to {action_key} {target_name}: "
+                f"{status_word} ({outcome_name})"
+            )
+        receivers = [target_persona]
+        target_personas = [target_persona]
 
     return create_interaction(
         persona=action_request.initiator_persona,
         content=content,
         mode="action",
         scene=action_request.scene,
-        receivers=[action_request.target_persona],
-        target_personas=[action_request.target_persona],
+        receivers=receivers,
+        target_personas=target_personas,
         strain_committed=strain_committed,
     )
+
+
+def create_and_resolve_area_action(  # noqa: PLR0913
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    action_template: ActionTemplate,
+    action_key: str,
+    pose_text: str = "",
+    effort_level: str = "medium",
+    difficulty_choice: str = DifficultyChoice.NORMAL,
+    spread_deed_target: object | None = None,
+    extra_modifiers: int = 0,
+) -> EnhancedSceneActionResult:
+    """Create and immediately resolve an area (to-the-room) scene action.
+
+    Area actions have no target and no consent round-trip — the telling resolves
+    on the spot. Charges the template's action points + social fatigue (scaled by
+    effort), resolves the check, echoes the pose + the outcome, and runs any
+    registered resolver (e.g. spread_a_tale).
+
+    Effort and ``extra_modifiers`` (a caller-supplied roller bonus, e.g. a chosen
+    specialization) are applied as check modifiers, not difficulty deltas.
+
+    Raises:
+        ValidationError: if the initiator lacks the template's action-point cost.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    character = initiator_persona.character_sheet.character
+
+    difficulty = DIFFICULTY_VALUES.get(
+        difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    )
+    check_modifiers = EFFORT_CHECK_MODIFIER.get(effort_level, 0) + extra_modifiers
+
+    with transaction.atomic():
+        # AP spend lives INSIDE the atomic (as a savepoint) so a failed
+        # resolution rolls the debit back — never charge for a spread that
+        # didn't happen.
+        ap_pool = ActionPointPool.get_or_create_for_character(character)
+        if action_template.ap_cost and not ap_pool.spend(action_template.ap_cost):
+            msg = f"Not enough action points (need {action_template.ap_cost})."
+            raise ValidationError(msg)
+
+        request = SceneActionRequest.objects.create(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=None,
+            action_template=action_template,
+            action_key=action_key,
+            pose_text=pose_text,
+            effort_level=effort_level,
+            difficulty_choice=difficulty_choice,
+            spread_deed_target=spread_deed_target,
+            status=ActionRequestStatus.PENDING,
+        )
+        context = ResolutionContext(character=character, target=None)
+        action_resolution = start_action_resolution(
+            character=character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+            extra_modifiers=check_modifiers,
+        )
+        result = EnhancedSceneActionResult(
+            action_resolution=action_resolution, action_key=action_key
+        )
+
+        request.status = ActionRequestStatus.RESOLVED
+        request.resolved_at = timezone.now()
+        request.resolved_difficulty = difficulty
+        request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+
+        apply_fatigue(
+            initiator_persona.character_sheet,
+            ActionCategory.SOCIAL,
+            action_template.social_fatigue_cost,
+            effort_level,
+        )
+
+        result_interaction = _create_result_interaction(action_request=request, result=result)
+        if result_interaction is not None:
+            request.result_interaction = result_interaction
+            request.save(update_fields=["result_interaction"])
+
+        resolver = get_resolver(action_key)
+        if resolver is not None:
+            resolver(request, result)
+
+    return result

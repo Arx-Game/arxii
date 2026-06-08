@@ -332,6 +332,9 @@ class PendingActionResolution:
     awaiting_confirmation: bool = False
     awaiting_intervention: bool = False
     intervention_options: list[str] = field(default_factory=list)
+    # Roller-side check bonus (effort + specialization etc.), carried so the
+    # resume path can re-apply it after a confirmation pause.
+    extra_modifiers: int = 0
 
 
 @dataclass(frozen=True)
