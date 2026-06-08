@@ -159,6 +159,15 @@ class CovenantRiteRolePackageFactory(factory_django.DjangoModelFactory):
 def wire_covenant_rite_content() -> CovenantRite:
     """Idempotent seed helper: create the Renew the Oath ritual + CovenantRite row.
 
+    Also seeds the default and role/level-band stat packages (#753 Task 10):
+    - Default package ("Oathbound Resolve"): willpower + composure + stability,
+      each with value=5, scales_with_severity=True.
+    - Sword (offense): "Oathbound Fury I" (strength, presence) at level 1+;
+      "Oathbound Fury II" (strength, presence, wits) at level 4+.
+    - Shield (defense): "Oathbound Bulwark" (stability, stamina) at level 1+.
+    - Crown (support): "Oathbound Grace" (composure, charm) at level 1+.
+    All effect rows use scales_with_severity=True.
+
     Safe to call as both integration-test setUp and staff/seed scripts — uses
     get_or_create semantics at each step so no duplicate rows are created.
 
@@ -189,14 +198,58 @@ def wire_covenant_rite_content() -> CovenantRite:
         },
     )
 
-    from world.conditions.factories import OathboundResolveConditionFactory
+    from world.conditions.factories import (
+        OathboundBulwarkConditionFactory,
+        OathboundFuryIConditionFactory,
+        OathboundFuryIIConditionFactory,
+        OathboundGraceConditionFactory,
+        OathboundResolveConditionFactory,
+    )
+    from world.conditions.models import ConditionModifierEffect
+    from world.mechanics.models import ModifierCategory, ModifierTarget
 
-    condition = OathboundResolveConditionFactory()
+    # ------------------------------------------------------------------
+    # Ensure the 'stat' ModifierCategory and the named stat targets exist.
+    # All pattern: get_or_create keyed on (category, name) so repeated
+    # calls never produce duplicates.
+    # ------------------------------------------------------------------
+    stat_cat, _ = ModifierCategory.objects.get_or_create(
+        name="stat",
+        defaults={"description": "Primary character statistics.", "display_order": 10},
+    )
 
+    def _stat(name: str) -> ModifierTarget:
+        target, _ = ModifierTarget.objects.get_or_create(
+            category=stat_cat,
+            name=name,
+            defaults={
+                "description": f"{name.capitalize()} stat modifier target.",
+                "is_active": True,
+            },
+        )
+        return target
+
+    # ------------------------------------------------------------------
+    # Default condition ("Oathbound Resolve") + its modifier effects.
+    # ------------------------------------------------------------------
+    default_condition = OathboundResolveConditionFactory()
+
+    for stat_name in ("willpower", "composure", "stability"):
+        target = _stat(stat_name)
+        ConditionModifierEffect.objects.get_or_create(
+            condition=default_condition,
+            modifier_target=target,
+            stage=None,
+            defaults={"value": 5, "scales_with_severity": True},
+        )
+
+    # ------------------------------------------------------------------
+    # CovenantRite row (keyed on ritual; idempotent).
+    # ------------------------------------------------------------------
     rite, _ = CovenantRite.objects.get_or_create(
         ritual=ritual,
         defaults={
-            "granted_condition": condition,
+            "granted_condition": default_condition,
             "covenant_type": CovenantType.DURANCE,
             "min_covenant_level": 2,
             "min_members_present": 2,
@@ -206,6 +259,111 @@ def wire_covenant_rite_content() -> CovenantRite:
             "duration_rounds": None,
         },
     )
+
+    # ------------------------------------------------------------------
+    # Canonical DURANCE roles (get_or_create on slug, mirroring the
+    # pattern in integration_tests/game_content/items.py).
+    # ------------------------------------------------------------------
+    sword_role, _ = CovenantRole.objects.get_or_create(
+        slug="sword-vanguard",
+        defaults={
+            "name": "Vanguard",
+            "covenant_type": CovenantType.DURANCE,
+            "archetype": RoleArchetype.SWORD,
+            "speed_rank": 2,
+        },
+    )
+    shield_role, _ = CovenantRole.objects.get_or_create(
+        slug="shield-bulwark",
+        defaults={
+            "name": "Bulwark",
+            "covenant_type": CovenantType.DURANCE,
+            "archetype": RoleArchetype.SHIELD,
+            "speed_rank": 3,
+        },
+    )
+    crown_role, _ = CovenantRole.objects.get_or_create(
+        slug="crown-luminary",
+        defaults={
+            "name": "Luminary",
+            "covenant_type": CovenantType.DURANCE,
+            "archetype": RoleArchetype.CROWN,
+            "speed_rank": 1,
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # Role-package conditions + modifier effects.
+    # ------------------------------------------------------------------
+
+    # Sword level-1 band: strength, presence
+    fury_i = OathboundFuryIConditionFactory()
+    for stat_name in ("strength", "presence"):
+        ConditionModifierEffect.objects.get_or_create(
+            condition=fury_i,
+            modifier_target=_stat(stat_name),
+            stage=None,
+            defaults={"value": 5, "scales_with_severity": True},
+        )
+
+    # Sword level-4 band: strength, presence, wits
+    fury_ii = OathboundFuryIIConditionFactory()
+    for stat_name in ("strength", "presence", "wits"):
+        ConditionModifierEffect.objects.get_or_create(
+            condition=fury_ii,
+            modifier_target=_stat(stat_name),
+            stage=None,
+            defaults={"value": 7, "scales_with_severity": True},
+        )
+
+    # Shield level-1 band: stability, stamina
+    bulwark = OathboundBulwarkConditionFactory()
+    for stat_name in ("stability", "stamina"):
+        ConditionModifierEffect.objects.get_or_create(
+            condition=bulwark,
+            modifier_target=_stat(stat_name),
+            stage=None,
+            defaults={"value": 5, "scales_with_severity": True},
+        )
+
+    # Crown level-1 band: composure, charm
+    grace = OathboundGraceConditionFactory()
+    for stat_name in ("composure", "charm"):
+        ConditionModifierEffect.objects.get_or_create(
+            condition=grace,
+            modifier_target=_stat(stat_name),
+            stage=None,
+            defaults={"value": 5, "scales_with_severity": True},
+        )
+
+    # ------------------------------------------------------------------
+    # CovenantRiteRolePackage rows (get_or_create on the unique triple).
+    # ------------------------------------------------------------------
+    CovenantRiteRolePackage.objects.get_or_create(
+        rite=rite,
+        covenant_role=sword_role,
+        min_covenant_level=1,
+        defaults={"condition_template": fury_i},
+    )
+    CovenantRiteRolePackage.objects.get_or_create(
+        rite=rite,
+        covenant_role=sword_role,
+        min_covenant_level=4,
+        defaults={"condition_template": fury_ii},
+    )
+    CovenantRiteRolePackage.objects.get_or_create(
+        rite=rite,
+        covenant_role=shield_role,
+        min_covenant_level=1,
+        defaults={"condition_template": bulwark},
+    )
+    CovenantRiteRolePackage.objects.get_or_create(
+        rite=rite,
+        covenant_role=crown_role,
+        min_covenant_level=1,
+        defaults={"condition_template": grace},
+    )
+
     return rite
 
 
