@@ -1,4 +1,4 @@
-"""Tests for Tasks 3 + 4: engaged_members_present helper and perform_covenant_rite service.
+"""Tests for Tasks 3 + 4: covenant_members_present helper and perform_covenant_rite service.
 Tests for Task 5: fold_arrival_into_active_rites (late-arrival fold-in).
 Tests for Task 6: complete_rites_for_encounter (combat-end buff sweep).
 
@@ -22,7 +22,7 @@ from world.covenants.factories import (
 from world.covenants.models import CovenantRite, CovenantRiteInstance
 from world.covenants.services import (
     complete_rites_for_encounter,
-    engaged_members_present,
+    covenant_members_present,
     evaluate_scene_engagement,
     fold_arrival_into_active_rites,
     perform_covenant_rite,
@@ -128,8 +128,8 @@ class _RiteSceneTestCase(TestCase):
         )
 
 
-class EngagedMembersPresentTests(TestCase):
-    """Unit tests for the engaged_members_present helper."""
+class CovenantMembersPresentTests(TestCase):
+    """Unit tests for the covenant_members_present helper."""
 
     def setUp(self) -> None:
         from world.covenants.constants import CovenantType
@@ -140,44 +140,44 @@ class EngagedMembersPresentTests(TestCase):
         self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
 
     def test_returns_engaged_members_in_room(self) -> None:
-        """Members who are engaged AND in the room appear in results."""
+        """Engaged (active) members in the room appear in results."""
         mem_a = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         mem_b = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         _place_character_in_room(mem_a.character_sheet.character, self.room)
         _place_character_in_room(mem_b.character_sheet.character, self.room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(mem_a.character_sheet.pk, sheet_ids)
         self.assertIn(mem_b.character_sheet.pk, sheet_ids)
         self.assertEqual(len(result), 2)
 
-    def test_excludes_unengaged_member_in_room(self) -> None:
-        """A member who is in the room but not engaged is excluded."""
+    def test_includes_non_engaged_active_member_in_room(self) -> None:
+        """A non-engaged but active member present in the room is now included."""
         from world.covenants.factories import CharacterCovenantRoleFactory
 
         engaged = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        unengaged_ccr = CharacterCovenantRoleFactory(
-            covenant=self.covenant, covenant_role=self.role, engaged=False
+        non_engaged_ccr = CharacterCovenantRoleFactory(
+            covenant=self.covenant, covenant_role=self.role, engaged=False, left_at=None
         )
         _place_character_in_room(engaged.character_sheet.character, self.room)
-        _place_character_in_room(unengaged_ccr.character_sheet.character, self.room)
+        _place_character_in_room(non_engaged_ccr.character_sheet.character, self.room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(engaged.character_sheet.pk, sheet_ids)
-        self.assertNotIn(unengaged_ccr.character_sheet.pk, sheet_ids)
+        self.assertIn(non_engaged_ccr.character_sheet.pk, sheet_ids)
 
-    def test_excludes_engaged_member_in_different_room(self) -> None:
-        """An engaged member who is in a different room is excluded."""
+    def test_excludes_active_member_in_different_room(self) -> None:
+        """An active member who is in a different room is excluded."""
         in_room = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         elsewhere = make_engaged_member(covenant=self.covenant, covenant_role=self.role)
         _place_character_in_room(in_room.character_sheet.character, self.room)
         _place_character_in_room(elsewhere.character_sheet.character, self.other_room)
 
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
 
         sheet_ids = {s.pk for s in result}
         self.assertIn(in_room.character_sheet.pk, sheet_ids)
@@ -186,7 +186,7 @@ class EngagedMembersPresentTests(TestCase):
     def test_empty_room_returns_empty_list(self) -> None:
         """No one in the room means an empty list."""
         make_engaged_member(covenant=self.covenant, covenant_role=self.role)
-        result = engaged_members_present(covenant=self.covenant, room=self.room)
+        result = covenant_members_present(covenant=self.covenant, room=self.room)
         self.assertEqual(result, [])
 
 
@@ -303,15 +303,15 @@ class PerformCovenantRiteGateTests(_RiteSceneTestCase):
             ConditionInstance.objects.filter(condition=self.condition_template).exists()
         )
 
-    def test_not_enough_engaged_present_raises_and_rolls_back(self) -> None:
-        """Fewer engaged present than min_members_present → NotEnoughEngagedPresentError."""
-        from world.covenants.exceptions import NotEnoughEngagedPresentError
+    def test_not_enough_members_present_raises_and_rolls_back(self) -> None:
+        """Fewer members present than min_members_present → NotEnoughMembersPresentError."""
+        from world.covenants.exceptions import NotEnoughMembersPresentError
 
-        # Remove mem_b from the room so only 1 engaged member is present.
+        # Remove mem_b from the room so only 1 active member is present.
         other_room = _make_room("Elsewhere")
         _place_character_in_room(self.mem_b.character_sheet.character, other_room)
 
-        with self.assertRaises(NotEnoughEngagedPresentError):
+        with self.assertRaises(NotEnoughMembersPresentError):
             perform_covenant_rite(session=self.session)
 
         self.assertFalse(CovenantRiteInstance.objects.filter(rite=self.rite).exists())

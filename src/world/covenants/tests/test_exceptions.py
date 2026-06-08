@@ -9,7 +9,7 @@ from world.covenants.exceptions import (
     CovenantRiteError,
     CovenantRoleNeverHeldError,
     NoActiveBattleError,
-    NotEnoughEngagedPresentError,
+    NotEnoughMembersPresentError,
 )
 
 
@@ -47,7 +47,7 @@ class CovenantRiteExceptionTests(SimpleTestCase):
     def test_rite_exceptions_are_covenant_rite_errors(self) -> None:
         for exc_cls in (
             CovenantLevelTooLowError,
-            NotEnoughEngagedPresentError,
+            NotEnoughMembersPresentError,
             NoActiveBattleError,
         ):
             self.assertTrue(issubclass(exc_cls, CovenantRiteError))
@@ -56,7 +56,7 @@ class CovenantRiteExceptionTests(SimpleTestCase):
         for exc_cls in (
             CovenantRiteError,
             CovenantLevelTooLowError,
-            NotEnoughEngagedPresentError,
+            NotEnoughMembersPresentError,
             NoActiveBattleError,
         ):
             exc = exc_cls()

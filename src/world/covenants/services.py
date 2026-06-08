@@ -16,7 +16,7 @@ from world.covenants.exceptions import (
     DuplicateFounderError,
     InsufficientFoundersError,
     NoActiveBattleError,
-    NotEnoughEngagedPresentError,
+    NotEnoughMembersPresentError,
     SubroleParentMismatchError,
     SubroleResonanceMismatchError,
     SubroleThreadLevelInsufficientError,
@@ -633,21 +633,22 @@ def _co_present_member_count(
     return n
 
 
-def engaged_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
-    """CharacterSheets that are engaged with `covenant` AND present in `room`.
+def covenant_members_present(*, covenant: Covenant, room: ObjectDB) -> list[CharacterSheet]:
+    """CharacterSheets of active `covenant` members present in `room`.
 
-    Builds the engaged-member set from the DB once, then walks room.contents —
-    no per-object queries. The ≥N test is len(engaged_members_present(...)).
+    Builds the active-member set from the DB once, then walks room.contents —
+    no per-object queries. The ≥N test is len(covenant_members_present(...)).
+    Active means left_at__isnull=True; the engaged flag is not considered here.
     """
-    engaged_sheet_ids = set(
-        covenant.memberships.filter(engaged=True, left_at__isnull=True).values_list(
+    active_sheet_ids = set(
+        covenant.memberships.filter(left_at__isnull=True).values_list(
             "character_sheet_id", flat=True
         )
     )
     present: list[CharacterSheet] = []
     for obj in room.contents:
         sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
-        if sheet is not None and sheet.pk in engaged_sheet_ids:
+        if sheet is not None and sheet.pk in active_sheet_ids:
             present.append(sheet)
     return present
 
@@ -813,10 +814,10 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     if encounter is None:
         raise NoActiveBattleError
 
-    # 4c. Gate: enough engaged members present.
-    beneficiaries = engaged_members_present(covenant=covenant, room=room)
+    # 4c. Gate: enough active covenant members present.
+    beneficiaries = covenant_members_present(covenant=covenant, room=room)
     if len(beneficiaries) < rite.min_members_present:
-        raise NotEnoughEngagedPresentError
+        raise NotEnoughMembersPresentError
 
     # 5. Compute scaled severity.
     severity = rite.severity_for(present_count=len(beneficiaries))

@@ -174,13 +174,13 @@ class CovenantLevelTooLowError(CovenantRiteError):
     )
 
 
-class NotEnoughEngagedPresentError(CovenantRiteError):
-    """Raised when too few engaged covenant members are present to perform the rite."""
+class NotEnoughMembersPresentError(CovenantRiteError):
+    """Raised when too few active covenant members are present to perform the rite."""
 
-    user_message = "Not enough engaged covenant members are present."
+    user_message = "Not enough covenant members are present."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
-            "Not enough engaged covenant members are present.",
+            "Not enough covenant members are present.",
         }
     )
 
