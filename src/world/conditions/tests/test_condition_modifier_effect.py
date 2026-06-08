@@ -81,6 +81,22 @@ class GetConditionModifierTotalTests(TestCase):
         remove_condition(target=self.character, condition=condition)
         self.assertEqual(get_condition_modifier_total(self.sheet, self.target), 0)
 
+    def test_scales_with_severity_multiplies_by_instance_severity(self):
+        cond = ConditionTemplateFactory(name="sev_scale")
+        ConditionModifierEffectFactory(
+            condition=cond, modifier_target=self.target, value=10, scales_with_severity=True
+        )
+        apply_condition(target=self.character, condition=cond, severity=3)
+        self.assertEqual(get_condition_modifier_total(self.sheet, self.target), 30)
+
+    def test_flat_effect_ignores_severity(self):
+        cond = ConditionTemplateFactory(name="flat_scale")
+        ConditionModifierEffectFactory(
+            condition=cond, modifier_target=self.target, value=10, scales_with_severity=False
+        )
+        apply_condition(target=self.character, condition=cond, severity=3)
+        self.assertEqual(get_condition_modifier_total(self.sheet, self.target), 10)
+
 
 class GetConditionModifierBreakdownTests(TestCase):
     """Tests for get_condition_modifier_breakdown (#639 power ledger)."""
