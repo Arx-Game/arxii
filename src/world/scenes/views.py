@@ -53,6 +53,7 @@ from world.societies.renown_serializers import (
     build_renown_payload,
 )
 from world.societies.spread_serializers import (
+    SceneActivitySerializer,
     SpreadableDeedSerializer,
     SpreadInputSerializer,
     SpreadResultSerializer,
@@ -260,6 +261,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         broadcast_scene_message(scene, SceneAction.END)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
+
+    @extend_schema(responses=SceneActivitySerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def activity(self, request: Request, pk: int | None = None) -> Response:
+        """#745 — The scene room's current activity band (qualitative, time-aware)."""
+        from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+
+        scene = self.get_object()
+        band = room_activity_band(scene.location)
+        return Response(SceneActivitySerializer({"band": band.label}).data)
 
 
 class PersonaViewSet(viewsets.ModelViewSet):

@@ -86,3 +86,9 @@ class SpreadEndpointTest(APITestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_scene_activity_returns_a_band(self) -> None:
+        url = reverse("scene-activity", args=[self.scene.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertIn("band", resp.data)
