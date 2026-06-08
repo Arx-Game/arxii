@@ -14324,6 +14324,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSpreadableDeedList'
           description: ''
+  /api/personas/spread-specializations/:
+    get:
+      operationId: personas_spread_specializations_list
+      description: '#745 — Performance specializations a teller may optionally apply.'
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: integer
+      - in: query
+        name: character_sheet
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: persona_type
+        schema:
+          type: string
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - personas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSpreadSpecializationList'
+          description: ''
   /api/places/:
     get:
       operationId: places_list
@@ -30173,6 +30223,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SocietySearch'
+    PaginatedSpreadSpecializationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpreadSpecialization'
     PaginatedSpreadableDeedList:
       type: object
       required:
@@ -35730,6 +35803,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/EffortLevelEnum'
           default: medium
+        specialization:
+          type: integer
+          nullable: true
+          description: Optional Performance specialization id.
       required:
       - deed
       - scene
@@ -35750,6 +35827,24 @@ components:
       - band
       - outcome
       - resolved
+    SpreadSpecialization:
+      type: object
+      description: A Performance specialization a teller may apply (Story-weaving
+        / Propaganda).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+      required:
+      - description
+      - id
+      - name
     SpreadableDeed:
       type: object
       description: A deed the persona may spread (deed picker row).

@@ -21,11 +21,34 @@ export interface SpreadResult {
   band: string;
 }
 
+export interface SpreadForm {
+  id: number;
+  name: string;
+  description: string;
+}
+
 export interface SpreadInput {
   scene: number;
   deed: number;
   pose_text: string;
   effort_level: string;
+  specialization?: number | null;
+}
+
+async function fetchSpreadSpecializations(): Promise<SpreadForm[]> {
+  const res = await apiFetch('/api/personas/spread-specializations/');
+  if (!res.ok) {
+    throw new Error('Failed to load telling forms.');
+  }
+  return res.json() as Promise<SpreadForm[]>;
+}
+
+export function useSpreadSpecializationsQuery(enabled = true) {
+  return useQuery({
+    queryKey: ['spread-specializations'],
+    queryFn: fetchSpreadSpecializations,
+    enabled,
+  });
 }
 
 async function fetchSpreadableDeeds(personaId: number): Promise<SpreadableDeed[]> {

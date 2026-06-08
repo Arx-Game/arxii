@@ -25,7 +25,14 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useAppSelector } from '@/store/hooks';
 
-import { useSpreadableDeedsQuery, useSpreadMutation, type SpreadResult } from './queries';
+import {
+  useSpreadableDeedsQuery,
+  useSpreadMutation,
+  useSpreadSpecializationsQuery,
+  type SpreadResult,
+} from './queries';
+
+const NO_FORM = 'none';
 
 const EFFORT_OPTIONS = [
   { value: 'low', label: 'Lightly' },
@@ -78,9 +85,11 @@ interface FormProps {
 
 function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   const { data: deeds, isLoading } = useSpreadableDeedsQuery(personaId, open);
+  const { data: forms } = useSpreadSpecializationsQuery(open);
   const [deedId, setDeedId] = useState<number | null>(null);
   const [pose, setPose] = useState('');
   const [effort, setEffort] = useState('medium');
+  const [formId, setFormId] = useState<string>(NO_FORM);
   const [result, setResult] = useState<SpreadResult | null>(null);
   const mutation = useSpreadMutation(personaId);
 
@@ -119,7 +128,13 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
       return;
     }
     mutation.mutate(
-      { scene: sceneId, deed: deedId, pose_text: pose, effort_level: effort },
+      {
+        scene: sceneId,
+        deed: deedId,
+        pose_text: pose,
+        effort_level: effort,
+        specialization: formId === NO_FORM ? null : Number(formId),
+      },
       { onSuccess: setResult }
     );
   };
@@ -138,6 +153,22 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
           ))}
         </SelectContent>
       </Select>
+
+      {forms && forms.length > 0 && (
+        <Select value={formId} onValueChange={setFormId}>
+          <SelectTrigger aria-label="Form of telling">
+            <SelectValue placeholder="Form (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_FORM}>No particular form</SelectItem>
+            {forms.map((f) => (
+              <SelectItem key={f.id} value={f.id.toString()}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Textarea
         value={pose}
