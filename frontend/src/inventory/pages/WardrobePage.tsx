@@ -84,12 +84,16 @@ export function WardrobePage() {
     (payload: ActionResultPayload) => {
       if (payload.success) {
         if (characterId != null) {
-          void queryClient.invalidateQueries({
-            queryKey: inventoryKeys.inventory(characterId),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: inventoryKeys.equipped(characterId),
-          });
+          queryClient
+            .invalidateQueries({
+              queryKey: inventoryKeys.inventory(characterId),
+            })
+            .catch(() => {});
+          queryClient
+            .invalidateQueries({
+              queryKey: inventoryKeys.equipped(characterId),
+            })
+            .catch(() => {});
         }
         if (payload.message) {
           toast.success(payload.message);

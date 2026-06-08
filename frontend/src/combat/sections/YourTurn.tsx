@@ -475,7 +475,7 @@ export function YourTurn({
         type="button"
         disabled={isLocked || dispatchPending}
         onClick={() => {
-          void handleSubmit();
+          handleSubmit().catch(() => {});
         }}
         data-testid="submit-declarations-btn"
         className={cn(

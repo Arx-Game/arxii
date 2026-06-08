@@ -7,7 +7,7 @@
 set -euo pipefail
 
 for p in /workspaces/arxii/.venv /workspaces/arxii/frontend/node_modules; do
-  if [ -d "$p" ]; then
+  if [[ -d "$p" ]]; then
     chown -R vscode:vscode "$p"
   fi
 done

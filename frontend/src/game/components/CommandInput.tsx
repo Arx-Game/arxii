@@ -16,6 +16,25 @@ export interface ComposerMode {
 
 const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk'];
 
+/**
+ * Builds the full command string for a trimmed input given the active composer
+ * mode. When the input already starts with an explicit known command, or there
+ * is no composer mode, the input is sent verbatim.
+ */
+function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string {
+  if (!composerMode) return trimmed;
+
+  const firstWord = trimmed.split(' ')[0].toLowerCase();
+  const hasExplicitCommand = KNOWN_COMMANDS.includes(firstWord);
+  if (hasExplicitCommand) return trimmed;
+
+  if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
+    return `whisper ${composerMode.targets[0]}=${trimmed}`;
+  }
+  const targetStr = composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
+  return `${composerMode.command}${targetStr}${trimmed}`;
+}
+
 interface CommandInputProps {
   character: MyRosterEntry['name'];
   composerMode?: ComposerMode;
@@ -78,21 +97,7 @@ export function CommandInput({
 
     submittingRef.current = true;
 
-    let fullCommand = trimmed;
-    if (composerMode) {
-      const firstWord = trimmed.split(' ')[0].toLowerCase();
-      const hasExplicitCommand = KNOWN_COMMANDS.includes(firstWord);
-
-      if (!hasExplicitCommand) {
-        if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
-          fullCommand = `whisper ${composerMode.targets[0]}=${trimmed}`;
-        } else {
-          const targetStr =
-            composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
-          fullCommand = `${composerMode.command}${targetStr}${trimmed}`;
-        }
-      }
-    }
+    const fullCommand = buildFullCommand(trimmed, composerMode);
 
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
@@ -112,14 +117,16 @@ export function CommandInput({
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
       // to avoid creating two POSE Interactions for the same pose.
-      void submitPose({
+      submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
         action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
-      }).then(() => {
-        onPoseSubmitted?.();
-      });
+      })
+        .then(() => {
+          onPoseSubmitted?.();
+        })
+        .catch(() => {});
     } else {
       // WebSocket path: existing behavior. Server-side auto-link will attach
       // any pending ACTION interactions when the POSE is created.

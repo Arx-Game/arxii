@@ -80,12 +80,12 @@ export function AcceptOfferDialog({ offer, storyTitle }: AcceptOfferDialogProps)
           toast.success(`Story accepted — it is now at your table`, {
             action: {
               label: 'View story',
-              onClick: () => void navigate(`/stories/${updated.story}`),
+              onClick: () => navigate(`/stories/${updated.story}`),
             },
           });
         },
         onError: (err: unknown) => {
-          void Promise.resolve()
+          Promise.resolve()
             .then(async () => {
               const fetchErr = err as { response?: Response };
               if (fetchErr.response) {

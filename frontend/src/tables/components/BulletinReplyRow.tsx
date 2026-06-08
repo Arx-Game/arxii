@@ -132,7 +132,7 @@ export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) 
 
         {/* Body / inline edit form */}
         {editing ? (
-          <form onSubmit={(e) => void handleSaveEdit(e)} className="space-y-2">
+          <form onSubmit={(e) => handleSaveEdit(e)} className="space-y-2">
             <Textarea
               value={editBody}
               onChange={(e) => setEditBody(e.target.value)}

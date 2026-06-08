@@ -34,8 +34,11 @@ from world.magic.services.resonance_environment import (
 from world.magic.types.corruption import CorruptionSource
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
     from world.magic.models.techniques import Technique
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types.techniques import TechniqueUseResult
@@ -76,31 +79,58 @@ def defile_place_for_cast(
     room = room_profile.objectdb
 
     effect = _resolve_effect(effect, caster=caster, room=room, technique=technique)
-    interaction = effect.interaction
-    if (
-        effect.direction != ResonanceDirection.CASTER_DOMINANT
-        or interaction is None
-        or not interaction.caster_dominance_defiles
-    ):
+    if not _defilement_gate_met(effect):
         return
 
     cfg = get_resonance_environment_config()
+    _degrade_opposed_resonances(room=room, room_profile=room_profile, effect=effect, cfg=cfg)
+    _spread_abyssal_taint(
+        caster_sheet=caster_sheet,
+        room_profile=room_profile,
+        technique_result=technique_result,
+        cfg=cfg,
+    )
 
-    # 1. Degrade the place's dominant opposed resonance(s), flooring effective value at 0.
+
+def _defilement_gate_met(effect: ResonanceEnvironmentEffect) -> bool:
+    """True when the effect is a CASTER_DOMINANT, ``caster_dominance_defiles`` interaction."""
+    interaction = effect.interaction
+    return (
+        effect.direction == ResonanceDirection.CASTER_DOMINANT
+        and interaction is not None
+        and interaction.caster_dominance_defiles
+    )
+
+
+def _degrade_opposed_resonances(
+    *,
+    room: ObjectDB,
+    room_profile: RoomProfile,
+    effect: ResonanceEnvironmentEffect,
+    cfg: ResonanceEnvironmentConfig,
+) -> None:
+    """Step 1: degrade the place's dominant opposed resonance(s), flooring value at 0."""
     place_affinity = effect.environment_affinity
-    if place_affinity is not None and cfg.defile_degrade_per_cast > 0:
-        for resonance in _get_room_resonances(room):
-            if resonance.affinity_id != place_affinity.pk:
-                continue
-            current = effective_value(room, resonance=resonance)
-            if current <= 0:
-                continue
-            delta = -min(cfg.defile_degrade_per_cast, current)
-            upsert_room_resonance_modifier(
-                room_profile, resonance, source=DEFILE_SOURCE, delta=delta
-            )
+    if place_affinity is None or cfg.defile_degrade_per_cast <= 0:
+        return
+    for resonance in _get_room_resonances(room):
+        if resonance.affinity_id != place_affinity.pk:
+            continue
+        current = effective_value(room, resonance=resonance)
+        if current <= 0:
+            continue
+        delta = -min(cfg.defile_degrade_per_cast, current)
+        upsert_room_resonance_modifier(room_profile, resonance, source=DEFILE_SOURCE, delta=delta)
 
-    # The technique's Abyssal resonances drive spread + extra corruption.
+
+def _spread_abyssal_taint(
+    *,
+    caster_sheet: CharacterSheet,
+    room_profile: RoomProfile,
+    technique_result: TechniqueUseResult,
+    cfg: ResonanceEnvironmentConfig,
+) -> None:
+    """Steps 2-3: spread the technique's Abyssal resonances + accrue caster->world corruption."""
     abyssal_resonances = [
         inv.resonance
         for inv in technique_result.resonance_involvements

@@ -32,6 +32,13 @@ from world.conditions.types import AdvancementResistFailureKind
 if TYPE_CHECKING:
     from world.conditions.handlers import ConditionTemplateReactiveHandler
 
+# FK string constants reused across many fields / NaturalKeyConfig dependency
+# lists below. Centralized to avoid the duplicated-literal SonarCloud smell
+# (python:S1192).
+_CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
+_CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
+_CONDITION_STAGE_FK = "conditions.ConditionStage"
+
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
 # =============================================================================
@@ -142,7 +149,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
 
     # Consequence pools — nullable so a fallback config default can apply
     wound_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -150,7 +157,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
         help_text="Permanent-wound pool for this damage type. Null = use config default.",
     )
     death_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -496,7 +503,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # Per-cast consequence pool (fires on every action while at this stage)
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -511,7 +518,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         related_name="condition_stages_carrying",
     )
     on_entry_conditions = models.ManyToManyField(
-        "conditions.ConditionTemplate",
+        _CONDITION_TEMPLATE_FK,
         through="conditions.ConditionStageOnEntry",
         related_name="applied_on_entry_of",
         blank=True,
@@ -521,7 +528,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["condition", "stage_order"]
-        dependencies = ["conditions.ConditionTemplate"]
+        dependencies = [_CONDITION_TEMPLATE_FK]
 
     class Meta:
         unique_together = ["condition", "stage_order"]
@@ -650,8 +657,8 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
     class NaturalKeyConfig:
         fields = ["condition", "stage", "capability"]
         dependencies = [
-            "conditions.ConditionTemplate",
-            "conditions.ConditionStage",
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
             "conditions.CapabilityType",
         ]
 
@@ -696,8 +703,8 @@ class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
     class NaturalKeyConfig:
         fields = ["condition", "stage", "modifier_target"]
         dependencies = [
-            "conditions.ConditionTemplate",
-            "conditions.ConditionStage",
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
             "mechanics.ModifierTarget",
         ]
 
@@ -742,8 +749,8 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     class NaturalKeyConfig:
         fields = ["condition", "stage", "check_type"]
         dependencies = [
-            "conditions.ConditionTemplate",
-            "conditions.ConditionStage",
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
             "checks.CheckType",
         ]
 
@@ -799,8 +806,8 @@ class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):
     class NaturalKeyConfig:
         fields = ["condition", "stage", "damage_type"]
         dependencies = [
-            "conditions.ConditionTemplate",
-            "conditions.ConditionStage",
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
             "conditions.DamageType",
         ]
 
@@ -867,8 +874,8 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
     class NaturalKeyConfig:
         fields = ["condition", "stage", "damage_type"]
         dependencies = [
-            "conditions.ConditionTemplate",
-            "conditions.ConditionStage",
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
             "conditions.DamageType",
         ]
 
@@ -952,7 +959,7 @@ class ConditionDamageInteraction(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["condition", "damage_type"]
         dependencies = [
-            "conditions.ConditionTemplate",
+            _CONDITION_TEMPLATE_FK,
             "conditions.DamageType",
         ]
 
@@ -1021,7 +1028,7 @@ class ConditionConditionInteraction(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["condition", "other_condition", "trigger"]
-        dependencies = ["conditions.ConditionTemplate"]
+        dependencies = [_CONDITION_TEMPLATE_FK]
 
     class Meta:
         unique_together = ["condition", "other_condition", "trigger"]
@@ -1183,7 +1190,7 @@ class TreatmentTemplate(SharedMemoryModel):
     description = models.TextField(blank=True)
 
     target_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        _CONDITION_TEMPLATE_FK,
         on_delete=models.PROTECT,
         related_name="treatments",
     )
@@ -1204,7 +1211,7 @@ class TreatmentTemplate(SharedMemoryModel):
 
     backlash_severity_on_failure = models.PositiveIntegerField(default=0)
     backlash_target_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        _CONDITION_TEMPLATE_FK,
         null=True,
         blank=True,
         on_delete=models.PROTECT,

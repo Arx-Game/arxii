@@ -12,6 +12,11 @@ from world.buildings.models import (
     MaterialLoreEffect,
 )
 
+# Factory-path string for the Persona sub-factory, referenced by multiple
+# factories below. Centralized to avoid the duplicated-literal SonarCloud
+# smell (python:S1192).
+_PERSONA_FACTORY = "world.scenes.factories.PersonaFactory"
+
 
 class BuildingKindFactory(DjangoModelFactory):
     class Meta:
@@ -41,7 +46,7 @@ class BuildingFactory(DjangoModelFactory):
     target_size = 5
     target_grandeur = 5
     max_rooms = factory.LazyAttribute(lambda obj: obj.kind.rooms_per_size_tier * obj.target_size)
-    constructed_by_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    constructed_by_persona = factory.SubFactory(_PERSONA_FACTORY)
     source_project = None
 
 
@@ -55,7 +60,7 @@ class BuildingMaterialFactory(DjangoModelFactory):
     units = 1
     quality_tier = None
     lore_value = 0
-    contributed_by_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    contributed_by_persona = factory.SubFactory(_PERSONA_FACTORY)
 
 
 class MaterialLoreEffectFactory(DjangoModelFactory):
@@ -92,4 +97,4 @@ class BuildingConstructionDetailsFactory(DjangoModelFactory):
     ward = factory.SubFactory("world.areas.factories.AreaFactory", level=30)  # WARD
     target_size = 5
     target_grandeur = 5
-    constructed_by_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    constructed_by_persona = factory.SubFactory(_PERSONA_FACTORY)

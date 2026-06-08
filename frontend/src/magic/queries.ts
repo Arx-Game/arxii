@@ -179,10 +179,10 @@ export function useDissolveSoulTether() {
   return useMutation({
     mutationFn: (body: DissolveRequest) => api.dissolveSoulTether(body),
     onSuccess: (_data, variables) => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: magicKeys.soulTetherDetail(variables.relationship_id),
-      });
-      void qc.invalidateQueries({ queryKey: magicKeys.soulTether() });
+      }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });
 }
@@ -198,7 +198,7 @@ export function useRequestSineating() {
   return useMutation({
     mutationFn: (body: SineatingRequest) => api.requestSineating(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() });
+      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
     },
   });
 }
@@ -214,8 +214,8 @@ export function useRespondToSineating() {
   return useMutation({
     mutationFn: (body: SineatingRespondRequest) => api.respondToSineating(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() });
-      void qc.invalidateQueries({ queryKey: magicKeys.soulTether() });
+      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });
 }
@@ -230,7 +230,7 @@ export function usePerformRescue() {
   return useMutation({
     mutationFn: (body: RescueRequest) => api.performRescue(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.soulTether() });
+      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });
 }
@@ -246,8 +246,8 @@ export function useRespondToStageAdvance() {
   return useMutation({
     mutationFn: (body: StageAdvanceRespondRequest) => api.respondToStageAdvance(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.stageAdvancePending() });
-      void qc.invalidateQueries({ queryKey: magicKeys.soulTether() });
+      qc.invalidateQueries({ queryKey: magicKeys.stageAdvancePending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });
 }
@@ -313,8 +313,8 @@ export function useWeaveThread() {
   return useMutation({
     mutationFn: (body: WeaveThreadRequest) => api.weaveThread(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
     },
   });
 }
@@ -328,8 +328,8 @@ export function usePatchThreadNarrative(id: number) {
   return useMutation({
     mutationFn: (body: PatchThreadRequest) => api.patchThreadNarrative(id, body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.thread(id) });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
+      qc.invalidateQueries({ queryKey: magicKeys.thread(id) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
     },
   });
 }
@@ -343,8 +343,8 @@ export function useRetireThread() {
   return useMutation({
     mutationFn: (threadId: number) => api.retireThread(threadId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
     },
   });
 }
@@ -370,9 +370,9 @@ export function useImbueThread() {
       amount: number;
     }) => api.imbueThreadAuto(characterSheetId, threadId, amount),
     onSuccess: (_data, variables) => {
-      void qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
-      void qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() });
+      qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
     },
   });
 }
@@ -387,8 +387,8 @@ export function useCrossXPLock() {
     mutationFn: ({ threadId, body }: { threadId: number; body: CrossXPLockRequest }) =>
       api.crossXPLock(threadId, body),
     onSuccess: (_data, variables) => {
-      void qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
     },
   });
 }
@@ -406,8 +406,8 @@ export function useCommitPull() {
   return useMutation({
     mutationFn: (body: PullCommitRequest) => api.commitPull(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
-      void qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() });
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
     },
   });
 }
@@ -441,8 +441,8 @@ export function useAcceptTeachingOffer() {
     mutationFn: ({ offerId, body }: { offerId: number; body?: AcceptTeachingOfferRequest }) =>
       api.acceptTeachingOffer(offerId, body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() });
-      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
     },
   });
 }
@@ -520,8 +520,8 @@ export function useAuthorTechnique() {
   return useMutation({
     mutationFn: (body: TechniqueDesignRequest) => api.authorTechnique(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['techniques'] });
-      void qc.invalidateQueries({ queryKey: magicKeys.all });
+      qc.invalidateQueries({ queryKey: ['techniques'] }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.all }).catch(() => {});
     },
   });
 }

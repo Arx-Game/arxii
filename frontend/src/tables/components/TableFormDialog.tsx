@@ -149,7 +149,7 @@ export function TableFormDialog(props: TableFormDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">
           {/* Name */}
           <div className="space-y-1">
             <Label htmlFor="table-name">Name *</Label>

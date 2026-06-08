@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from world.action_points.factories import ActionPointPoolFactory
 from world.action_points.models import ActionPointPool
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import (
     CharacterCodexKnowledgeFactory,
     CodexCategoryFactory,
@@ -281,7 +282,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
         knowledge = CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
         )
         assert self.entry.name in str(knowledge)
         assert "uncovered" in str(knowledge)
@@ -317,7 +318,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
         knowledge.refresh_from_db()
 
         assert result is True
-        assert knowledge.status == CharacterCodexKnowledge.Status.KNOWN
+        assert knowledge.status == CodexKnowledgeStatus.KNOWN
         assert knowledge.learned_at is not None
 
     def test_add_progress_does_not_complete_below_threshold(self):
@@ -331,14 +332,14 @@ class CharacterCodexKnowledgeModelTests(TestCase):
         knowledge.refresh_from_db()
 
         assert result is False
-        assert knowledge.status == CharacterCodexKnowledge.Status.UNCOVERED
+        assert knowledge.status == CodexKnowledgeStatus.UNCOVERED
 
     def test_add_progress_on_known_does_nothing(self):
         """add_progress on already known entry returns False."""
         knowledge = CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         result = knowledge.add_progress(5)
         assert result is False
@@ -348,7 +349,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
         knowledge = CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         assert knowledge.is_complete() is True
 
@@ -357,7 +358,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
         knowledge = CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
         )
         assert knowledge.is_complete() is False
 
@@ -462,7 +463,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
@@ -480,7 +481,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=self.entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
         )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
@@ -515,7 +516,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=prereq,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
@@ -579,7 +580,7 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
         assert knowledge.roster_entry == self.learner.roster_entry
         assert knowledge.entry == self.entry
-        assert knowledge.status == CharacterCodexKnowledge.Status.UNCOVERED
+        assert knowledge.status == CodexKnowledgeStatus.UNCOVERED
         assert knowledge.learned_from == self.teacher
 
     def test_accept_spends_learner_ap(self):

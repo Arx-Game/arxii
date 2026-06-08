@@ -81,7 +81,7 @@ export function TableStoryRoster({ table, onRemove }: TableStoryRosterProps) {
             <button
               type="button"
               className="text-left font-medium hover:underline"
-              onClick={() => void navigate(`/stories/${story.id}`)}
+              onClick={() => navigate(`/stories/${story.id}`)}
             >
               {story.title}
             </button>

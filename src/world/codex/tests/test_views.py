@@ -7,13 +7,13 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import (
     CharacterCodexKnowledgeFactory,
     CodexCategoryFactory,
     CodexEntryFactory,
     CodexSubjectFactory,
 )
-from world.codex.models import CharacterCodexKnowledge
 from world.roster.factories import RosterTenureFactory
 
 
@@ -156,7 +156,7 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get("/api/codex/entries/")
@@ -169,7 +169,7 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get("/api/codex/entries/")
@@ -182,7 +182,7 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get(f"/api/codex/entries/{self.restricted_entry.id}/")
@@ -197,7 +197,7 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get(f"/api/codex/entries/{self.restricted_entry.id}/")
@@ -227,7 +227,7 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get("/api/codex/entries/?search=Restricted")
@@ -271,20 +271,20 @@ class TestCodexEntryAPI(CodexAPITestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.public_entry,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
         self.client.force_authenticate(user=self.account)
         response = self.client.get(f"/api/codex/entries/{self.public_entry.id}/")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
-        assert data["knowledge_status"] == CharacterCodexKnowledge.Status.KNOWN
+        assert data["knowledge_status"] == CodexKnowledgeStatus.KNOWN
 
     def test_research_progress_in_response(self):
         """Research progress is included for uncovered entries."""
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
-            status=CharacterCodexKnowledge.Status.UNCOVERED,
+            status=CodexKnowledgeStatus.UNCOVERED,
             learning_progress=5,
         )
         self.client.force_authenticate(user=self.account)
@@ -377,7 +377,7 @@ class TestCodexTreeQueryCount(TestCase):
         CharacterCodexKnowledgeFactory(
             roster_entry=tenure.roster_entry,
             entry=restricted,
-            status=CharacterCodexKnowledge.Status.KNOWN,
+            status=CodexKnowledgeStatus.KNOWN,
         )
 
         self.client.force_authenticate(user=account)

@@ -84,7 +84,14 @@ export function MissionBrowserPage() {
                 data-testid="mission-list-error"
               >
                 <p className="font-medium">Couldn't load missions.</p>
-                <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    refetch().catch(() => {});
+                  }}
+                >
                   Retry
                 </Button>
               </div>

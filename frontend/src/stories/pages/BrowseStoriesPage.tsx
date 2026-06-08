@@ -94,7 +94,7 @@ function StoryRow({ story }: StoryRowProps) {
         variant="outline"
         size="sm"
         className="shrink-0"
-        onClick={() => void navigate(`/stories/${story.id}`)}
+        onClick={() => navigate(`/stories/${story.id}`)}
       >
         {ctaLabel}
       </Button>

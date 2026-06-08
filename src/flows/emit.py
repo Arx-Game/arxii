@@ -42,6 +42,24 @@ def emit_event(
     """
     stack = parent_stack or FlowStack(owner=location, originating_event=event_name)
 
+    gathered = _gather_triggers(event_name, location)
+    gathered.sort(key=lambda t: -t.priority)
+
+    for trigger in gathered:
+        if not _trigger_should_fire(trigger, payload, event_name):
+            continue
+        _execute_flow(trigger, payload, stack)
+        handler = getattr(trigger.obj, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if handler is not None:
+            handler.note_fired(trigger.pk)
+        if stack.was_cancelled():
+            break
+
+    return stack
+
+
+def _gather_triggers(event_name: str, location: Any) -> list[Any]:
+    """Collect every trigger for ``event_name`` from ``location`` + its contents."""
     owners: list[Any] = [location]
     contents = getattr(location, "contents", None) or []  # noqa: GETATTR_LITERAL
     owners.extend(contents)
@@ -52,36 +70,32 @@ def emit_event(
         if handler is None:
             continue
         gathered.extend(handler.triggers_for(event_name))
+    return gathered
 
-    gathered.sort(key=lambda t: -t.priority)
 
-    for trigger in gathered:
-        try:
-            matched = evaluate_filter(
-                trigger.additional_filter_condition,
-                payload,
-                self_ref=trigger.obj,
-            )
-        except FilterPathError:
-            logger.warning(
-                "FilterPathError on trigger %s during dispatch of %s",
-                trigger.pk,
-                event_name,
-            )
-            continue
-        if not matched:
-            continue
-        handler = getattr(trigger.obj, "trigger_handler", None)  # noqa: GETATTR_LITERAL
-        limit = _dispatch_usage_limit(trigger, event_name)
-        if handler is not None and limit is not None and handler.fire_count(trigger.pk) >= limit:
-            continue
-        _execute_flow(trigger, payload, stack)
-        if handler is not None:
-            handler.note_fired(trigger.pk)
-        if stack.was_cancelled():
-            break
+def _trigger_should_fire(trigger: Any, payload: Any, event_name: str) -> bool:
+    """Whether ``trigger`` passes its filter and is under its dispatch usage cap."""
+    try:
+        matched = evaluate_filter(
+            trigger.additional_filter_condition,
+            payload,
+            self_ref=trigger.obj,
+        )
+    except FilterPathError:
+        logger.warning(
+            "FilterPathError on trigger %s during dispatch of %s",
+            trigger.pk,
+            event_name,
+        )
+        return False
+    if not matched:
+        return False
 
-    return stack
+    handler = getattr(trigger.obj, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    limit = _dispatch_usage_limit(trigger, event_name)
+    if handler is not None and limit is not None and handler.fire_count(trigger.pk) >= limit:
+        return False
+    return True
 
 
 def _dispatch_usage_limit(trigger: Any, event_name: str) -> int | None:

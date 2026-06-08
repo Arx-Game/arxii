@@ -26,11 +26,11 @@ export function StoryCard({ entry }: StoryCardProps) {
       className="cursor-pointer transition-colors hover:bg-accent"
       role="button"
       tabIndex={0}
-      onClick={() => void navigate(`/stories/${entry.story_id}`)}
+      onClick={() => navigate(`/stories/${entry.story_id}`)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          void navigate(`/stories/${entry.story_id}`);
+          navigate(`/stories/${entry.story_id}`);
         }
       }}
     >

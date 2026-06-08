@@ -20,6 +20,8 @@ from world.projects.constants import (
 from world.projects.models import Contribution, Project
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.traits.models import CheckOutcome
@@ -180,12 +182,24 @@ def resolve_project(project: Project, *, outcome_tier: CheckOutcome) -> None:
     project.save(update_fields=["outcome_tier", "status", "updated_at"])
 
 
-def scan_active_projects() -> int:
-    """Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.
+def _project_is_completion_ready(project: Project, now: datetime) -> bool:
+    """Return True if an ACTIVE project meets its completion condition.
 
     SINGLE_THRESHOLD: completion = (current_progress >= threshold_target)
                                    OR (now >= time_limit).
     TIERED_PERIOD:    completion = (now >= time_limit).
+    """
+    if project.completion_mode == CompletionMode.SINGLE_THRESHOLD:
+        if project.threshold_target is None:
+            return False
+        return project.current_progress >= project.threshold_target or now >= project.time_limit
+    if project.completion_mode == CompletionMode.TIERED_PERIOD:
+        return now >= project.time_limit
+    return False
+
+
+def scan_active_projects() -> int:
+    """Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.
 
     Returns count of projects transitioned. Resolution itself (handler call +
     outcome_tier set) is done by resolve_project, called separately.
@@ -194,23 +208,14 @@ def scan_active_projects() -> int:
     transitioned = 0
     active = Project.objects.filter(status=ProjectStatus.ACTIVE)
     for project in active:
-        should_resolve = False
-        if project.completion_mode == CompletionMode.SINGLE_THRESHOLD:
-            if project.threshold_target is None:
-                continue
-            if project.current_progress >= project.threshold_target or now >= project.time_limit:
-                should_resolve = True
-        elif project.completion_mode == CompletionMode.TIERED_PERIOD:
-            if now >= project.time_limit:
-                should_resolve = True
-
-        if should_resolve:
-            # Use save() instead of .objects.filter().update() so the in-memory
-            # SharedMemoryModel instance stays in sync — refresh_from_db() does
-            # not reliably re-fetch when the identity map already holds the row.
-            project.status = ProjectStatus.RESOLVING
-            project.save(update_fields=["status", "updated_at"])
-            transitioned += 1
+        if not _project_is_completion_ready(project, now):
+            continue
+        # Use save() instead of .objects.filter().update() so the in-memory
+        # SharedMemoryModel instance stays in sync — refresh_from_db() does
+        # not reliably re-fetch when the identity map already holds the row.
+        project.status = ProjectStatus.RESOLVING
+        project.save(update_fields=["status", "updated_at"])
+        transitioned += 1
 
     return transitioned
 

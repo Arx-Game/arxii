@@ -86,6 +86,13 @@ from world.mechanics.factories import (
 from world.roster.factories import RosterEntryFactory
 from world.traits.factories import TraitFactory
 
+# Centralized repeated literals (avoids the duplicated-literal SonarCloud
+# smell, python:S1192).
+# Factory-path string for the CapabilityType sub-factory.
+_CAPABILITY_TYPE_FACTORY = "world.conditions.factories.CapabilityTypeFactory"
+# Flow-step parameter sentinel that binds the step's payload to the event payload.
+_PAYLOAD_PARAM = "@payload"
+
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
     """Factory for EffectType with power scaling."""
@@ -286,7 +293,7 @@ class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
         model = TechniqueCapabilityGrant
 
     technique = factory.SubFactory(TechniqueFactory)
-    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    capability = factory.SubFactory(_CAPABILITY_TYPE_FACTORY)
     base_value = 5
     intensity_multiplier = Decimal("1.0")
 
@@ -298,7 +305,7 @@ class TechniqueCapabilityRequirementFactory(factory.django.DjangoModelFactory):
         model = TechniqueCapabilityRequirement
 
     technique = factory.SubFactory(TechniqueFactory)
-    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    capability = factory.SubFactory(_CAPABILITY_TYPE_FACTORY)
     minimum_value = 1
 
 
@@ -685,7 +692,7 @@ class ThreadPullEffectFactory(factory.django.DjangoModelFactory):
             effect_kind=EffectKind.CAPABILITY_GRANT,
             flat_bonus_amount=None,
             capability_grant=factory.SubFactory(
-                "world.conditions.factories.CapabilityTypeFactory",
+                _CAPABILITY_TYPE_FACTORY,
             ),
         )
         as_narrative_only = factory.Trait(
@@ -1754,7 +1761,7 @@ def _build_soul_tether_redirect_flow() -> object:
             flow=flow,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.magic.services.soul_tether.soul_tether_redirect_handler",
-            parameters={"payload": "@payload"},
+            parameters={"payload": _PAYLOAD_PARAM},
         )
     return flow
 
@@ -1774,7 +1781,7 @@ def _build_soul_tether_stage_advance_prompt_flow() -> object:
             flow=flow,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name=("world.magic.services.soul_tether.soul_tether_stage_advance_prompt"),
-            parameters={"payload": "@payload"},
+            parameters={"payload": _PAYLOAD_PARAM},
         )
     return flow
 
@@ -2245,7 +2252,7 @@ def _build_scar_escalation_flow(escalation_condition_name: str) -> object:
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.conditions.services.apply_condition_by_name",
             parameters={
-                "payload": "@payload",
+                "payload": _PAYLOAD_PARAM,
                 "condition_name": escalation_condition_name,
             },
         )

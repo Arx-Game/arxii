@@ -17,6 +17,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 
+# Cross-app FK strings used by multiple fields below. Centralized to avoid the
+# duplicated-literal SonarCloud smell (python:S1192).
+_CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
+_PERSONA_FK = "scenes.Persona"
+
 
 class QualityTier(SharedMemoryModel):
     """
@@ -372,7 +377,7 @@ class ItemInstance(SharedMemoryModel):
     # the account. One inventory per character; personas are a display layer
     # over the same underlying gear. See docs in the spec on the GitHub issue.
     holder_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -384,7 +389,7 @@ class ItemInstance(SharedMemoryModel):
         ),
     )
     crafter_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -392,7 +397,7 @@ class ItemInstance(SharedMemoryModel):
         help_text="The body that crafted this item.",
     )
     crafter_persona_display = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -607,7 +612,7 @@ class OwnershipEvent(SharedMemoryModel):
     # persona_display fields below snapshot how each side appeared IC at
     # the moment of transfer — narrative layer, never a permission gate.
     from_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -615,7 +620,7 @@ class OwnershipEvent(SharedMemoryModel):
         help_text="Previous holder (null for creation events).",
     )
     to_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -623,7 +628,7 @@ class OwnershipEvent(SharedMemoryModel):
         help_text="New holder.",
     )
     from_persona_display = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -634,7 +639,7 @@ class OwnershipEvent(SharedMemoryModel):
         ),
     )
     to_persona_display = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -742,7 +747,7 @@ class Outfit(SharedMemoryModel):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="outfits",
     )

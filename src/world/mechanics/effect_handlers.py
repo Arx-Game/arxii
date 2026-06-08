@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.checks.constants import EffectTarget, EffectType
+from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
 from world.magic.constants import AlterationTier
@@ -185,7 +186,7 @@ def _deal_damage(
     vitals.save(update_fields=["health"])
 
     process_damage_consequences(
-        character=target,
+        character_sheet=target.sheet_data,
         damage_dealt=effect.damage_amount,
         damage_type=effect.damage_type,
     )
@@ -248,7 +249,7 @@ def _grant_codex(
     _, created = CharacterCodexKnowledge.objects.get_or_create(
         roster_entry=roster_entry,
         entry=effect.codex_entry,
-        defaults={"status": CharacterCodexKnowledge.Status.UNCOVERED},
+        defaults={"status": CodexKnowledgeStatus.UNCOVERED},
     )
     entry_name = effect.codex_entry.name
     if created:

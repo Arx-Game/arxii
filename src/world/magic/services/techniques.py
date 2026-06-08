@@ -47,9 +47,10 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
-    from world.magic.models import Technique
+    from world.magic.models import SoulfrayConfig, Technique
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
+    from world.magic.types import MishapResult, SoulfrayResult
     from world.mechanics.models import ModifierTarget
 
 
@@ -242,6 +243,51 @@ def _partition_power_targets(
     return multiplier_target, flat_targets
 
 
+def _apply_power_multiplier_stage(
+    builder: PowerLedgerBuilder,
+    *,
+    sheet: CharacterSheet,
+    multiplier_target: ModifierTarget,
+) -> None:
+    """Add the aggregate MULTIPLIER entry (applies to base only) for ``multiplier_target``.
+
+    The percent-delta and its source label are derived from identity + condition
+    modifiers; immunity-blocked sources are excluded from the label.
+    """
+    from world.conditions.services import (  # noqa: PLC0415
+        get_condition_modifier_breakdown,
+        get_condition_modifier_total,
+    )
+    from world.mechanics.services import get_modifier_breakdown  # noqa: PLC0415
+
+    mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
+    mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
+    delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
+    names = [
+        s.source_name for s in mult_breakdown.sources if s.source_name and not s.blocked_by_immunity
+    ]
+    names += [name for name, _value in mult_condition_rows if name]
+    label = ", ".join(names) if names else "power multipliers"
+    builder.multiply(PowerStage.MULTIPLIER, label, delta)
+
+
+def _environment_amplifies(environment: ResonanceEnvironmentEffect | None) -> bool:
+    """True when the resonance environment adds power (ALIGNED AMPLIFY, positive magnitude).
+
+    Only AMPLIFY adds power here. Double-count guards:
+      - OPPOSED (REJECT/REPEL): NO power change — its penalty is the existing Step 10
+        backfire; subtracting power here would double-count the same opposition.
+      - ALIGNED persistent presence boon: applied as a ConditionInstance on move and
+        already flows through the FLAT/condition stage; no entry here.
+      - CORRUPT: deferred; no entry.
+    """
+    return (
+        environment is not None
+        and environment.kind == AffinityInteractionKind.AMPLIFY
+        and environment.magnitude > 0
+    )
+
+
 def _derive_power(
     *,
     channeled_intensity: int,
@@ -276,10 +322,7 @@ def _derive_power(
     Power-scoped contributions raise landed effect only; channeled intensity
     (anima/mishap/Soulfray) is untouched by construction.
     """
-    from world.conditions.services import (  # noqa: PLC0415
-        get_condition_modifier_breakdown,
-        get_condition_modifier_total,
-    )
+    from world.conditions.services import get_condition_modifier_breakdown  # noqa: PLC0415
     from world.magic.services.power_terms import (  # noqa: PLC0415
         PowerTermContext,
         get_power_term_providers,
@@ -298,17 +341,11 @@ def _derive_power(
 
     # --- MULTIPLIER stage (applies to base only; single aggregate call) ---
     if multiplier_target is not None:
-        mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
-        mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
-        delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
-        names = [
-            s.source_name
-            for s in mult_breakdown.sources
-            if s.source_name and not s.blocked_by_immunity
-        ]
-        names += [name for name, _value in mult_condition_rows if name]
-        label = ", ".join(names) if names else "power multipliers"
-        builder.multiply(PowerStage.MULTIPLIER, label, delta)
+        _apply_power_multiplier_stage(
+            builder,
+            sheet=sheet,
+            multiplier_target=multiplier_target,
+        )
 
     # --- FLAT stage (per source; addition does not round) ---
     for target in flat_targets:
@@ -329,17 +366,7 @@ def _derive_power(
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
 
     # --- ENVIRONMENT stage (#639 Task 4): a place's cast-time resonance reaction ---
-    # Only AMPLIFY (ALIGNED amplify) adds power here. Double-count guards:
-    #   - OPPOSED (REJECT/REPEL): NO power change — its penalty is the existing Step 10
-    #     backfire; subtracting power here would double-count the same opposition.
-    #   - ALIGNED persistent presence boon: applied as a ConditionInstance on move and
-    #     already flows through the FLAT/condition stage above; no entry here.
-    #   - CORRUPT: deferred; no entry.
-    if (
-        environment is not None
-        and environment.kind == AffinityInteractionKind.AMPLIFY
-        and environment.magnitude > 0
-    ):
+    if _environment_amplifies(environment):
         builder.add(PowerStage.ENVIRONMENT, "resonance environment", environment.magnitude)
 
     return builder.clamp_floor().build()
@@ -430,7 +457,232 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
+def _evaluate_cast_environment(
+    character: ObjectDB,
+    caster_room: ObjectDB | None,
+    technique: Technique,
+) -> tuple[RoomProfile | None, ResonanceEnvironmentEffect | None]:
+    """Resolve the caster's room profile and evaluate the resonance environment once.
+
+    Returns ``(room_profile, environment_effect)``; both are ``None`` when the caster
+    has no location or the location has no ``RoomProfile``.
+    """
+    if caster_room is None:
+        return None, None
+    try:
+        room_profile = caster_room.room_profile
+    except RoomProfile.DoesNotExist:
+        return None, None
+    environment_effect = evaluate_resonance_environment(
+        caster=character, room=caster_room, technique=technique
+    )
+    return room_profile, environment_effect
+
+
+def _reconcile_precast_ledger(pre_payload: TechniquePreCastPayload) -> PowerLedger:
+    """Return the ledger reconciled against any pre-cast MODIFY_PAYLOAD power edit.
+
+    Stage 6 (REACTIVE): when a hook edited ``payload.power``, the signed delta becomes a
+    single REACTIVE entry so the ledger total matches the post-hook power. The ledger is
+    the source of truth, so a hook driving power below 0 yields a floored (>=0) value.
+    """
+    effective_ledger = pre_payload.ledger
+    if pre_payload.power == effective_ledger.total:
+        return effective_ledger
+    return (
+        PowerLedgerBuilder.from_ledger(effective_ledger)
+        .add(PowerStage.REACTIVE, "pre-cast edit", pre_payload.power - effective_ledger.total)
+        .build()
+    )
+
+
+def _resolve_check_result(
+    check_result: CheckResult | None,
+    resolution_result: Any,
+) -> CheckResult | None:
+    """Return the explicit check_result, else pull it from the resolution result."""
+    if check_result is not None:
+        return check_result
+    result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL
+    if result is not None:
+        return result
+    main = getattr(resolution_result, "main_result", None)  # noqa: GETATTR_LITERAL
+    if main is not None:
+        return getattr(main, "check_result", None)  # noqa: GETATTR_LITERAL
+    return None
+
+
+def _accumulate_soulfray(
+    *,
+    character: ObjectDB,
+    anima: CharacterAnima,
+    deficit: int,
+    soulfray_config: SoulfrayConfig | None,
+    check_result: CheckResult | None,
+) -> SoulfrayResult | None:
+    """Step 7: accumulate Soulfray severity and apply stage consequences.
+
+    No-op (returns ``None``) when Soulfray is unconfigured or severity is non-positive.
+    """
+    if not soulfray_config:
+        return None
+    anima.refresh_from_db()
+    soulfray_severity = calculate_soulfray_severity(
+        current_anima=anima.current,
+        max_anima=anima.maximum,
+        deficit=deficit,
+        config=soulfray_config,
+    )
+    if soulfray_severity <= 0:
+        return None
+    return _handle_soulfray_accumulation(
+        character=character,
+        soulfray_severity=soulfray_severity,
+        soulfray_config=soulfray_config,
+        technique_check_result=check_result,
+    )
+
+
+def _resolve_control_mishap(
+    *,
+    character: ObjectDB,
+    stats: RuntimeTechniqueStats,
+    check_result: CheckResult | None,
+) -> MishapResult | None:
+    """Step 8: resolve a control-deficit mishap rider, or ``None`` when none applies."""
+    control_deficit = stats.intensity - stats.control
+    if control_deficit <= 0:
+        return None
+    pool = select_mishap_pool(control_deficit)
+    if pool is None or check_result is None:
+        return None
+    return _resolve_mishap(character, pool, check_result)
+
+
+def _apply_technique_fatigue_step(
+    *,
+    sheet: CharacterSheet | None,
+    character: ObjectDB,
+    technique: Technique,
+    cost: AnimaCostResult,
+    strain_commitment: int,
+) -> None:
+    """Step 8b: accrue technique fatigue to the matching action-category pool.
+
+    Collapse is suppressed when the character has the fatigue_collapse_immune condition.
+    No-op for NPCs without a CharacterSheet or zero-cost casts.
+    """
+    if sheet is None or cost.effective_cost <= 0:
+        return
+    from world.fatigue.services import apply_technique_fatigue  # noqa: PLC0415
+
+    apply_technique_fatigue(
+        sheet,
+        technique.action_category,
+        cost.effective_cost,
+        strain_commitment,
+        immune_to_fatigue_collapse=_character_has_fatigue_collapse_immune(character),
+    )
+
+
+def _accrue_cast_corruption(
+    *,
+    sheet: CharacterSheet | None,
+    technique_result: TechniqueUseResult,
+) -> None:
+    """Step 9: per-cast corruption accrual. NPCs without a CharacterSheet skip silently."""
+    if sheet is None:
+        return
+    from world.magic.services.corruption import accrue_corruption_for_cast  # noqa: PLC0415
+
+    technique_result.corruption_summary = accrue_corruption_for_cast(
+        caster_sheet=sheet,
+        technique_use_result=technique_result,
+    )
+
+
+def _react_resonance_environment(
+    *,
+    sheet: CharacterSheet | None,
+    room_profile: RoomProfile | None,
+    environment_effect: ResonanceEnvironmentEffect | None,
+    technique: Technique,
+    technique_result: TechniqueUseResult,
+) -> None:
+    """Step 10: universal resonance-environment reaction (backfire + defilement).
+
+    Reuses the hoisted environment_effect / room_profile (#639/#722). The sheet guard
+    keeps backfire/defile gated to magically-active casters; inert when room_profile or
+    environment_effect is None. Runs no flows/events of its own.
+    """
+    if sheet is None or room_profile is None or environment_effect is None:
+        return
+    from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+
+    resonance_environment_for_cast(
+        caster_sheet=sheet,
+        room_profile=room_profile,
+        technique=technique,
+        effect=environment_effect,
+    )
+    # Defilement: a CASTER_DOMINANT caster overpowering an opposed place degrades it,
+    # spreads its taint, and accrues caster->world corruption (issue #525). Inert unless
+    # the gate is met.
+    defile_place_for_cast(
+        caster_sheet=sheet,
+        room_profile=room_profile,
+        technique=technique,
+        technique_result=technique_result,
+        effect=environment_effect,
+    )
+
+
+def _emit_cast_events(  # noqa: PLR0913 - frozen event payload fields
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    caster_room: ObjectDB | None,
+    effective_targets: list,
+    intensity: int,
+    effective_power: int,
+    effective_ledger: PowerLedger,
+    resolution_result: Any,
+) -> None:
+    """Emit the frozen TECHNIQUE_CAST event and a TECHNIQUE_AFFECTED event per target."""
+    if caster_room is not None:
+        emit_event(
+            EventName.TECHNIQUE_CAST,
+            TechniqueCastPayload(
+                caster=character,
+                technique=technique,
+                targets=effective_targets,
+                intensity=intensity,
+                power=effective_power,
+                ledger=effective_ledger,
+                result=resolution_result,
+            ),
+            location=caster_room,
+        )
+
+    for affected_target in effective_targets:
+        target_room = getattr(affected_target, "location", None)  # noqa: GETATTR_LITERAL
+        if target_room is None:
+            continue
+        emit_event(
+            EventName.TECHNIQUE_AFFECTED,
+            TechniqueAffectedPayload(
+                caster=character,
+                technique=technique,
+                target=affected_target,
+                power=effective_power,
+                ledger=effective_ledger,
+                effect=resolution_result,
+            ),
+            location=target_room,
+        )
+
+
+def use_technique(  # noqa: PLR0913
     *,
     character: ObjectDB,
     technique: Technique,
@@ -485,17 +737,7 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     # Evaluate the resonance-environment primitive ONCE per cast, before power
     # derivation. The result feeds the ENVIRONMENT power-shift stage here AND is
     # reused at Step 10 (backfire + defilement) — evaluate-once (#639/#722).
-    environment_effect: ResonanceEnvironmentEffect | None = None
-    room_profile = None
-    if caster_room is not None:
-        try:
-            room_profile = caster_room.room_profile
-        except RoomProfile.DoesNotExist:
-            room_profile = None
-        if room_profile is not None:
-            environment_effect = evaluate_resonance_environment(
-                caster=character, room=caster_room, technique=technique
-            )
+    room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
 
     seed_ledger = _derive_power(
         channeled_intensity=stats.intensity,
@@ -524,23 +766,9 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
                 technique=technique,
             )
 
-    # Read back power after any pre-cast MODIFY_PAYLOAD hooks (mutable payload).
-    # pre_payload.power holds seed_power when no room exists (no emit path),
-    # and the post-hook value when the emit path ran.
-    effective_power = pre_payload.power
-
-    # Stage 6 (REACTIVE): if a pre-cast MODIFY_PAYLOAD hook edited payload.power,
-    # reconcile the ledger so its running total matches the post-hook power. The
-    # signed delta becomes a single REACTIVE entry.
-    effective_ledger = pre_payload.ledger
-    if pre_payload.power != effective_ledger.total:
-        effective_ledger = (
-            PowerLedgerBuilder.from_ledger(effective_ledger)
-            .add(PowerStage.REACTIVE, "pre-cast edit", pre_payload.power - effective_ledger.total)
-            .build()
-        )
-    # Ledger is the source of truth: keep effective_power == effective_ledger.total so a
-    # hook that drives power below 0 yields a floored (>=0) value, never a negative power.
+    # Read back power after any pre-cast MODIFY_PAYLOAD hooks (mutable payload) and
+    # reconcile the ledger so its total matches; ledger is the source of truth.
+    effective_ledger = _reconcile_precast_ledger(pre_payload)
     effective_power = effective_ledger.total
 
     # Step 4: Deduct anima
@@ -550,56 +778,34 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     resolution_result = resolve_fn(power=effective_power, ledger=effective_ledger)
 
     # Extract check_result from resolution if not provided explicitly
-    effective_check_result = check_result
-    if effective_check_result is None:
-        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL
-        if effective_check_result is None and hasattr(resolution_result, "main_result"):
-            main = resolution_result.main_result
-            if main is not None and hasattr(main, "check_result"):
-                effective_check_result = main.check_result
+    effective_check_result = _resolve_check_result(check_result, resolution_result)
 
     # Step 7: Soulfray accumulation and stage consequences
-    soulfray_result = None
-    soulfray_config = SoulfrayConfig.objects.first()
-    if soulfray_config:
-        anima.refresh_from_db()
-        soulfray_severity = calculate_soulfray_severity(
-            current_anima=anima.current,
-            max_anima=anima.maximum,
-            deficit=deficit,
-            config=soulfray_config,
-        )
-
-        if soulfray_severity > 0:
-            soulfray_result = _handle_soulfray_accumulation(
-                character=character,
-                soulfray_severity=soulfray_severity,
-                soulfray_config=soulfray_config,
-                technique_check_result=effective_check_result,
-            )
+    soulfray_result = _accumulate_soulfray(
+        character=character,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.first(),
+        check_result=effective_check_result,
+    )
 
     # Step 8: Mishap rider
-    mishap = None
-    control_deficit = stats.intensity - stats.control
-    if control_deficit > 0:
-        pool = select_mishap_pool(control_deficit)
-        if pool is not None and effective_check_result is not None:
-            mishap = _resolve_mishap(character, pool, effective_check_result)
+    mishap = _resolve_control_mishap(
+        character=character,
+        stats=stats,
+        check_result=effective_check_result,
+    )
 
     # Step 8b: Technique fatigue — accrues to the matching action-category pool.
-    # Collapse is suppressed when the character has the fatigue_collapse_immune condition.
     # sheet is also used in Steps 9 and 10; NPCs without a CharacterSheet skip those paths.
     sheet = _get_character_sheet(character)
-    if sheet is not None and cost.effective_cost > 0:
-        from world.fatigue.services import apply_technique_fatigue  # noqa: PLC0415
-
-        apply_technique_fatigue(
-            sheet,
-            technique.action_category,
-            cost.effective_cost,
-            strain_commitment,
-            immune_to_fatigue_collapse=_character_has_fatigue_collapse_immune(character),
-        )
+    _apply_technique_fatigue_step(
+        sheet=sheet,
+        character=character,
+        technique=technique,
+        cost=cost,
+        strain_commitment=strain_commitment,
+    )
 
     resonance_involvements = _build_resonance_involvements(
         technique=technique,
@@ -622,71 +828,27 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901, PLR0915
     )
 
     # Step 9: Per-cast corruption accrual (Magic Scope #7)
-    # NPCs without a CharacterSheet skip corruption accrual silently.
-    if sheet is not None:
-        from world.magic.services.corruption import accrue_corruption_for_cast  # noqa: PLC0415
-
-        technique_result.corruption_summary = accrue_corruption_for_cast(
-            caster_sheet=sheet,
-            technique_use_result=technique_result,
-        )
+    _accrue_cast_corruption(sheet=sheet, technique_result=technique_result)
 
     # Step 10: Universal resonance-environment reaction (core magic-physics; no flow/trigger)
-    # Reuses the hoisted environment_effect / room_profile computed before power
-    # derivation — evaluate_resonance_environment runs at most ONCE per cast (#639/#722).
-    # The sheet guard keeps backfire/defile gated to magically-active casters; when
-    # room_profile is None (no profile) this block stays inert exactly as before.
-    if sheet is not None and room_profile is not None and environment_effect is not None:
-        from world.magic.services.defilement import defile_place_for_cast  # noqa: PLC0415
+    _react_resonance_environment(
+        sheet=sheet,
+        room_profile=room_profile,
+        environment_effect=environment_effect,
+        technique=technique,
+        technique_result=technique_result,
+    )
 
-        resonance_environment_for_cast(
-            caster_sheet=sheet,
-            room_profile=room_profile,
-            technique=technique,
-            effect=environment_effect,
-        )
-        # Defilement: a CASTER_DOMINANT caster overpowering an opposed place
-        # degrades it, spreads its taint, and accrues caster->world corruption
-        # (issue #525). Inert unless the gate is met; runs no flows/events of its own.
-        defile_place_for_cast(
-            caster_sheet=sheet,
-            room_profile=room_profile,
-            technique=technique,
-            technique_result=technique_result,
-            effect=environment_effect,
-        )
-
-    # --- TECHNIQUE_CAST (post-resolve, frozen) ---
-    if caster_room is not None:
-        emit_event(
-            EventName.TECHNIQUE_CAST,
-            TechniqueCastPayload(
-                caster=character,
-                technique=technique,
-                targets=effective_targets,
-                intensity=stats.intensity,
-                power=effective_power,
-                ledger=effective_ledger,
-                result=resolution_result,
-            ),
-            location=caster_room,
-        )
-
-    # --- TECHNIQUE_AFFECTED per target ---
-    for affected_target in effective_targets:
-        target_room = getattr(affected_target, "location", None)  # noqa: GETATTR_LITERAL
-        if target_room is not None:
-            emit_event(
-                EventName.TECHNIQUE_AFFECTED,
-                TechniqueAffectedPayload(
-                    caster=character,
-                    technique=technique,
-                    target=affected_target,
-                    power=effective_power,
-                    ledger=effective_ledger,
-                    effect=resolution_result,
-                ),
-                location=target_room,
-            )
+    # --- TECHNIQUE_CAST + TECHNIQUE_AFFECTED events (post-resolve, frozen) ---
+    _emit_cast_events(
+        character=character,
+        technique=technique,
+        caster_room=caster_room,
+        effective_targets=effective_targets,
+        intensity=stats.intensity,
+        effective_power=effective_power,
+        effective_ledger=effective_ledger,
+        resolution_result=resolution_result,
+    )
 
     return technique_result

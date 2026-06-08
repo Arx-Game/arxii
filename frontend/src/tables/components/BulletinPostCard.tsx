@@ -107,7 +107,7 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
   const isValid = title.trim().length > 0 && body.trim().length > 0;
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3 rounded border p-4">
+    <form onSubmit={(e) => handleSubmit(e)} className="space-y-3 rounded border p-4">
       <div className="space-y-1">
         <Label htmlFor={`post-title-${post.id}`}>Title *</Label>
         <Input
@@ -204,7 +204,7 @@ function ReplyForm({ postId, viewerPersonaId, onCancel }: ReplyFormProps) {
   const isValid = body.trim().length > 0;
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-2 pl-6">
+    <form onSubmit={(e) => handleSubmit(e)} className="space-y-2 pl-6">
       <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}

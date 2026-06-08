@@ -48,6 +48,11 @@ def power_outcome_clause(power_ledger: PowerLedger | None) -> str:
     if power_ledger is None:
         return ""
 
+    return _penetration_clause(power_ledger) or _environment_clause(power_ledger)
+
+
+def _penetration_clause(power_ledger: PowerLedger) -> str:
+    """Return the PENETRATION-stage clause (bounce / partial / tear-through), or ``""``."""
     from world.magic.constants import LedgerOp, PowerStage  # noqa: PLC0415
 
     for entry in power_ledger.entries:
@@ -64,10 +69,14 @@ def power_outcome_clause(power_ledger: PowerLedger | None) -> str:
         # Both are "tore through" — collapse into one condition.
         if entry.amount > 0:
             return "— it tears through the ward"
+    return ""
 
-    # Environment amplification: ENVIRONMENT ADD with positive amount
+
+def _environment_clause(power_ledger: PowerLedger) -> str:
+    """Return the ENVIRONMENT-amplification clause (ADD with positive amount), or ``""``."""
+    from world.magic.constants import LedgerOp, PowerStage  # noqa: PLC0415
+
     for entry in power_ledger.entries:
         if entry.stage == PowerStage.ENVIRONMENT and entry.op == LedgerOp.ADD and entry.amount > 0:
             return "— the place's resonance swells the working"
-
     return ""

@@ -21,7 +21,7 @@ function initialLetter(name: string): string {
 function colorForName(name: string): string {
   // Stable hash -> HSL color so the same persona always gets the same color.
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < name.length; i++) hash = Math.trunc(hash * 31 + name.charCodeAt(i));
   const hue = Math.abs(hash) % 360;
   return `hsl(${hue}, 55%, 35%)`;
 }

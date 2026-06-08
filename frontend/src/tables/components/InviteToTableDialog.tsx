@@ -135,7 +135,7 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">
           {/* Persona search */}
           <div className="space-y-1">
             <Label htmlFor="invite-persona">Persona *</Label>

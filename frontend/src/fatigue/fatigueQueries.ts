@@ -46,7 +46,7 @@ export function useRestMutation() {
   return useMutation({
     mutationFn: restCommand,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fatigue-status'] });
+      queryClient.invalidateQueries({ queryKey: ['fatigue-status'] }).catch(() => {});
     },
   });
 }

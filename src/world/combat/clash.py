@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
-    from world.combat.models import Clash, CombatEncounter
+    from world.combat.models import Clash, CombatEncounter, CombatRoundAction
     from world.magic.models import Affinity, Technique
 
 
@@ -1119,11 +1119,7 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
 
     Private helper — call only from ``detect_clash_opportunities``.
     """
-    from world.combat.models import (  # noqa: PLC0415
-        Clash,
-        CombatOpponentAction,
-        CombatRoundAction,
-    )
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
     created: list[Clash] = []
 
@@ -1139,74 +1135,99 @@ def _detect_clash_flavor(*, encounter: CombatEncounter, round_number: int) -> li
     )
 
     # Pre-resolve clash config once for the intensity floor.
-    from world.combat.services import compute_intensity_for_clash, get_clash_config  # noqa: PLC0415
+    from world.combat.services import get_clash_config  # noqa: PLC0415
 
-    clash_config = get_clash_config()
-    intensity_floor = clash_config.clash_min_intensity
+    intensity_floor = get_clash_config().clash_min_intensity
 
     for pc_action in pc_actions:
-        technique = pc_action.focused_action
-        opponent = pc_action.focused_opponent_target
-
-        # Skip if no resolution pool — cannot create a non-nullable FK row.
-        if technique.clash_resolution_pool is None:
-            continue
-
-        # Find the matching NPC action this round for the same opponent.
-        try:
-            npc_action = CombatOpponentAction.objects.select_related("threat_entry").get(
-                opponent=opponent,
-                round_number=round_number,
-            )
-        except CombatOpponentAction.DoesNotExist:
-            continue  # NPC has no action this round — no clash
-
-        if not npc_action.threat_entry.clash_capable:
-            continue  # NPC action is not clash-capable
-
-        # Property-based opposition gate — clash only opens if technique and
-        # threat entry share at least one Property. Legacy-permissive: when
-        # either side has no authored effect properties, fall through (we're
-        # in pre-Phase-1 content territory). Once seed content authors
-        # Properties for production, the gate engages naturally.
-        pc_props = _technique_effect_property_ids(technique)
-        npc_props = frozenset(
-            npc_action.threat_entry.effect_properties.values_list("pk", flat=True)
-        )
-        if pc_props and npc_props and not can_clash(pc_props, npc_props):
-            continue
-
-        # Intensity floor — prevents trivial round-1 clashes. When floor is 0
-        # (default — set to a real value by seed content), this is a no-op.
-        if intensity_floor > 0:
-            eff_intensity = compute_intensity_for_clash(pc_action.participant, pc_action)
-            if eff_intensity < intensity_floor:
-                continue
-
-        # Determine thresholds from authored base_damage fields.
-        # Use TechniqueDamageProfile.base_damage if a profile exists; fall back to
-        # ThreatPoolEntry.base_damage; if neither side provides signal, use the
-        # design scaffold default.
-        pc_power = _technique_attack_power(technique)
-        npc_power = npc_action.threat_entry.base_damage or 0
-        threshold = max(pc_power, npc_power) or _DEFAULT_THRESHOLD
-
-        clash = Clash.objects.create(
+        clash = _build_clash_for_action(
+            pc_action,
             encounter=encounter,
-            npc_opponent=opponent,
-            initiator=pc_action.participant.character_sheet,
-            resolution_consequence_pool=technique.clash_resolution_pool,
-            per_round_consequence_pool=technique.clash_per_round_pool,
-            flavor=ClashFlavor.CLASH,
-            progress=0,
-            pc_win_threshold=threshold,
-            npc_win_threshold=threshold,
-            started_round=round_number,
-            triggering_threat_entry=npc_action.threat_entry,
+            round_number=round_number,
+            intensity_floor=intensity_floor,
         )
-        created.append(clash)
+        if clash is not None:
+            created.append(clash)
 
     return created
+
+
+def _build_clash_for_action(
+    pc_action: CombatRoundAction,
+    *,
+    encounter: CombatEncounter,
+    round_number: int,
+    intensity_floor: int,
+) -> Clash | None:
+    """Form a CLASH for one PC action, or return None if no clash opens.
+
+    Applies the gates in order: technique has a resolution pool, a matching
+    clash-capable NPC action exists this round, the property opposition gate
+    passes, and the intensity floor is met.
+    """
+    from world.combat.models import (  # noqa: PLC0415
+        Clash,
+        CombatOpponentAction,
+    )
+    from world.combat.services import compute_intensity_for_clash  # noqa: PLC0415
+
+    technique = pc_action.focused_action
+    opponent = pc_action.focused_opponent_target
+
+    # Skip if no resolution pool — cannot create a non-nullable FK row.
+    if technique.clash_resolution_pool is None:
+        return None
+
+    # Find the matching NPC action this round for the same opponent.
+    try:
+        npc_action = CombatOpponentAction.objects.select_related("threat_entry").get(
+            opponent=opponent,
+            round_number=round_number,
+        )
+    except CombatOpponentAction.DoesNotExist:
+        return None  # NPC has no action this round — no clash
+
+    if not npc_action.threat_entry.clash_capable:
+        return None  # NPC action is not clash-capable
+
+    # Property-based opposition gate — clash only opens if technique and
+    # threat entry share at least one Property. Legacy-permissive: when
+    # either side has no authored effect properties, fall through (we're
+    # in pre-Phase-1 content territory). Once seed content authors
+    # Properties for production, the gate engages naturally.
+    pc_props = _technique_effect_property_ids(technique)
+    npc_props = frozenset(npc_action.threat_entry.effect_properties.values_list("pk", flat=True))
+    if pc_props and npc_props and not can_clash(pc_props, npc_props):
+        return None
+
+    # Intensity floor — prevents trivial round-1 clashes. When floor is 0
+    # (default — set to a real value by seed content), this is a no-op.
+    if intensity_floor > 0:
+        eff_intensity = compute_intensity_for_clash(pc_action.participant, pc_action)
+        if eff_intensity < intensity_floor:
+            return None
+
+    # Determine thresholds from authored base_damage fields.
+    # Use TechniqueDamageProfile.base_damage if a profile exists; fall back to
+    # ThreatPoolEntry.base_damage; if neither side provides signal, use the
+    # design scaffold default.
+    pc_power = _technique_attack_power(technique)
+    npc_power = npc_action.threat_entry.base_damage or 0
+    threshold = max(pc_power, npc_power) or _DEFAULT_THRESHOLD
+
+    return Clash.objects.create(
+        encounter=encounter,
+        npc_opponent=opponent,
+        initiator=pc_action.participant.character_sheet,
+        resolution_consequence_pool=technique.clash_resolution_pool,
+        per_round_consequence_pool=technique.clash_per_round_pool,
+        flavor=ClashFlavor.CLASH,
+        progress=0,
+        pc_win_threshold=threshold,
+        npc_win_threshold=threshold,
+        started_round=round_number,
+        triggering_threat_entry=npc_action.threat_entry,
+    )
 
 
 def _detect_lock_sustaining(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:

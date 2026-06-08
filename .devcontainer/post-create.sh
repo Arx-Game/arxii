@@ -16,13 +16,13 @@ eval "$(~/.local/bin/mise activate bash)"
 # idempotent. Read each contributor's personal identity from dev.env
 # (gitignored, per-contributor) so we don't have to hardcode anyone's name
 # in the script.
-if [ -f .devcontainer/dev.env ]; then
+if [[ -f .devcontainer/dev.env ]]; then
   set -a
   # shellcheck disable=SC1091
   source .devcontainer/dev.env
   set +a
 fi
-if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
+if [[ -n "${GIT_USER_NAME:-}" ]] && [[ -n "${GIT_USER_EMAIL:-}" ]]; then
   git config --global user.name "$GIT_USER_NAME"
   git config --global user.email "$GIT_USER_EMAIL"
 else
@@ -55,7 +55,7 @@ sudo /usr/local/bin/fix-volume-perms.sh
 #
 # Idempotent: subsequent runs see ~/.claude/.claude.json already present
 # and skip. Never overwrites existing persisted state.
-if [ -f /home/vscode/.claude.json ] && [ ! -f /home/vscode/.claude/.claude.json ]; then
+if [[ -f /home/vscode/.claude.json ]] && [[ ! -f /home/vscode/.claude/.claude.json ]]; then
   mv /home/vscode/.claude.json /home/vscode/.claude/.claude.json
   echo "[post-create] migrated ~/.claude.json -> ~/.claude/.claude.json (issue #505)"
 fi
@@ -63,7 +63,7 @@ fi
 # settings.py requires SECRET_KEY and DATABASE_URL (django-environ, raises if
 # missing). No .env ships in a fresh checkout. DATABASE_URL also arrives via
 # compose env, but settings reads src/.env, so write it there too.
-if [ ! -f src/.env ]; then
+if [[ ! -f src/.env ]]; then
   SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')"
   cat > src/.env <<EOF
 DEBUG=True

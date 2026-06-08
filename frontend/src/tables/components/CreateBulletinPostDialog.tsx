@@ -149,7 +149,7 @@ export function CreateBulletinPostDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">
           {/* Title */}
           <div className="space-y-1">
             <Label htmlFor="bp-title">Title *</Label>

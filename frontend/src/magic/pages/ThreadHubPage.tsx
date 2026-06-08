@@ -54,7 +54,7 @@ export function ThreadHubPage() {
   const nonEmptyKinds = Object.keys(threadsByKind) as TargetKind[];
 
   const handleThreadClick = (thread: Thread) => {
-    void navigate(`/threads/${thread.id}`);
+    navigate(`/threads/${thread.id}`);
   };
 
   const handleWeaveNew = () => {
