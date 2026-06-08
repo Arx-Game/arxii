@@ -8468,9 +8468,10 @@ export interface paths {
     /**
      * @description #745 Phase 4 — Written accounts of a deed this persona knows of.
      *
-     *     Requires ``?deed=<id>`` and that the persona's societies are aware of
-     *     the deed (same awareness gate as spreading), so lore about unknown
-     *     deeds isn't leaked.
+     *     Requires ``?deed=<id>``. Gated on control of this persona (enforced by
+     *     ``get_object``'s object permission) AND that the persona's societies are
+     *     aware of the deed, so lore about unknown deeds isn't leaked. Paginated —
+     *     a popular deed can accrue one account per aware persona.
      */
     get: operations['personas_deed_stories_list'];
     put?: never;

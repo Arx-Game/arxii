@@ -99,7 +99,7 @@ class SpreadEndpointTest(APITestCase):
         list_url = reverse("persona-deed-stories", args=[self.persona.pk])
         list_resp = self.client.get(list_url, {"deed": self.deed.pk})
         self.assertEqual(list_resp.status_code, status.HTTP_200_OK, list_resp.data)
-        self.assertEqual([s["text"] for s in list_resp.data], ["I sang of it."])
+        self.assertEqual([s["text"] for s in list_resp.data["results"]], ["I sang of it."])
 
     def test_save_deed_story_upserts_one_per_author(self) -> None:
         url = reverse("persona-deed-story", args=[self.persona.pk])
@@ -109,7 +109,7 @@ class SpreadEndpointTest(APITestCase):
 
         list_url = reverse("persona-deed-stories", args=[self.persona.pk])
         list_resp = self.client.get(list_url, {"deed": self.deed.pk})
-        self.assertEqual([s["text"] for s in list_resp.data], ["Revised take."])
+        self.assertEqual([s["text"] for s in list_resp.data["results"]], ["Revised take."])
 
     def test_save_deed_story_unaware_deed_forbidden(self) -> None:
         unknown = LegendEntryFactory(persona=PersonaFactory(), base_value=10)

@@ -65,7 +65,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           </p>
         ) : (
           <SpreadForm
-            key={sceneId}
+            key={`${sceneId}-${open}`}
             personaId={personaId}
             sceneId={sceneId}
             open={open}

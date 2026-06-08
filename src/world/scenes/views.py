@@ -424,9 +424,10 @@ class PersonaViewSet(viewsets.ModelViewSet):
     def deed_stories(self, request: Request, pk: int | None = None) -> Response:
         """#745 Phase 4 — Written accounts of a deed this persona knows of.
 
-        Requires ``?deed=<id>`` and that the persona's societies are aware of
-        the deed (same awareness gate as spreading), so lore about unknown
-        deeds isn't leaked.
+        Requires ``?deed=<id>``. Gated on control of this persona (enforced by
+        ``get_object``'s object permission) AND that the persona's societies are
+        aware of the deed, so lore about unknown deeds isn't leaked. Paginated —
+        a popular deed can accrue one account per aware persona.
         """
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 
@@ -450,6 +451,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         stories = get_deed_stories(deed)
+        page = self.paginate_queryset(stories)
+        if page is not None:
+            return self.get_paginated_response(DeedStorySerializer(page, many=True).data)
         return Response(DeedStorySerializer(stories, many=True).data)
 
     @extend_schema(

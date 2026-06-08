@@ -111,7 +111,8 @@ async function fetchDeedStories(personaId: number, deedId: number): Promise<Deed
   if (!res.ok) {
     throw new Error('Failed to load accounts of this deed.');
   }
-  return res.json() as Promise<DeedStory[]>;
+  const body = (await res.json()) as { results: DeedStory[] };
+  return body.results;
 }
 
 export function useDeedStoriesQuery(
