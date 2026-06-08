@@ -520,8 +520,8 @@ export function useAuthorTechnique() {
   return useMutation({
     mutationFn: (body: TechniqueDesignRequest) => api.authorTechnique(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['techniques'] });
-      void qc.invalidateQueries({ queryKey: magicKeys.all });
+      qc.invalidateQueries({ queryKey: ['techniques'] }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.all }).catch(() => {});
     },
   });
 }

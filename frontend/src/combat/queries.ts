@@ -126,8 +126,8 @@ export function useUpgradeCombo(encounterId: number) {
   return useMutation({
     mutationFn: (comboId: number) => api.postUpgradeCombo(encounterId, comboId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) });
-      void qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) });
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) }).catch(() => {});
     },
   });
 }
