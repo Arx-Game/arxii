@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAppSelector } from '@/store/hooks';
 
 import {
+  useSceneActivityQuery,
   useSpreadableDeedsQuery,
   useSpreadMutation,
   useSpreadSpecializationsQuery,
@@ -86,6 +87,7 @@ interface FormProps {
 function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
   const { data: deeds, isLoading } = useSpreadableDeedsQuery(personaId, open);
   const { data: forms } = useSpreadSpecializationsQuery(open);
+  const { data: activity } = useSceneActivityQuery(sceneId, open);
   const [deedId, setDeedId] = useState<number | null>(null);
   const [pose, setPose] = useState('');
   const [effort, setEffort] = useState('medium');
@@ -141,6 +143,10 @@ function SpreadForm({ personaId, sceneId, open, onDone }: FormProps) {
 
   return (
     <div className="space-y-4">
+      {activity && (
+        <p className="text-sm text-muted-foreground">The room is {activity.band.toLowerCase()}.</p>
+      )}
+
       <Select value={deedId?.toString() ?? ''} onValueChange={(v) => setDeedId(Number(v))}>
         <SelectTrigger aria-label="Tale to spread">
           <SelectValue placeholder="Choose a tale to tell" />

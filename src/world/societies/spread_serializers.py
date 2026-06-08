@@ -40,3 +40,9 @@ class SpreadResultSerializer(serializers.Serializer):
     resolved = serializers.BooleanField(read_only=True)
     outcome = serializers.CharField(read_only=True)
     band = serializers.CharField(read_only=True)
+
+
+class SceneActivitySerializer(serializers.Serializer):
+    """A scene room's current activity band (shown before a teller commits)."""
+
+    band = serializers.CharField(read_only=True)
