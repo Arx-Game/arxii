@@ -349,6 +349,11 @@ class PersonaViewSet(viewsets.ModelViewSet):
         data = input_serializer.validated_data
 
         scene = get_object_or_404(Scene, pk=data["scene"])
+        if not scene.participants.filter(pk=request.user.pk).exists():
+            return Response(
+                {"detail": "You are not a participant in that scene."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         deed = get_object_or_404(LegendEntry, pk=data["deed"])
         if not get_spreadable_deeds(persona).filter(pk=deed.pk).exists():
             return Response(
@@ -369,6 +374,12 @@ class PersonaViewSet(viewsets.ModelViewSet):
             )
         except ValidationError as exc:
             return Response({"detail": exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError:
+            # e.g. the deed was deactivated between eligibility and resolution.
+            return Response(
+                {"detail": "The tale could not be spread right now."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         main = result.action_resolution.main_result
         outcome = main.check_result.outcome_name if main and main.check_result else "Unknown"

@@ -95,6 +95,28 @@ def _has_active_player(sheet) -> bool:
     return roster_entry.tenures.filter(end_date__isnull=True).exists()
 
 
+def notify_spread_event(deed, *, fame_tier_changed: bool = False) -> None:
+    """Tell a deed's player-owned subject that their legend is spreading (#745).
+
+    Mirrors ``notify_renown_event``'s gating + RENOWN category, including the
+    separate fame-tier-transition chat line. No-op for NPC-owned deeds.
+    """
+    sheet = deed.persona.character_sheet
+    if sheet is None or not _has_active_player(sheet):
+        return
+    send_narrative_message(
+        recipients=[sheet],
+        body="✦ A tale of your deed spreads — your legend grows.",
+        category=NarrativeCategory.RENOWN,
+    )
+    if fame_tier_changed:
+        send_narrative_message(
+            recipients=[sheet],
+            body=_build_tier_transition_body(deed.persona),
+            category=NarrativeCategory.RENOWN,
+        )
+
+
 def _build_deed_body(
     *,
     magnitude: str | None,

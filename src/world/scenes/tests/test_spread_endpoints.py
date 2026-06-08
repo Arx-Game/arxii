@@ -8,7 +8,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.societies.factories import (
     LegendEntryFactory,
     OrganizationFactory,
@@ -29,6 +29,7 @@ class SpreadEndpointTest(APITestCase):
         cls.persona = identity.primary_persona
 
         cls.scene = SceneFactory()
+        SceneParticipationFactory(scene=cls.scene, account=cls.account)
         society = SocietyFactory()
         org = OrganizationFactory(society=society)
         OrganizationMembershipFactory(persona=cls.persona, organization=org)

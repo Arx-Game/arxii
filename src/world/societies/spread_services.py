@@ -17,6 +17,9 @@ SPREAD_TALE_ACTION_KEY = "spread_a_tale"
 # success_level -> fraction of base_value (failure / <=0 yields 0). Tunable.
 TIER_PAYOFF: dict[int, float] = {0: 0.0, 1: 0.10, 2: 0.30, 3: 0.60, 4: 1.00}
 
+# Maps a room's activity multiplier to the fame-bump "audience" magnitude.
+_FAME_AUDIENCE_PER_MULTIPLIER = 10
+
 
 def compute_spread_value(*, base_value: int, success_level: int, multiplier: float) -> int:
     """Legend value a single telling adds, before the per-deed cap clamp.
@@ -89,6 +92,7 @@ def _resolve_spread_tale(action_request, result) -> None:
     from decimal import Decimal  # noqa: PLC0415
 
     from world.locations.activity_services import room_activity_band  # noqa: PLC0415
+    from world.societies.notifications import notify_spread_event  # noqa: PLC0415
     from world.societies.renown import apply_spread_fame_bump  # noqa: PLC0415
     from world.societies.services import spread_deed  # noqa: PLC0415
 
@@ -117,26 +121,12 @@ def _resolve_spread_tale(action_request, result) -> None:
         audience_factor=Decimal(str(band.multiplier)),
         scene=action_request.scene,
     )
-    apply_spread_fame_bump(
-        deed, npc_audience=int(band.multiplier * 10), success_level=success_level
+    tier_changed = apply_spread_fame_bump(
+        deed,
+        npc_audience=int(band.multiplier * _FAME_AUDIENCE_PER_MULTIPLIER),
+        success_level=success_level,
     )
-    _notify_spread_subject(deed)
-
-
-def _notify_spread_subject(deed) -> None:
-    """Tell the deed's player-owned subject that their legend is spreading."""
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-    from world.societies.notifications import _has_active_player  # noqa: PLC0415
-
-    sheet = deed.persona.character_sheet
-    if sheet is None or not _has_active_player(sheet):
-        return
-    send_narrative_message(
-        recipients=[sheet],
-        body="✦ A tale of your deed spreads — your legend grows.",
-        category=NarrativeCategory.RENOWN,
-    )
+    notify_spread_event(deed, fame_tier_changed=tier_changed)
 
 
 register_resolver(SPREAD_TALE_ACTION_KEY, _resolve_spread_tale)

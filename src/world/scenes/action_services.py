@@ -439,19 +439,24 @@ def create_and_resolve_area_action(  # noqa: PLR0913
 
     character = initiator_persona.character_sheet.character
 
-    # Charge action points up front; insufficient AP aborts before side-effects.
-    ap_pool = ActionPointPool.get_or_create_for_character(character)
-    if action_template.ap_cost and not ap_pool.spend(action_template.ap_cost):
-        msg = f"Not enough action points (need {action_template.ap_cost})."
-        raise ValidationError(msg)
-
     base_difficulty = DIFFICULTY_VALUES.get(
         difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
+    # NOTE (#745): effort is applied as a target-difficulty delta here (a tunable
+    # Phase-1 approximation). Refining it to a roller-side check modifier is a
+    # Phase-3 calibration item.
     effort_mod = EFFORT_CHECK_MODIFIER.get(effort_level, 0)
     difficulty = max(0, base_difficulty - effort_mod)
 
     with transaction.atomic():
+        # AP spend lives INSIDE the atomic (as a savepoint) so a failed
+        # resolution rolls the debit back — never charge for a spread that
+        # didn't happen.
+        ap_pool = ActionPointPool.get_or_create_for_character(character)
+        if action_template.ap_cost and not ap_pool.spend(action_template.ap_cost):
+            msg = f"Not enough action points (need {action_template.ap_cost})."
+            raise ValidationError(msg)
+
         request = SceneActionRequest.objects.create(
             scene=scene,
             initiator_persona=initiator_persona,
