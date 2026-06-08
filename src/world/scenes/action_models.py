@@ -33,8 +33,28 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     target_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="received_action_requests",
-        help_text="The persona being targeted",
+        help_text="The persona being targeted. Null for area actions (to the room).",
+    )
+    pose_text = models.TextField(
+        blank=True,
+        help_text="Freeform telling/pose echoed with the outcome (area/social actions).",
+    )
+    effort_level = models.CharField(
+        max_length=20,
+        blank=True,
+        default="medium",
+        help_text="EffortLevel value — modifies the check and scales social fatigue.",
+    )
+    spread_deed_target = models.ForeignKey(
+        "societies.LegendEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="spread_action_requests",
+        help_text="For spread_a_tale: the deed being spread.",
     )
     action_template = models.ForeignKey(
         "actions.ActionTemplate",
@@ -151,8 +171,9 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
+        target = self.target_persona.name if self.target_persona else "room"
         return (
-            f"{self.initiator_persona.name} -> {self.target_persona.name}: "
+            f"{self.initiator_persona.name} -> {target}: "
             f"{self.action_key or 'template'} ({self.get_status_display()})"
         )
 
