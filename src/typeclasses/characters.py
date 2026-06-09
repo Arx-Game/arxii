@@ -315,6 +315,17 @@ class Character(ObjectParent, DefaultCharacter):
             )
             emit_event(EventName.MOVED, payload, location=self.location)
 
+            # Trigger-based mission dispatch (#729): a ROOM_TRIGGER giver bound
+            # to the destination may hand this character a mission. The cheap
+            # "is this a trigger room?" query short-circuits for ordinary rooms.
+            # Best-effort — an optional mission hook must never break movement.
+            with contextlib.suppress(Exception):
+                from world.missions.services.trigger_dispatch import (
+                    maybe_dispatch_on_enter,
+                )
+
+                maybe_dispatch_on_enter(self, self.location)
+
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
 
