@@ -39,6 +39,27 @@ def _capture_power() -> "tuple[dict[str, object], object]":
     return captured, resolve_fn
 
 
+def _make_caster() -> "tuple[object, object]":
+    """Create a caster (ObjectDB) + CharacterSheet with full anima and engagement."""
+    anima = CharacterAnimaFactory(current=20, maximum=20)
+    character = anima.character
+    CharacterEngagementFactory(character=character)
+    sheet = CharacterSheetFactory(character=character)
+    return character, sheet
+
+
+def _make_technique_thread(sheet: object, resonance: object, technique: object) -> object:
+    """Create a tier-0 TECHNIQUE-anchored thread on ``technique`` owned by ``sheet``."""
+    return ThreadFactory(
+        owner=sheet,
+        resonance=resonance,
+        target_kind=TargetKind.TECHNIQUE,
+        target_trait=None,
+        target_technique=technique,
+        level=0,
+    )
+
+
 class UseTechniqueThreadPowerTermTests(TestCase):
     """A passive TECHNIQUE-anchored thread with a tier-0 INTENSITY_BUMP raises power."""
 
@@ -55,17 +76,10 @@ class UseTechniqueThreadPowerTermTests(TestCase):
             intensity_bump_amount=4,
         )
 
-    def _make_caster(self) -> object:
-        anima = CharacterAnimaFactory(current=20, maximum=20)
-        character = anima.character
-        CharacterEngagementFactory(character=character)
-        sheet = CharacterSheetFactory(character=character)
-        return character, sheet
-
     def test_passive_thread_raises_power_by_intensity_bump(self) -> None:
         """Derived power == baseline + 4 when the in-scope thread is supplied."""
         # Baseline caster (no thread / no applicable threads).
-        baseline_char, _ = self._make_caster()
+        baseline_char, _ = _make_caster()
         baseline_captured, baseline_resolve = _capture_power()
         use_technique(
             character=baseline_char,
@@ -75,15 +89,8 @@ class UseTechniqueThreadPowerTermTests(TestCase):
         )
 
         # Caster with a TECHNIQUE-anchored thread on this technique.
-        thread_char, thread_sheet = self._make_caster()
-        ThreadFactory(
-            owner=thread_sheet,
-            resonance=self.resonance,
-            target_kind=TargetKind.TECHNIQUE,
-            target_trait=None,
-            target_technique=self.technique,
-            level=0,
-        )
+        thread_char, thread_sheet = _make_caster()
+        _make_technique_thread(thread_sheet, self.resonance, self.technique)
         applicable = build_cast_applicable_threads(thread_sheet, self.technique)
         self.assertTrue(applicable, "thread should be in-scope for the cast")
 
@@ -101,8 +108,9 @@ class UseTechniqueThreadPowerTermTests(TestCase):
         )
 
 
-class UseTechniqueCastPullChargeTests(TestCase):
-    """A declared cast pull debits resonance currency through use_technique."""
+class _CastPullChargeTestBase(TestCase):
+    """Shared setup: a known technique + resonance with a tier-1 pull cost, and a
+    caster owning a TECHNIQUE-anchored thread on that technique."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -112,18 +120,13 @@ class UseTechniqueCastPullChargeTests(TestCase):
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
 
     def setUp(self) -> None:
-        self.anima = CharacterAnimaFactory(current=20, maximum=20)
-        self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.thread = ThreadFactory(
-            owner=self.sheet,
-            resonance=self.resonance,
-            target_kind=TargetKind.TECHNIQUE,
-            target_trait=None,
-            target_technique=self.technique,
-            level=0,
-        )
+        self.character, self.sheet = _make_caster()
+        self.anima = self.character.anima
+        self.thread = _make_technique_thread(self.sheet, self.resonance, self.technique)
+
+
+class UseTechniqueCastPullChargeTests(_CastPullChargeTestBase):
+    """A declared cast pull debits resonance currency through use_technique."""
 
     def test_declared_pull_debits_resonance(self) -> None:
         cr = CharacterResonanceFactory(
@@ -145,28 +148,8 @@ class UseTechniqueCastPullChargeTests(TestCase):
         self.assertEqual(cr.balance, 9)  # 10 - 1 (single thread → no anima cost)
 
 
-class UseTechniqueUnaffordablePullTests(TestCase):
+class UseTechniqueUnaffordablePullTests(_CastPullChargeTestBase):
     """An unaffordable declared pull raises before the technique's anima is spent."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.technique = TechniqueFactory(intensity=5, control=10, anima_cost=2)
-        cls.resonance = ResonanceFactory()
-        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
-
-    def setUp(self) -> None:
-        self.anima = CharacterAnimaFactory(current=20, maximum=20)
-        self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.thread = ThreadFactory(
-            owner=self.sheet,
-            resonance=self.resonance,
-            target_kind=TargetKind.TECHNIQUE,
-            target_trait=None,
-            target_technique=self.technique,
-            level=0,
-        )
 
     def test_unaffordable_pull_raises_before_anima_spent(self) -> None:
         CharacterResonanceFactory(
