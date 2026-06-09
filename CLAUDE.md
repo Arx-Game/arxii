@@ -170,12 +170,16 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 ## Testing
 
 **Always use `arx test` or its `just` wrappers** — never `uv run python -m`,
-`python manage.py test`, or sourcing venvs. Two tiers: SQLite for the inner loop
-(`just test-fast <app>`), Postgres for parity (`just test-parity <app>` /
-`just regression` — what CI runs). Run the full suite **without `--keepdb`** before
-pushing. For the per-app tier table, recipes, `@tag("postgres")` decisions, the
-`--keepdb` pitfall, and the "never rely on Evennia defaults in service functions"
-rule: see the `running-tests` skill.
+`python manage.py test`, or sourcing venvs. Two tiers: SQLite for fast local
+iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
+`just regression`), which CI runs on every PR.
+
+Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
+fixing what CI catches. **CI is the full-regression gate** — run a local
+`just regression` only to reproduce a CI failure the fast tier doesn't surface. For
+the per-app tier table, recipes, `@tag("postgres")` decisions, the `--keepdb`
+pitfall, and the "never rely on Evennia defaults in service functions" rule: see the
+`running-tests` skill.
 
 ## Proactive Quality Checks
 
@@ -190,7 +194,6 @@ rule: see the `running-tests` skill.
 
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run full regression** — all affected suites, not just the new tests.
-- **Run once without `--keepdb`** before pushing — matches CI's fresh-DB behavior
-  and catches bugs that depend on preserved test-DB state (e.g. Evennia setup
-  objects like Limbo). See the `running-tests` skill for why.
+- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
+- **Push and let CI gate regression** — CI runs the Postgres parity suite on every
+  PR; monitor the PR and fix failures there.
