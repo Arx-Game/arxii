@@ -1,3 +1,4 @@
+import contextlib
 from typing import TYPE_CHECKING, Self, Union
 
 from django.utils.functional import cached_property
@@ -130,6 +131,17 @@ class ObjectParent:
             post,
             location=location,
         )
+
+        # Trigger-based mission dispatch (#729): an ENVIRONMENTAL_DETAIL giver
+        # bound to this object may hand the examiner a mission. The cheap
+        # giver lookup short-circuits for ordinary objects. Best-effort — an
+        # optional mission hook must never break a look.
+        with contextlib.suppress(Exception):
+            from world.missions.services.trigger_dispatch import (
+                maybe_dispatch_on_examine,
+            )
+
+            maybe_dispatch_on_examine(observer, self)
         return True
 
     def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:

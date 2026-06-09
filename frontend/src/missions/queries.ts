@@ -13,9 +13,12 @@ import {
   copyNode,
   copySubtree,
   copyTemplate,
+  createGiver,
   createMissionTemplate,
+  deleteGiver,
   deleteMissionInstance,
   getMissionTemplate,
+  listGivers,
   listMissionCategories,
   listMissionNodes,
   listMissionOptions,
@@ -24,6 +27,7 @@ import {
   listPredicateLeaves,
   listRouteCandidates,
   listRouteRewards,
+  patchGiver,
   patchMissionNode,
   patchMissionTemplate,
 } from './api';
@@ -31,6 +35,8 @@ import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './ap
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
   MissionCategory,
+  MissionGiver,
+  MissionGiverRequest,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -61,6 +67,8 @@ export const missionKeys = {
   rewardsFor: (filters: object) => [...missionKeys.rewards(), filters] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
+  givers: () => [...missionKeys.all, 'givers'] as const,
+  giversFor: (filters: object) => [...missionKeys.givers(), filters] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -255,5 +263,44 @@ export function useMissionCategories(): UseQueryResult<PaginatedResponse<Mission
     // Intentionally no throwOnError here: the picker consumers (CreateMissionPage,
     // EditCategoriesDialog) check isError and render inline so a categories
     // fetch failure doesn't nuke the user's half-filled form.
+  });
+}
+
+// ---------------------------------------------------------------------------
+// MissionGiver hooks (#729 — trigger-based giver editor)
+// ---------------------------------------------------------------------------
+
+export function useGivers(
+  filters: { giver_kind?: string; is_active?: boolean; name?: string } = {}
+): UseQueryResult<PaginatedResponse<MissionGiver>> {
+  return useQuery({
+    queryKey: missionKeys.giversFor(filters),
+    queryFn: () => listGivers(filters),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<MissionGiverRequest>) => createGiver(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
+  });
+}
+
+export function usePatchGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<MissionGiverRequest> }) =>
+      patchGiver(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
+  });
+}
+
+export function useDeleteGiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteGiver(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
   });
 }

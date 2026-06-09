@@ -1245,6 +1245,43 @@ class MissionGiver(SharedMemoryModel):
         return self.name
 
 
+class MissionGiverCooldown(SharedMemoryModel):
+    """Per-(giver, character) re-offer cooldown for trigger dispatch (#729).
+
+    Mirrors ``npc_services.OfferCooldown``: a trigger giver fires on every
+    qualifying room-entry / examine, so dispatch writes a cooldown row after a
+    grant and skips the giver while ``available_at`` is in the future — the
+    anti-nag guard so the same room doesn't hand out missions on every pass.
+    """
+
+    giver = models.ForeignKey(
+        MissionGiver,
+        on_delete=models.CASCADE,
+        related_name="cooldowns",
+    )
+    # Character is an ObjectDB here to match MissionParticipant.character — the
+    # missions app keys runtime participation on the Evennia object, not a Persona.
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    available_at = models.DateTimeField(
+        help_text="The giver won't re-dispatch to this character until this time."
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["giver", "character"],
+                name="unique_missiongivercooldown_giver_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.giver.name} → {self.character_id} until {self.available_at:%Y-%m-%d %H:%M}"
+
+
 class MissionDeedRewardLine(SharedMemoryModel):
     """One persisted structured reward line for a :class:`MissionDeedRecord`.
 

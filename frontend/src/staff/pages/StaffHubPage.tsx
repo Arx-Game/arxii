@@ -119,6 +119,20 @@ export function StaffHubPage() {
             </CardContent>
           </Card>
         </Link>
+
+        <Link to="/staff/missions/givers">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Trigger Givers</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Author rooms and objects that hand a player a mission on entry or examine
+                (ROOM_TRIGGER / ENVIRONMENTAL_DETAIL).
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );

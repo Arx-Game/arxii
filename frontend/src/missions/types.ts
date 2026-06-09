@@ -22,6 +22,8 @@ export type MissionOptionRoute = components['schemas']['MissionOptionRoute'];
 export type MissionOptionRouteCandidate = components['schemas']['MissionOptionRouteCandidate'];
 export type MissionOptionRouteReward = components['schemas']['MissionOptionRouteReward'];
 export type MissionInstance = components['schemas']['MissionInstance'];
+export type MissionGiver = components['schemas']['MissionGiver'];
+export type MissionGiverRequest = components['schemas']['MissionGiverRequest'];
 
 export type AccessTier = components['schemas']['AccessTierEnum'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
