@@ -61,19 +61,19 @@ The two-tier model exposes a small set of patterns:
 
 See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canonical `@tag("postgres")` pattern.
 
-## Full regression testing before completion
+## CI is the full-regression gate
 
-**Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
+Run the fast SQLite tier for the apps you changed (`just test-fast <app>`), then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR — let it catch regressions and fix what it reports there. Run a local `just regression` only to reproduce a CI failure the fast tier doesn't surface.
 
-## Run without `--keepdb` before pushing
+## `--keepdb` and faithful local repro
 
-**Run without `--keepdb` before pushing.** `--keepdb` preserves the test DB across runs, which means objects created by Evennia's initial setup (Limbo room #2, default Account #1, etc.) and objects created by prior test runs persist into your current run. CI always starts from a fresh DB, so tests that implicitly depend on that preserved state will pass locally but fail in CI. Before pushing anything that touches migrations, factories, service functions that call `create_object`, typeclass initialization, or test settings, run the full suite WITHOUT `--keepdb`:
+CI always starts from a fresh DB. To reproduce a CI failure locally, run without `--keepdb` so Evennia setup objects (Limbo room #2, default Account #1) and prior-run state don't leak in:
 
 ```
 just regression                        # echo "yes" | arx test — fresh DB, matches CI
 ```
 
-This catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
+`--keepdb` speeds local iteration but hides bugs that depend on a fresh DB — migrations, factories, service functions that call `create_object`, typeclass initialization, test settings. Drop it for the repro run.
 
 ## Never rely on Evennia defaults in service functions
 
