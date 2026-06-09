@@ -16,15 +16,28 @@ Every technique has two core stats: **intensity** (raw power) and **control** (s
 - This creates the heroic sacrifice mechanic — push for maximum power at the risk of self-destruction
 - Higher-tier techniques have disproportionately more intensity relative to control, making them inherently more volatile
 
-### Affinity Bonuses (via Resonance)
-Resonance points feed into technique stats through affinity alignment:
-- **Celestial:** every 10 resonance → +2 control (precise magic)
-- **Primal:** every 10 resonance → +1 intensity, +1 control (balanced magic)
-- **Abyssal:** every 10 resonance → +2 intensity (powerful magic)
-- Rounded up
+### Aura → Power (affinity alignment + resonance standing)
+Aura and resonance feed technique **power** through the `aura_power_term` stage of the
+power pipeline, tuned via the `AuraPowerConfig` singleton (staff-authored; zero
+defaults = disabled). Two combined axes:
+- **Affinity alignment:** the caster's `CharacterAura` percentage in the affinity
+  matching the technique's resonance(s), scaled by `affinity_alignment_bonus`
+- **Resonance standing:** `CharacterResonance.lifetime_earned` (the monotonic standing
+  earned from scene endorsements — the "aura farming" loop) scaled by
+  `resonance_standing_bonus`, clamped by `resonance_standing_cap` (per-level caps: #853)
 
-### Combat Escalation
+Standing uses lifetime earned, never spendable balance, so spending resonance never
+weakens the aura. (The old fixed per-10-resonance intensity/control conversion was
+retired by the resonance pivot.)
+
+### Combat Escalation (not yet built — #872)
 In serious boss fights, intensity auto-escalates each round. Characters make control checks to keep control in pace. Relationship events (true love threatened, ally falls) can spike intensity dramatically. Emotional state (anger, desperation) also feeds intensity. This mirrors superhero/fantasy boss fight pacing — things only escalate, never reset.
+
+Escalation is complementary to Strain and Audere: it builds pressure naturally so big
+dramatic moments never happen on round one, and the climax expresses through clashes,
+Soulfray, and — at peak drama — an Audere or Audere Majora offer. Only the
+player-triggered levers (Strain, Audere) exist in code today; the round-over-round
+build and event-driven spikes are #872.
 
 ### No Healing, Shielding Instead
 Restoration mechanics are counter to the tension-building combat design. Shielding prevents damage without undoing escalation. Healing is absent by design.

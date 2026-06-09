@@ -185,8 +185,21 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 
 ## What's Needed for MVP
 
-### Party Combat (first priority) — Phase 1 complete (foundation)
+### Party Combat (first priority) — Phases 1–9 complete
 Full design: `docs/plans/2026-04-05-party-combat-design.md`
+
+**Design-intent gaps with no phase yet (audited 2026-06-09, tracked):**
+
+- **Combat escalation engine** — intensity building across rounds toward a climax
+  (complementary to Strain/Audere; climax expression is clashes, Soulfray, Audere) — #872
+- **Audere offer/accept player surface** — the offer lifecycle is service-only today — #873
+- **Passive action defaults are mechanically no-ops** — design wants secondary
+  defend/buff/debuff/combo-opening effects — #874
+- **NPC tier mechanics** — `OpponentTier` enum exists but Swarm has no count-based
+  handling and Hero Killer has no narrative escape state — #875
+- **Encounter aftermath** — completion only flips a status flag; no outcome record,
+  pool-routed aftermath, or pose-log narration — #876
+- **Flee is an auto-succeed stub** (the deferred "Phase 4" checks) — #878
 
 **Phase 1 (complete):** Foundation models and core services
 - CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models
@@ -399,23 +412,27 @@ the React frontend.
 - `combat/pages/CombatScenePage.tsx` at `/scenes/:id/combat` (Phase 11)
 - `e2e/combat.spec.ts` Playwright smoke test (Phase 12)
 
-**Known carry-forward (not in this PR):**
+**Carry-forward status (verified against code 2026-06-09):**
 
-- `CombatRoundAction → Interaction` join FK needed for effect enumeration in `outcome-details` endpoint (v1 returns empty effects)
+Shipped since the original list:
+
+- `CombatRoundAction → Interaction` join FK + `interaction_timestamp` — **DONE**: `GET /api/combat/action-outcome-details/` enumerates real effects (`views_outcome_details.py`). Surfacing the ledger on standalone cast cards (no linking pose yet) is #859.
 - Deep-link routing for outcome-detail effects — **#551 DONE**: outcome-effect deep links open a Redux-driven `DeepLinkModalHost` routing 5 kinds (combo/opponent/participant/condition/clash); added read-only `GET /api/conditions/instances/<pk>/`.
-- Auto-expand pose units on critical events (KO, death) — pending player-preference toggle
-- Fatigue pools — **#552 DONE**: `ParticipantSerializer` exposes physical/social/mental fatigue (current + capacity); `VitalPools` renders real values. Strain stays anima (ratified); the anima→fatigue "pushing" cost is tracked in #624.
-- `CombatOpponent` portrait FK — NPC avatars are initial-letter-only
+- Fatigue pools — **#552 DONE**: `ParticipantSerializer` exposes physical/social/mental fatigue (current + capacity); `VitalPools` renders real values. Fatigue costs are charged on resolution (`apply_fatigue`).
+- Conditions on combatant rows — **#553 DONE**: visibility-filtered `active_conditions` on both serializers; `CombatantsList` badges deep-link to the condition modal.
 - ActiveState Commit/Lend buttons — **#555 DONE**: ActiveState is read-only; the clash-commit path lives in YourTurn's `ClashContributionRow` (no parallel surface).
-- Focused-category technique taxonomy (was **#558**) — **reframed/descoped to #614**: needs a physical/social/mental technique taxonomy that does not exist yet.
-- `ClashStateSerializer` does not expose `contributors` or `side_favored`
-- Conditions on combatant rows — **#553 DONE**: Participant + Opponent serializers expose `active_conditions` (visibility-filtered); `CombatantsList` rows render condition badges that deep-link to the condition detail modal (reuses #551's `DeepLinkModalHost`).
-- `submit_pose` REST endpoint does not broadcast via WebSocket
-- Strain budget — `CombatParticipant.available_strain` (anima) is exposed + drives the slider max; the hardcoded `10` is now only a missing-data fallback. Per-category fatigue binding deferred (#614 taxonomy, #624 fatigue cost).
-- Focused-category resolution stubbed to `passive-physical`
-- `lend-to-clash` not wired; no `CLASH_SUPPORT` `PlayerAction` descriptor exists
+- Focused-category resolution — **DONE** (#558/#614): sourced from the technique's authored `action_category`; the `passive-physical` stub is gone.
+- `ClashStateSerializer` — **DONE**: exposes `contributors` and `side_favored`.
+- `lend-to-clash` / `CLASH_SUPPORT` — **REJECTED BY DESIGN (#559)**: a clash binds to the focused action only; there is no passive-contribution concept. Do not re-add a Lend surface.
+
+Still open (tracked):
+
+- `submit_pose` REST endpoint does not broadcast via WebSocket — #878
+- Auto-expand pose units on critical events (KO, death) — pending player-preference toggle (no issue yet)
+- `CombatOpponent` portrait FK — NPC avatars are initial-letter-only (no issue yet)
+- Outcome-panel scoping/visibility polish — #866
 - Scene-side adoption of `<ActionDeclarationCard>` (no `ScenePull` envelope) — out of this spec's scope
-- Positioning/zones integration, mobile responsive layout, WebSocket real-time push — out of scope
+- Positioning/zones integration (#530–#533), mobile responsive layout — out of scope
 
 ---
 
@@ -565,9 +582,9 @@ integration test suite.
 
 **Known follow-ups / deferred:**
 
-- **Clash-contribution dispatch handler** — the `PlayerAction` read surface (`_clash_contribution_actions`)
-  is live. The dispatch route is gated with `UNKNOWN_ACTION_REF`; a follow-up task wires
-  the handler so declarations can be made from the unified action interface.
+- **Clash-contribution dispatch handler** — **DONE**: `_dispatch_clash_contribution`
+  (`src/actions/player_interface.py`) routes clash declarations through the unified
+  action interface; the `UNKNOWN_ACTION_REF` gate is gone. FOCUSED-only by design (#559).
 - **Positioning / zone-aware POV filtering** — clash visibility (who can see the meter,
   which contributions are shown to which players) depends on the positioning/zones model
   that is not yet settled. See `docs/plans/2026-05-21-positioning-zones-design-notes.md`.
