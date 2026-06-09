@@ -65,6 +65,11 @@ const NPCRoleEditorPage = lazy(() =>
     default: m.NPCRoleEditorPage,
   }))
 );
+const TriggerGiversPage = lazy(() =>
+  import('@/missions/pages/TriggerGiversPage').then((m) => ({
+    default: m.TriggerGiversPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -366,10 +371,9 @@ function App() {
             </StaffRoute>
           }
         />
-        {/* /staff/missions/givers routes removed per #686: NPC-mediated
-            mission-giver editor moved to the npc-services framework
-            (NPCRole + NPCServiceOffer). The npc-services staff editor (#728)
-            lives at /staff/npc-services/roles. */}
+        {/* NPC-mediated giver editor lives on the npc-services framework
+            (NPCRole + NPCServiceOffer) per #686/#728; trigger-based givers
+            (ROOM_TRIGGER + ENVIRONMENTAL_DETAIL) get their own editor — #729. */}
         <Route
           path="/staff/npc-services/roles"
           element={
@@ -386,6 +390,16 @@ function App() {
             <StaffRoute>
               <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                 <NPCRoleEditorPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/missions/givers"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <TriggerGiversPage />
               </Suspense>
             </StaffRoute>
           }

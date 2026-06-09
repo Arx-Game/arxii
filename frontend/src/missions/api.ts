@@ -10,6 +10,8 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   MissionCategory,
+  MissionGiver,
+  MissionGiverRequest,
   MissionInstance,
   MissionNode,
   MissionOption,
@@ -334,4 +336,44 @@ export async function listPredicateLeaves(): Promise<PredicateLeaf[]> {
   const res = await apiFetch(`${BASE_URL}/predicate-leaves/`);
   if (!res.ok) throw new Error('Failed to load predicate leaves');
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// MissionGiver (#729 — trigger-based givers: ROOM_TRIGGER / ENVIRONMENTAL_DETAIL)
+// ---------------------------------------------------------------------------
+
+export async function listGivers(
+  filters: { giver_kind?: string; is_active?: boolean; name?: string; page?: number } = {}
+): Promise<PaginatedResponse<MissionGiver>> {
+  const res = await apiFetch(`${BASE_URL}/givers/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load mission givers');
+  return res.json();
+}
+
+export async function createGiver(body: Partial<MissionGiverRequest>): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiValidationError(await res.json().catch(() => ({})));
+  return res.json();
+}
+
+export async function patchGiver(
+  id: number,
+  body: Partial<MissionGiverRequest>
+): Promise<MissionGiver> {
+  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiValidationError(await res.json().catch(() => ({})));
+  return res.json();
+}
+
+export async function deleteGiver(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/givers/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete giver ${id}`);
 }
