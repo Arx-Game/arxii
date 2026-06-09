@@ -3,7 +3,16 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterLifeState
+from world.vitals.constants import (
+    DEATH_BASE_DIFFICULTY,
+    DEATH_SCALING_PER_PERCENT,
+    KNOCKOUT_BASE_DIFFICULTY,
+    KNOCKOUT_SCALING_PER_PERCENT,
+    WOUND_BASE_DIFFICULTY,
+    WOUND_DESCRIPTIONS,
+    WOUND_SCALING_PER_PERCENT,
+    CharacterLifeState,
+)
 
 # Cross-app FK string for the consequence pool model, referenced by several
 # fields below. Centralized to avoid the duplicated-literal SonarCloud smell
@@ -111,6 +120,44 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         related_name="+",
         help_text="Fallback death pool when DamageType.death_pool is null.",
     )
+    # ------------------------------------------------------------------
+    # Survivability difficulty tuning — authored here, read by services.py
+    # ------------------------------------------------------------------
+
+    knockout_base_difficulty = models.PositiveIntegerField(
+        default=KNOCKOUT_BASE_DIFFICULTY,
+        help_text=(
+            "Base difficulty for the knockout check when health is exactly at the 20% threshold."
+        ),
+    )
+    knockout_scaling_per_percent = models.PositiveIntegerField(
+        default=KNOCKOUT_SCALING_PER_PERCENT,
+        help_text=(
+            "Additional difficulty added per percentage point health falls below the 20% threshold."
+        ),
+    )
+    death_base_difficulty = models.PositiveIntegerField(
+        default=DEATH_BASE_DIFFICULTY,
+        help_text=("Base difficulty for the death check when health is exactly at 0%."),
+    )
+    death_scaling_per_percent = models.PositiveIntegerField(
+        default=DEATH_SCALING_PER_PERCENT,
+        help_text=("Additional difficulty added per percentage point health is below 0%."),
+    )
+    wound_base_difficulty = models.PositiveIntegerField(
+        default=WOUND_BASE_DIFFICULTY,
+        help_text=(
+            "Base difficulty for the permanent-wound check when damage is exactly"
+            " at the 50% threshold."
+        ),
+    )
+    wound_scaling_per_percent = models.PositiveIntegerField(
+        default=WOUND_SCALING_PER_PERCENT,
+        help_text=(
+            "Additional difficulty added per percentage point damage exceeds the 50% threshold."
+        ),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:

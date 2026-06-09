@@ -19,9 +19,23 @@ from world.conditions.factories import (
 )
 from world.conditions.services import get_active_conditions
 from world.traits.factories import CheckOutcomeFactory
-from world.vitals.constants import DEATH_CHECK_NAME, ENDURANCE_CHECK_NAME, CharacterLifeState
+from world.vitals.constants import (
+    DEATH_BASE_DIFFICULTY,
+    DEATH_CHECK_NAME,
+    DEATH_SCALING_PER_PERCENT,
+    ENDURANCE_CHECK_NAME,
+    KNOCKOUT_BASE_DIFFICULTY,
+    WOUND_BASE_DIFFICULTY,
+    CharacterLifeState,
+)
 from world.vitals.factories import CharacterVitalsFactory
-from world.vitals.services import _ensure_death_check_type, _ensure_endurance_check_type
+from world.vitals.services import (
+    _ensure_death_check_type,
+    _ensure_endurance_check_type,
+    calculate_death_difficulty,
+    calculate_knockout_difficulty,
+    calculate_wound_difficulty,
+)
 
 
 class SurvivabilityCheckSeedingTests(TestCase):
@@ -52,6 +66,64 @@ class VitalsConsequenceConfigTests(TestCase):
         cfg = get_vitals_consequence_config()
         self.assertEqual(cfg.pk, 1)
         self.assertIsNone(cfg.knockout_pool)
+
+    def test_difficulty_reads_authored_config(self) -> None:
+        """Difficulty functions read values from the config singleton, not hardcoded constants.
+
+        Asserts two things:
+        1. Default config yields the same result as the existing constants (defaults preserved).
+        2. Overriding a config field changes the calculated difficulty accordingly.
+        """
+        from world.vitals.services import get_vitals_consequence_config
+
+        cfg = get_vitals_consequence_config()
+
+        # --- Default values match the constant-derived results ---
+        # knockout at exactly 20% → pct_below = 0 → KNOCKOUT_BASE_DIFFICULTY
+        self.assertEqual(calculate_knockout_difficulty(health_pct=0.20), KNOCKOUT_BASE_DIFFICULTY)
+        # death at exactly 0% → pct_below = 0 → DEATH_BASE_DIFFICULTY
+        self.assertEqual(calculate_death_difficulty(health_pct=0.0), DEATH_BASE_DIFFICULTY)
+        # wound at exactly 50% damage of max → pct_over = 0 → WOUND_BASE_DIFFICULTY
+        wound_diff = calculate_wound_difficulty(damage=50, max_health=100)
+        self.assertEqual(wound_diff, WOUND_BASE_DIFFICULTY)
+
+        # --- Authored override: bump knockout_base_difficulty and confirm new result ---
+        cfg.knockout_base_difficulty = KNOCKOUT_BASE_DIFFICULTY + 10
+        cfg.save(update_fields=["knockout_base_difficulty"])
+        # Flush the identity-map cache so get_vitals_consequence_config re-fetches from DB.
+        cfg.flush_from_cache()
+
+        self.assertEqual(
+            calculate_knockout_difficulty(health_pct=0.20),
+            KNOCKOUT_BASE_DIFFICULTY + 10,
+            "calculate_knockout_difficulty must read knockout_base_difficulty from config",
+        )
+
+        # --- Authored override: bump death_scaling_per_percent ---
+        cfg = get_vitals_consequence_config()
+        cfg.death_scaling_per_percent = DEATH_SCALING_PER_PERCENT + 2
+        cfg.save(update_fields=["death_scaling_per_percent"])
+        cfg.flush_from_cache()
+
+        # 10% below 0 → pct_below=10 → base + (10 * new_scale)
+        expected = DEATH_BASE_DIFFICULTY + 10 * (DEATH_SCALING_PER_PERCENT + 2)
+        self.assertEqual(
+            calculate_death_difficulty(health_pct=-0.10),
+            expected,
+            "calculate_death_difficulty must read death_scaling_per_percent from config",
+        )
+
+        # --- Authored override: bump wound_base_difficulty ---
+        cfg = get_vitals_consequence_config()
+        cfg.wound_base_difficulty = WOUND_BASE_DIFFICULTY + 5
+        cfg.save(update_fields=["wound_base_difficulty"])
+        cfg.flush_from_cache()
+
+        self.assertEqual(
+            calculate_wound_difficulty(damage=50, max_health=100),
+            WOUND_BASE_DIFFICULTY + 5,
+            "calculate_wound_difficulty must read wound_base_difficulty from config",
+        )
 
 
 class ResolveVitalsConsequenceTests(TestCase):

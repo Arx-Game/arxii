@@ -15,22 +15,16 @@ from django.utils import timezone
 from world.checks.models import CheckCategory, CheckType
 from world.checks.services import collect_check_modifiers, perform_check
 from world.vitals.constants import (
-    DEATH_BASE_DIFFICULTY,
     DEATH_CHECK_NAME,
     DEATH_HEALTH_THRESHOLD,
-    DEATH_SCALING_PER_PERCENT,
     DERIVED_STATUS_ALIVE,
     DERIVED_STATUS_DEAD,
     DERIVED_STATUS_DYING,
     DERIVED_STATUS_INCAPACITATED,
     ENDURANCE_CHECK_NAME,
-    KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_HEALTH_THRESHOLD,
-    KNOCKOUT_SCALING_PER_PERCENT,
     PERMANENT_WOUND_THRESHOLD,
     SURVIVABILITY_CHECK_CATEGORY,
-    WOUND_BASE_DIFFICULTY,
-    WOUND_SCALING_PER_PERCENT,
     CharacterLifeState,
 )
 from world.vitals.types import DamageConsequenceResult
@@ -136,27 +130,38 @@ def derive_character_status(character_sheet: CharacterSheet | None) -> str:
 def calculate_knockout_difficulty(*, health_pct: float) -> int:
     """Scale knockout check difficulty by how far below 20% health.
 
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
+
     Returns 0 if above threshold (no check needed).
     """
     if health_pct > KNOCKOUT_HEALTH_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_below = int((KNOCKOUT_HEALTH_THRESHOLD - health_pct) * 100)
-    return KNOCKOUT_BASE_DIFFICULTY + (pct_below * KNOCKOUT_SCALING_PER_PERCENT)
+    return cfg.knockout_base_difficulty + (pct_below * cfg.knockout_scaling_per_percent)
 
 
 def calculate_death_difficulty(*, health_pct: float) -> int:
     """Scale death check difficulty by depth of negative health.
 
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
+
     Returns 0 if above zero (no check needed).
     """
     if health_pct > DEATH_HEALTH_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_below = int(abs(health_pct) * 100)
-    return DEATH_BASE_DIFFICULTY + (pct_below * DEATH_SCALING_PER_PERCENT)
+    return cfg.death_base_difficulty + (pct_below * cfg.death_scaling_per_percent)
 
 
 def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     """Scale wound check difficulty by how far damage exceeds 50% threshold.
+
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
 
     Returns 0 if below threshold (no check needed).
     """
@@ -165,8 +170,9 @@ def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     damage_pct = damage / max_health
     if damage_pct < PERMANENT_WOUND_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_over = int((damage_pct - PERMANENT_WOUND_THRESHOLD) * 100)
-    return WOUND_BASE_DIFFICULTY + (pct_over * WOUND_SCALING_PER_PERCENT)
+    return cfg.wound_base_difficulty + (pct_over * cfg.wound_scaling_per_percent)
 
 
 def _ensure_survival_category() -> CheckCategory:
