@@ -217,7 +217,8 @@ function OfferCard({
   const patchOffer = usePatchOffer(roleId);
   const patchDetails = usePatchMissionDetails(roleId);
   const del = useDeleteOffer(roleId);
-  const leaves = usePredicateLeaves().data ?? [];
+  const leavesQuery = usePredicateLeaves();
+  const leaves = leavesQuery.data ?? [];
 
   const [label, setLabel] = useState(offer.label ?? '');
   const [drawMode, setDrawMode] = useState(offer.draw_mode ?? 'menu');
@@ -228,7 +229,9 @@ function OfferCard({
   );
   const [weight, setWeight] = useState(details?.weight?.toString() ?? '');
 
-  const ruleErrors = validatePredicate(rule, leaves);
+  // Only validate/coerce once the predicate-leaf catalog has loaded — otherwise
+  // every leaf reads as "unknown" and a valid persisted rule becomes un-saveable.
+  const ruleErrors = leavesQuery.isSuccess ? validatePredicate(rule, leaves) : [];
 
   const save = () => {
     if (ruleErrors.length > 0) return;
@@ -239,11 +242,12 @@ function OfferCard({
         draw_mode: drawMode,
         rapport_requirement: numOrNull(rapportReq) ?? 0,
         is_final: isFinal,
-        eligibility_rule: coercePredicate(rule, leaves),
+        eligibility_rule: leavesQuery.isSuccess ? coercePredicate(rule, leaves) : rule,
       },
     });
     if (offer.kind === 'mission' && details) {
-      patchDetails.mutate({ id: details.id, body: { weight: numOrNull(weight) ?? 1 } });
+      // null weight intentionally falls back to MissionTemplate.base_weight.
+      patchDetails.mutate({ id: details.id, body: { weight: numOrNull(weight) } });
     }
   };
 
@@ -325,6 +329,7 @@ function AddOfferForm({ roleId }: { roleId: number }) {
   const [templateId, setTemplateId] = useState<string>('');
   const createOffer = useCreateOffer(roleId);
   const createDetails = useCreateMissionDetails(roleId);
+  const deleteOffer = useDeleteOffer(roleId);
   const { data: templatesData } = useMissionTemplates({});
   const templates = templatesData?.results ?? [];
 
@@ -344,6 +349,10 @@ function AddOfferForm({ roleId }: { roleId: number }) {
                   setLabel('');
                   setTemplateId('');
                 },
+                // Compensating rollback: the details create failed (usually the
+                // (role, mission_template) uniqueness), so drop the now-orphaned
+                // offer rather than leave a mission offer with no template.
+                onError: () => deleteOffer.mutate(offer.id),
               }
             );
           } else {

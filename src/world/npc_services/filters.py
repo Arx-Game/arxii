@@ -2,7 +2,14 @@
 
 import django_filters
 
-from world.npc_services.models import NPCRole, NPCServiceOffer, NPCStanding, OfferCooldown
+from world.npc_services.models import (
+    MissionOfferDetails,
+    NPCRole,
+    NPCServiceOffer,
+    NPCStanding,
+    OfferCooldown,
+    PermitOfferDetails,
+)
 
 
 class NPCStandingFilterSet(django_filters.FilterSet):
@@ -41,4 +48,22 @@ class OfferCooldownFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = OfferCooldown
+        fields: list[str] = []
+
+
+class MissionOfferDetailsFilterSet(django_filters.FilterSet):
+    offer = django_filters.NumberFilter(field_name="offer_id")
+    role = django_filters.NumberFilter(field_name="role_id")
+
+    class Meta:
+        model = MissionOfferDetails
+        fields: list[str] = []
+
+
+class PermitOfferDetailsFilterSet(django_filters.FilterSet):
+    offer = django_filters.NumberFilter(field_name="offer_id")
+    building_kind = django_filters.NumberFilter(field_name="building_kind_id")
+
+    class Meta:
+        model = PermitOfferDetails
         fields: list[str] = []
