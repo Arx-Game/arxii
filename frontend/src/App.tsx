@@ -55,6 +55,16 @@ const CreateMissionPage = lazy(() =>
     default: m.CreateMissionPage,
   }))
 );
+const NPCRolesLibraryPage = lazy(() =>
+  import('@/npc_services/pages/NPCRolesLibraryPage').then((m) => ({
+    default: m.NPCRolesLibraryPage,
+  }))
+);
+const NPCRoleEditorPage = lazy(() =>
+  import('@/npc_services/pages/NPCRoleEditorPage').then((m) => ({
+    default: m.NPCRoleEditorPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -358,8 +368,28 @@ function App() {
         />
         {/* /staff/missions/givers routes removed per #686: NPC-mediated
             mission-giver editor moved to the npc-services framework
-            (NPCRole + NPCServiceOffer). The npc-services staff editor
-            is a follow-up. */}
+            (NPCRole + NPCServiceOffer). The npc-services staff editor (#728)
+            lives at /staff/npc-services/roles. */}
+        <Route
+          path="/staff/npc-services/roles"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <NPCRolesLibraryPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/npc-services/roles/:id"
+          element={
+            <StaffRoute>
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <NPCRoleEditorPage />
+              </Suspense>
+            </StaffRoute>
+          }
+        />
         <Route
           path="/staff/applications"
           element={

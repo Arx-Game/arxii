@@ -32709,10 +32709,12 @@ export interface operations {
   npc_services_mission_details_list: {
     parameters: {
       query?: {
+        offer?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        role?: number;
       };
       header?: never;
       path?: never;
@@ -32996,6 +32998,8 @@ export interface operations {
   npc_services_permit_details_list: {
     parameters: {
       query?: {
+        building_kind?: number;
+        offer?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
