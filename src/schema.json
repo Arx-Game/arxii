@@ -11546,6 +11546,204 @@ paths:
               schema:
                 $ref: '#/components/schemas/MissionCategory'
           description: ''
+  /api/missions/givers/:
+    get:
+      operationId: missions_givers_list
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      parameters:
+      - in: query
+        name: giver_kind
+        schema:
+          type: string
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: name
+        schema:
+          type: string
+      - in: query
+        name: org
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMissionGiverList'
+          description: ''
+    post:
+      operationId: missions_givers_create
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionGiverRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionGiver'
+          description: ''
+  /api/missions/givers/{id}/:
+    get:
+      operationId: missions_givers_retrieve
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this mission giver.
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionGiver'
+          description: ''
+    put:
+      operationId: missions_givers_update
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this mission giver.
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionGiverRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionGiver'
+          description: ''
+    patch:
+      operationId: missions_givers_partial_update
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this mission giver.
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMissionGiverRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionGiver'
+          description: ''
+    delete:
+      operationId: missions_givers_destroy
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+        offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+        each template self-gates at draw time via its own ``availability_rule``
+        (Option A, #729).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this mission giver.
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/missions/instances/:
     get:
       operationId: missions_instances_list
@@ -25690,6 +25888,14 @@ components:
       - id
       - name
       - technique_count
+    GiverKindEnum:
+      enum:
+      - environmental_detail
+      - room_trigger
+      type: string
+      description: |-
+        * `environmental_detail` - Environmental Detail
+        * `room_trigger` - Room Trigger
     GlobalStoryProgress:
       type: object
       description: Serializer for GlobalStoryProgress — singleton metaplot progress
@@ -26772,6 +26978,105 @@ components:
             'name')``.
       required:
       - id
+      - name
+    MissionGiver:
+      type: object
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL). ``templates`` is a flat M2M draw pool — each
+        template self-gates at draw time via its own ``availability_rule``
+        (Option A), so there are no per-attachment overrides here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        giver_kind:
+          allOf:
+          - $ref: '#/components/schemas/GiverKindEnum'
+          description: |-
+            How this giver reaches the player; selects the target's expected typeclass.
+
+            * `environmental_detail` - Environmental Detail
+            * `room_trigger` - Room Trigger
+        target:
+          type: integer
+          nullable: true
+          description: 'The Evennia object this giver is bound to. Its typeclass must
+            match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass;
+            ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable
+            item or room detail). Null = draft (see is_publishable). All FK targets
+            land in ObjectDB; the kind enum + clean() typeclass check enforce semantic
+            shape without the wasted nullable columns of a discriminator.'
+        org:
+          type: integer
+          nullable: true
+          description: Optional organization this giver fronts for (used by ORG arc-scope).
+        is_active:
+          type: boolean
+        templates:
+          type: array
+          items:
+            type: integer
+          description: The mission templates this trigger giver offers (#729). A flat
+            draw pool — each template self-gates at draw time via its own availability_rule,
+            so per-attachment overrides aren't needed (Option A).
+        is_publishable:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_publishable
+      - name
+    MissionGiverRequest:
+      type: object
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL). ``templates`` is a flat M2M draw pool — each
+        template self-gates at draw time via its own ``availability_rule``
+        (Option A), so there are no per-attachment overrides here.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        giver_kind:
+          allOf:
+          - $ref: '#/components/schemas/GiverKindEnum'
+          description: |-
+            How this giver reaches the player; selects the target's expected typeclass.
+
+            * `environmental_detail` - Environmental Detail
+            * `room_trigger` - Room Trigger
+        target:
+          type: integer
+          nullable: true
+          description: 'The Evennia object this giver is bound to. Its typeclass must
+            match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass;
+            ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable
+            item or room detail). Null = draft (see is_publishable). All FK targets
+            land in ObjectDB; the kind enum + clean() typeclass check enforce semantic
+            shape without the wasted nullable columns of a discriminator.'
+        org:
+          type: integer
+          nullable: true
+          description: Optional organization this giver fronts for (used by ORG arc-scope).
+        is_active:
+          type: boolean
+        templates:
+          type: array
+          items:
+            type: integer
+          description: The mission templates this trigger giver offers (#729). A flat
+            draw pool — each template self-gates at draw time via its own availability_rule,
+            so per-attachment overrides aren't needed (Option A).
+      required:
       - name
     MissionInstance:
       type: object
@@ -29605,6 +29910,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionCategory'
+    PaginatedMissionGiverList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionGiver'
     PaginatedMissionInstanceList:
       type: object
       required:
@@ -31544,6 +31872,50 @@ components:
             start.
         is_active:
           type: boolean
+    PatchedMissionGiverRequest:
+      type: object
+      description: |-
+        Staff CRUD for trigger-based MissionGiver rows (#729).
+
+        Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+        ENVIRONMENTAL_DETAIL). ``templates`` is a flat M2M draw pool — each
+        template self-gates at draw time via its own ``availability_rule``
+        (Option A), so there are no per-attachment overrides here.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        giver_kind:
+          allOf:
+          - $ref: '#/components/schemas/GiverKindEnum'
+          description: |-
+            How this giver reaches the player; selects the target's expected typeclass.
+
+            * `environmental_detail` - Environmental Detail
+            * `room_trigger` - Room Trigger
+        target:
+          type: integer
+          nullable: true
+          description: 'The Evennia object this giver is bound to. Its typeclass must
+            match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass;
+            ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable
+            item or room detail). Null = draft (see is_publishable). All FK targets
+            land in ObjectDB; the kind enum + clean() typeclass check enforce semantic
+            shape without the wasted nullable columns of a discriminator.'
+        org:
+          type: integer
+          nullable: true
+          description: Optional organization this giver fronts for (used by ORG arc-scope).
+        is_active:
+          type: boolean
+        templates:
+          type: array
+          items:
+            type: integer
+          description: The mission templates this trigger giver offers (#729). A flat
+            draw pool — each template self-gates at draw time via its own availability_rule,
+            so per-attachment overrides aren't needed (Option A).
     PatchedMissionNodeRequest:
       type: object
       description: |-

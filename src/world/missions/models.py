@@ -1166,6 +1166,16 @@ class MissionGiver(SharedMemoryModel):
         help_text="Optional organization this giver fronts for (used by ORG arc-scope).",
     )
     is_active = models.BooleanField(default=True)
+    templates = models.ManyToManyField(
+        "missions.MissionTemplate",
+        blank=True,
+        related_name="givers",
+        help_text=(
+            "The mission templates this trigger giver offers (#729). A flat draw "
+            "pool — each template self-gates at draw time via its own "
+            "availability_rule, so per-attachment overrides aren't needed (Option A)."
+        ),
+    )
 
     def clean(self) -> None:
         super().clean()

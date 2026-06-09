@@ -11,6 +11,7 @@ from rest_framework import serializers
 from world.missions.constants import MissionStatus
 from world.missions.models import (
     MissionCategory,
+    MissionGiver,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -420,3 +421,58 @@ class MissionCategorySerializer(serializers.ModelSerializer):
         model = MissionCategory
         fields = ["id", "name", "description", "display_order"]
         read_only_fields = ["id"]
+
+
+class MissionGiverSerializer(serializers.ModelSerializer):
+    """Staff CRUD for trigger-based MissionGiver rows (#729).
+
+    Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+    ENVIRONMENTAL_DETAIL). ``templates`` is a flat M2M draw pool — each
+    template self-gates at draw time via its own ``availability_rule``
+    (Option A), so there are no per-attachment overrides here.
+    """
+
+    is_publishable = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = MissionGiver
+        fields = [
+            "id",
+            "name",
+            "giver_kind",
+            "target",
+            "org",
+            "is_active",
+            "templates",
+            "is_publishable",
+        ]
+        read_only_fields = ["id", "is_publishable"]
+
+    def validate(self, attrs: dict) -> dict:
+        """Run the model's (kind, target) typeclass check so a bad pairing is a
+        400, not a 500 raised from ``save()``."""
+        merged = {**({} if self.instance is None else _instance_attrs(self.instance)), **attrs}
+        probe = MissionGiver(
+            name=merged.get("name", ""),
+            giver_kind=merged.get("giver_kind", ""),
+            target=merged.get("target"),
+            org=merged.get("org"),
+            is_active=merged.get("is_active", True),
+        )
+        try:
+            probe.clean()
+        except DjangoValidationError as exc:
+            detail = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            raise serializers.ValidationError(detail) from exc
+        return attrs
+
+
+def _instance_attrs(instance: MissionGiver) -> dict:
+    """Current persisted field values for a partial-update clean() probe."""
+    return {
+        "name": instance.name,
+        "giver_kind": instance.giver_kind,
+        "target": instance.target,
+        "org": instance.org,
+        "is_active": instance.is_active,
+    }

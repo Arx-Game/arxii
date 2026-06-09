@@ -31,6 +31,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.missions.filters import (
+    MissionGiverFilterSet,
     MissionNodeFilterSet,
     MissionOptionFilterSet,
     MissionOptionRouteCandidateFilterSet,
@@ -40,6 +41,7 @@ from world.missions.filters import (
 )
 from world.missions.models import (
     MissionCategory,
+    MissionGiver,
     MissionInstance,
     MissionNode,
     MissionOption,
@@ -50,6 +52,7 @@ from world.missions.models import (
 )
 from world.missions.serializers import (
     MissionCategorySerializer,
+    MissionGiverSerializer,
     MissionInstanceSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
@@ -384,3 +387,21 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
             for name, resolver in sorted(LEAF_RESOLVERS.items())
         ]
         return Response(catalog)
+
+
+class MissionGiverViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for trigger-based MissionGiver rows (#729).
+
+    Covers the two surviving GiverKind variants (ROOM_TRIGGER,
+    ENVIRONMENTAL_DETAIL); NPC-mediated giving lives on the npc-services
+    offer framework (#686/#728). ``templates`` is a flat M2M draw pool —
+    each template self-gates at draw time via its own ``availability_rule``
+    (Option A, #729).
+    """
+
+    queryset = MissionGiver.objects.all().prefetch_related("templates").order_by("pk")  # noqa: PREFETCH_STRING
+    serializer_class = MissionGiverSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionGiverFilterSet
