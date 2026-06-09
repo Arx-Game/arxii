@@ -24,3 +24,15 @@ class EffectTarget(models.TextChoices):
     SELF = "self", "Self (acting character)"
     TARGET = "target", "Target (recipient of social or targeted action)"
     LOCATION = "location", "Location (challenge's room)"
+
+
+class ModifierSourceKind(models.TextChoices):
+    """Provenance categories for check modifiers."""
+
+    CONDITION = "condition", "Condition"
+    ROLLMOD = "rollmod", "Roll Modifier"
+    SCENE = "scene", "Surroundings"
+    EQUIPMENT = "equipment", "Equipment"
+    EFFORT = "effort", "Effort"
+    FATIGUE = "fatigue", "Fatigue"
+    STRAIN = "strain", "Strain"

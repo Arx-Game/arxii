@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -78,6 +78,26 @@ class ResolutionContext:
             return str(self.action_context.action)
         msg = "ResolutionContext has no populated source (challenge_instance or action_context)"
         raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class ModifierContribution:
+    """A single modifier with its provenance label and numeric value."""
+
+    source_kind: str
+    source_label: str
+    value: int
+
+
+@dataclass
+class ModifierBreakdown:
+    """Aggregated modifier provenance for a check."""
+
+    contributions: list[ModifierContribution] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return sum(c.value for c in self.contributions)
 
 
 @dataclass

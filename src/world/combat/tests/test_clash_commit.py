@@ -131,6 +131,72 @@ class CommitToClashTests(TestCase):
         self.assertGreaterEqual(effective_cost, strain_n)
 
     # -------------------------------------------------------------------------
+    # 2b. Strain + affinity tilt route through the shared modifier seam
+    # -------------------------------------------------------------------------
+
+    def test_strain_routed_as_labeled_contribution(self) -> None:
+        """commit_to_clash must express strain as a labeled STRAIN ModifierContribution
+        routed through collect_check_modifiers, with the same magnitude as the raw
+        strain_modifier.  The breakdown total (== strain for a bare character) is what
+        reaches the check."""
+        from unittest.mock import patch
+
+        from world.checks import services as checks_services
+        from world.checks.constants import ModifierSourceKind
+
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        strain_n = 10
+        expected_strain = strain_to_modifier(
+            anima_committed=strain_n,
+            config=self.config_strain,
+        )
+        self.assertGreater(expected_strain, 0)
+
+        captured: dict = {}
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            breakdown = real_collect(sheet, check_type, **kwargs)
+            captured["extra_contributions"] = kwargs.get("extra_contributions")
+            captured["total"] = breakdown.total
+            return breakdown
+
+        # commit_to_clash imports collect_check_modifiers locally from
+        # world.checks.services, so patch it at the source module (the local import
+        # binds at call time).  The rest of the magic pipeline runs for real via
+        # force_check_outcome.
+        with (
+            force_check_outcome(self.success_outcome),
+            patch(
+                "world.checks.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=strain_n,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        # A STRAIN-kind contribution with the strain magnitude must have been
+        # routed through the seam.
+        extras = captured["extra_contributions"]
+        strain_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.STRAIN]
+        self.assertEqual(len(strain_contribs), 1)
+        self.assertEqual(strain_contribs[0].value, expected_strain)
+        self.assertEqual(strain_contribs[0].source_label, "Strain")
+
+        # For a bare character with no conditions / rollmod, the breakdown total
+        # equals the strain modifier alone — provenance is unified, magnitude preserved.
+        self.assertEqual(captured["total"], expected_strain)
+
+    # -------------------------------------------------------------------------
     # 3. Overburn when strain exceeds anima pool
     # -------------------------------------------------------------------------
 

@@ -13,13 +13,15 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useAvailableActions, useCombatEncounter } from './queries';
+import { useAvailableActions, useCombatEncounter, useConsequenceOutcomes } from './queries';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
+import { OutcomeRoulette } from './OutcomeRoulette';
+import type { OutcomeDisplayRow } from './api';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -41,7 +43,8 @@ type SectionName =
   | 'vitalPools'
   | 'combatantsList'
   | 'activeState'
-  | 'roundFlow';
+  | 'roundFlow'
+  | 'outcomeRoulette';
 
 const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
   yourTurn: false,
@@ -50,6 +53,7 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
   combatantsList: false,
   activeState: false,
   roundFlow: false,
+  outcomeRoulette: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -70,6 +74,13 @@ export function CombatTurnPanel({
 
   // Available COMBAT-backend actions for the character (includes clash refs).
   const { data: combatActions } = useAvailableActions(characterId);
+
+  // Most recent consequence outcome for this character (for the roulette section).
+  const { data: consequenceOutcomes } = useConsequenceOutcomes({
+    character: characterId,
+    page_size: 1,
+  });
+  const latestOutcome = consequenceOutcomes?.[0] ?? null;
 
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
@@ -177,6 +188,45 @@ export function CombatTurnPanel({
         onToggleCollapse={() => toggleSection('roundFlow')}
         data-testid="section-round-flow"
       />
+
+      {/* 7. OutcomeRoulette — most recent consequence outcome for this character */}
+      {latestOutcome !== null && (
+        <div
+          className="rounded-md border border-border bg-card"
+          data-testid="outcome-roulette-section"
+        >
+          <button
+            type="button"
+            onClick={() => toggleSection('outcomeRoulette')}
+            className="flex w-full items-center justify-between px-3 py-2 text-left"
+            aria-expanded={!collapsed.outcomeRoulette}
+            data-testid="outcome-roulette-toggle"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Last Outcome
+            </span>
+            <span
+              className={cn(
+                'text-muted-foreground transition-transform',
+                collapsed.outcomeRoulette ? '-rotate-90' : 'rotate-0'
+              )}
+              aria-hidden="true"
+            >
+              ▾
+            </span>
+          </button>
+          {!collapsed.outcomeRoulette && (
+            <div className="border-t border-border px-3 py-2">
+              <OutcomeRoulette
+                outcomeDisplay={latestOutcome.outcome_display as unknown as OutcomeDisplayRow[]}
+                modifiers={latestOutcome.modifiers}
+                modifierTotal={latestOutcome.modifier_total}
+                summary={latestOutcome.summary}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

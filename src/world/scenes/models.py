@@ -855,6 +855,55 @@ class SceneSummaryRevision(SharedMemoryModel):
         return f"{self.persona.name} {self.action} summary for {self.scene.name}"
 
 
+class SceneCheckModifier(SharedMemoryModel):
+    """
+    Defines how a scene's surroundings modify a specific check type.
+
+    Authors use this to express environmental fiction mechanically — a dark
+    dungeon imposes a -10 Perception penalty; sacred ground grants +5 to Faith
+    checks.  One row per (scene, check_type) pair; multiple check types on the
+    same scene each get their own row.
+
+    Surface choice: FK to Scene (not ObjectDB/location) because:
+    - Scene is the encapsulating roleplay session already passed by
+      combat/scene callers via collect_check_modifiers(scene=...).
+    - Location (ObjectDB) is too broad — any game object, not just rooms.
+    - A scene represents the active *context* in which a check happens,
+      which is exactly what surroundings modifiers should attach to.
+
+    Mirrors ConditionCheckModifier: FK check_type, IntegerField modifier_value,
+    UniqueConstraint per (scene, check_type).
+    """
+
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="check_modifiers",
+        help_text="The scene whose surroundings this modifier describes",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        related_name="scene_check_modifiers",
+        help_text="The check type this modifier applies to",
+    )
+    modifier_value = models.IntegerField(
+        help_text="Flat modifier (positive = bonus, negative = penalty)",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scene", "check_type"],
+                name="scene_check_modifier_unique_scene_check_type",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        sign = "+" if self.modifier_value >= 0 else ""
+        return f"{self.scene.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+
 # Import place_models and action_models for Django model discovery
 from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
