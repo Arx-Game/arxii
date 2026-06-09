@@ -2444,6 +2444,94 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/checks/consequence-outcomes/:
+    get:
+      operationId: checks_consequence_outcomes_list
+      description: |-
+        Read-only endpoint for ConsequenceOutcome records.
+
+        Returns the roulette display recomputed from the persisted pool +
+        selected_consequence on every read.  Authenticated users may read any
+        record (list is all-records; no server-side ownership scoping because
+        staff need the full list and the frontend scopes by character via the
+        ``character`` filter).
+
+        Write operations are intentionally absent — outcomes are append-only and
+        written by the resolution pipeline.
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: number
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: pool
+        schema:
+          type: number
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsequenceOutcomeList'
+          description: ''
+  /api/checks/consequence-outcomes/{id}/:
+    get:
+      operationId: checks_consequence_outcomes_retrieve
+      description: |-
+        Read-only endpoint for ConsequenceOutcome records.
+
+        Returns the roulette display recomputed from the persisted pool +
+        selected_consequence on every read.  Authenticated users may read any
+        record (list is all-records; no server-side ownership scoping because
+        staff need the full list and the frontend scopes by character via the
+        ``character`` filter).
+
+        Write operations are intentionally absent — outcomes are append-only and
+        written by the resolution pipeline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this consequence outcome.
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsequenceOutcome'
+          description: ''
   /api/classes/aspects/:
     get:
       operationId: classes_aspects_list
@@ -22614,6 +22702,120 @@ components:
       description: |-
         * `therefore` - Therefore
         * `but` - But
+    ConsequenceOutcome:
+      type: object
+      description: |-
+        Read serializer for ConsequenceOutcome.
+
+        Recomputes the roulette display on every read from the persisted pool +
+        selected_consequence so the frontend always receives the full weighted
+        roulette (outcome_display) rather than storing it.
+
+        combat_interaction and challenge_record are exposed as plain integer ids to
+        avoid touching the range-partitioned scenes_interaction table at
+        serialization time.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        check_type:
+          type: integer
+          readOnly: true
+        pool:
+          type: integer
+          readOnly: true
+        selected_consequence:
+          type: integer
+          readOnly: true
+          nullable: true
+        modifier_total:
+          type: integer
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+        outcome_display:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Recompute the roulette from pool + selected_consequence on read.
+
+            Uses resolve_pool_consequences() — the same pool-walk used by
+            apply_pool_deterministically — to get the full flat list of
+            Consequence rows, then passes them with the persisted
+            selected_consequence to build_outcome_display() to mark the winner.
+
+            Returns a list of plain dicts matching OutcomeDisplay's fields.
+          readOnly: true
+        modifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsequenceOutcomeModifier'
+          readOnly: true
+        combat_interaction_id:
+          type: integer
+          readOnly: true
+        challenge_record_id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - challenge_record_id
+      - character
+      - check_type
+      - combat_interaction_id
+      - created_at
+      - id
+      - modifier_total
+      - modifiers
+      - outcome_display
+      - pool
+      - selected_consequence
+      - summary
+    ConsequenceOutcomeModifier:
+      type: object
+      description: Serializes a single snapshotted modifier contribution.
+      properties:
+        source_kind:
+          $ref: '#/components/schemas/ConsequenceOutcomeModifierSourceKindEnum'
+        source_label:
+          type: string
+          maxLength: 120
+        value:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+      required:
+      - source_kind
+      - source_label
+      - value
+    ConsequenceOutcomeModifierSourceKindEnum:
+      enum:
+      - condition
+      - rollmod
+      - scene
+      - equipment
+      - effort
+      - fatigue
+      - strain
+      type: string
+      description: |-
+        * `condition` - Condition
+        * `rollmod` - Roll Modifier
+        * `scene` - Surroundings
+        * `equipment` - Equipment
+        * `effort` - Effort
+        * `fatigue` - Fatigue
+        * `strain` - Strain
     Covenant:
       type: object
       description: Read-only serializer for Covenant identity, type, level, and lifecycle
@@ -27079,7 +27281,7 @@ components:
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
-          $ref: '#/components/schemas/SourceKindEnum'
+          $ref: '#/components/schemas/MissionOptionSourceKindEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -27139,7 +27341,7 @@ components:
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
-          $ref: '#/components/schemas/SourceKindEnum'
+          $ref: '#/components/schemas/MissionOptionSourceKindEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -27429,6 +27631,14 @@ components:
       required:
       - kind
       - sink
+    MissionOptionSourceKindEnum:
+      enum:
+      - authored
+      - challenge
+      type: string
+      description: |-
+        * `authored` - Authored
+        * `challenge` - Challenge
     MissionTemplate:
       type: object
       description: |-
@@ -28927,6 +29137,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterRelationshipList'
+    PaginatedConsequenceOutcomeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsequenceOutcome'
     PaginatedCovenantList:
       type: object
       required:
@@ -31638,7 +31871,7 @@ components:
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
-          $ref: '#/components/schemas/SourceKindEnum'
+          $ref: '#/components/schemas/MissionOptionSourceKindEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -35929,14 +36162,6 @@ components:
         * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
         * `PROJECT_CONTRIBUTION` - Project contribution payout
         * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
-    SourceKindEnum:
-      enum:
-      - authored
-      - challenge
-      type: string
-      description: |-
-        * `authored` - Authored
-        * `challenge` - Challenge
     Specialization:
       type: object
       description: Serializer for Specialization model.

@@ -70,4 +70,6 @@ urlpatterns = [
     path("mechanics/", include("world.mechanics.urls", namespace="mechanics")),
     # Relationships API
     path("relationships/", include("world.relationships.urls", namespace="relationships")),
+    # Checks API
+    path("checks/", include("world.checks.urls", namespace="checks")),
 ]
