@@ -127,3 +127,32 @@ class TriggerDispatchVisibilityTests(TestCase):
         self.template.save(update_fields=["availability_rule"])
         instance = maybe_dispatch_on_enter(_pc(), self.room)
         self.assertIsNotNone(instance)
+
+    def test_persona_gated_rule_fires_for_presented_persona(self) -> None:
+        # Mission givers gate on the presented persona (#870): the trigger
+        # path resolves the character's PRIMARY persona (the npc-offer
+        # path's convention) so persona-keyed leaves actually fire. A
+        # member's persona passes; a non-member's fails closed.
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+        )
+
+        OrganizationFactory(name="Trigger Guild")
+        self.template.availability_rule = {
+            "leaf": "is_member_of_org",
+            "params": {"org": "Trigger Guild"},
+        }
+        self.template.save(update_fields=["availability_rule"])
+
+        outsider = _pc()
+        self.assertIsNone(maybe_dispatch_on_enter(outsider, self.room))
+
+        member = _pc()
+        OrganizationMembershipFactory(
+            persona=member.sheet_data.primary_persona,
+            organization__name="Trigger Guild",
+        )
+        instance = maybe_dispatch_on_enter(member, self.room)
+        self.assertIsNotNone(instance)
+        self.assertEqual(instance.template_id, self.template.pk)
