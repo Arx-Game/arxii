@@ -827,6 +827,52 @@ class OutfitSlot(SharedMemoryModel):
         return f"{self.outfit.name}: {self.item_instance.display_name}"
 
 
+class ItemCheckModifier(SharedMemoryModel):
+    """Authored check modifier contributed by an item template when equipped.
+
+    Mirrors ``ConditionCheckModifier``: one row per (template, check_type) pair
+    carries a flat integer modifier.  When the character has an equipped item
+    whose template has a matching row, ``collect_check_modifiers`` emits an
+    EQUIPMENT ``ModifierContribution`` for it.
+
+    Examples:
+      - Padded boots give +5 to Stealth checks
+      - A sorcerer's staff gives +10 to Arcane checks
+      - Heavy plate armour gives -10 to Stealth checks
+    """
+
+    template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="check_modifiers",
+        help_text="Item template that carries this modifier.",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        related_name="item_check_modifiers",
+        help_text="The check type this modifier affects.",
+    )
+    modifier_value = models.IntegerField(
+        help_text=(
+            "Flat modifier applied when the item is equipped "
+            "(positive = bonus, negative = penalty)."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "check_type"],
+                name="items_unique_itemcheckmodifier_per_template_check",
+            )
+        ]
+
+    def __str__(self) -> str:
+        sign = "+" if self.modifier_value >= 0 else ""
+        return f"{self.template.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+
 class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
     """An admin-authored 'what's in vogue' definition (Outfits Phase B, #513).
 

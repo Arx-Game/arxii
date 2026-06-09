@@ -389,7 +389,29 @@ def collect_check_modifiers(
             for mod in scene_mods
         )
 
-    # EQUIPMENT source is wired in P3 Task 3.2; not yet.
+    # --- EQUIPMENT contributions ---
+    # Lazy import: world.items.models has no circular dependency with
+    # world.checks, but we keep the lazy pattern consistent with the other
+    # branches to avoid loading the items module at import time of
+    # checks.services.
+    from world.items.models import ItemCheckModifier  # noqa: PLC0415
+
+    item_mods = (
+        ItemCheckModifier.objects.filter(
+            template__instances__equipped_slots__character=character_sheet.character,
+            check_type=check_type,
+        )
+        .select_related("template")
+        .distinct()
+    )
+    contributions.extend(
+        ModifierContribution(
+            source_kind=ModifierSourceKind.EQUIPMENT,
+            source_label=f"Equipped: {mod.template.name}",
+            value=mod.modifier_value,
+        )
+        for mod in item_mods
+    )
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
