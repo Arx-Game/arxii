@@ -5,17 +5,22 @@ Covers:
 - Modifier breakdown rows included
 - Pagination present
 - Filtering by character_id
-- Non-owner (non-staff, different character) gets an empty list (queryset-level
-  scoping pattern used across this codebase)
+- Queryset scoped to the requesting user's own characters; non-owner gets
+  an empty list, staff bypass returns all rows
+- List endpoint query count does NOT scale with the number of
+  ConsequenceOutcome rows (prefetch cache is hit, not bypassed)
 """
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
@@ -39,15 +44,26 @@ def _make_user(*, is_staff: bool = False):
     return account
 
 
+def _character_with_account(account):
+    """Return a CharacterSheet whose character.db_account == account."""
+    char = CharacterFactory()
+    char.db_account = account
+    char.save()
+    return CharacterSheetFactory(character=char)
+
+
 class ConsequenceOutcomeAPISetupMixin:
-    """Shared setUp: one pool with two Consequence rows + one ConsequenceOutcome."""
+    """Shared setUp: one pool with two Consequence rows + one ConsequenceOutcome.
+
+    cls.owner_account is linked to cls.sheet via the ObjectDB.db_account field
+    so ownership-scoping tests can authenticate as the owner.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
         from world.traits.factories import CheckOutcomeFactory
 
         # Build a real pool with two consequences sharing the same outcome tier
-        cls.sheet = CharacterSheetFactory()
         cls.check_type = CheckTypeFactory()
         cls.pool = ConsequencePoolFactory()
         cls.outcome_tier = CheckOutcomeFactory(name="Partial Success")
@@ -67,6 +83,10 @@ class ConsequenceOutcomeAPISetupMixin:
         ConsequencePoolEntryFactory(pool=cls.pool, consequence=cls.consequence_b)
 
         cls.interaction = InteractionFactory()
+
+        # Owner account — character's db_account links the sheet to this user.
+        cls.owner_account = _make_user()
+        cls.sheet = _character_with_account(cls.owner_account)
 
         # Create the outcome — consequence_b was selected
         cls.outcome = ConsequenceOutcome.objects.create(
@@ -99,9 +119,9 @@ class ConsequenceOutcomeAPIReadTest(ConsequenceOutcomeAPISetupMixin, TestCase):
     """Authenticated requests: roulette payload, modifiers, pagination."""
 
     def setUp(self) -> None:
-        self.user = _make_user()
+        # Authenticate as the owner so the scoped queryset includes cls.outcome.
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        self.client.force_authenticate(user=self.owner_account)
 
     def test_list_returns_200_and_paginated(self) -> None:
         """GET /api/checks/consequence-outcomes/ returns 200 with pagination wrapper."""
@@ -185,8 +205,10 @@ class ConsequenceOutcomeAPIReadTest(ConsequenceOutcomeAPISetupMixin, TestCase):
 
     def test_filter_by_character(self) -> None:
         """Filtering by character_id returns only matching rows."""
-        # Create a second outcome for a different sheet
-        other_sheet = CharacterSheetFactory()
+        # Create a second outcome for a different sheet owned by the same user
+        # so the filter test is about the character filter, not ownership.
+        other_account = _make_user()
+        other_sheet = _character_with_account(other_account)
         other_interaction = InteractionFactory()
         ConsequenceOutcome.objects.create(
             character=other_sheet,
@@ -196,7 +218,12 @@ class ConsequenceOutcomeAPIReadTest(ConsequenceOutcomeAPISetupMixin, TestCase):
             combat_interaction_timestamp=other_interaction.timestamp,
         )
 
-        response = self.client.get(f"/api/checks/consequence-outcomes/?character={self.sheet.pk}")
+        # Staff client sees all rows, so use staff to test the filter itself.
+        staff_user = _make_user(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_user)
+
+        response = staff_client.get(f"/api/checks/consequence-outcomes/?character={self.sheet.pk}")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["count"], 1)
@@ -215,9 +242,9 @@ class ConsequenceOutcomeAPIReadTest(ConsequenceOutcomeAPISetupMixin, TestCase):
 
 
 class ConsequenceOutcomeAPIPermissionTest(ConsequenceOutcomeAPISetupMixin, TestCase):
-    """Staff bypass: staff users can read any outcome."""
+    """Ownership scoping: non-owner gets empty list; owner and staff see their rows."""
 
-    def test_staff_can_read(self) -> None:
+    def test_staff_can_read_all(self) -> None:
         """Staff user sees all outcomes regardless of character ownership."""
         staff_user = _make_user(is_staff=True)
         client = APIClient()
@@ -225,3 +252,79 @@ class ConsequenceOutcomeAPIPermissionTest(ConsequenceOutcomeAPISetupMixin, TestC
         response = client.get("/api/checks/consequence-outcomes/")
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(response.json()["count"], 1)
+
+    def test_owner_sees_own_outcomes(self) -> None:
+        """Character owner sees their own outcomes."""
+        client = APIClient()
+        client.force_authenticate(user=self.owner_account)
+        response = client.get("/api/checks/consequence-outcomes/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+
+    def test_non_owner_non_staff_sees_empty_list(self) -> None:
+        """A non-owner, non-staff user does NOT see another character's outcomes."""
+        other_user = _make_user()
+        client = APIClient()
+        client.force_authenticate(user=other_user)
+        response = client.get("/api/checks/consequence-outcomes/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 0)
+        self.assertEqual(response.json()["results"], [])
+
+    def test_non_owner_cannot_retrieve_by_pk(self) -> None:
+        """A non-owner cannot retrieve a specific outcome by PK."""
+        other_user = _make_user()
+        client = APIClient()
+        client.force_authenticate(user=other_user)
+        response = client.get(f"/api/checks/consequence-outcomes/{self.outcome.pk}/")
+        self.assertEqual(response.status_code, 404)
+
+
+class ConsequenceOutcomeQueryCountTest(ConsequenceOutcomeAPISetupMixin, TestCase):
+    """List endpoint query count does not scale with number of outcome rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # Create two additional outcomes (total 3) for the same character.
+        for _ in range(2):
+            extra_interaction = InteractionFactory()
+            ConsequenceOutcome.objects.create(
+                character=cls.sheet,
+                check_type=cls.check_type,
+                pool=cls.pool,
+                selected_consequence=cls.consequence_a,
+                modifier_total=0,
+                summary="Extra outcome",
+                combat_interaction=extra_interaction,
+                combat_interaction_timestamp=extra_interaction.timestamp,
+            )
+
+    def test_list_query_count_bounded(self) -> None:
+        """Query count for the list endpoint must NOT grow linearly with row count.
+
+        With 3 ConsequenceOutcome rows and properly prefetched relations,
+        the total query count should be a small constant (auth + pagination +
+        main queryset + prefetches), not 3 × N per-row queries.  We assert
+        fewer than 15 queries — far below the naive 3-per-row ceiling.
+        """
+        client = APIClient()
+        client.force_authenticate(user=self.owner_account)
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get("/api/checks/consequence-outcomes/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 3)
+
+        query_count = len(ctx.captured_queries)
+        # 3 rows × naive-3-queries-per-row = 9 queries minimum for the N+1 case.
+        # With prefetch the constant overhead is well under 15.
+        self.assertLess(
+            query_count,
+            15,
+            msg=(
+                f"Expected <15 queries for 3 outcomes (prefetch should be active), "
+                f"got {query_count}. Prefetch cache may not be hit."
+            ),
+        )

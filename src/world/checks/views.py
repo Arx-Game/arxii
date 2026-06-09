@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -13,14 +13,16 @@ from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeMo
 from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.stories.pagination import StandardResultsSetPagination
 
-# Prefetch querysets reused across list and retrieve.
+# Prefetch pool entries including each consequence's outcome_tier so the
+# serializer can read entry.consequence.outcome_tier.name from the cache
+# without issuing additional queries.
 _POOL_ENTRIES_PREFETCH = Prefetch(
     "pool__entries",
-    queryset=ConsequencePoolEntry.objects.select_related("consequence"),
+    queryset=ConsequencePoolEntry.objects.select_related("consequence__outcome_tier"),
 )
 _PARENT_ENTRIES_PREFETCH = Prefetch(
     "pool__parent__entries",
-    queryset=ConsequencePoolEntry.objects.select_related("consequence"),
+    queryset=ConsequencePoolEntry.objects.select_related("consequence__outcome_tier"),
 )
 _MODIFIERS_PREFETCH = Prefetch(
     "modifiers",
@@ -32,10 +34,13 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
     """Read-only endpoint for ConsequenceOutcome records.
 
     Returns the roulette display recomputed from the persisted pool +
-    selected_consequence on every read.  Authenticated users may read any
-    record (list is all-records; no server-side ownership scoping because
-    staff need the full list and the frontend scopes by character via the
-    ``character`` filter).
+    selected_consequence on every read.
+
+    Queryset scoping:
+    - Staff users see all outcomes.
+    - Non-staff users see only outcomes for characters they own
+      (chain: ConsequenceOutcome.character → CharacterSheet.character →
+      ObjectDB.db_account == request.user).
 
     Write operations are intentionally absent — outcomes are append-only and
     written by the resolution pipeline.
@@ -50,11 +55,12 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self) -> QuerySet[ConsequenceOutcome]:
-        return (
+        user = self.request.user
+        qs = (
             ConsequenceOutcome.objects.select_related(
                 "pool",
                 "pool__parent",
-                "selected_consequence",
+                "selected_consequence__outcome_tier",
                 "character",
                 "check_type",
             )
@@ -65,3 +71,8 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
             )
             .order_by("-created_at")
         )
+        if user.is_staff:
+            return qs
+        # Scope to outcomes for the requesting user's own characters.
+        # Chain: CharacterSheet.character (ObjectDB) → db_account == user.
+        return qs.filter(Q(character__character__db_account=user))

@@ -2,17 +2,19 @@
 
 ConsequenceOutcome is the unified anchor record written once per check
 resolution — both combat damage resolution and challenge resolution write one.
-A ViewSet (Task 4.4) will expose it with the roulette recomputed on read.
+A ViewSet exposes it with the roulette recomputed on read.
 
 The `combat_interaction` FK is declared db_constraint=False because
-scenes_interaction is range-partitioned by timestamp.  The composite FK
-constraint (interaction_id, interaction_timestamp) is added separately by a
-raw-SQL migration, mirroring the pattern used in CombatRoundAction and
-ClashContribution.
+scenes_interaction is range-partitioned by timestamp.  No composite FK
+constraint (interaction_id, interaction_timestamp) is created at the DB level
+for this table — unlike CombatRoundAction/ClashContribution, the raw-SQL
+migration for that constraint has deliberately been omitted here because the
+partitioned table has no DB-level referential integrity requirement.  Integrity
+is maintained by the writer setting both columns atomically.
 
 `combat_interaction_timestamp` is a denormalized companion field required for
-the composite FK.  It must be populated atomically with `combat_interaction_id`
-by the caller (same pattern as CombatRoundAction.interaction_timestamp).
+the composite partition key.  It must be populated atomically with
+`combat_interaction_id` by the caller.
 """
 
 from __future__ import annotations
@@ -65,8 +67,9 @@ class ConsequenceOutcome(SharedMemoryModel):
 
     # combat_interaction: FK to the partitioned scenes_interaction table.
     # db_constraint=False because Django cannot express the required composite
-    # FK (interaction_id, interaction_timestamp); the raw-SQL migration adds it.
-    # Mirror of CombatRoundAction.interaction and ClashContribution.interaction.
+    # FK (interaction_id, interaction_timestamp) against a range-partitioned
+    # table.  No raw-SQL migration adds a DB-level composite FK constraint here;
+    # integrity is maintained by the writer setting both columns atomically.
     combat_interaction = models.ForeignKey(
         "scenes.Interaction",
         on_delete=models.SET_NULL,
@@ -85,9 +88,9 @@ class ConsequenceOutcome(SharedMemoryModel):
         db_index=True,
         help_text=(
             "Denormalized from combat_interaction.timestamp. Required because "
-            "scenes_interaction is range-partitioned by timestamp — the composite "
-            "FK constraint targets (combat_interaction_id, combat_interaction_timestamp). "
-            "Populated atomically with combat_interaction_id by the caller."
+            "scenes_interaction is range-partitioned by timestamp. "
+            "No DB-level composite FK constraint is enforced — integrity is "
+            "maintained by the writer setting both columns atomically."
         ),
     )
 

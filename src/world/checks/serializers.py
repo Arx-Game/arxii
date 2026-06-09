@@ -6,7 +6,6 @@ from dataclasses import asdict
 
 from rest_framework import serializers
 
-from world.checks.consequence_resolution import resolve_pool_consequences
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
 
@@ -57,13 +56,31 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     def get_outcome_display(self, obj: ConsequenceOutcome) -> list[dict]:
         """Recompute the roulette from pool + selected_consequence on read.
 
-        Uses resolve_pool_consequences() — the same pool-walk used by
-        apply_pool_deterministically — to get the full flat list of
-        Consequence rows, then passes them with the persisted
-        selected_consequence to build_outcome_display() to mark the winner.
+        Reads pool entries and parent entries from the prefetch cache
+        (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
+        _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries
+        are issued per row.  Mirrors the pool-walk logic of
+        resolve_pool_consequences() but operates on already-fetched data.
 
         Returns a list of plain dicts matching OutcomeDisplay's fields.
         """
-        all_consequences = resolve_pool_consequences(obj.pool)
+        pool = obj.pool
+        # Read from prefetch cache — pool.entries.all() hits the cache when
+        # the ViewSet has declared a Prefetch for "pool__entries".
+        own_entries = list(pool.entries.all())
+
+        if pool.parent_id is None:
+            all_consequences = [e.consequence for e in own_entries if not e.is_excluded]
+        else:
+            excluded_ids = {e.consequence_id for e in own_entries if e.is_excluded}
+            # pool.parent.entries.all() hits the _PARENT_ENTRIES_PREFETCH cache.
+            parent_consequences = [
+                e.consequence
+                for e in pool.parent.entries.all()
+                if e.consequence_id not in excluded_ids
+            ]
+            own_included = [e.consequence for e in own_entries if not e.is_excluded]
+            all_consequences = parent_consequences + own_included
+
         display_items = build_outcome_display(all_consequences, obj.selected_consequence)
         return [asdict(item) for item in display_items]
