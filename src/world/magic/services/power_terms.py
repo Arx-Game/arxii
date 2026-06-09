@@ -80,10 +80,49 @@ def level_power_term(ctx: PowerTermContext) -> int:
     return char_contribution + tech_contribution
 
 
-def aura_power_term(_ctx: PowerTermContext) -> int:
-    """Aura/resonance standing contribution to power. Formula TBD — returns 0."""
-    # TODO: implement once the aura→power formula is designed
-    return 0
+def aura_power_term(ctx: PowerTermContext) -> int:
+    """Aura contribution to power: affinity-alignment + resonance standing (#768).
+
+    Affinity axis: caster's CharacterAura % in each distinct affinity of the
+    technique's resonances, proportional to ``affinity_alignment_bonus``.
+    Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
+    in those resonances x ``resonance_standing_bonus``, soft-capped.
+    Returns 0 when unconfigured or when the cast has no technique.
+    """
+    from world.magic.models.aura import CharacterAura, CharacterResonance  # noqa: PLC0415
+
+    config = get_aura_power_config()
+    if config is None or ctx.technique is None:
+        return 0
+
+    resonances = list(ctx.technique.gift.resonances.all())
+    if not resonances:
+        return 0
+
+    alignment = 0
+    if config.affinity_alignment_bonus:
+        aura = CharacterAura.objects.filter(character=ctx.sheet.character).first()
+        if aura is not None:
+            affinities = {r.affinity for r in resonances}
+            for affinity in affinities:
+                pct = getattr(aura, affinity.name.lower(), None)
+                if pct is not None:
+                    alignment += int(pct / 100 * config.affinity_alignment_bonus)
+
+    standing = 0
+    if config.resonance_standing_bonus:
+        resonance_ids = [r.pk for r in resonances]
+        total_earned = sum(
+            cr.lifetime_earned
+            for cr in CharacterResonance.objects.filter(
+                character_sheet=ctx.sheet, resonance_id__in=resonance_ids
+            )
+        )
+        standing = total_earned * config.resonance_standing_bonus
+        if config.resonance_standing_cap:
+            standing = min(standing, config.resonance_standing_cap)
+
+    return int(alignment + standing)
 
 
 def thread_power_term(_ctx: PowerTermContext) -> int:

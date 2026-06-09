@@ -1,5 +1,7 @@
 """Tests for power-scoped modifiers and power-term providers feeding _derive_power (#634, #637)."""
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
@@ -704,3 +706,64 @@ class ImmunityBlockedFlatSourceTests(TestCase):
         }
         self.assertNotIn("Cursed Aim", flat_labels)
         self.assertIn("Warded Strike", flat_labels)
+
+
+class AuraPowerTermTests(TestCase):
+    def setUp(self):
+        from world.magic.factories import (
+            AffinityFactory,
+            CharacterAuraFactory,
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.affinity = AffinityFactory(name="Celestial")
+        self.resonance = ResonanceFactory(affinity=self.affinity)
+        gift = GiftFactory()
+        gift.resonances.add(self.resonance)
+        self.technique = TechniqueFactory(gift=gift)
+        CharacterAuraFactory(
+            character=self.character,
+            celestial=Decimal("50.00"),
+            primal=Decimal("30.00"),
+            abyssal=Decimal("20.00"),
+        )
+
+    def _ctx(self):
+        from world.magic.services.power_terms import PowerTermContext
+
+        return PowerTermContext(sheet=self.sheet, technique=self.technique, applicable_threads=[])
+
+    def test_returns_zero_without_config(self):
+        from world.magic.services.power_terms import aura_power_term
+
+        self.assertEqual(aura_power_term(self._ctx()), 0)
+
+    def test_affinity_alignment_axis(self):
+        from world.magic.factories import AuraPowerConfigFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        AuraPowerConfigFactory(affinity_alignment_bonus=20)  # 50% celestial * 20 = 10
+        self.assertEqual(aura_power_term(self._ctx()), 10)
+
+    def test_resonance_standing_axis_and_cap(self):
+        from world.magic.factories import AuraPowerConfigFactory, CharacterResonanceFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=self.resonance, lifetime_earned=30
+        )
+        AuraPowerConfigFactory(resonance_standing_bonus=2, resonance_standing_cap=40)
+        # 30 * 2 = 60, capped to 40
+        self.assertEqual(aura_power_term(self._ctx()), 40)
+
+    def test_no_technique_returns_zero(self):
+        from world.magic.factories import AuraPowerConfigFactory
+        from world.magic.services.power_terms import PowerTermContext, aura_power_term
+
+        AuraPowerConfigFactory(affinity_alignment_bonus=20)
+        ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
+        self.assertEqual(aura_power_term(ctx), 0)
