@@ -2,12 +2,14 @@
  * MissionDetailPanel — shows a single MissionTemplate's full footprint.
  *
  * §5: list fields + lifetime completions + active instances. Surfaces
- * `access_tier` prominently (the publish gate) plus the categories
+ * `visibility` prominently (the audience gate, #870) plus the categories
  * pills, the level band, and a quick read of active runs (instance id,
  * current node, contract holder).
  *
- * E1 ships read-only; mutation surfaces (access-tier flip, copy, assign)
- * land in E6 and reuse the mutation hooks already in queries.ts.
+ * The availability-rule editor (TemplateRuleSection) only renders when
+ * the template is RESTRICTED — under visibility=eligibility, an OPEN
+ * template never consults the rule, so showing the builder would
+ * mislead authors into editing a no-op.
  */
 
 import { useState } from 'react';
@@ -71,7 +73,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <CardTitle>{template.name}</CardTitle>
-            <AccessTierBadge tier={template.access_tier ?? 'staff_only'} />
+            <VisibilityBadge visibility={template.visibility ?? 'restricted'} />
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">#{template.id}</div>
@@ -114,19 +116,28 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
         </CardContent>
       </Card>
       <StaffActionsCard template={template} />
-      <TemplateRuleSection template={template} />
+      {template.visibility === 'restricted' ? (
+        <TemplateRuleSection template={template} />
+      ) : (
+        <Card>
+          <CardContent className="p-4 text-xs text-muted-foreground">
+            This mission is open to everyone — the availability rule is not consulted. Restrict it
+            (Staff actions above) to gate the audience with a rule.
+          </CardContent>
+        </Card>
+      )}
       <FlavorRewriteCard template={template} />
     </div>
   );
 }
 
-function AccessTierBadge({ tier }: { tier: 'open' | 'staff_only' }) {
-  if (tier === 'open') {
+function VisibilityBadge({ visibility }: { visibility: 'open' | 'restricted' }) {
+  if (visibility === 'open') {
     return <Badge variant="default">Open</Badge>;
   }
   return (
-    <Badge variant="secondary" data-testid="access-tier-staff-only">
-      Staff only
+    <Badge variant="secondary" data-testid="visibility-restricted">
+      Restricted
     </Badge>
   );
 }

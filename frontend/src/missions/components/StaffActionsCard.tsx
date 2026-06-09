@@ -4,11 +4,13 @@
  * Embedded in MissionDetailPanel. Wraps the three D4 staff-power
  * surfaces:
  *
- * - Publish / Withdraw: PATCH access_tier between "open" and
- *   "staff_only" (gate for player-facing visibility).
+ * - Open / Restrict: PATCH visibility between "open" (everyone; the
+ *   availability rule is not consulted) and "restricted" (the
+ *   availability rule IS the audience — empty rule = staff-only, #870).
  * - Copy template: POST D4.2 copy action with optional new_name.
- *   Lands the copy as staff_only with all flavor flagged needs_rewrite
- *   (so the new template doesn't accidentally publish stale text).
+ *   Lands the copy restricted with an empty rule (= staff-only) and all
+ *   flavor flagged needs_rewrite (so the new template doesn't
+ *   accidentally surface stale text).
  *   The server auto-suffixes the name; new_name is optional override.
  * - Assign: POST D4.3 staff-power assign action with a character pk.
  *   Bypasses availability filters — explicit operator gesture per the
@@ -38,8 +40,8 @@ interface StaffActionsCardProps {
 
 export function StaffActionsCard({ template }: StaffActionsCardProps) {
   const patch = usePatchMissionTemplate();
-  const isOpen = template.access_tier === 'open';
-  const nextTier = isOpen ? 'staff_only' : 'open';
+  const isOpen = template.visibility === 'open';
+  const nextVisibility = isOpen ? 'restricted' : 'open';
 
   return (
     <Card>
@@ -50,9 +52,13 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
         <div className="rounded border p-2">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-medium">Access tier</div>
+              <div className="text-sm font-medium">Visibility</div>
               <div className="text-xs text-muted-foreground">
-                Currently <Badge variant="outline">{template.access_tier}</Badge>
+                Currently <Badge variant="outline">{template.visibility}</Badge>
+                {' — '}
+                {isOpen
+                  ? 'visible to everyone; the availability rule is ignored.'
+                  : 'the availability rule is the audience; empty rule = staff-only.'}
               </div>
             </div>
             <Button
@@ -61,23 +67,19 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
               onClick={() =>
                 patch.mutate({
                   id: template.id,
-                  body: { access_tier: nextTier },
+                  body: { visibility: nextVisibility },
                 })
               }
               disabled={patch.isPending}
-              data-testid="access-tier-flip"
+              data-testid="visibility-flip"
             >
-              {patch.isPending ? 'Flipping…' : isOpen ? 'Withdraw' : 'Publish'}
+              {patch.isPending ? 'Flipping…' : isOpen ? 'Restrict' : 'Open up'}
             </Button>
           </div>
           {patch.error ? (
-            // Adversarial review HIGH: validate_access_tier returns 400 with
-            // "Cannot flip to OPEN: the following attached giver(s) are not
-            // publishable: ...". Render the body so the staffer knows what
-            // to fix. patchMissionTemplate now throws ApiValidationError so
-            // we flatten fieldErrors directly; fall back to message for other
-            // error types.
-            <div className="mt-2 text-xs text-destructive" data-testid="access-tier-error">
+            // Surface API 400s (e.g. a malformed availability_rule rejected
+            // by the server-side validator) so the staffer knows what to fix.
+            <div className="mt-2 text-xs text-destructive" data-testid="visibility-error">
               {patch.error instanceof ApiValidationError
                 ? flattenErrorMessage(patch.error.fieldErrors)
                 : patch.error.message}

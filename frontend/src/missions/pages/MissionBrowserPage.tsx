@@ -39,12 +39,12 @@ export function MissionBrowserPage() {
   const selectedId = selectedIdStr ? Number(selectedIdStr) : undefined;
 
   const [nameFilter, setNameFilter] = useState('');
-  const [accessTier, setAccessTier] = useState<string>(ANY_VALUE);
+  const [visibility, setVisibility] = useState<string>(ANY_VALUE);
   const [page, setPage] = useState(1);
 
   const filters: MissionTemplateFilters & { page?: number } = {
     name: nameFilter || undefined,
-    access_tier: accessTier === ANY_VALUE ? undefined : (accessTier as 'open' | 'staff_only'),
+    visibility: visibility === ANY_VALUE ? undefined : (visibility as 'open' | 'restricted'),
     page,
   };
 
@@ -68,9 +68,9 @@ export function MissionBrowserPage() {
           setNameFilter(v);
           setPage(1);
         }}
-        accessTier={accessTier}
-        onAccessTierChange={(v) => {
-          setAccessTier(v);
+        visibility={visibility}
+        onVisibilityChange={(v) => {
+          setVisibility(v);
           setPage(1);
         }}
       />
@@ -130,13 +130,13 @@ export function MissionBrowserPage() {
 function FiltersBar({
   nameFilter,
   onNameChange,
-  accessTier,
-  onAccessTierChange,
+  visibility,
+  onVisibilityChange,
 }: {
   nameFilter: string;
   onNameChange: (v: string) => void;
-  accessTier: string;
-  onAccessTierChange: (v: string) => void;
+  visibility: string;
+  onVisibilityChange: (v: string) => void;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -151,15 +151,15 @@ function FiltersBar({
         />
       </div>
       <div>
-        <Label htmlFor="mission-filter-tier">Access tier</Label>
-        <Select value={accessTier} onValueChange={onAccessTierChange}>
-          <SelectTrigger id="mission-filter-tier" className="w-48">
+        <Label htmlFor="mission-filter-visibility">Visibility</Label>
+        <Select value={visibility} onValueChange={onVisibilityChange}>
+          <SelectTrigger id="mission-filter-visibility" className="w-48">
             <SelectValue placeholder="Any" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY_VALUE}>Any</SelectItem>
             <SelectItem value="open">Open</SelectItem>
-            <SelectItem value="staff_only">Staff only</SelectItem>
+            <SelectItem value="restricted">Restricted</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -192,7 +192,9 @@ function MissionRow({
           L{template.level_band_min}-{template.level_band_max}
         </Badge>
         <Badge variant="outline">R{template.risk_tier}</Badge>
-        {template.access_tier === 'staff_only' ? <Badge variant="secondary">Staff</Badge> : null}
+        {template.visibility === 'restricted' ? (
+          <Badge variant="secondary">Restricted</Badge>
+        ) : null}
       </span>
     </button>
   );

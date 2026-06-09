@@ -1710,10 +1710,13 @@ export interface paths {
      * @description Read-only endpoint for ConsequenceOutcome records.
      *
      *     Returns the roulette display recomputed from the persisted pool +
-     *     selected_consequence on every read.  Authenticated users may read any
-     *     record (list is all-records; no server-side ownership scoping because
-     *     staff need the full list and the frontend scopes by character via the
-     *     ``character`` filter).
+     *     selected_consequence on every read.
+     *
+     *     Queryset scoping:
+     *     - Staff users see all outcomes.
+     *     - Non-staff users see only outcomes for characters they own
+     *       (chain: ConsequenceOutcome.character → CharacterSheet.character →
+     *       ObjectDB.db_account == request.user).
      *
      *     Write operations are intentionally absent — outcomes are append-only and
      *     written by the resolution pipeline.
@@ -1738,10 +1741,13 @@ export interface paths {
      * @description Read-only endpoint for ConsequenceOutcome records.
      *
      *     Returns the roulette display recomputed from the persisted pool +
-     *     selected_consequence on every read.  Authenticated users may read any
-     *     record (list is all-records; no server-side ownership scoping because
-     *     staff need the full list and the frontend scopes by character via the
-     *     ``character`` filter).
+     *     selected_consequence on every read.
+     *
+     *     Queryset scoping:
+     *     - Staff users see all outcomes.
+     *     - Non-staff users see only outcomes for characters they own
+     *       (chain: ConsequenceOutcome.character → CharacterSheet.character →
+     *       ObjectDB.db_account == request.user).
      *
      *     Write operations are intentionally absent — outcomes are append-only and
      *     written by the resolution pipeline.
@@ -7812,7 +7818,9 @@ export interface paths {
      *     str}, ...]}]`` for every leaf in ``LEAF_RESOLVERS``. The Mission
      *     Studio's predicate-tree builder uses this to render leaf-type
      *     dropdowns + per-param input widgets typed correctly (int vs str)
-     *     without hard-coding the registry on the frontend.
+     *     without hard-coding the registry on the frontend. Param introspection
+     *     lives in ``world.predicates.catalog`` — shared with the server-side
+     *     tree validator (#870) so palette and validation can't drift.
      */
     get: operations['missions_predicate_leaves_list'];
     put?: never;
@@ -8066,8 +8074,8 @@ export interface paths {
      * @description D4.3 — staff-power: drop this mission on a character.
      *
      *     POST body: ``{"character": <ObjectDB pk>}``. Bypasses all
-     *     availability filters (predicate / cooldown / level band / access
-     *     tier) — operator gesture, not a normal acceptance flow. Returns
+     *     availability filters (visibility / predicate / cooldown / level
+     *     band) — operator gesture, not a normal acceptance flow. Returns
      *     the new MissionInstance shape.
      */
     post: operations['missions_templates_assign_create'];
@@ -11520,12 +11528,6 @@ export interface components {
       unlock_id: number;
       xp_spent: number;
     };
-    /**
-     * @description * `open` - Open
-     *     * `staff_only` - Staff Only
-     * @enum {string}
-     */
-    AccessTierEnum: 'open' | 'staff_only';
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -12942,10 +12944,11 @@ export interface components {
       /**
        * @description Recompute the roulette from pool + selected_consequence on read.
        *
-       *     Uses resolve_pool_consequences() — the same pool-walk used by
-       *     apply_pool_deterministically — to get the full flat list of
-       *     Consequence rows, then passes them with the persisted
-       *     selected_consequence to build_outcome_display() to mark the winner.
+       *     Reads pool entries and parent entries from the prefetch cache
+       *     (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
+       *     _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries
+       *     are issued per row.  Mirrors the pool-walk logic of
+       *     resolve_pool_consequences() but operates on already-fetched data.
        *
        *     Returns a list of plain dicts matching OutcomeDisplay's fields.
        */
@@ -15330,14 +15333,14 @@ export interface components {
      *
      *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
-     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     cooldown, reward-group rule, active flag, visibility, categories,
      *     availability rule.
      *
-     *     Access-tier flip is unguarded post-#686 — the legacy
-     *     ``MissionGiver.is_publishable`` guard was stripped with the
-     *     giver editor surface; an equivalent guard against the new
-     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
-     *     npc-services authoring follow-up.
+     *     The visibility flip is a straight write (#870): there is no
+     *     "publish to nobody" failure mode to guard against — a RESTRICTED
+     *     template whose rule admits no PC simply IS staff-only, a valid
+     *     emergent state. ``availability_rule`` IS validated (well-formedness;
+     *     a malformed tree would crash every later availability check).
      */
     MissionTemplate: {
       readonly id: number;
@@ -15375,12 +15378,12 @@ export interface components {
       reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
       is_active?: boolean;
       /**
-       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       * @description Audience gate (#870): OPEN surfaces the template to everyone (availability_rule is not consulted); RESTRICTED makes the availability_rule predicate the eligibility gate — an empty rule admits no PC (the emergent staff-only / in-testing state, and the production-safe default for new templates). Staff (is_staff_observer) always bypass.
        *
        *     * `open` - Open
-       *     * `staff_only` - Staff Only
+       *     * `restricted` - Restricted
        */
-      access_tier?: components['schemas']['AccessTierEnum'];
+      visibility?: components['schemas']['MissionVisibilityEnum'];
       /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
@@ -15434,12 +15437,12 @@ export interface components {
       reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
       is_active?: boolean;
       /**
-       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       * @description Audience gate (#870): OPEN surfaces the template to everyone (availability_rule is not consulted); RESTRICTED makes the availability_rule predicate the eligibility gate — an empty rule admits no PC (the emergent staff-only / in-testing state, and the production-safe default for new templates). Staff (is_staff_observer) always bypass.
        *
        *     * `open` - Open
-       *     * `staff_only` - Staff Only
+       *     * `restricted` - Restricted
        */
-      access_tier?: components['schemas']['AccessTierEnum'];
+      visibility?: components['schemas']['MissionVisibilityEnum'];
       /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
@@ -15461,14 +15464,14 @@ export interface components {
      *
      *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
-     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     cooldown, reward-group rule, active flag, visibility, categories,
      *     availability rule.
      *
-     *     Access-tier flip is unguarded post-#686 — the legacy
-     *     ``MissionGiver.is_publishable`` guard was stripped with the
-     *     giver editor surface; an equivalent guard against the new
-     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
-     *     npc-services authoring follow-up.
+     *     The visibility flip is a straight write (#870): there is no
+     *     "publish to nobody" failure mode to guard against — a RESTRICTED
+     *     template whose rule admits no PC simply IS staff-only, a valid
+     *     emergent state. ``availability_rule`` IS validated (well-formedness;
+     *     a malformed tree would crash every later availability check).
      */
     MissionTemplateRequest: {
       name: string;
@@ -15505,17 +15508,23 @@ export interface components {
       reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
       is_active?: boolean;
       /**
-       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       * @description Audience gate (#870): OPEN surfaces the template to everyone (availability_rule is not consulted); RESTRICTED makes the availability_rule predicate the eligibility gate — an empty rule admits no PC (the emergent staff-only / in-testing state, and the production-safe default for new templates). Staff (is_staff_observer) always bypass.
        *
        *     * `open` - Open
-       *     * `staff_only` - Staff Only
+       *     * `restricted` - Restricted
        */
-      access_tier?: components['schemas']['AccessTierEnum'];
+      visibility?: components['schemas']['MissionVisibilityEnum'];
       /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
+    /**
+     * @description * `open` - Open
+     *     * `restricted` - Restricted
+     * @enum {string}
+     */
+    MissionVisibilityEnum: 'open' | 'restricted';
     /**
      * @description * `pose` - Pose
      *     * `emit` - Emit
@@ -17974,14 +17983,14 @@ export interface components {
      *
      *     Read-only fields cover the authoring footprint: name, summary,
      *     epilogue, level band, risk tier, weighting, era association, scope,
-     *     cooldown, reward-group rule, active flag, access tier, categories,
+     *     cooldown, reward-group rule, active flag, visibility, categories,
      *     availability rule.
      *
-     *     Access-tier flip is unguarded post-#686 — the legacy
-     *     ``MissionGiver.is_publishable`` guard was stripped with the
-     *     giver editor surface; an equivalent guard against the new
-     *     ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
-     *     npc-services authoring follow-up.
+     *     The visibility flip is a straight write (#870): there is no
+     *     "publish to nobody" failure mode to guard against — a RESTRICTED
+     *     template whose rule admits no PC simply IS staff-only, a valid
+     *     emergent state. ``availability_rule`` IS validated (well-formedness;
+     *     a malformed tree would crash every later availability check).
      */
     PatchedMissionTemplateRequest: {
       name?: string;
@@ -18018,12 +18027,12 @@ export interface components {
       reward_group_rule?: components['schemas']['RewardGroupRuleEnum'];
       is_active?: boolean;
       /**
-       * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
+       * @description Audience gate (#870): OPEN surfaces the template to everyone (availability_rule is not consulted); RESTRICTED makes the availability_rule predicate the eligibility gate — an empty rule admits no PC (the emergent staff-only / in-testing state, and the production-safe default for new templates). Staff (is_staff_observer) always bypass.
        *
        *     * `open` - Open
-       *     * `staff_only` - Staff Only
+       *     * `restricted` - Restricted
        */
-      access_tier?: components['schemas']['AccessTierEnum'];
+      visibility?: components['schemas']['MissionVisibilityEnum'];
       /** @description Content-type tags for this mission (multi-valued, e.g. assassination, courtly, heist). Drives browse/filter in the authoring tool. */
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
@@ -23569,14 +23578,10 @@ export interface operations {
   checks_consequence_outcomes_list: {
     parameters: {
       query?: {
-        character?: number;
-        created_after?: string;
-        created_before?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        pool?: number;
       };
       header?: never;
       path?: never;
@@ -23599,8 +23604,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this consequence outcome. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -32425,13 +32429,6 @@ export interface operations {
     parameters: {
       query?: {
         /**
-         * @description Audience gate: STAFF_ONLY hides the template from all but is_staff_observer characters (the 'in testing' state — the production-safe default for new templates). OPEN lets the usual predicate / cooldown / level-band filters take over. Phase B-7 intentionally ships only two tiers; richer tiers (society, GM-level, etc.) follow after a permission-design brainstorm.
-         *
-         *     * `open` - Open
-         *     * `staff_only` - Staff Only
-         */
-        access_tier?: 'open' | 'staff_only';
-        /**
          * @description Whether this is offered globally, per-org, or per-giver.
          *
          *     * `global` - Global
@@ -32451,6 +32448,13 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         risk_tier?: number;
+        /**
+         * @description Audience gate (#870): OPEN surfaces the template to everyone (availability_rule is not consulted); RESTRICTED makes the availability_rule predicate the eligibility gate — an empty rule admits no PC (the emergent staff-only / in-testing state, and the production-safe default for new templates). Staff (is_staff_observer) always bypass.
+         *
+         *     * `open` - Open
+         *     * `restricted` - Restricted
+         */
+        visibility?: 'open' | 'restricted';
       };
       header?: never;
       path?: never;

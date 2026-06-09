@@ -2,7 +2,7 @@
  * E6 — StaffActionsCard + FlavorRewriteCard interaction tests.
  *
  * Mocks the queries module so the components render against fixed
- * data. Verifies access-tier flip wiring, copy/assign open-form
+ * data. Verifies visibility flip wiring (#870), copy/assign open-form
  * toggles, and the flagged-content list aggregates the three
  * nested-resource queries with the needs_rewrite=true filter.
  */
@@ -25,7 +25,7 @@ const FAKE_TEMPLATE: MissionTemplate = {
   risk_tier: 1,
   cooldown: '0',
   arc_scope: 'global',
-  access_tier: 'staff_only',
+  visibility: 'restricted',
   categories: [],
 } as MissionTemplate;
 
@@ -105,18 +105,18 @@ describe('StaffActionsCard', () => {
     assignMutateAsync.mockClear();
   });
 
-  it('renders Publish when current tier is staff_only', () => {
+  it('renders Open up when currently restricted', () => {
     render(withProviders(<StaffActionsCard template={FAKE_TEMPLATE} />));
-    expect(screen.getByTestId('access-tier-flip')).toHaveTextContent('Publish');
+    expect(screen.getByTestId('visibility-flip')).toHaveTextContent('Open up');
   });
 
-  it('flips access tier when Publish is clicked', async () => {
+  it('flips visibility when Open up is clicked', async () => {
     const user = userEvent.setup();
     render(withProviders(<StaffActionsCard template={FAKE_TEMPLATE} />));
-    await user.click(screen.getByTestId('access-tier-flip'));
+    await user.click(screen.getByTestId('visibility-flip'));
     expect(patchMutate).toHaveBeenCalledWith({
       id: 11,
-      body: { access_tier: 'open' },
+      body: { visibility: 'open' },
     });
   });
 
