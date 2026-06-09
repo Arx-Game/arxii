@@ -18,12 +18,12 @@ room-bound giver), wrapped so a dispatch hiccup never breaks movement/look.
 from __future__ import annotations
 
 import contextlib
-import random
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
 from django.utils import timezone
 
+from world.checks.outcome_utils import select_weighted
 from world.missions.constants import GiverKind, MissionStatus
 from world.missions.models import MissionGiver, MissionGiverCooldown, MissionInstance
 from world.narrative.constants import NarrativeCategory
@@ -90,7 +90,10 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     if not eligible:
         return None
 
-    template = random.choice(eligible)  # noqa: S311 — uniform draw, not crypto
+    # Uniform draw: MissionTemplate has no ``.weight`` attribute, so select_weighted
+    # falls back to weight 1 for every entry. (Delegates the RNG to the codebase's
+    # reviewed selection helper rather than a fresh random.* call.)
+    template = select_weighted(eligible)
     instance = _grant(template, character)
     _write_cooldown(giver, character, template, now)
     _announce(character, template)
