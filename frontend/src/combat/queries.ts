@@ -29,6 +29,9 @@ export const combatKeys = {
     [...combatKeys.all, 'available-actions', characterId] as const,
 
   outcomeDetails: (ids: number[]) => [...combatKeys.all, 'outcome-details', ids] as const,
+
+  consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
+    [...combatKeys.all, 'consequence-outcomes', params] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -209,5 +212,29 @@ export function useOutcomeDetails(actionInteractionIds: number[]) {
 export function useDispatchPlayerAction(characterId: number) {
   return useMutation({
     mutationFn: (body: DispatchActionRequest) => api.postDispatchAction(characterId, body),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Consequence outcomes hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch ConsequenceOutcome records for a character (or pool).
+ *
+ * Returns the roulette display + modifier breakdown for each outcome.
+ * Disabled when no params are provided (avoids a fetch-all).
+ * staleTime is generous — outcomes are append-only, never mutated.
+ */
+export function useConsequenceOutcomes(params: api.ConsequenceOutcomesParams) {
+  // Only enable when a meaningful filter is provided (> 0 to guard against un-initialized ids).
+  const hasFilter =
+    (params.character !== undefined && params.character > 0) ||
+    (params.pool !== undefined && params.pool > 0);
+  return useQuery({
+    queryKey: combatKeys.consequenceOutcomes(params),
+    queryFn: () => api.fetchConsequenceOutcomes(params),
+    enabled: hasFilter,
+    staleTime: 60_000,
   });
 }

@@ -6,6 +6,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
 import type {
   AvailableCombo,
   DispatchActionRequest,
@@ -13,6 +14,24 @@ import type {
   EncounterDetail,
   EncounterListItem,
 } from './types';
+
+// ---------------------------------------------------------------------------
+// Re-exported generated types for consequence outcomes
+// ---------------------------------------------------------------------------
+
+export type ConsequenceOutcome = components['schemas']['ConsequenceOutcome'];
+export type ConsequenceOutcomeModifier = components['schemas']['ConsequenceOutcomeModifier'];
+
+/**
+ * A single row in the outcome_display roulette wheel.
+ * The backend serializes OutcomeDisplay dataclass as plain dicts.
+ */
+export interface OutcomeDisplayRow {
+  label: string;
+  tier_name: string;
+  weight: number;
+  is_selected: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Encounter
@@ -114,6 +133,48 @@ export async function fetchOutcomeDetails(
   const res = await apiFetch(`/api/combat/action-outcome-details/?action_interaction_ids=${ids}`);
   if (!res.ok) throw new Error('Failed to load outcome details');
   return res.json() as Promise<ActionOutcomeDetail[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Consequence outcomes
+// ---------------------------------------------------------------------------
+
+export interface ConsequenceOutcomesParams {
+  character?: number;
+  pool?: number;
+  created_after?: string;
+  created_before?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * Fetch a paginated list of ConsequenceOutcome records.
+ * GET /api/checks/consequence-outcomes/
+ *
+ * Returns the results array from the paginated response.
+ * Supports filtering by character, pool, and time range.
+ */
+export async function fetchConsequenceOutcomes(
+  params: ConsequenceOutcomesParams = {}
+): Promise<ConsequenceOutcome[]> {
+  const qs = new URLSearchParams();
+  if (params.character !== undefined) qs.set('character', String(params.character));
+  if (params.pool !== undefined) qs.set('pool', String(params.pool));
+  if (params.created_after !== undefined) qs.set('created_after', params.created_after);
+  if (params.created_before !== undefined) qs.set('created_before', params.created_before);
+  if (params.page !== undefined) qs.set('page', String(params.page));
+  if (params.page_size !== undefined) qs.set('page_size', String(params.page_size));
+
+  const query = qs.toString();
+  const url = query
+    ? `/api/checks/consequence-outcomes/?${query}`
+    : '/api/checks/consequence-outcomes/';
+
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load consequence outcomes');
+  const data = (await res.json()) as { results?: ConsequenceOutcome[]; count?: number };
+  return data.results ?? [];
 }
 
 /**
