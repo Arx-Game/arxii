@@ -145,6 +145,9 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             self.date_finished = timezone.now()
             self.is_active = False
             self.save()
+            from world.scenes.power_ledger_services import purge_scene_power_ledger  # noqa: PLC0415
+
+            purge_scene_power_ledger(self)
 
 
 class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):

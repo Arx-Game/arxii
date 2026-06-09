@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.magic.types.power_ledger import PowerLedger, PowerLedgerEntry
 from world.scenes.models import Interaction, InteractionPowerLedgerEntry
+
+if TYPE_CHECKING:
+    from world.scenes.models import Scene
 
 
 def persist_power_ledger(*, interaction: Interaction, ledger: PowerLedger | None) -> None:
@@ -46,6 +51,15 @@ def load_persisted_ledger(interaction_id: int) -> PowerLedger | None:
         for row in rows
     )
     return PowerLedger(entries=entries, total=entries[-1].running_total)
+
+
+def purge_scene_power_ledger(scene: Scene) -> None:
+    """Delete all persisted power-ledger rows for a scene's interactions.
+
+    Called when a scene finishes — the ledger is scene-lifetime only, so it's
+    chucked once the scene resolves. The Interaction records themselves remain.
+    """
+    InteractionPowerLedgerEntry.objects.filter(interaction__scene=scene).delete()
 
 
 def viewer_can_see_ledger(interaction: Interaction, user: object) -> bool:
