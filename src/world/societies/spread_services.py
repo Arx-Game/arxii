@@ -13,6 +13,8 @@ from world.scenes.action_resolvers import register_resolver
 from world.societies.models import LegendEntry, OrganizationMembership
 
 SPREAD_TALE_ACTION_KEY = "spread_a_tale"
+# Display name shared by the Spread a Tale ActionTemplate and its CheckType.
+SPREAD_TALE_TEMPLATE_NAME = "Spread a Tale"
 
 # success_level -> fraction of base_value (failure / <=0 yields 0). Tunable.
 TIER_PAYOFF: dict[int, float] = {0: 0.0, 1: 0.10, 2: 0.30, 3: 0.60, 4: 1.00}
@@ -173,14 +175,14 @@ def get_or_create_spread_a_tale_template():
 
     # Fast-path: once seeded, the template (and its skills) exist, so a single
     # fetch per spread suffices instead of replaying every get_or_create below.
-    existing = ActionTemplate.objects.filter(name="Spread a Tale").first()
+    existing = ActionTemplate.objects.filter(name=SPREAD_TALE_TEMPLATE_NAME).first()
     if existing is not None:
         return existing
 
     ensure_spread_skills()
     category, _ = CheckCategory.objects.get_or_create(name="Social")
     check_type, _ = CheckType.objects.get_or_create(
-        name="Spread a Tale",
+        name=SPREAD_TALE_TEMPLATE_NAME,
         defaults={
             "category": category,
             "description": "Telling a deed's tale to a crowd.",
@@ -194,7 +196,7 @@ def get_or_create_spread_a_tale_template():
         check_type=check_type, trait=presence, defaults={"weight": Decimal("0.5")}
     )
     template, _ = ActionTemplate.objects.get_or_create(
-        name="Spread a Tale",
+        name=SPREAD_TALE_TEMPLATE_NAME,
         defaults={
             "check_type": check_type,
             "target_type": ActionTargetType.AREA,

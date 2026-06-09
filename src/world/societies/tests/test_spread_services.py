@@ -52,12 +52,15 @@ class SeedFastPathTest(TestCase):
 
     def test_template_seeded_once_and_fast_path_is_cheap(self) -> None:
         from actions.models.action_templates import ActionTemplate
-        from world.societies.spread_services import get_or_create_spread_a_tale_template
+        from world.societies.spread_services import (
+            SPREAD_TALE_TEMPLATE_NAME,
+            get_or_create_spread_a_tale_template,
+        )
 
         first = get_or_create_spread_a_tale_template()
         second = get_or_create_spread_a_tale_template()
         self.assertEqual(first.pk, second.pk)
-        self.assertEqual(ActionTemplate.objects.filter(name="Spread a Tale").count(), 1)
+        self.assertEqual(ActionTemplate.objects.filter(name=SPREAD_TALE_TEMPLATE_NAME).count(), 1)
         # Steady state: a single fetch, not the full chain of get_or_creates.
         with self.assertNumQueries(1):
             get_or_create_spread_a_tale_template()
