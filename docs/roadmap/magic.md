@@ -498,7 +498,7 @@ identity + process modifiers, Audere, and tier) → **MULTIPLIER** (the `power_m
 pool, applied as a single aggregate `×(1+Σ%/100)` to BASE; immunity-blocked sources
 excluded) → **FLAT** (per-source additive power modifiers via `get_modifier_breakdown` +
 per-condition rows via `get_condition_modifier_breakdown`; immunity-blocked excluded) →
-**TERM** (`get_power_term_providers()`; level live, aura/thread stubs) → **ENVIRONMENT**
+**TERM** (`get_power_term_providers()`; level, aura, and thread all live — see #768) → **ENVIRONMENT**
 (cast-time `evaluate_resonance_environment` AMPLIFY magnitude only; OPPOSED penalty stays
 in the existing Step 10 backfire; ALIGNED persistent boon flows through FLAT/condition —
 double-count guards in both cases; evaluate-once per cast). In the combat resolver:
@@ -515,6 +515,31 @@ payloads, and combat narration folds a concise ward/environment outcome clause v
 invariant is preserved — power is never stored. Research + candidate-directions report:
 `docs/architecture/power-intensity-research.md`. Architecture reference (as-built):
 `docs/architecture/power-derivation.md`.
+
+**#768 — aura & thread power-term providers (DONE):**
+
+The two remaining `PowerStage.TERM` providers are now live (joining `level_power_term`):
+
+- **`aura_power_term`** — staff-tunable via the `AuraPowerConfig` singleton (zero
+  defaults = disabled). Two combined axes: *affinity alignment* (the caster's
+  `CharacterAura` percentage in the affinity matching the technique's resonance(s),
+  proportional to `affinity_alignment_bonus`) and *resonance standing* — the
+  "aura farming" loop: `CharacterResonance.lifetime_earned` (the monotonic standing
+  earned from scene reactions via the Spec C endorsement system) × `resonance_standing_bonus`,
+  clamped by `resonance_standing_cap`. Uses `lifetime_earned` (not spendable `balance`)
+  so spending resonance never weakens the aura.
+- **`thread_power_term`** — out-of-combat per-thread `INTENSITY_BUMP` contribution, the
+  RP analog of the combat `COMBAT_PULL` path. Reuses the existing `resolve_pull_effects`
+  scaler over `ApplicableThread`s (tier-0 passive + declared paid pulls), so out-of-combat
+  and combat scaling agree.
+
+Wiring: `build_cast_applicable_threads` (`services/cast_threads.py`) computes a cast's
+in-scope passive threads (via `_anchor_in_action`) plus an optional `CastPullDeclaration`;
+`use_technique` threads them into `_derive_power` and charges a declared pull (after the
+soulfray/pre-cast gates, before anima deduction). The two non-combat scene callers
+(`scenes/cast_services.py`, `scenes/action_services.py`) opt in; combat is unchanged.
+A player-facing control to declare a paid pull *with* a cast, and per-level
+softcaps/hardcaps on the resonance-standing axis, are deferred follow-ups.
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
