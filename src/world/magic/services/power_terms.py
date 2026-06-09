@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import LevelPowerConfig, Technique, Thread
+    from world.magic.models import AuraPowerConfig, LevelPowerConfig, Technique, Thread
 
 
 @dataclass(frozen=True)
@@ -54,6 +54,13 @@ def get_level_power_config() -> LevelPowerConfig | None:
     from world.magic.models import LevelPowerConfig  # noqa: PLC0415
 
     return LevelPowerConfig.objects.filter(pk=1).first()
+
+
+def get_aura_power_config() -> AuraPowerConfig | None:
+    """Return the AuraPowerConfig singleton, or None if no row exists yet."""
+    from world.magic.models import AuraPowerConfig  # noqa: PLC0415
+
+    return AuraPowerConfig.objects.filter(pk=1).first()
 
 
 # ---------------------------------------------------------------------------

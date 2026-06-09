@@ -610,6 +610,22 @@ class EnvironmentPowerStageTests(TestCase):
         self.assertEqual(env_entries, [])
 
 
+class AuraPowerConfigAccessorTests(TestCase):
+    def test_accessor_returns_none_when_absent(self):
+        from world.magic.services.power_terms import get_aura_power_config
+
+        self.assertIsNone(get_aura_power_config())
+
+    def test_accessor_returns_singleton(self):
+        from world.magic.models import AuraPowerConfig
+        from world.magic.services.power_terms import get_aura_power_config
+
+        cfg = AuraPowerConfig.objects.create(
+            pk=1, affinity_alignment_bonus=10, resonance_standing_bonus=2, resonance_standing_cap=50
+        )
+        self.assertEqual(get_aura_power_config(), cfg)
+
+
 class ImmunityBlockedFlatSourceTests(TestCase):
     """Immunity-blocked negative sources must be excluded from FLAT stage (#639 fidelity).
 
