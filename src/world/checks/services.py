@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.scenes.models import Scene
     from world.traits.handlers import TraitHandler
 
 
@@ -317,28 +318,27 @@ def collect_check_modifiers(
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
     *,
-    scene: object = None,  # noqa: ARG001 — reserved for P3 scene-modifier wiring
+    scene: "Scene | None" = None,
     extra_contributions: list[ModifierContribution] | None = None,
 ) -> ModifierBreakdown:
     """Aggregate all modifier contributions for a check into a ModifierBreakdown.
 
-    This is the central seam that Phase 1 funnels through.  P3 (Tasks 3.1/3.2)
-    will add SCENE and EQUIPMENT contributions once those models exist; the
-    ``scene`` parameter is accepted now for forward-compatibility but is unused
-    until then — do not add queries against scene/equipment here yet.
+    This is the central seam that Phase 1 funnels through.
 
     Args:
         character_sheet: The CharacterSheet of the character making the check.
             The ObjectDB character is derived via ``character_sheet.character``
             for callers (like get_rollmod) that still operate on ObjectDB.
         check_type: The CheckType being resolved.
-        scene: Reserved for Phase 3 scene-modifier wiring (Tasks 3.1/3.2).
-            Pass None; any non-None value is silently ignored until P3 lands.
+        scene: Optional Scene whose surroundings may modify this check.
+            When provided, any SceneCheckModifier rows for (scene, check_type)
+            are folded in as SCENE contributions.  Pass None when checks are
+            performed outside an active scene.
         extra_contributions: Caller-supplied, already-labeled contributions
             (e.g. combat strain/affinity tilt, effort) to fold into the same
             breakdown so every check honors every modifier source through one
-            seam.  Appended AFTER the gathered condition/rollmod contributions
-            to keep ordering stable.  Pass None when there are none.
+            seam.  Appended AFTER the gathered condition/rollmod/scene
+            contributions to keep ordering stable.  Pass None when there are none.
 
     Returns:
         ModifierBreakdown whose .total is the sum of all contributions and
@@ -368,10 +368,31 @@ def collect_check_modifiers(
             )
         )
 
-    # SCENE / EQUIPMENT sources are wired in P3 (Tasks 3.1/3.2); not yet.
+    # --- SCENE contributions ---
+    # Lazy import: world.scenes.models imports from world.scenes.constants,
+    # world.societies, etc. — no cycle risk, but we keep the lazy pattern
+    # consistent with condition_contributions for uniformity and to avoid
+    # loading the scenes app module at import time of checks.services.
+    if scene is not None:
+        from world.scenes.models import SceneCheckModifier  # noqa: PLC0415
+
+        scene_mods = SceneCheckModifier.objects.filter(
+            scene=scene,
+            check_type=check_type,
+        ).select_related("scene")
+        contributions.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.SCENE,
+                source_label=f"Scene surroundings: {mod.scene.name}",
+                value=mod.modifier_value,
+            )
+            for mod in scene_mods
+        )
+
+    # EQUIPMENT source is wired in P3 Task 3.2; not yet.
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
-    # Appended last so the gathered condition/rollmod ordering stays stable.
+    # Appended last so the gathered condition/rollmod/scene ordering stays stable.
     if extra_contributions:
         contributions.extend(extra_contributions)
 
