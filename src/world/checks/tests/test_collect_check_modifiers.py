@@ -128,3 +128,49 @@ class CollectCheckModifiersTest(TestCase):
 
         assert breakdown.contributions == []
         assert breakdown.total == 0
+
+
+class CollectCheckModifiersMockCheckTypeTest(TestCase):
+    """Regression: collect_check_modifiers must not raise when check_type is a MagicMock.
+
+    Combat resolver tests (e.g. AnimaDeductionTest) pass MagicMock() as
+    offense_check_type to bypass the check-roll pipeline.  The EQUIPMENT branch
+    introduced in #851 previously crashed with:
+
+        TypeError: Field 'id' expected a number but got []
+
+    because it unconditionally filtered ItemCheckModifier by check_type=<MagicMock>,
+    and Django tried to coerce the mock's pk to an integer.  The guard added in
+    the fix short-circuits the equipment (and scene) query when check_type is not
+    a real Django Model instance, so mock callers get a graceful empty breakdown
+    instead of a TypeError.
+    """
+
+    def setUp(self):
+        self.target = ObjectDB.objects.create(db_key="MockCheckTypeTarget")
+        self.sheet = CharacterSheetFactory(character=self.target)
+
+    def test_mock_check_type_does_not_raise(self):
+        """collect_check_modifiers with MagicMock check_type must not raise."""
+        from unittest.mock import MagicMock
+
+        from world.checks.services import collect_check_modifiers
+
+        mock_check_type = MagicMock()
+        # Must not raise TypeError regardless of active conditions or equipped items.
+        breakdown = collect_check_modifiers(self.sheet, mock_check_type)
+        # EQUIPMENT branch skipped → no EQUIPMENT contributions
+        equipment_kinds = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.EQUIPMENT
+        ]
+        assert equipment_kinds == []
+
+    def test_mock_check_type_total_is_zero_with_no_conditions_or_rollmod(self):
+        """With no conditions/rollmod and a mock check_type, total must be 0."""
+        from unittest.mock import MagicMock
+
+        from world.checks.services import collect_check_modifiers
+
+        mock_check_type = MagicMock()
+        breakdown = collect_check_modifiers(self.sheet, mock_check_type)
+        assert breakdown.total == 0

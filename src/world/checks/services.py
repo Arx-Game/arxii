@@ -473,28 +473,36 @@ def collect_check_modifiers(
         )
 
     # --- EQUIPMENT contributions ---
-    # Lazy import: world.items.models has no circular dependency with
-    # world.checks, but we keep the lazy pattern consistent with the other
-    # branches to avoid loading the items module at import time of
-    # checks.services.
+    # Guard: only run the DB query when check_type is a real persisted model
+    # instance.  Callers that mock the check pipeline (e.g. combat resolver tests
+    # that pass MagicMock() as offense_check_type) must not trigger a live query;
+    # without the guard, filter(check_type=<MagicMock>) raises TypeError because
+    # Django cannot coerce the mock's pk to an integer.
+    # ``isinstance(check_type, Model)`` is False for MagicMock — it is not a
+    # Django Model subclass — so this reliably skips the query for mocks while
+    # remaining transparent for every real-code caller.
+    from django.db.models import Model as _DjangoModel  # noqa: PLC0415
+
     from world.items.models import ItemCheckModifier  # noqa: PLC0415
 
-    item_mods = (
-        ItemCheckModifier.objects.filter(
-            template__instances__equipped_slots__character=character_sheet.character,
-            check_type=check_type,
+    character = character_sheet.character
+    if isinstance(check_type, _DjangoModel) and character is not None:
+        item_mods = (
+            ItemCheckModifier.objects.filter(
+                template__instances__equipped_slots__character=character,
+                check_type=check_type,
+            )
+            .select_related("template")
+            .distinct()
         )
-        .select_related("template")
-        .distinct()
-    )
-    contributions.extend(
-        ModifierContribution(
-            source_kind=ModifierSourceKind.EQUIPMENT,
-            source_label=f"Equipped: {mod.template.name}",
-            value=mod.modifier_value,
+        contributions.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label=f"Equipped: {mod.template.name}",
+                value=mod.modifier_value,
+            )
+            for mod in item_mods
         )
-        for mod in item_mods
-    )
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
