@@ -1,12 +1,17 @@
+from unittest.mock import patch
+
 from django.test import TestCase, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
-from world.checks.constants import EffectType
+from world.checks.constants import EffectType, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.outcome_utils import build_outcome_display
 from world.checks.test_helpers import force_check_outcome
+from world.checks.types import CheckResult
 from world.conditions.factories import (
     BleedingOutConditionFactory,
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
     DamageTypeFactory,
@@ -270,4 +275,110 @@ class ProcessDamageConsequencesPoolTests(TestCase):
             "Lethal",
             [d.label for d in display],
             "Outcome display reflects the full pool (all tiers)",
+        )
+
+    def test_active_condition_modifier_affects_survivability_check(self) -> None:
+        """An active condition with a positive Endurance modifier causes the character to
+        survive a knockout tier they would otherwise fail, and result.modifier_breakdown
+        carries the condition contribution.
+
+        The condition grants +20 on the Endurance check type.  Without it the
+        perform_check call receives extra_modifiers=0 and the mock returns a FAILURE
+        outcome (knockout applied).  With the condition active, extra_modifiers=+20 and
+        the mock returns a SUCCESS outcome (no pool entry → not knocked out).
+
+        The mock gates on the extra_modifiers value so the test is deterministic and
+        explicitly validates that the condition modifier reached perform_check.
+        """
+        from world.vitals.services import get_vitals_consequence_config, process_damage_consequences
+
+        # Health in the 0-20% knockout band.
+        vitals = CharacterVitalsFactory(health=10, max_health=100)
+        character = vitals.character_sheet.character
+
+        # Build two outcomes: failure (knockout) and success (no effect).
+        failure_outcome = CheckOutcomeFactory(name="KO-ModTest-Failure", success_level=-1)
+        success_outcome = CheckOutcomeFactory(name="KO-ModTest-Success", success_level=1)
+
+        # Knockout pool: only a FAILURE-tier consequence that applies Unconscious.
+        unconscious_template = UnconsciousConditionFactory()
+        ko_consequence = ConsequenceFactory(outcome_tier=failure_outcome, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=ko_consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=unconscious_template,
+            target="self",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=ko_consequence)
+
+        cfg = get_vitals_consequence_config()
+        cfg.knockout_pool = pool
+        cfg.save(update_fields=["knockout_pool"])
+
+        # Ensure the Endurance check type exists so collect_check_modifiers uses it.
+        endurance_check_type = _ensure_endurance_check_type()
+
+        # Active condition with a large positive modifier (+20) on the Endurance check.
+        buff_template = ConditionTemplateFactory(name="KO-ModTest-Buff", has_progression=False)
+        ConditionCheckModifierFactory(
+            condition=buff_template,
+            check_type=endurance_check_type,
+            modifier_value=20,
+        )
+        ConditionInstanceFactory(target=character, condition=buff_template)
+
+        # Mock perform_check in consequence_resolution to return outcome based on
+        # whether extra_modifiers carries the condition value (> 0 → success, else failure).
+        def _mock_perform_check(char, check_type, target_difficulty, extra_modifiers=0):  # type: ignore[misc]
+            outcome = success_outcome if extra_modifiers > 0 else failure_outcome
+            return CheckResult(
+                check_type=check_type,
+                outcome=outcome,
+                chart=None,
+                roller_rank=None,
+                target_rank=None,
+                rank_difference=0,
+                trait_points=0,
+                aspect_bonus=0,
+                total_points=extra_modifiers,
+            )
+
+        perform_check_path = "world.checks.consequence_resolution.perform_check"
+        with patch(perform_check_path, side_effect=_mock_perform_check):
+            result = process_damage_consequences(
+                character_sheet=character.sheet_data,
+                damage_dealt=5,
+                damage_type=None,
+            )
+
+        # The condition's +20 modifier shifted the outcome to SUCCESS → not knocked out.
+        self.assertFalse(
+            result.knocked_out,
+            "Active condition with positive modifier should prevent knockout",
+        )
+        self.assertFalse(
+            get_active_conditions(character, condition=unconscious_template).exists(),
+            "Unconscious condition must not be applied when condition modifier yields SUCCESS",
+        )
+
+        # modifier_breakdown must be populated and include the condition contribution.
+        self.assertIsNotNone(
+            result.modifier_breakdown,
+            "result.modifier_breakdown must be set when a survivability tier fires",
+        )
+        condition_contribs = [
+            c
+            for c in result.modifier_breakdown.contributions  # type: ignore[union-attr]
+            if c.source_kind == ModifierSourceKind.CONDITION
+        ]
+        self.assertEqual(
+            len(condition_contribs),
+            1,
+            "Exactly one CONDITION contribution expected in modifier_breakdown",
+        )
+        self.assertEqual(
+            condition_contribs[0].value,
+            20,
+            "CONDITION contribution value must match the ConditionCheckModifier modifier_value",
         )

@@ -13,7 +13,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
-from world.checks.services import perform_check
+from world.checks.services import collect_check_modifiers, perform_check
 from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
     DEATH_CHECK_NAME,
@@ -350,26 +350,34 @@ def process_damage_consequences(
     )
     wound_pool = _wound_pool(damage_type)
     if wound_difficulty > 0 and wound_pool is not None:
+        wound_check_type = _ensure_endurance_check_type()
+        wound_breakdown = collect_check_modifiers(character_sheet, wound_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_endurance_check_type(),
+            wound_check_type,
             wound_difficulty,
             wound_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + wound_breakdown.total,
         )
-        result.wounds_applied.extend(_wounds_from(pending))
+        wounds = _wounds_from(pending)
+        if wounds:
+            result.wounds_applied.extend(wounds)
+            result.modifier_breakdown = wound_breakdown
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
     death_pool = _death_pool(damage_type)
     if death_difficulty > 0 and death_pool is not None:
+        death_check_type = _ensure_death_check_type()
+        death_breakdown = collect_check_modifiers(character_sheet, death_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_death_check_type(),
+            death_check_type,
             death_difficulty,
             death_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + death_breakdown.total,
         )
+        result.modifier_breakdown = death_breakdown
         if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
@@ -381,13 +389,16 @@ def process_damage_consequences(
     )
     knockout_pool = _knockout_pool()
     if knockout_difficulty > 0 and knockout_pool is not None:
+        ko_check_type = _ensure_endurance_check_type()
+        ko_breakdown = collect_check_modifiers(character_sheet, ko_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_endurance_check_type(),
+            ko_check_type,
             knockout_difficulty,
             knockout_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + ko_breakdown.total,
         )
+        result.modifier_breakdown = ko_breakdown
         if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
