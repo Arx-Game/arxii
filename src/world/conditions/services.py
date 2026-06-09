@@ -1375,12 +1375,13 @@ def get_check_modifier(
         for mod in modifiers:
             modifier_value = mod.modifier_value
 
-            # Scale by severity if configured
+            # effective_severity already folds in the stage multiplier, so scaling
+            # by severity and by the stage are mutually exclusive — if/elif, not two
+            # ifs, mirroring get_condition_modifier_total. (Two ifs double-applied
+            # the stage multiplier for a staged, severity-scaled modifier.)
             if mod.scales_with_severity:
-                modifier_value = modifier_value * instance.effective_severity
-
-            # Apply stage multiplier
-            if instance.current_stage:
+                modifier_value = int(modifier_value * instance.effective_severity)
+            elif instance.current_stage:
                 modifier_value = int(modifier_value * instance.current_stage.severity_multiplier)
 
             result.total_modifier += modifier_value
@@ -1425,8 +1426,12 @@ def get_resistance_modifier(
         for mod in modifiers:
             modifier_value = mod.modifier_value
 
-            # Apply stage multiplier
-            if instance.current_stage:
+            # Honor scales_with_severity, consistent with the other numeric readers
+            # (get_condition_modifier_total / get_check_modifier). effective_severity
+            # already folds in the stage multiplier, so it's if/elif.
+            if mod.scales_with_severity:
+                modifier_value = int(modifier_value * instance.effective_severity)
+            elif instance.current_stage:
                 modifier_value = int(modifier_value * instance.current_stage.severity_multiplier)
 
             result.total_modifier += modifier_value

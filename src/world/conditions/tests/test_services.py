@@ -787,6 +787,27 @@ class GetCheckModifierTest(TestCase):
 
         assert result.total_modifier == -15  # -5 * 3
 
+    def test_check_modifier_staged_and_scaling_does_not_double_apply(self):
+        """Regression (#782): a staged + severity-scaled check modifier must scale
+        once. effective_severity already folds in the stage multiplier, so the two
+        independent `if`s double-applied it (severity_multiplier squared)."""
+        staged = ConditionTemplateFactory(name="staged-scaling")
+        stage = ConditionStageFactory(condition=staged, severity_multiplier=2)
+        ConditionCheckModifierFactory(
+            condition=staged,
+            check_type=self.combat_attack,
+            modifier_value=-5,
+            scales_with_severity=True,
+        )
+        instance = ConditionInstanceFactory(
+            target=self.target, condition=staged, severity=3, current_stage=stage
+        )
+
+        # effective_severity = 3 * 2 = 6; correct total = -5 * 6 = -30 (not -60).
+        assert instance.effective_severity == 6
+        result = get_check_modifier(self.target.sheet_data, self.combat_attack)
+        assert result.total_modifier == -30
+
 
 class GetResistanceModifierTest(TestCase):
     """Tests for get_resistance_modifier service function."""
@@ -846,6 +867,22 @@ class GetResistanceModifierTest(TestCase):
 
         result = get_resistance_modifier(self.target.sheet_data, self.lightning)
         assert result.total_modifier == 25
+
+    def test_resistance_modifier_scales_with_severity(self):
+        """Resistance modifiers honor scales_with_severity, consistent with the
+        check/total readers (#782)."""
+        scaling = ConditionTemplateFactory(name="scaling-resist")
+        ConditionResistanceModifierFactory(
+            condition=scaling,
+            damage_type=self.fire,
+            modifier_value=10,
+            scales_with_severity=True,
+        )
+
+        ConditionInstanceFactory(target=self.target, condition=scaling, severity=3)
+
+        result = get_resistance_modifier(self.target.sheet_data, self.fire)
+        assert result.total_modifier == 30  # 10 * 3
 
 
 class RoundProcessingTest(TestCase):
