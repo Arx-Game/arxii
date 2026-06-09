@@ -16,11 +16,10 @@ from __future__ import annotations
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django.utils import timezone
 from rest_framework.test import APIClient
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
@@ -30,18 +29,7 @@ from world.scenes.factories import InteractionFactory
 
 def _make_user(*, is_staff: bool = False):
     """Create an AccountDB-backed user for API tests."""
-    from evennia.utils import create
-
-    username = f"testuser_{timezone.now().timestamp()}"
-    account = create.create_account(
-        username,
-        email=f"{username}@test.com",
-        password="testpass123",
-        typeclass="typeclasses.accounts.Account",
-    )
-    account.is_staff = is_staff
-    account.save()
-    return account
+    return AccountFactory(is_staff=is_staff)
 
 
 def _character_with_account(account):
