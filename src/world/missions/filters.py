@@ -14,6 +14,7 @@ import django_filters
 
 from world.missions.constants import AccessTier, ArcScope
 from world.missions.models import (
+    MissionGiver,
     MissionNode,
     MissionOption,
     MissionOptionRoute,
@@ -158,3 +159,16 @@ class MissionOptionRouteRewardFilterSet(django_filters.FilterSet):
 
 
 # Mission-giver filters moved to world.npc_services.filters per #686.
+
+
+class MissionGiverFilterSet(django_filters.FilterSet):
+    """Browse/filter trigger-based MissionGiver rows for the staff editor (#729)."""
+
+    giver_kind = django_filters.CharFilter(field_name="giver_kind")
+    is_active = django_filters.BooleanFilter(field_name="is_active")
+    org = django_filters.NumberFilter(field_name="org_id")
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = MissionGiver
+        fields: list[str] = []
