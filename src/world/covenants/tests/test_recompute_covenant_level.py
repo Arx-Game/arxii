@@ -1,6 +1,6 @@
 """Tests for recompute_covenant_level service."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
@@ -21,6 +21,7 @@ from world.societies.models import refresh_legend_views
 from world.societies.services import create_legend_event
 
 
+@tag("postgres")  # reads societies_covenantlegendsummary (a PG materialized view) — #758
 class RecomputeCovenantLevelTests(TestCase):
     """Behavioural tests for recompute_covenant_level.
 

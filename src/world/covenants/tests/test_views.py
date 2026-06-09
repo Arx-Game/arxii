@@ -1,6 +1,6 @@
 """Tests for covenants API views."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -324,6 +324,7 @@ class CovenantViewTests(CovenantsViewTestCase):
             covenant_role=cls.role,
         )
 
+    @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_user_sees_only_active_member_covenant(self) -> None:
         """Non-staff user only sees covenants where they have an active membership."""
         response = self.client.get("/api/covenants/covenants/")
@@ -334,6 +335,7 @@ class CovenantViewTests(CovenantsViewTestCase):
         # No membership on dissolved covenant either.
         self.assertNotIn(self.cov_dissolved.pk, ids)
 
+    @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_staff_sees_all(self) -> None:
         """Staff users see all covenants regardless of membership."""
         from evennia.accounts.models import AccountDB
@@ -349,6 +351,7 @@ class CovenantViewTests(CovenantsViewTestCase):
         self.assertIn(self.cov_no_membership.pk, ids)
         self.assertIn(self.cov_dissolved.pk, ids)
 
+    @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_filter_by_covenant_type(self) -> None:
         """?covenant_type= filters to only covenants of that type."""
         from evennia.accounts.models import AccountDB
@@ -369,6 +372,7 @@ class CovenantViewTests(CovenantsViewTestCase):
         for row in response.data["results"]:
             self.assertEqual(row["covenant_type"], CovenantType.DURANCE)
 
+    @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_filter_by_is_active_true(self) -> None:
         """?is_active=true returns only covenants with dissolved_at=None."""
         from evennia.accounts.models import AccountDB
@@ -385,6 +389,7 @@ class CovenantViewTests(CovenantsViewTestCase):
         for row in response.data["results"]:
             self.assertIsNone(row["dissolved_at"])
 
+    @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_serializer_exposes_member_count(self) -> None:
         """Detail endpoint includes member_count reflecting active memberships."""
         response = self.client.get(f"/api/covenants/covenants/{self.cov_active_member.pk}/")
@@ -439,6 +444,7 @@ class CharacterCovenantRoleSerializerExposureTests(CovenantsViewTestCase):
         self.assertFalse(response.data["engaged"])
 
 
+@tag("postgres")  # serializes legend_total → societies_covenantlegendsummary (PG view) — #758
 class CovenantSerializerLegendAndStorylinesTests(CovenantsViewTestCase):
     """Verify CovenantSerializer detail includes legend_total and storylines."""
 
