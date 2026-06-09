@@ -85,7 +85,7 @@ from world.magic.models.motifs import (
     MotifResonance,
     MotifResonanceAssociation,
 )
-from world.magic.models.power_config import LevelPowerConfig
+from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_scene_action import RitualSceneActionConfig
@@ -155,6 +155,8 @@ __all__ = [
     "AnimaRitualPerformance",
     # audere (re-exported from world.magic.audere)
     "AudereThreshold",
+    # power config (#768)
+    "AuraPowerConfig",
     # knowledge layer grants (Anima Ritual UI spec §Decision 6)
     "BeginningsRitualGrant",
     # cantrips

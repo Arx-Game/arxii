@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult, SoulfrayResult
+    from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
 
 
@@ -691,6 +692,8 @@ def use_technique(  # noqa: PLR0913
     check_result: CheckResult | None = None,
     targets: list | None = None,
     strain_commitment: int = 0,
+    applicable_threads: Sequence[ApplicableThread] | None = None,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -743,6 +746,7 @@ def use_technique(  # noqa: PLR0913
         channeled_intensity=stats.intensity,
         technique=technique,
         character=character,
+        applicable_threads=applicable_threads,
         environment=environment_effect,
     )
     pre_payload = TechniquePreCastPayload(
@@ -770,6 +774,28 @@ def use_technique(  # noqa: PLR0913
     # reconcile the ledger so its total matches; ledger is the source of truth.
     effective_ledger = _reconcile_precast_ledger(pre_payload)
     effective_power = effective_ledger.total
+
+    # Step 3c (#768): charge a declared cast pull. Placed after the soulfray
+    # checkpoint and pre-cast cancellation gate (so an aborted cast never
+    # charges) and before anima deduction (so an unaffordable pull raises
+    # before the technique's own anima is spent). Combat pulls are committed
+    # separately and never reach this path.
+    if cast_pull is not None:
+        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+        pull_sheet = _get_character_sheet(character)
+        if pull_sheet is not None:
+            spend_resonance_for_pull(
+                pull_sheet,
+                cast_pull.resonance,
+                cast_pull.tier,
+                list(cast_pull.threads),
+                PullActionContext(
+                    combat_encounter=None,
+                    involved_techniques=(technique.pk,),
+                ),
+            )
 
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)

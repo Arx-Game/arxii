@@ -1,5 +1,7 @@
 """Tests for power-scoped modifiers and power-term providers feeding _derive_power (#634, #637)."""
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
@@ -610,6 +612,22 @@ class EnvironmentPowerStageTests(TestCase):
         self.assertEqual(env_entries, [])
 
 
+class AuraPowerConfigAccessorTests(TestCase):
+    def test_accessor_returns_none_when_absent(self):
+        from world.magic.services.power_terms import get_aura_power_config
+
+        self.assertIsNone(get_aura_power_config())
+
+    def test_accessor_returns_singleton(self):
+        from world.magic.models import AuraPowerConfig
+        from world.magic.services.power_terms import get_aura_power_config
+
+        cfg = AuraPowerConfig.objects.create(
+            pk=1, affinity_alignment_bonus=10, resonance_standing_bonus=2, resonance_standing_cap=50
+        )
+        self.assertEqual(get_aura_power_config(), cfg)
+
+
 class ImmunityBlockedFlatSourceTests(TestCase):
     """Immunity-blocked negative sources must be excluded from FLAT stage (#639 fidelity).
 
@@ -688,3 +706,148 @@ class ImmunityBlockedFlatSourceTests(TestCase):
         }
         self.assertNotIn("Cursed Aim", flat_labels)
         self.assertIn("Warded Strike", flat_labels)
+
+
+class AuraPowerTermTests(TestCase):
+    def setUp(self):
+        from world.magic.factories import (
+            AffinityFactory,
+            CharacterAuraFactory,
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.affinity = AffinityFactory(name="Celestial")
+        self.resonance = ResonanceFactory(affinity=self.affinity)
+        gift = GiftFactory()
+        gift.resonances.add(self.resonance)
+        self.technique = TechniqueFactory(gift=gift)
+        CharacterAuraFactory(
+            character=self.character,
+            celestial=Decimal("50.00"),
+            primal=Decimal("30.00"),
+            abyssal=Decimal("20.00"),
+        )
+
+    def _ctx(self):
+        from world.magic.services.power_terms import PowerTermContext
+
+        return PowerTermContext(sheet=self.sheet, technique=self.technique, applicable_threads=[])
+
+    def test_returns_zero_without_config(self):
+        from world.magic.services.power_terms import aura_power_term
+
+        self.assertEqual(aura_power_term(self._ctx()), 0)
+
+    def test_affinity_alignment_axis(self):
+        from world.magic.factories import AuraPowerConfigFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        AuraPowerConfigFactory(affinity_alignment_bonus=20)  # 50% celestial * 20 = 10
+        self.assertEqual(aura_power_term(self._ctx()), 10)
+
+    def test_resonance_standing_axis_and_cap(self):
+        from world.magic.factories import AuraPowerConfigFactory, CharacterResonanceFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=self.resonance, lifetime_earned=30
+        )
+        AuraPowerConfigFactory(resonance_standing_bonus=2, resonance_standing_cap=40)
+        # 30 * 2 = 60, capped to 40
+        self.assertEqual(aura_power_term(self._ctx()), 40)
+
+    def test_no_technique_returns_zero(self):
+        from world.magic.factories import AuraPowerConfigFactory
+        from world.magic.services.power_terms import PowerTermContext, aura_power_term
+
+        AuraPowerConfigFactory(affinity_alignment_bonus=20)
+        ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
+        self.assertEqual(aura_power_term(ctx), 0)
+
+
+class ThreadPowerTermTests(TestCase):
+    def setUp(self):
+        from world.magic.factories import ResonanceFactory
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.resonance = ResonanceFactory()
+
+    def _thread(self, level=0):
+        from world.magic.factories import ThreadFactory
+
+        return ThreadFactory(owner=self.sheet, resonance=self.resonance, level=level)
+
+    def test_empty_returns_zero(self):
+        from world.magic.services.power_terms import PowerTermContext, thread_power_term
+
+        ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
+        self.assertEqual(thread_power_term(ctx), 0)
+
+    def test_sums_intensity_bump_for_passive_tier0(self):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadPullEffectFactory
+        from world.magic.services.power_terms import (
+            ApplicableThread,
+            PowerTermContext,
+            thread_power_term,
+        )
+
+        thread = self._thread(level=0)  # multiplier max(1, 0//10) = 1
+        ThreadPullEffectFactory(
+            as_intensity_bump=True,
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=0,
+            intensity_bump_amount=3,
+        )
+        ctx = PowerTermContext(
+            sheet=self.sheet,
+            technique=None,
+            applicable_threads=[ApplicableThread(thread=thread, pull_tier=0)],
+        )
+        self.assertEqual(thread_power_term(ctx), 3)
+
+    def test_flat_bonus_ignored(self):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadPullEffectFactory
+        from world.magic.services.power_terms import (
+            ApplicableThread,
+            PowerTermContext,
+            thread_power_term,
+        )
+
+        thread = self._thread(level=0)
+        ThreadPullEffectFactory(  # FLAT_BONUS (default) must NOT contribute to power
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=0,
+            flat_bonus_amount=9,
+        )
+        ctx = PowerTermContext(
+            sheet=self.sheet,
+            technique=None,
+            applicable_threads=[ApplicableThread(thread=thread, pull_tier=0)],
+        )
+        self.assertEqual(thread_power_term(ctx), 0)
+
+
+class CastPullDeclarationTests(TestCase):
+    def test_is_frozen_dataclass(self):
+        import dataclasses
+
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.types.pull import CastPullDeclaration
+
+        res = ResonanceFactory()
+        thread = ThreadFactory(resonance=res)
+        decl = CastPullDeclaration(resonance=res, tier=2, threads=(thread,))
+        self.assertEqual(decl.tier, 2)
+        self.assertEqual(decl.resonance, res)
+        self.assertEqual(decl.threads, (thread,))
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            decl.tier = 3  # frozen
