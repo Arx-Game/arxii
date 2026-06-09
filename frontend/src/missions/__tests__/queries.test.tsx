@@ -82,7 +82,7 @@ describe('useMissionTemplates', () => {
           arc_scope: 'global',
           cooldown: 'P1D',
           categories: [],
-          access_tier: 'open',
+          visibility: 'open',
         } as never,
       ],
     });

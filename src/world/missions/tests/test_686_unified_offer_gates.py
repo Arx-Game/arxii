@@ -27,7 +27,7 @@ from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.missions.constants import AccessTier, MissionStatus
+from world.missions.constants import MissionStatus, MissionVisibility
 from world.missions.factories import (
     MissionNodeFactory,
     MissionParticipantFactory,
@@ -394,11 +394,11 @@ class MissionOfferDetailsRequirementsOverrideTests(TestCase):
 
 
 class MissionTemplateGateCompositionTests(TestCase):
-    """`MissionTemplate.is_active`, `access_tier`, `level_band`, and
-    `availability_rule` are AND-composed with the offer's own gates per spec.
+    """`MissionTemplate.is_active`, `visibility` (#870), and `level_band`
+    are AND-composed with the offer's own gates per spec.
 
     These tests pin the composition contract identified by adversarial
-    review — without them, a level-50 / STAFF_ONLY / inactive template
+    review — without them, a level-50 / staff-only / inactive template
     or one whose availability_rule rejects the PC would silently leak
     through the unified offer path.
     """
@@ -412,25 +412,26 @@ class MissionTemplateGateCompositionTests(TestCase):
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertNotIn(offer, available_offers(session))
 
-    def test_staff_only_template_hides_from_non_staff(self):
+    def test_restricted_empty_rule_hides_from_non_staff(self):
+        """RESTRICTED + empty rule = emergent staff-only; non-staff never see it."""
         character, persona = _make_pc()
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
-        template.access_tier = AccessTier.STAFF_ONLY
-        template.save(update_fields=["access_tier"])
+        template.visibility = MissionVisibility.RESTRICTED
+        template.save(update_fields=["visibility"])
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertNotIn(offer, available_offers(session))
 
-    def test_staff_only_template_visible_to_staff_observer(self):
+    def test_restricted_template_visible_to_staff_observer(self):
         character, persona = _make_pc()
         # `is_staff_observer` walks `character.account.is_staff` — wire a
-        # staff account onto the character so the gate evaluates True.
+        # staff account onto the character so the bypass evaluates True.
         character.db_account = AccountFactory(is_staff=True)
         character.save(update_fields=["db_account"])
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
-        template.access_tier = AccessTier.STAFF_ONLY
-        template.save(update_fields=["access_tier"])
+        template.visibility = MissionVisibility.RESTRICTED
+        template.save(update_fields=["visibility"])
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertIn(offer, available_offers(session))
 
@@ -445,15 +446,30 @@ class MissionTemplateGateCompositionTests(TestCase):
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertNotIn(offer, available_offers(session))
 
-    def test_template_availability_rule_blocks(self):
-        """Template availability_rule is AND-composed; empty OR == False."""
+    def test_restricted_failing_rule_blocks(self):
+        """RESTRICTED: the availability_rule IS eligibility. Leafy always-false
+        rule (fresh PCs are level 0) so the evaluate path is exercised, not
+        the leafless-tree staff-only guard."""
         character, persona = _make_pc()
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
-        template.availability_rule = {"op": "OR", "of": []}
-        template.save(update_fields=["availability_rule"])
+        template.visibility = MissionVisibility.RESTRICTED
+        template.availability_rule = {"leaf": "min_character_level", "params": {"level": 99}}
+        template.save(update_fields=["visibility", "availability_rule"])
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertNotIn(offer, available_offers(session))
+
+    def test_open_template_ignores_failing_rule(self):
+        """OPEN: the predicate is not consulted (#870) — a stale always-false
+        rule left on the row must not hide an OPEN template."""
+        character, persona = _make_pc()
+        role = NPCRoleFactory()
+        offer, _, template = _make_mission_offer(role)
+        template.visibility = MissionVisibility.OPEN
+        template.availability_rule = {"op": "OR", "of": []}
+        template.save(update_fields=["visibility", "availability_rule"])
+        session = start_interaction(role=role, persona=persona, character=character)
+        self.assertIn(offer, available_offers(session))
 
 
 # ---------------------------------------------------------------------------
@@ -631,31 +647,50 @@ class IssueMissionContractTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Access-tier serializer no-op (regression guard)
+# Visibility flip + availability_rule validation (#870 — supersedes the
+# AccessTierFlipNoOpRegressionTests / #730 publishability gate)
 # ---------------------------------------------------------------------------
 
 
-class AccessTierFlipNoOpRegressionTests(TestCase):
-    """The legacy `is_publishable`-gated flip was stripped in #686 Phase 3.
-
-    Pin the current contract: `validate_access_tier` is a pass-through. A
-    future contributor re-introducing a guard (against the new offer
-    surface) should write a new test rather than silently breaking this
-    one — until that follow-up lands, the staff API allows tier flips
-    unconditionally.
+class VisibilityFlipAndRuleValidationTests(TestCase):
+    """#870: the visibility flip is a straight write — there is no "publish
+    to nobody" failure mode to guard (a RESTRICTED template no PC's rule
+    admits simply IS staff-only). What IS guarded at author time is the
+    rule's well-formedness: a malformed tree crashes every later
+    availability check, so `validate_availability_rule` rejects it with a
+    DRF ValidationError (HTTP 400 at the API surface).
     """
 
-    def test_serializer_validate_access_tier_is_passthrough(self):
+    def test_visibility_flip_is_unguarded(self):
+        from world.missions.serializers import MissionTemplateSerializer
+
+        template = MissionTemplateFactory(visibility=MissionVisibility.RESTRICTED)
+        serializer = MissionTemplateSerializer(
+            instance=template, data={"visibility": MissionVisibility.OPEN}, partial=True
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_malformed_rule_rejected(self):
         from world.missions.serializers import MissionTemplateSerializer
 
         template = MissionTemplateFactory()
-        serializer = MissionTemplateSerializer(instance=template)
-        # Both values pass through unchanged.
-        self.assertEqual(serializer.validate_access_tier(AccessTier.OPEN), AccessTier.OPEN)
-        self.assertEqual(
-            serializer.validate_access_tier(AccessTier.STAFF_ONLY),
-            AccessTier.STAFF_ONLY,
+        serializer = MissionTemplateSerializer(
+            instance=template,
+            data={"availability_rule": {"leaf": "no_such_leaf", "params": {}}},
+            partial=True,
         )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("availability_rule", serializer.errors)
+
+    def test_well_formed_rule_accepted(self):
+        from world.missions.serializers import MissionTemplateSerializer
+
+        template = MissionTemplateFactory()
+        rule = {"leaf": "min_character_level", "params": {"level": 3}}
+        serializer = MissionTemplateSerializer(
+            instance=template, data={"availability_rule": rule}, partial=True
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
 # ---------------------------------------------------------------------------

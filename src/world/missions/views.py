@@ -2,8 +2,8 @@
 
 D1 ships ``MissionTemplateViewSet`` — staff-only browse + detail. D2
 adds editor CRUD for nodes / options / routes / candidates / rewards.
-D3 adds the giver library. D4 adds access-tier flip + copy + staff-power
-actions. D5 adds the predicate-tree API.
+D3 adds the giver library. D4 adds the visibility flip + copy +
+staff-power actions. D5 adds the predicate-tree API.
 
 Every viewset in this module uses the project conventions:
 - ``IsAuthenticated + IsAdminUser`` permission stack (401 vs 403 split).
@@ -17,8 +17,6 @@ Every viewset in this module uses the project conventions:
   pure browse; ``viewsets.ViewSet`` + ``@extend_schema`` for non-CRUD
   surfaces per project_drf_spectacular_viewset_break.
 """
-
-import inspect
 
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -62,8 +60,8 @@ from world.missions.serializers import (
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
 )
+from world.predicates.catalog import leaf_params
 from world.predicates.predicates import LEAF_RESOLVERS
-from world.predicates.types import LeafResolver
 
 
 class MissionStudioPagination(PageNumberPagination):
@@ -143,8 +141,8 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
         """D4.3 — staff-power: drop this mission on a character.
 
         POST body: ``{"character": <ObjectDB pk>}``. Bypasses all
-        availability filters (predicate / cooldown / level band / access
-        tier) — operator gesture, not a normal acceptance flow. Returns
+        availability filters (visibility / predicate / cooldown / level
+        band) — operator gesture, not a normal acceptance flow. Returns
         the new MissionInstance shape.
         """
         from evennia.objects.models import ObjectDB  # noqa: PLC0415
@@ -322,50 +320,6 @@ class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-_TYPE_TAGS: dict[type, str] = {int: "int", bool: "bool", str: "str", float: "float"}
-
-
-def _annotation_tag(annotation: object) -> str:
-    """Map a resolver param annotation to a string tag the FE can switch on.
-
-    Used by the predicate-leaf catalog endpoint so the Studio's builder
-    can coerce ``<Input>`` strings into the right Python type before save
-    — without this, int-typed leaves (e.g. ``min_character_level``) blow
-    up at evaluate time with ``TypeError: '>=' not supported between
-    instances of 'int' and 'str'``.
-
-    Unknown / unannotated params fall back to ``"str"`` (the safe default
-    — most resolvers either accept a slug or ``int(...)``-coerce on read).
-    """
-    return _TYPE_TAGS.get(annotation, "str") if isinstance(annotation, type) else "str"
-
-
-def _leaf_params(resolver: LeafResolver) -> list[dict[str, str]]:
-    """Return the leaf's authored param names + type tags (everything after ctx).
-
-    The resolver module uses ``from __future__ import annotations``, so
-    ``Parameter.annotation`` is a string rather than the type object.
-    Re-resolve via ``typing.get_type_hints`` so the tag mapping works.
-    """
-    import typing  # noqa: PLC0415
-
-    sig = inspect.signature(resolver)
-    try:
-        hints = typing.get_type_hints(resolver)
-    except (NameError, AttributeError, TypeError):
-        # If a resolver's annotations reference an as-yet-unresolvable
-        # forward reference (NameError) or a non-evaluable annotation
-        # (TypeError / AttributeError on inner typing surfaces), fall
-        # back to the raw (string) annotation — which falls through to
-        # "str" via the isinstance check in _annotation_tag.
-        hints = {}
-    return [
-        {"name": name, "type": _annotation_tag(hints.get(name, param.annotation))}
-        for name, param in list(sig.parameters.items())[1:]
-        if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
-    ]
-
-
 class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     """D5 — the available predicate-leaf catalog for the builder palette.
 
@@ -373,7 +327,9 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     str}, ...]}]`` for every leaf in ``LEAF_RESOLVERS``. The Mission
     Studio's predicate-tree builder uses this to render leaf-type
     dropdowns + per-param input widgets typed correctly (int vs str)
-    without hard-coding the registry on the frontend.
+    without hard-coding the registry on the frontend. Param introspection
+    lives in ``world.predicates.catalog`` — shared with the server-side
+    tree validator (#870) so palette and validation can't drift.
     """
 
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -383,7 +339,7 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     )
     def list(self, request: Request) -> Response:
         catalog = [
-            {"name": name, "params": _leaf_params(resolver)}
+            {"name": name, "params": leaf_params(resolver)}
             for name, resolver in sorted(LEAF_RESOLVERS.items())
         ]
         return Response(catalog)

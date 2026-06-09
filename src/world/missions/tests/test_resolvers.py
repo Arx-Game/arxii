@@ -630,3 +630,137 @@ class SocietyStandingResolverTests(TestCase):
         ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
         with self.assertRaises(KeyError):
             ctx.has_leaf("min_society_standing", society="Glorious Society", tier="bogus")
+
+
+class OrgRankResolverTests(TestCase):
+    """min_org_rank (#870): presented persona holds at least ``rank`` in the org.
+
+    ``OrganizationMembership.rank`` is 1=leader … 5=lowest, so "at least
+    rank N" means ``membership.rank <= N``. Distinct from
+    ``min_org_reputation`` (reputation tier, not membership rank).
+    Persona-aware + fail-closed like the other membership leaves.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.primary = cls.sheet.primary_persona
+        cls.guild = OrganizationFactory(name="Rank Guild")
+        OrganizationMembershipFactory(persona=cls.primary, organization=cls.guild, rank=3)
+
+    def setUp(self) -> None:
+        self.ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+
+    def test_true_at_exact_rank(self) -> None:
+        self.assertTrue(self.ctx.has_leaf("min_org_rank", org="Rank Guild", rank=3))
+
+    def test_true_when_threshold_is_lower_in_hierarchy(self) -> None:
+        # Rank 3 satisfies "at least rank 5" (5 = lowest).
+        self.assertTrue(self.ctx.has_leaf("min_org_rank", org="Rank Guild", rank=5))
+
+    def test_false_when_threshold_is_higher_in_hierarchy(self) -> None:
+        # Rank 3 does NOT satisfy "at least rank 2" (closer to leader).
+        self.assertFalse(self.ctx.has_leaf("min_org_rank", org="Rank Guild", rank=2))
+
+    def test_false_when_not_a_member(self) -> None:
+        OrganizationFactory(name="Other Guild")
+        self.assertFalse(self.ctx.has_leaf("min_org_rank", org="Other Guild", rank=5))
+
+    def test_false_when_no_such_org(self) -> None:
+        self.assertFalse(self.ctx.has_leaf("min_org_rank", org="Phantom Guild", rank=5))
+
+    def test_false_when_no_presented_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(ctx.has_leaf("min_org_rank", org="Rank Guild", rank=5))
+
+    def test_evaluate_dispatches(self) -> None:
+        rule = {"leaf": "min_org_rank", "params": {"org": "Rank Guild", "rank": 3}}
+        self.assertTrue(evaluate(rule, self.ctx))
+
+
+class ResonanceLevelResolverTests(TestCase):
+    """min_resonance_level (#870): lifetime_earned for the named resonance >= amount.
+
+    Gates on the monotonic ``lifetime_earned`` total, NOT the spendable
+    ``balance`` — spending resonance currency must never revoke earned
+    eligibility. Distinct from ``has_resonance`` (bare row existence).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.resonance = ResonanceFactory(name="Umbra")
+        # Spent down to 2 spendable, but 10 earned over the lifetime.
+        CharacterResonanceFactory(
+            character_sheet=cls.sheet,
+            resonance=cls.resonance,
+            balance=2,
+            lifetime_earned=10,
+        )
+
+    def setUp(self) -> None:
+        self.ctx = CharacterPredicateContext(self.character)
+
+    def test_true_at_exact_amount(self) -> None:
+        self.assertTrue(self.ctx.has_leaf("min_resonance_level", resonance="Umbra", amount=10))
+
+    def test_true_below_lifetime_even_though_balance_is_spent(self) -> None:
+        # balance is 2, but the gate reads lifetime_earned (10) — spending
+        # must not revoke eligibility.
+        self.assertTrue(self.ctx.has_leaf("min_resonance_level", resonance="Umbra", amount=5))
+
+    def test_false_above_lifetime(self) -> None:
+        self.assertFalse(self.ctx.has_leaf("min_resonance_level", resonance="Umbra", amount=11))
+
+    def test_false_when_no_row(self) -> None:
+        ResonanceFactory(name="Lux")
+        self.assertFalse(self.ctx.has_leaf("min_resonance_level", resonance="Lux", amount=1))
+
+    def test_false_when_no_such_resonance(self) -> None:
+        self.assertFalse(self.ctx.has_leaf("min_resonance_level", resonance="Nope", amount=1))
+
+    def test_evaluate_dispatches(self) -> None:
+        rule = {"leaf": "min_resonance_level", "params": {"resonance": "Umbra", "amount": 10}}
+        self.assertTrue(evaluate(rule, self.ctx))
+
+
+class SocietyMembershipResolverTests(TestCase):
+    """is_member_of_society (#870): presented persona belongs to ANY org in the society.
+
+    First-class rather than an authored OR over ``is_member_of_org`` —
+    org rosters change, and an enumerated rule silently rots when a new
+    org joins the society. Persona-aware + fail-closed.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.primary = cls.sheet.primary_persona
+        cls.society = SocietyFactory(name="Member Society")
+        cls.org = OrganizationFactory(name="Society Org", society=cls.society)
+        OrganizationMembershipFactory(persona=cls.primary, organization=cls.org)
+
+    def setUp(self) -> None:
+        self.ctx = CharacterPredicateContext(self.character, presented_persona=self.primary)
+
+    def test_true_when_member_of_an_org_in_society(self) -> None:
+        self.assertTrue(self.ctx.has_leaf("is_member_of_society", society="Member Society"))
+
+    def test_false_when_no_membership_in_society(self) -> None:
+        other_society = SocietyFactory(name="Other Society")
+        OrganizationFactory(name="Other Society Org", society=other_society)
+        self.assertFalse(self.ctx.has_leaf("is_member_of_society", society="Other Society"))
+
+    def test_false_when_no_such_society(self) -> None:
+        self.assertFalse(self.ctx.has_leaf("is_member_of_society", society="Phantom Society"))
+
+    def test_false_when_no_presented_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(ctx.has_leaf("is_member_of_society", society="Member Society"))
+
+    def test_evaluate_dispatches(self) -> None:
+        rule = {"leaf": "is_member_of_society", "params": {"society": "Member Society"}}
+        self.assertTrue(evaluate(rule, self.ctx))

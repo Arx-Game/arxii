@@ -9,7 +9,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
-from world.missions.constants import AccessTier, ArcScope, RewardGroupRule
+from world.missions.constants import ArcScope, MissionVisibility, RewardGroupRule
 from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 from world.missions.models import MissionTemplate
 
@@ -45,7 +45,7 @@ class MissionTemplateCreateTests(TestCase):
         self.assertEqual(body["name"], "Heist the Castle")
         self.assertIn("id", body)
         # Defaults verified.
-        self.assertEqual(body["access_tier"], AccessTier.STAFF_ONLY.value)
+        self.assertEqual(body["visibility"], MissionVisibility.RESTRICTED.value)
         self.assertEqual(body["base_weight"], 1)
         self.assertTrue(body["is_active"])
         self.assertEqual(body["reward_group_rule"], RewardGroupRule.ALL_EQUAL.value)

@@ -6,13 +6,11 @@ eligibility filter, and the three anti-nag guards (non-trigger target, active
 trigger mission already held, per-(giver, character) cooldown).
 """
 
-from unittest.mock import patch
-
 from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.missions.constants import GiverKind, MissionStatus
+from world.missions.constants import GiverKind, MissionStatus, MissionVisibility
 from world.missions.factories import (
     MissionGiverFactory,
     MissionInstanceFactory,
@@ -63,8 +61,13 @@ class TriggerDispatchTests(TestCase):
         self.assertIsNone(maybe_dispatch_on_enter(self.character, bare_room))
 
     def test_ineligible_template_skipped(self) -> None:
-        with patch("world.missions.services.trigger_dispatch.evaluate", return_value=False):
-            self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
+        # RESTRICTED + empty rule = emergent staff-only (#870); the
+        # non-staff character is filtered out of the draw pool. Regression
+        # guard for the pre-#870 gap where the trigger path ignored the
+        # template's audience gate entirely.
+        self.template.visibility = MissionVisibility.RESTRICTED
+        self.template.save(update_fields=["visibility"])
+        self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
         self.assertFalse(
             MissionInstance.objects.filter(participants__character=self.character).exists()
         )

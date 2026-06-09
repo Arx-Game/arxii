@@ -26,7 +26,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
     MAX_PERCENT_REPLACE,
-    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
@@ -34,6 +33,7 @@ from world.missions.constants import (
     GiverKind,
     JointCombine,
     MissionStatus,
+    MissionVisibility,
     OptionKind,
     OptionSource,
     RewardGroupRule,
@@ -150,19 +150,18 @@ class MissionTemplate(SharedMemoryModel):
         help_text="Phase 0 predicate tree gating front-door availability for this template.",
     )
     is_active = models.BooleanField(default=True)
-    access_tier = models.CharField(
+    visibility = models.CharField(
         max_length=16,
-        choices=AccessTier.choices,
-        default=AccessTier.STAFF_ONLY,
+        choices=MissionVisibility.choices,
+        default=MissionVisibility.RESTRICTED,
         db_index=True,
         help_text=(
-            "Audience gate: STAFF_ONLY hides the template from all but "
-            "is_staff_observer characters (the 'in testing' state — the "
-            "production-safe default for new templates). OPEN lets the "
-            "usual predicate / cooldown / level-band filters take over. "
-            "Phase B-7 intentionally ships only two tiers; richer tiers "
-            "(society, GM-level, etc.) follow after a permission-design "
-            "brainstorm."
+            "Audience gate (#870): OPEN surfaces the template to everyone "
+            "(availability_rule is not consulted); RESTRICTED makes the "
+            "availability_rule predicate the eligibility gate — an empty "
+            "rule admits no PC (the emergent staff-only / in-testing "
+            "state, and the production-safe default for new templates). "
+            "Staff (is_staff_observer) always bypass."
         ),
     )
     categories = models.ManyToManyField(
@@ -1231,10 +1230,9 @@ class MissionGiver(SharedMemoryModel):
         authoring tools can save mid-edit state. ``is_publishable`` is the
         boolean signal that an authoring UI / admin surface uses to gate
         the "ready for live audience" transition (e.g. the operator flipping
-        ``MissionTemplate.access_tier`` from ``STAFF_ONLY`` to ``OPEN``).
+        ``MissionTemplate.visibility`` from ``RESTRICTED`` to ``OPEN``).
         Runtime enforcement in ``offer_missions`` is deferred until the
-        Phase-D offering surface and the broader visibility/permission
-        brainstorm — today this property is consumed only by the
+        Phase-D offering surface — today this property is consumed only by the
         authoring layer. NOT a ``cached_property`` — ``target`` is
         mutable and ``SharedMemoryModel`` keeps the instance long-lived;
         recomputing on access is the safe choice.

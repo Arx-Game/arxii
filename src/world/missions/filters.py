@@ -12,7 +12,7 @@ for editor CRUD and giver library land in D2/D3.
 from django.db.models import QuerySet
 import django_filters
 
-from world.missions.constants import AccessTier, ArcScope
+from world.missions.constants import ArcScope, MissionVisibility
 from world.missions.models import (
     MissionGiver,
     MissionNode,
@@ -30,7 +30,7 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
     Plan-defined surface: name (substring), level band, area (giver→
     room→Area; deferred — see DESIGN below), category (by name), risk,
     org (mission-offer role's faction by name; #686),
-    status (is_active / arc_scope / access_tier).
+    status (is_active / arc_scope / visibility).
     """
 
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
@@ -43,7 +43,9 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
     risk_tier = django_filters.NumberFilter(field_name="risk_tier")
     is_active = django_filters.BooleanFilter(field_name="is_active")
     arc_scope = django_filters.ChoiceFilter(field_name="arc_scope", choices=ArcScope.choices)
-    access_tier = django_filters.ChoiceFilter(field_name="access_tier", choices=AccessTier.choices)
+    visibility = django_filters.ChoiceFilter(
+        field_name="visibility", choices=MissionVisibility.choices
+    )
     category = django_filters.CharFilter(field_name="categories__name", lookup_expr="iexact")
     org = django_filters.CharFilter(
         field_name="offer_details__offer__role__faction_affiliation__name",

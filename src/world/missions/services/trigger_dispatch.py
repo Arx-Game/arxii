@@ -3,7 +3,8 @@
 When a character enters a ``ROOM_TRIGGER`` room or examines an
 ``ENVIRONMENTAL_DETAIL`` object, the giver bound to that object may hand the
 character a mission drawn from its ``templates`` pool. Each template self-gates
-via its own ``availability_rule`` (Option A), so dispatch just filters the pool
+via the unified visibility gate (``template_visible_to`` — OPEN/RESTRICTED +
+``availability_rule`` + staff bypass, #870), so dispatch just filters the pool
 to what the character is eligible for and draws one at uniform weight.
 
 Guards (the anti-nag layer): the giver must be active; the character must not
@@ -18,7 +19,7 @@ room-bound giver), wrapped so a dispatch hiccup never breaks movement/look.
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.db.models import Q
 from django.utils import timezone
@@ -26,15 +27,17 @@ from django.utils import timezone
 from world.checks.outcome_utils import select_weighted
 from world.missions.constants import GiverKind, MissionStatus
 from world.missions.models import MissionGiver, MissionGiverCooldown, MissionInstance
+from world.missions.services.visibility import template_visible_to
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import send_narrative_message
-from world.predicates.predicates import CharacterPredicateContext, evaluate
+from world.scenes.services import MissingPrimaryPersonaError, persona_for_character
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.missions.models import MissionTemplate
 
 # Default re-offer cooldown when a drawn template carries no cooldown of its own.
@@ -81,11 +84,25 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     if _holds_active_trigger_mission(character):
         return None
 
-    ctx = CharacterPredicateContext(character)
+    # Mission givers gate on the persona the character presents (#870).
+    # Today "presented" resolves to the PRIMARY persona — the same
+    # convention the NPC-offer path uses (npc_services views call
+    # persona_for_character at interaction start); there is no ambient
+    # worn-mask state yet, so when one lands, swap this resolver and both
+    # paths follow. Resolved defensively: a sheet-less character (no
+    # PRIMARY persona) gets None, so persona-keyed leaves fail closed
+    # rather than dispatch blowing up movement/look.
+    try:
+        # The movement/examine hooks pass the puppet, which is always a
+        # Character typeclass at runtime; the param stays ObjectDB-typed
+        # to match the hook signatures.
+        persona = persona_for_character(cast("Character", character))
+    except MissingPrimaryPersonaError:
+        persona = None
     eligible = [
         template
         for template in giver.templates.all()
-        if template.is_active and evaluate(template.availability_rule or {}, ctx)
+        if template.is_active and template_visible_to(template, character, persona=persona)
     ]
     if not eligible:
         return None
