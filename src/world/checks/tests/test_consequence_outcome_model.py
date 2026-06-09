@@ -114,6 +114,108 @@ class ConsequenceOutcomeBasicTests(TestCase):
         self.assertEqual(mod.value, -5)
 
 
+class RecordConsequenceOutcomeTests(TestCase):
+    """Tests for the record_consequence_outcome service-function writer."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
+
+        cls.ConsequenceOutcome = ConsequenceOutcome
+        cls.ConsequenceOutcomeModifier = ConsequenceOutcomeModifier
+
+        cls.sheet = CharacterSheetFactory()
+        cls.check_type = CheckTypeFactory()
+        cls.pool = ConsequencePoolFactory()
+        cls.consequence = ConsequenceFactory()
+        cls.interaction = InteractionFactory()
+
+    def test_record_consequence_outcome_persists_record_and_modifiers(self) -> None:
+        """record_consequence_outcome creates one ConsequenceOutcome and two modifier rows."""
+        from world.checks.services import record_consequence_outcome
+        from world.checks.types import ModifierBreakdown, ModifierContribution
+
+        breakdown = ModifierBreakdown(
+            contributions=[
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.ROLLMOD,
+                    source_label="Roll modifier",
+                    value=2,
+                ),
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CONDITION,
+                    source_label="Inspired",
+                    value=3,
+                ),
+            ]
+        )
+
+        outcome = record_consequence_outcome(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            pool=self.pool,
+            selected_consequence=self.consequence,
+            breakdown=breakdown,
+            combat_interaction=self.interaction,
+            summary="Test summary",
+        )
+
+        # One ConsequenceOutcome row created.
+        self.assertEqual(self.ConsequenceOutcome.objects.count(), 1)
+
+        # modifier_total equals breakdown.total (2 + 3 = 5).
+        self.assertEqual(outcome.modifier_total, breakdown.total)
+
+        # Two modifier rows attached.
+        self.assertEqual(outcome.modifiers.count(), 2)
+
+        # Modifier rows match contributions.
+        mods = list(outcome.modifiers.order_by("value"))
+        self.assertEqual(mods[0].source_kind, ModifierSourceKind.ROLLMOD)
+        self.assertEqual(mods[0].source_label, "Roll modifier")
+        self.assertEqual(mods[0].value, 2)
+        self.assertEqual(mods[1].source_kind, ModifierSourceKind.CONDITION)
+        self.assertEqual(mods[1].source_label, "Inspired")
+        self.assertEqual(mods[1].value, 3)
+
+        # combat_interaction_timestamp is populated and equals interaction.timestamp.
+        self.assertIsNotNone(outcome.combat_interaction_timestamp)
+        self.assertEqual(outcome.combat_interaction_timestamp, self.interaction.timestamp)
+
+    def test_record_consequence_outcome_neither_source_raises(self) -> None:
+        """Passing neither combat_interaction nor challenge_record raises ValueError."""
+        from world.checks.services import record_consequence_outcome
+        from world.checks.types import ModifierBreakdown
+
+        with self.assertRaises(ValueError):
+            record_consequence_outcome(
+                character_sheet=self.sheet,
+                check_type=self.check_type,
+                pool=self.pool,
+                selected_consequence=None,
+                breakdown=ModifierBreakdown(),
+            )
+
+    def test_record_consequence_outcome_both_sources_raises(self) -> None:
+        """Passing both combat_interaction and challenge_record raises ValueError."""
+        from unittest.mock import MagicMock
+
+        from world.checks.services import record_consequence_outcome
+        from world.checks.types import ModifierBreakdown
+
+        fake_record = MagicMock()
+        with self.assertRaises(ValueError):
+            record_consequence_outcome(
+                character_sheet=self.sheet,
+                check_type=self.check_type,
+                pool=self.pool,
+                selected_consequence=None,
+                breakdown=ModifierBreakdown(),
+                combat_interaction=self.interaction,
+                challenge_record=fake_record,
+            )
+
+
 @tag("postgres")
 class ConsequenceOutcomeConstraintTests(TestCase):
     """DB-level CheckConstraint: exactly one source must be set.

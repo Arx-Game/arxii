@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.checks.constants import ModifierSourceKind
+from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
 from world.classes.models import CharacterClassLevel, PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
@@ -23,8 +24,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import CheckType
-    from world.scenes.models import Scene
+    from world.checks.models import CheckType, Consequence
+    from world.mechanics.models import CharacterChallengeRecord
+    from world.scenes.models import Interaction, Scene
     from world.traits.handlers import TraitHandler
 
 
@@ -296,6 +298,87 @@ def chart_has_success_outcomes(rank_difference: int) -> bool:
         chart=chart,
         outcome__success_level__gt=0,
     ).exists()
+
+
+def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs all context fields
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    pool,  # actions.ConsequencePool — no TYPE_CHECKING import to avoid cross-app cycle
+    selected_consequence: "Consequence | None",
+    breakdown: ModifierBreakdown,
+    *,
+    combat_interaction: "Interaction | None" = None,
+    challenge_record: "CharacterChallengeRecord | None" = None,
+    summary: str = "",
+) -> ConsequenceOutcome:
+    """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
+
+    Exactly one of ``combat_interaction`` / ``challenge_record`` must be provided;
+    ValueError is raised before any DB write if the constraint would be violated.
+
+    ``combat_interaction_timestamp`` is derived from ``combat_interaction.timestamp``
+    (the same attribute CombatRoundAction.interaction_timestamp is denormalized from)
+    and is populated atomically with the FK, as required by the composite FK
+    constraint on the range-partitioned scenes_interaction table.
+
+    Modifier rows are bulk-created in a single query (no per-row saves).
+
+    Args:
+        character_sheet: The CharacterSheet of the resolving character.
+        check_type: The CheckType that was resolved.
+        pool: The actions.ConsequencePool the roulette ran against.
+        selected_consequence: The Consequence that was selected (may be None if no
+            consequence was triggered).
+        breakdown: ModifierBreakdown snapshot at resolution time — its total and
+            individual contributions are persisted.
+        combat_interaction: Interaction created for the combat resolution.
+            Mutually exclusive with challenge_record.
+        challenge_record: CharacterChallengeRecord this resolved against.
+            Mutually exclusive with combat_interaction.
+        summary: Optional human-readable summary string.
+
+    Returns:
+        The newly created ConsequenceOutcome instance.
+
+    Raises:
+        ValueError: If neither or both of combat_interaction/challenge_record are provided.
+    """
+    both_set = combat_interaction is not None and challenge_record is not None
+    neither_set = combat_interaction is None and challenge_record is None
+    if both_set or neither_set:
+        raise ValueError(
+            "record_consequence_outcome requires exactly one of combat_interaction or "
+            "challenge_record; got " + ("both" if both_set else "neither") + "."
+        )
+
+    outcome = ConsequenceOutcome.objects.create(
+        character=character_sheet,
+        check_type=check_type,
+        pool=pool,
+        selected_consequence=selected_consequence,
+        modifier_total=breakdown.total,
+        summary=summary,
+        combat_interaction=combat_interaction,
+        combat_interaction_timestamp=(
+            combat_interaction.timestamp if combat_interaction is not None else None
+        ),
+        challenge_record=challenge_record,
+    )
+
+    if breakdown.contributions:
+        ConsequenceOutcomeModifier.objects.bulk_create(
+            [
+                ConsequenceOutcomeModifier(
+                    outcome=outcome,
+                    source_kind=contribution.source_kind,
+                    source_label=contribution.source_label,
+                    value=contribution.value,
+                )
+                for contribution in breakdown.contributions
+            ]
+        )
+
+    return outcome
 
 
 def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | None:
