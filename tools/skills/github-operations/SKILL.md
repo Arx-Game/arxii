@@ -53,6 +53,10 @@ gh issue view 651 --json number,title         # ← verify 651, NOT 652
    it; use a background `until` loop or Monitor).
 6. **Read-only `gh` is safe to batch; writes are not.** `gh issue view`, `gh pr checks`,
    `gh api` GETs can run freely. Anything that changes server state follows gates 1–3.
+7. **Repeat the closing keyword per issue.** To auto-close several issues when a PR
+   merges, put the keyword before *each* number: `Closes #1, closes #2, closes #3`. GitHub
+   does **not** parse `Closes #1 #2 #3` as a list — it closes only `#1`; the rest stay open
+   and must be closed by hand. Bites any multi-issue PR, not just bulk ones.
 
 ## Quick reference
 
