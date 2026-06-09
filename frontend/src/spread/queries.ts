@@ -53,7 +53,8 @@ async function fetchSpreadSpecializations(): Promise<SpreadForm[]> {
   if (!res.ok) {
     throw new Error('Failed to load telling forms.');
   }
-  return res.json() as Promise<SpreadForm[]>;
+  const body = (await res.json()) as { results: SpreadForm[] };
+  return body.results;
 }
 
 export function useSpreadSpecializationsQuery(enabled = true) {
@@ -89,7 +90,8 @@ async function fetchSpreadableDeeds(personaId: number): Promise<SpreadableDeed[]
   if (!res.ok) {
     throw new Error('Failed to load deeds you can spread.');
   }
-  return res.json() as Promise<SpreadableDeed[]>;
+  const body = (await res.json()) as { results: SpreadableDeed[] };
+  return body.results;
 }
 
 export function useSpreadableDeedsQuery(personaId: number | null, enabled = true) {

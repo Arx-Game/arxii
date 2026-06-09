@@ -325,6 +325,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
         persona = self.get_object()
         deeds = get_spreadable_deeds(persona)
+        page = self.paginate_queryset(deeds)
+        if page is not None:
+            return self.get_paginated_response(SpreadableDeedSerializer(page, many=True).data)
         return Response(SpreadableDeedSerializer(deeds, many=True).data)
 
     @extend_schema(responses=SpreadSpecializationSerializer(many=True), tags=["personas"])
@@ -334,6 +337,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
         from world.societies.spread_services import get_spread_specializations  # noqa: PLC0415
 
         specs = get_spread_specializations()
+        page = self.paginate_queryset(specs)
+        if page is not None:
+            return self.get_paginated_response(SpreadSpecializationSerializer(page, many=True).data)
         return Response(SpreadSpecializationSerializer(specs, many=True).data)
 
     @extend_schema(
