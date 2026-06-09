@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
     from world.magic.models import Technique
+    from world.magic.types.pull import CastPullDeclaration
 
 # Cache for social_engagement category - initialized on first access.
 _SOCIAL_ENGAGEMENT_CATEGORY: KudosSourceCategory | None = None
@@ -346,6 +347,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     difficulty: int,
     context: ResolutionContext,
     strain_commitment: int = 0,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
 
@@ -368,6 +370,19 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         EnhancedSceneActionResult with both action_resolution and technique_result.
     """
     from world.magic.services import use_technique  # noqa: PLC0415
+    from world.magic.services.cast_threads import build_cast_applicable_threads  # noqa: PLC0415
+    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    location_id = location.pk if location is not None else None
+    sheet = _get_character_sheet(character)
+    applicable_threads = (
+        build_cast_applicable_threads(
+            sheet, technique, location_id=location_id, cast_pull=cast_pull
+        )
+        if sheet is not None
+        else None
+    )
 
     technique_result = use_technique(
         character=character,
@@ -380,6 +395,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,
+        applicable_threads=applicable_threads,
+        cast_pull=cast_pull,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
