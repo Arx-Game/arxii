@@ -133,3 +133,29 @@ class DerivedOutcomeRowsTest(TestCase):
         outsider = AccountFactory()
         detail = _build_outcome_detail(self.interaction.pk, outsider)
         assert detail.effects == []
+
+    def test_caster_sees_power_ledger(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+        from world.magic.types.power_ledger import PowerLedgerBuilder
+        from world.scenes.power_ledger_services import persist_power_ledger
+
+        persist_power_ledger(
+            interaction=self.interaction, ledger=PowerLedgerBuilder(base=5).build()
+        )
+        self.account.is_staff = True
+        self.account.save()
+        detail = _build_outcome_detail(self.interaction.pk, self.account)
+        assert detail.power_ledger is not None
+        assert detail.power_ledger.total == 5
+
+    def test_non_caster_gets_null_ledger_but_keeps_effects(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+        from world.magic.types.power_ledger import PowerLedgerBuilder
+        from world.scenes.power_ledger_services import persist_power_ledger
+
+        persist_power_ledger(
+            interaction=self.interaction, ledger=PowerLedgerBuilder(base=5).build()
+        )
+        outsider = AccountFactory()
+        detail = _build_outcome_detail(self.interaction.pk, outsider)
+        assert detail.power_ledger is None
