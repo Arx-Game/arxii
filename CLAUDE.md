@@ -70,37 +70,20 @@ frontend is the primary game interface — design every feature for modern web U
 a secondary compatibility goal, **not** the design target: do not design features
 around text-command-and-response patterns.
 
-The backend is **action-centric**. Both entry paths converge on `action.run()`:
+The backend is **action-centric, not flow-based**: both the web frontend
+(WebSocket / REST dispatch) and telnet commands converge on `action.run()`. An
+`Action` (`src/actions/`) owns its prerequisites (permission checks) and execution,
+calling **service functions** (`src/flows/service_functions/`) for state changes.
+**Flows** (`src/flows/`) are a reactive, event-driven layer (triggers), **not** the
+primary path. Game logic lives in actions and the service functions they call;
+commands are a thin telnet-compatibility layer with no business logic.
 
-- **Web (primary):** frontend → WebSocket `execute_action` (or REST `POST
-  /api/actions/characters/<id>/dispatch/`) → `dispatch_player_action()` →
-  `action.run()`.
-- **Telnet (compatibility):** text → command `parse()`/`func()` → `action.run()`.
-
-- **Actions** (`src/actions/`) — the core unit of game behavior. An `Action`
-  subclass overrides `get_prerequisites()` (permission/availability checks) and
-  `execute()`; stateless singletons registered in `registry.py`. Database entities
-  (techniques, conditions, distinctions) modify base actions via `ActionEnhancement`
-  + typed effect-config rows. See `src/actions/CLAUDE.md`.
-- **Service functions** (`src/flows/service_functions/`) — reusable game-state
-  primitives (movement, communication, inventory, perception, conditions). Called
-  directly by actions, by flows, and by API views.
-- **Flows** (`src/flows/`) — reactive, event-driven workflows, **not** the primary
-  path. **Triggers** (DB-defined; `src/flows/emit.py`) match emitted events and run
-  flows (e.g. condition decay, reactive effects) and can cancel the stack to
-  suppress default behavior. **Object states** (`src/flows/object_states/`:
-  `CharacterState`, `RoomState`, …) are ephemeral scene-state wrappers used during a
-  flow run. See `src/flows/CLAUDE.md`.
-- **Scheduled tasks** — a custom Evennia game-clock scheduler (not Celery) ticks
-  periodic tasks (AP regen, weekly rollover, timed combat) registered in
-  `src/world/game_clock/tasks.py`.
-
-Game logic lives in **actions and the service functions they call**; flows add
-reactive/event-driven behavior. Commands (`src/commands/`) are a thin
-telnet-compatibility layer with no business logic — see `src/commands/CLAUDE.md`.
-Custom typeclasses live in `src/typeclasses/`; server config in `src/server/`.
-Python 3.13+ (mise), Node 20, `uv` for deps; env file `src/.env`; Django commands
-run from `src/`.
+For each layer's detail, read the code-adjacent app guides (also loaded when you
+work in those dirs): **`src/actions/CLAUDE.md`** (action lifecycle, enhancements,
+effects), **`src/commands/CLAUDE.md`** (telnet layer), **`src/flows/CLAUDE.md`**
+(flows, triggers, object states). Custom typeclasses live in `src/typeclasses/`;
+server config in `src/server/`. Python 3.13+ (mise), Node 20, `uv` for deps; env
+file `src/.env`; Django commands run from `src/`.
 
 ## Where to Look (consult before starting)
 
