@@ -21,10 +21,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from world.npc_services.filters import (
+    MissionOfferDetailsFilterSet,
     NPCRoleFilterSet,
     NPCServiceOfferFilterSet,
     NPCStandingFilterSet,
     OfferCooldownFilterSet,
+    PermitOfferDetailsFilterSet,
 )
 from world.npc_services.models import (
     MissionOfferDetails,
@@ -122,6 +124,8 @@ class PermitOfferDetailsViewSet(viewsets.ModelViewSet):
     serializer_class = PermitOfferDetailsSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = NPCServicesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PermitOfferDetailsFilterSet
 
 
 class MissionOfferDetailsViewSet(viewsets.ModelViewSet):
@@ -139,6 +143,8 @@ class MissionOfferDetailsViewSet(viewsets.ModelViewSet):
     serializer_class = MissionOfferDetailsSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = NPCServicesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MissionOfferDetailsFilterSet
 
 
 # ---------------------------------------------------------------------------

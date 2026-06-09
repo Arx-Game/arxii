@@ -13298,6 +13298,10 @@ paths:
         sets `offer` and the catalog uniqueness `(role, mission_template)`
         is enforced at the DB level via the auto-mirrored FK.
       parameters:
+      - in: query
+        name: offer
+        schema:
+          type: number
       - name: page
         required: false
         in: query
@@ -13310,6 +13314,10 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: role
+        schema:
+          type: number
       tags:
       - npc-services
       security:
@@ -13630,6 +13638,14 @@ paths:
       operationId: npc_services_permit_details_list
       description: Staff CRUD for permit offer details (1:1 to an NPCServiceOffer).
       parameters:
+      - in: query
+        name: building_kind
+        schema:
+          type: number
+      - in: query
+        name: offer
+        schema:
+          type: number
       - name: page
         required: false
         in: query
