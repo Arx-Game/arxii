@@ -178,6 +178,25 @@ class TestRequestTechniqueCastRouting(CastScenarioMixin):
         self.assertTrue(pose.persona.is_system)
         self.assertEqual(cast.request.result_interaction, pose)
 
+    def test_self_cast_creates_action_interaction_with_ledger(self) -> None:
+        """The cast creates an ACTION interaction for the caster carrying ledger rows."""
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            technique=technique,
+        )
+
+        request = cast.request
+        request.refresh_from_db()
+        assert request.action_interaction_id is not None
+        action_int = request.action_interaction
+        assert action_int.mode == InteractionMode.ACTION
+        assert action_int.persona_id == self.initiator.pk
+        assert list(action_int.power_ledger_entries.all()), "ledger persisted on cast ACTION"
+
     def test_self_cast_persists_strain_commitment(self) -> None:
         """strain_commitment forwarded on the immediate path is stored on the request."""
         technique = make_benign_castable_technique()

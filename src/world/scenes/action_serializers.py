@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.scenes.action_constants import ConsentDecision
@@ -224,6 +225,7 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
     anima_recovery = serializers.SerializerMethodField()
     power_ledger = serializers.SerializerMethodField()
 
+    @extend_schema_field(PowerLedgerSerializer)
     def get_power_ledger(self, obj: object) -> dict | None:
         """Return the power ledger attached to the result object, if present."""
         from world.scenes.types import EnhancedSceneActionResult  # noqa: PLC0415

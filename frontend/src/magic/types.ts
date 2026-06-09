@@ -340,6 +340,15 @@ export interface TechniqueCostBreakdown {
   lines: TechniqueCostLine[];
 }
 
+// ---------------------------------------------------------------------------
+// Power Ledger — per-stage breakdown of a cast's power, plus final total.
+//
+// Returned (generated cleanly) as part of the cast result payload.
+// ---------------------------------------------------------------------------
+
+export type PowerLedger = components['schemas']['PowerLedger'];
+export type PowerLedgerEntry = components['schemas']['PowerLedgerEntry'];
+
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {
   name: string;

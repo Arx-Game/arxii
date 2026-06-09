@@ -177,6 +177,27 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     return interaction
 
 
+def create_action_interaction_core(
+    *,
+    persona: Persona,
+    scene: Scene | None,
+    summary_label: str,
+    strain_committed: int = 0,
+) -> Interaction:
+    """Create one ACTION-mode Interaction for a resolved action/cast.
+
+    The shared core behind combat's create_action_interaction and the scene
+    cast path. Keyed on persona + (nullable) scene.
+    """
+    return Interaction.objects.create(
+        persona=persona,
+        scene=scene,
+        content=summary_label,
+        mode=InteractionMode.ACTION,
+        strain_committed=strain_committed,
+    )
+
+
 def _send_to_objects(
     objects: Iterable[ObjectDB],
     payload: InteractionPayload,

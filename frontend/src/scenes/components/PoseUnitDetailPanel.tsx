@@ -9,6 +9,7 @@
  */
 
 import { useOutcomeDetails } from '@/combat/queries';
+import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { cn } from '@/lib/utils';
 import { useAppDispatch } from '@/store/hooks';
 import { openDeepLink, type DeepLinkKind } from '@/store/deepLinkModalSlice';
@@ -98,6 +99,7 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
               )
             )
           )}
+          {actionOutcome.power_ledger && <PowerLedgerPanel ledger={actionOutcome.power_ledger} />}
         </div>
       ))}
     </div>

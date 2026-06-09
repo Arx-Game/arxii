@@ -200,6 +200,19 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
 
+    from world.scenes.interaction_services import create_action_interaction_core  # noqa: PLC0415
+    from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
+
+    action_interaction = create_action_interaction_core(
+        persona=caster_persona,
+        scene=scene,
+        summary_label=f"{technique.name}",
+        strain_committed=strain_commitment,
+    )
+    persist_power_ledger(interaction=action_interaction, ledger=power_ledger)
+    request.action_interaction = action_interaction
+    request.save(update_fields=["action_interaction"])
+
     return result, power_ledger, pose
 
 

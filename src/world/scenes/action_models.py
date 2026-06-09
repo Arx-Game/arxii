@@ -160,6 +160,15 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         related_name="action_request_result",
         help_text="The interaction recording the result of this action",
     )
+    action_interaction = models.OneToOneField(
+        "scenes.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_constraint=False,
+        related_name="action_request_action",
+        help_text="ACTION-mode Interaction for this cast (carries the power ledger).",
+    )
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(
         null=True,

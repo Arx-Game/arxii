@@ -9,6 +9,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
+from world.magic.constants import LedgerOp, PowerStage
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -144,6 +145,9 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             self.date_finished = timezone.now()
             self.is_active = False
             self.save()
+            from world.scenes.power_ledger_services import purge_scene_power_ledger  # noqa: PLC0415
+
+            purge_scene_power_ledger(self)
 
 
 class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -780,6 +784,42 @@ class InteractionAction(SharedMemoryModel):
             raise ValidationError(
                 {"action_interaction": "Linked target must be an ACTION-mode Interaction."}
             )
+
+
+class InteractionPowerLedgerEntry(SharedMemoryModel):
+    """One persisted stage entry of a cast's power ledger.
+
+    Child of the ACTION-mode Interaction the cast/action resolved into. The
+    transient ``world.magic.types.power_ledger.PowerLedger`` is copied here at
+    resolution time so the per-stage breakdown is re-viewable from the log.
+    FK uses ``db_constraint=False`` because ``scenes_interaction`` is partitioned.
+    """
+
+    interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="power_ledger_entries",
+        db_constraint=False,
+        help_text="The ACTION-mode Interaction this ledger entry belongs to.",
+    )
+    ordering = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="0-based index preserving the ledger's stage order.",
+    )
+    stage = models.CharField(max_length=20, choices=PowerStage.choices)
+    source_label = models.CharField(max_length=120)
+    op = models.CharField(max_length=12, choices=LedgerOp.choices)
+    amount = models.IntegerField(
+        help_text="Signed delta (add) | whole percent (multiply) | target value (set).",
+    )
+    running_total = models.IntegerField(help_text="Cumulative power after this entry.")
+
+    class Meta:
+        ordering = ["ordering"]
+        indexes = [models.Index(fields=["interaction", "ordering"])]
+
+    def __str__(self) -> str:
+        return f"{self.interaction_id} [{self.ordering}] {self.stage}={self.running_total}"
 
 
 class SceneSummaryRevision(SharedMemoryModel):
