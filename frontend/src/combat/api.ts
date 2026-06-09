@@ -7,6 +7,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
+import type { PowerLedger } from '@/magic/types';
 import type {
   AvailableCombo,
   DispatchActionRequest,
@@ -120,6 +121,7 @@ export interface OutcomeEffectRow {
 export interface ActionOutcomeDetail {
   action_interaction_id: number;
   effects: OutcomeEffectRow[];
+  power_ledger?: PowerLedger | null;
 }
 
 /**

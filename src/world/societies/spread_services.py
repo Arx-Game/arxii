@@ -13,6 +13,8 @@ from world.scenes.action_resolvers import register_resolver
 from world.societies.models import LegendEntry, OrganizationMembership
 
 SPREAD_TALE_ACTION_KEY = "spread_a_tale"
+# Display name shared by the Spread a Tale ActionTemplate and its CheckType.
+SPREAD_TALE_TEMPLATE_NAME = "Spread a Tale"
 
 # success_level -> fraction of base_value (failure / <=0 yields 0). Tunable.
 TIER_PAYOFF: dict[int, float] = {0: 0.0, 1: 0.10, 2: 0.30, 3: 0.60, 4: 1.00}
@@ -73,8 +75,22 @@ def _ensure_skill(name: str):
 
 def ensure_spread_skills() -> None:
     """Idempotently ensure the spread skills (Performance, Persuasion) + their
-    form specializations exist."""
+    form specializations exist.
+
+    Called several times per spread (template build, modifiers, form list). The
+    repo bans data migrations / seed commands pre-production, so this is the
+    seed-on-first-use path — but the fast-path keeps the steady state at a single
+    count query instead of re-running the get_or_creates every request.
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
+
+    form_names = [name for name, _, _ in SPREAD_FORMS]
+    already_seeded = Specialization.objects.filter(
+        name__in=form_names,
+        parent_skill__trait__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
+    ).count() == len(SPREAD_FORMS)
+    if already_seeded:
+        return
 
     skills_by_name = {
         PERFORMANCE_SKILL_NAME: _ensure_skill(PERFORMANCE_SKILL_NAME),
@@ -157,10 +173,16 @@ def get_or_create_spread_a_tale_template():
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
+    # Fast-path: once seeded, the template (and its skills) exist, so a single
+    # fetch per spread suffices instead of replaying every get_or_create below.
+    existing = ActionTemplate.objects.filter(name=SPREAD_TALE_TEMPLATE_NAME).first()
+    if existing is not None:
+        return existing
+
     ensure_spread_skills()
     category, _ = CheckCategory.objects.get_or_create(name="Social")
     check_type, _ = CheckType.objects.get_or_create(
-        name="Spread a Tale",
+        name=SPREAD_TALE_TEMPLATE_NAME,
         defaults={
             "category": category,
             "description": "Telling a deed's tale to a crowd.",
@@ -174,7 +196,7 @@ def get_or_create_spread_a_tale_template():
         check_type=check_type, trait=presence, defaults={"weight": Decimal("0.5")}
     )
     template, _ = ActionTemplate.objects.get_or_create(
-        name="Spread a Tale",
+        name=SPREAD_TALE_TEMPLATE_NAME,
         defaults={
             "check_type": check_type,
             "target_type": ActionTargetType.AREA,

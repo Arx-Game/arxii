@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0005_charactersheet_max_active_npc_missions"),
         ("checks", "0003_initial"),
         ("mechanics", "0002_initial"),
-        ("scenes", "0012_scenecheckmodifier"),
+        ("scenes", "0014_scenecheckmodifier"),
     ]
 
     operations = [

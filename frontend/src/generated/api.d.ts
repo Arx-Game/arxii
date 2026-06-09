@@ -2445,7 +2445,7 @@ export interface paths {
      *     correlation by source_technique + applied_at window, target status from
      *     CombatOpponent.status / CharacterVitals.life_state. No new audit tables.
      */
-    get: operations['combat_action_outcome_details_retrieve'];
+    get: operations['combat_action_outcome_details_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -13341,6 +13341,13 @@ export interface components {
      * @enum {string}
      */
     DrawModeEnum: 'menu' | 'pool';
+    EffectRow: {
+      kind: string;
+      label: string;
+      readonly deep_link: {
+        [key: string]: number | string;
+      } | null;
+    };
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
       readonly id: number;
@@ -15746,6 +15753,11 @@ export interface components {
     OrganizationSearch: {
       id: number;
       name: string;
+    };
+    OutcomeDetail: {
+      action_interaction_id: number;
+      effects: components['schemas']['EffectRow'][];
+      power_ledger?: components['schemas']['PowerLedger'] | null;
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -18774,6 +18786,19 @@ export interface components {
       /** @description The interaction being endorsed. */
       interaction: number;
       resonance: number;
+    };
+    /** @description Serializes a PowerLedger (entries + total) for the cast result payload. */
+    PowerLedger: {
+      entries: components['schemas']['PowerLedgerEntry'][];
+      total: number;
+    };
+    /** @description Serializes a single PowerLedgerEntry for the API payload. */
+    PowerLedgerEntry: {
+      stage: string;
+      source_label: string;
+      op: string;
+      amount: number;
+      running_total: number;
     };
     /**
      * @description * `gm_marked` - GM-marked
@@ -24331,7 +24356,7 @@ export interface operations {
       };
     };
   };
-  combat_action_outcome_details_retrieve: {
+  combat_action_outcome_details_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -24340,12 +24365,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['OutcomeDetail'][];
+        };
       };
     };
   };

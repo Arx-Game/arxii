@@ -16,6 +16,7 @@ from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_and_resolve_area_action
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.societies.factories import LegendEntryFactory
+from world.societies.spread_services import SPREAD_TALE_TEMPLATE_NAME
 
 
 class AreaActionDispatchTest(TestCase):
@@ -23,7 +24,7 @@ class AreaActionDispatchTest(TestCase):
         spreader = PersonaFactory()
         scene = SceneFactory()
         template = ActionTemplateFactory(
-            name="Spread a Tale",
+            name=SPREAD_TALE_TEMPLATE_NAME,
             target_type=ActionTargetType.AREA,
             category="social",
             ap_cost=20,

@@ -2164,6 +2164,10 @@ def _resolve_pc_action(
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
         push_interaction(interaction)
+        if combat_result is not None:
+            from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
+
+            persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
     # Broadcast a durable, Narrator-authored OUTCOME line for this action.
     # The power_ledger is threaded from the combat resolver (magic pipeline) so

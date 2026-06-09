@@ -3524,7 +3524,7 @@ paths:
           description: ''
   /api/combat/action-outcome-details/:
     get:
-      operationId: combat_action_outcome_details_retrieve
+      operationId: combat_action_outcome_details_list
       description: |-
         Return outcome details for a list of ACTION Interaction IDs.
 
@@ -3541,7 +3541,13 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OutcomeDetail'
+          description: ''
   /api/conditions/capabilities/:
     get:
       operationId: conditions_capabilities_list
@@ -23825,6 +23831,25 @@ components:
       description: |-
         * `menu` - Menu
         * `pool` - Pool
+    EffectRow:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        deep_link:
+          type: object
+          additionalProperties:
+            oneOf:
+            - type: integer
+            - type: string
+          nullable: true
+          readOnly: true
+      required:
+      - deep_link
+      - kind
+      - label
     EffectType:
       type: object
       description: Serializer for EffectType lookup records.
@@ -28722,6 +28747,22 @@ components:
       required:
       - id
       - name
+    OutcomeDetail:
+      type: object
+      properties:
+        action_interaction_id:
+          type: integer
+        effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/EffectRow'
+        power_ledger:
+          allOf:
+          - $ref: '#/components/schemas/PowerLedger'
+          nullable: true
+      required:
+      - action_interaction_id
+      - effects
     OutcomeEnum:
       enum:
       - unsatisfied
@@ -33844,6 +33885,40 @@ components:
       required:
       - interaction
       - resonance
+    PowerLedger:
+      type: object
+      description: Serializes a PowerLedger (entries + total) for the cast result
+        payload.
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/PowerLedgerEntry'
+        total:
+          type: integer
+      required:
+      - entries
+      - total
+    PowerLedgerEntry:
+      type: object
+      description: Serializes a single PowerLedgerEntry for the API payload.
+      properties:
+        stage:
+          type: string
+        source_label:
+          type: string
+        op:
+          type: string
+        amount:
+          type: integer
+        running_total:
+          type: integer
+      required:
+      - amount
+      - op
+      - running_total
+      - source_label
+      - stage
     PredicateTypeEnum:
       enum:
       - gm_marked

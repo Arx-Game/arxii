@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { useMemo } from 'react';
 
 interface EvenniaMessageProps {
@@ -39,11 +40,13 @@ export function EvenniaMessage({ content, className = '' }: EvenniaMessageProps)
     // Convert line breaks
     processed = processed.replace(/<br>/g, '\n');
 
-    return processed;
+    // Messages carry user-authored text (poses, says, names) routed through
+    // Evennia's ANSI→HTML conversion, so the string is untrusted. Sanitize
+    // before injecting: DOMPurify strips scripts/event-handlers/dangerous tags
+    // while keeping the legitimate color <span>s.
+    return DOMPurify.sanitize(processed);
   }, [content]);
 
-  // For now, we'll render HTML directly but sanitize it later if needed
-  // This is safe for Evennia output but would need sanitization for user input
   return (
     <div
       className={`whitespace-pre-wrap font-mono text-sm ${className}`}

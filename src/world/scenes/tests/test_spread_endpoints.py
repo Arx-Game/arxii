@@ -44,7 +44,7 @@ class SpreadEndpointTest(APITestCase):
         url = reverse("persona-spreadable-deeds", args=[self.persona.pk])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn(self.deed.pk, [d["id"] for d in resp.data])
+        self.assertIn(self.deed.pk, [d["id"] for d in resp.data["results"]])
 
     def test_spread_resolves(self) -> None:
         url = reverse("persona-spread", args=[self.persona.pk])

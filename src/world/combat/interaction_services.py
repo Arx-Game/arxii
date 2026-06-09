@@ -78,11 +78,12 @@ def create_action_interaction(
     # walk back through the action.
     del round_number
 
-    return Interaction.objects.create(
+    from world.scenes.interaction_services import create_action_interaction_core  # noqa: PLC0415
+
+    return create_action_interaction_core(
         persona=persona,
         scene=scene,
-        content=summary_label,
-        mode=InteractionMode.ACTION,
+        summary_label=summary_label,
         strain_committed=strain_committed,
     )
 
@@ -309,7 +310,6 @@ def broadcast_action_outcome(
         return None
 
     from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
-    from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
         _broadcast_to_location,
         _build_interaction_payload,

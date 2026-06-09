@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -23,9 +24,11 @@ from rest_framework.views import APIView
 
 from world.combat.constants import OpponentStatus
 from world.combat.models import ClashContribution, CombatRoundAction
+from world.scenes.action_serializers import PowerLedgerSerializer
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
+    from world.magic.types.power_ledger import PowerLedger
 
 _ERR_NON_INTEGER_IDS = "action_interaction_ids must be comma-separated integers."
 
@@ -58,6 +61,7 @@ class ActionOutcomeDetail:
 
     action_interaction_id: int
     effects: list[EffectRow] = field(default_factory=list)
+    power_ledger: PowerLedger | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +103,7 @@ class EffectRowSerializer(serializers.Serializer):
 class OutcomeDetailSerializer(serializers.Serializer):
     action_interaction_id = serializers.IntegerField()
     effects = EffectRowSerializer(many=True)
+    power_ledger = PowerLedgerSerializer(allow_null=True, required=False)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +249,17 @@ def _build_outcome_detail(
     derived from action.combo_upgrade, ConditionInstance correlation, and
     target status. No audit-row reads — purely derived from existing state.
     """
+    from world.scenes.models import Interaction  # noqa: PLC0415
+    from world.scenes.power_ledger_services import (  # noqa: PLC0415
+        load_persisted_ledger,
+        viewer_can_see_ledger,
+    )
+
+    ledger = None
+    _interaction = Interaction.objects.filter(pk=action_interaction_id).first()
+    if _interaction is not None and viewer_can_see_ledger(_interaction, user):
+        ledger = load_persisted_ledger(action_interaction_id)
+
     # Try CombatRoundAction first.
     action = (
         CombatRoundAction.objects.filter(interaction_id=action_interaction_id)
@@ -260,9 +276,13 @@ def _build_outcome_detail(
     )
     if action is not None:
         if not _viewer_can_see(user, action.participant.encounter):
-            return ActionOutcomeDetail(action_interaction_id=action_interaction_id, effects=[])
+            return ActionOutcomeDetail(
+                action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
+            )
         effects = _RoundActionEffects(action).rows
-        return ActionOutcomeDetail(action_interaction_id=action_interaction_id, effects=effects)
+        return ActionOutcomeDetail(
+            action_interaction_id=action_interaction_id, effects=effects, power_ledger=ledger
+        )
 
     # Fall back to ClashContribution.
     contribution = (
@@ -279,10 +299,14 @@ def _build_outcome_detail(
     if contribution is not None:
         encounter = contribution.clash_round.clash.encounter
         if not _viewer_can_see(user, encounter):
-            return ActionOutcomeDetail(action_interaction_id=action_interaction_id, effects=[])
+            return ActionOutcomeDetail(
+                action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
+            )
         return _build_clash_contribution_detail(contribution, action_interaction_id)
 
-    return ActionOutcomeDetail(action_interaction_id=action_interaction_id, effects=[])
+    return ActionOutcomeDetail(
+        action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
+    )
 
 
 def _build_clash_contribution_detail(
@@ -346,6 +370,7 @@ class ActionOutcomeDetailsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OutcomeDetailSerializer(many=True))
     def get(self, request: Request) -> Response:
         query = OutcomeDetailsQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)

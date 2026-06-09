@@ -133,3 +133,69 @@ class DerivedOutcomeRowsTest(TestCase):
         outsider = AccountFactory()
         detail = _build_outcome_detail(self.interaction.pk, outsider)
         assert detail.effects == []
+
+    def test_caster_sees_power_ledger(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+        from world.magic.types.power_ledger import PowerLedgerBuilder
+        from world.scenes.power_ledger_services import persist_power_ledger
+
+        persist_power_ledger(
+            interaction=self.interaction, ledger=PowerLedgerBuilder(base=5).build()
+        )
+        self.account.is_staff = True
+        self.account.save()
+        detail = _build_outcome_detail(self.interaction.pk, self.account)
+        assert detail.power_ledger is not None
+        assert detail.power_ledger.total == 5
+
+    def test_outsider_gets_null_ledger(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+        from world.magic.types.power_ledger import PowerLedgerBuilder
+        from world.scenes.power_ledger_services import persist_power_ledger
+
+        persist_power_ledger(
+            interaction=self.interaction, ledger=PowerLedgerBuilder(base=5).build()
+        )
+        outsider = AccountFactory()
+        detail = _build_outcome_detail(self.interaction.pk, outsider)
+        assert detail.power_ledger is None
+
+    def test_non_caster_participant_sees_effects_but_null_ledger(self) -> None:
+        """The ledger gate is strictly tighter than effect visibility.
+
+        A second encounter participant (not the caster, not staff) can see the
+        action's effects — they're in the fight — but must NOT see the caster's
+        power ledger. This proves the ledger is gated on
+        ``interaction.persona.character_sheet_id`` (the caster), separately from
+        ``_viewer_can_see`` (any encounter participant).
+        """
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.factories import CombatParticipantFactory
+        from world.combat.views_outcome_details import _build_outcome_detail
+        from world.magic.types.power_ledger import PowerLedgerBuilder
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.power_ledger_services import persist_power_ledger
+
+        persist_power_ledger(
+            interaction=self.interaction, ledger=PowerLedgerBuilder(base=5).build()
+        )
+
+        # A second, different character/account who is ALSO in this encounter.
+        other_account = AccountFactory()
+        other_char = CharacterFactory()
+        other_sheet = CharacterSheetFactory(character=other_char)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=other_char,
+            player_data__account=other_account,
+        )
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=other_sheet)
+
+        detail = _build_outcome_detail(self.interaction.pk, other_account)
+
+        # Gate denies the ledger — they are not the caster.
+        assert detail.power_ledger is None
+        # But they CAN see effects, because they are an encounter participant.
+        assert detail.effects, "second participant should see the action's effects"
+        kinds = {row.kind for row in detail.effects}
+        assert "status" in kinds

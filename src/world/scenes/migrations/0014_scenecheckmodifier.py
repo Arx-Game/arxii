@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("checks", "0003_initial"),
-        ("scenes", "0011_sceneactionrequest_effort_level_and_more"),
+        ("scenes", "0013_sceneactionrequest_action_interaction"),
     ]
 
     operations = [
