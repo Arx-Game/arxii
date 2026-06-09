@@ -181,6 +181,63 @@ describe('PoseUnitDetailPanel', () => {
     expect(store.getState().deepLinkModal.current).toEqual({ modal: 'condition', id: 7 });
   });
 
+  it('renders the PowerLedgerPanel when an outcome carries a power_ledger', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [{ kind: 'damage', label: 'Knight took 6 damage', deep_link: null }],
+          power_ledger: {
+            entries: [
+              {
+                stage: 'base',
+                source_label: 'Channeled',
+                op: 'add',
+                amount: 10,
+                running_total: 10,
+              },
+            ],
+            total: 10,
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('power-ledger-panel')).toBeInTheDocument();
+    });
+  });
+
+  it('does not render the PowerLedgerPanel when no power_ledger is present', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [{ kind: 'damage', label: 'Knight took 6 damage', deep_link: null }],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Knight took 6 damage')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('power-ledger-panel')).toBeNull();
+  });
+
   it('renders a non-deep-linked effect as plain text, not a button', () => {
     mockUseOutcomeDetails.mockReturnValue({
       data: [
