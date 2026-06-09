@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import RoomProfileFactory
@@ -16,6 +17,7 @@ from world.magic.constants import (
     LedgerOp,
     PowerStage,
     ResonanceValence,
+    TargetKind,
 )
 from world.magic.factories import (
     AffinityFactory,
@@ -27,6 +29,8 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadPullEffectFactory,
 )
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
@@ -173,6 +177,25 @@ class TestRequestTechniqueCastRouting(CastScenarioMixin):
         self.assertEqual(pose.mode, InteractionMode.OUTCOME)
         self.assertTrue(pose.persona.is_system)
         self.assertEqual(cast.request.result_interaction, pose)
+
+    def test_self_cast_creates_action_interaction_with_ledger(self) -> None:
+        """The cast creates an ACTION interaction for the caster carrying ledger rows."""
+        technique = make_benign_castable_technique()
+        grant_technique(self.initiator, technique)
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            technique=technique,
+        )
+
+        request = cast.request
+        request.refresh_from_db()
+        assert request.action_interaction_id is not None
+        action_int = request.action_interaction
+        assert action_int.mode == InteractionMode.ACTION
+        assert action_int.persona_id == self.initiator.pk
+        assert list(action_int.power_ledger_entries.all()), "ledger persisted on cast ACTION"
 
     def test_self_cast_persists_strain_commitment(self) -> None:
         """strain_commitment forwarded on the immediate path is stored on the request."""
@@ -450,3 +473,86 @@ class TestRespondToActionRequestStandaloneCast(CastScenarioMixin):
             mode=InteractionMode.OUTCOME,
         )
         self.assertFalse(outcome_poses.exists())
+
+
+class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase):
+    """A passive tier-0 INTENSITY_BUMP thread anchored to the cast technique
+    raises the cast-level power ledger (#768 Task 7 wiring).
+
+    Real integration: ``request_technique_cast`` (self-cast → immediate path →
+    ``_resolve_cast``) builds applicable threads from the caster's sheet and
+    feeds them into ``use_technique``. A TECHNIQUE-kind thread targeting the cast
+    technique with a tier-0 INTENSITY_BUMP effect must increase the returned
+    ``power_ledger.total`` by the scaled bump amount versus an identical cast
+    with no thread present.
+    """
+
+    def _make_caster_and_technique(self, room_key: str):
+        """Return (initiator_persona, technique, scene) ready for a self-cast.
+
+        Caller is responsible for the one-time ``CheckSystemSetupFactory.create()``.
+        """
+        room = create_object("typeclasses.rooms.Room", key=room_key, nohome=True)
+        scene = SceneFactory(location=room)
+
+        initiator = PersonaFactory()
+        caster_char = initiator.character_sheet.character
+        caster_char.location = room
+        CharacterAnimaFactory(character=caster_char, current=20, maximum=30)
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        CharacterTechniqueFactory(character=initiator.character_sheet, technique=technique)
+        return initiator, technique, scene
+
+    def _cast(self, initiator, technique, scene):
+        with patch("world.scenes.action_services.award_kudos"):
+            return request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator,
+                technique=technique,
+            )
+
+    def test_thread_intensity_bump_raises_power_ledger_total(self) -> None:
+        bump = 5
+        CheckSystemSetupFactory.create()
+
+        # Baseline caster — no thread.
+        base_initiator, base_technique, base_scene = self._make_caster_and_technique(
+            "Baseline Cast Room"
+        )
+        base_cast = self._cast(base_initiator, base_technique, base_scene)
+        self.assertIsNotNone(base_cast.power_ledger)
+        baseline_total = base_cast.power_ledger.total
+
+        # Threaded caster — a tier-0 INTENSITY_BUMP thread on the cast technique.
+        initiator, technique, scene = self._make_caster_and_technique("Threaded Cast Room")
+        resonance = ResonanceFactory()
+        ThreadFactory(
+            owner=initiator.character_sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+            level=0,
+        )
+        ThreadPullEffectFactory(
+            as_intensity_bump=True,
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=resonance,
+            tier=0,
+            intensity_bump_amount=bump,
+        )
+
+        threaded_cast = self._cast(initiator, technique, scene)
+        self.assertIsNotNone(threaded_cast.power_ledger)
+        threaded_total = threaded_cast.power_ledger.total
+
+        self.assertEqual(
+            threaded_total,
+            baseline_total + bump,
+            "Passive tier-0 INTENSITY_BUMP thread should raise cast power by its bump amount.",
+        )
