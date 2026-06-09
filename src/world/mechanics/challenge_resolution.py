@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import (
@@ -128,6 +130,50 @@ def resolve_challenge(
         resolution_type=resolution_type,
         challenge_deactivated=challenge_deactivated,
         display_consequences=display_consequences,
+    )
+
+
+def _record_challenge_outcome(
+    *,
+    record: CharacterChallengeRecord,
+    character: ObjectDB,
+    pool,  # actions.ConsequencePool | None — no import to avoid a cross-app cycle
+    check_type,  # checks.CheckType | None
+    consequence: Consequence,
+) -> None:
+    """Persist a ConsequenceOutcome for a challenge resolution (#850).
+
+    Side-effect only — never changes the returned ChallengeResolutionResult.
+    Skips silently when the inputs required by the non-nullable ConsequenceOutcome
+    columns are absent: a missing pool (check-only action template), a missing
+    check_type (gate-only resolution), or a character with no CharacterSheet.
+
+    The ModifierBreakdown is rebuilt from the character's live modifiers via
+    collect_check_modifiers — the challenge pipeline does not retain a breakdown
+    object, and rebuilding at record time is faithful to resolution-time state.
+    """
+    from world.checks.services import (  # noqa: PLC0415
+        collect_check_modifiers,
+        record_consequence_outcome,
+    )
+
+    if pool is None or check_type is None:
+        return
+    try:
+        character_sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    if character_sheet is None:
+        return
+
+    breakdown = collect_check_modifiers(character_sheet, check_type)
+    record_consequence_outcome(
+        character_sheet,
+        check_type,
+        pool,
+        consequence if consequence.pk else None,
+        breakdown,
+        challenge_record=record,
     )
 
 
@@ -261,12 +307,24 @@ def _resolve_via_template(
         challenge_instance.save()
         challenge_deactivated = True
 
-    CharacterChallengeRecord.objects.create(
+    record = CharacterChallengeRecord.objects.create(
         character=character,
         challenge_instance=challenge_instance,
         approach=approach,
         outcome=check_result.outcome if check_result else None,
         consequence=consequence if consequence.pk else None,
+    )
+
+    # Persist the unified ConsequenceOutcome (#850). Only the action-template path
+    # carries a ConsequencePool (ConsequenceOutcome.pool is non-nullable), so this
+    # is the only challenge path that records. check_result may be None for a
+    # gate-only resolution; without a check_type we cannot record.
+    _record_challenge_outcome(
+        record=record,
+        character=character,
+        pool=action_template.consequence_pool,
+        check_type=action_template.check_type,
+        consequence=consequence,
     )
 
     all_consequences = list(

@@ -184,8 +184,9 @@ def commit_to_clash(  # noqa: PLR0913
             an unconfirmed result when ``confirm_soulfray_risk=True`` (should
             not happen in v1; indicates a pipeline inconsistency).
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
-    from world.checks.types import CheckResult  # noqa: PLC0415
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
+    from world.checks.types import CheckResult, ModifierContribution  # noqa: PLC0415
 
     # 0. Resolve the ObjectDB from the CharacterSheet for the magic pipeline.
     #    CharacterSheet.character is a OneToOneField to ObjectDB (primary_key=True).
@@ -218,6 +219,36 @@ def commit_to_clash(  # noqa: PLR0913
         config=config_strain,
     )
 
+    # 2b. Express strain + affinity-tilt as labeled ModifierContributions and route
+    #     them through the shared collect_check_modifiers seam so the clash check
+    #     ALSO honors condition + rollmod sources (the #851 individualization lever),
+    #     not only its strain/affinity.  The summed .total replaces the former
+    #     ad-hoc ``strain_modifier + check_modifier_extra`` arithmetic.
+    extra_contributions: list[ModifierContribution] = []
+    if strain_modifier:
+        extra_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.STRAIN,
+                source_label="Strain",
+                value=strain_modifier,
+            )
+        )
+    if check_modifier_extra:
+        extra_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.STRAIN,
+                source_label="Affinity tilt",
+                value=check_modifier_extra,
+            )
+        )
+
+    breakdown = collect_check_modifiers(
+        character_sheet,
+        check_type,
+        extra_contributions=extra_contributions,
+    )
+    check_extra_modifiers = breakdown.total
+
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
@@ -227,7 +258,7 @@ def commit_to_clash(  # noqa: PLR0913
             objectdb,
             check_type,
             target_difficulty=0,
-            extra_modifiers=strain_modifier + check_modifier_extra,
+            extra_modifiers=check_extra_modifiers,
         )
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,

@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.types import CheckResult
+from world.checks.constants import ModifierSourceKind
+from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
+from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
 from world.classes.models import CharacterClassLevel, PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
@@ -21,7 +23,10 @@ from world.traits.models import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.checks.models import CheckType
+    from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType, Consequence
+    from world.mechanics.models import CharacterChallengeRecord
+    from world.scenes.models import Interaction, Scene
     from world.traits.handlers import TraitHandler
 
 
@@ -295,6 +300,87 @@ def chart_has_success_outcomes(rank_difference: int) -> bool:
     ).exists()
 
 
+def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs all context fields
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    pool,  # actions.ConsequencePool — no TYPE_CHECKING import to avoid cross-app cycle
+    selected_consequence: "Consequence | None",
+    breakdown: ModifierBreakdown,
+    *,
+    combat_interaction: "Interaction | None" = None,
+    challenge_record: "CharacterChallengeRecord | None" = None,
+    summary: str = "",
+) -> ConsequenceOutcome:
+    """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
+
+    Exactly one of ``combat_interaction`` / ``challenge_record`` must be provided;
+    ValueError is raised before any DB write if the constraint would be violated.
+
+    ``combat_interaction_timestamp`` is derived from ``combat_interaction.timestamp``
+    (the same attribute CombatRoundAction.interaction_timestamp is denormalized from)
+    and is populated atomically with the FK, as required by the composite FK
+    constraint on the range-partitioned scenes_interaction table.
+
+    Modifier rows are bulk-created in a single query (no per-row saves).
+
+    Args:
+        character_sheet: The CharacterSheet of the resolving character.
+        check_type: The CheckType that was resolved.
+        pool: The actions.ConsequencePool the roulette ran against.
+        selected_consequence: The Consequence that was selected (may be None if no
+            consequence was triggered).
+        breakdown: ModifierBreakdown snapshot at resolution time — its total and
+            individual contributions are persisted.
+        combat_interaction: Interaction created for the combat resolution.
+            Mutually exclusive with challenge_record.
+        challenge_record: CharacterChallengeRecord this resolved against.
+            Mutually exclusive with combat_interaction.
+        summary: Optional human-readable summary string.
+
+    Returns:
+        The newly created ConsequenceOutcome instance.
+
+    Raises:
+        ValueError: If neither or both of combat_interaction/challenge_record are provided.
+    """
+    both_set = combat_interaction is not None and challenge_record is not None
+    neither_set = combat_interaction is None and challenge_record is None
+    if both_set or neither_set:
+        raise ValueError(
+            "record_consequence_outcome requires exactly one of combat_interaction or "
+            "challenge_record; got " + ("both" if both_set else "neither") + "."
+        )
+
+    outcome = ConsequenceOutcome.objects.create(
+        character=character_sheet,
+        check_type=check_type,
+        pool=pool,
+        selected_consequence=selected_consequence,
+        modifier_total=breakdown.total,
+        summary=summary,
+        combat_interaction=combat_interaction,
+        combat_interaction_timestamp=(
+            combat_interaction.timestamp if combat_interaction is not None else None
+        ),
+        challenge_record=challenge_record,
+    )
+
+    if breakdown.contributions:
+        ConsequenceOutcomeModifier.objects.bulk_create(
+            [
+                ConsequenceOutcomeModifier(
+                    outcome=outcome,
+                    source_kind=contribution.source_kind,
+                    source_label=contribution.source_label,
+                    value=contribution.value,
+                )
+                for contribution in breakdown.contributions
+            ]
+        )
+
+    return outcome
+
+
 def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | None:
     """Query ResultChartOutcome for matching roll range, return the CheckOutcome."""
     chart_outcome = (
@@ -309,3 +395,118 @@ def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | Non
     if chart_outcome:
         return chart_outcome.outcome
     return None
+
+
+def collect_check_modifiers(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    *,
+    scene: "Scene | None" = None,
+    extra_contributions: list[ModifierContribution] | None = None,
+) -> ModifierBreakdown:
+    """Aggregate all modifier contributions for a check into a ModifierBreakdown.
+
+    This is the central seam that Phase 1 funnels through.
+
+    Args:
+        character_sheet: The CharacterSheet of the character making the check.
+            The ObjectDB character is derived via ``character_sheet.character``
+            for callers (like get_rollmod) that still operate on ObjectDB.
+        check_type: The CheckType being resolved.
+        scene: Optional Scene whose surroundings may modify this check.
+            When provided, any SceneCheckModifier rows for (scene, check_type)
+            are folded in as SCENE contributions.  Pass None when checks are
+            performed outside an active scene.
+        extra_contributions: Caller-supplied, already-labeled contributions
+            (e.g. combat strain/affinity tilt, effort) to fold into the same
+            breakdown so every check honors every modifier source through one
+            seam.  Appended AFTER the gathered condition/rollmod/scene
+            contributions to keep ordering stable.  Pass None when there are none.
+
+    Returns:
+        ModifierBreakdown whose .total is the sum of all contributions and
+        whose .contributions list carries full source provenance.
+    """
+    # Lazy import avoids a circular dependency: world.conditions.services
+    # already imports from world.checks, so a module-level import here would
+    # create a cycle.  The noqa: PLC0415 token opts this import out of the
+    # "no lazy imports" lint rule (same pattern used throughout the repo).
+    from world.conditions.services import condition_contributions  # noqa: PLC0415
+
+    contributions: list[ModifierContribution] = []
+
+    # --- CONDITION contributions ---
+    contributions.extend(condition_contributions(character_sheet, check_type))
+
+    # --- ROLLMOD contribution ---
+    # get_rollmod sums sheet_data.rollmod + account.player_data.rollmod;
+    # it operates on the ObjectDB character, so walk back from the sheet.
+    rollmod_value = get_rollmod(character_sheet.character)
+    if rollmod_value != 0:
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.ROLLMOD,
+                source_label="Roll modifier",
+                value=rollmod_value,
+            )
+        )
+
+    # --- SCENE contributions ---
+    # Lazy import: world.scenes.models imports from world.scenes.constants,
+    # world.societies, etc. — no cycle risk, but we keep the lazy pattern
+    # consistent with condition_contributions for uniformity and to avoid
+    # loading the scenes app module at import time of checks.services.
+    if scene is not None:
+        from world.scenes.models import SceneCheckModifier  # noqa: PLC0415
+
+        scene_mods = SceneCheckModifier.objects.filter(
+            scene=scene,
+            check_type=check_type,
+        ).select_related("scene")
+        contributions.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.SCENE,
+                source_label=f"Scene surroundings: {mod.scene.name}",
+                value=mod.modifier_value,
+            )
+            for mod in scene_mods
+        )
+
+    # --- EQUIPMENT contributions ---
+    # Guard: only run the DB query when check_type is a real persisted model
+    # instance.  Callers that mock the check pipeline (e.g. combat resolver tests
+    # that pass MagicMock() as offense_check_type) must not trigger a live query;
+    # without the guard, filter(check_type=<MagicMock>) raises TypeError because
+    # Django cannot coerce the mock's pk to an integer.
+    # ``isinstance(check_type, Model)`` is False for MagicMock — it is not a
+    # Django Model subclass — so this reliably skips the query for mocks while
+    # remaining transparent for every real-code caller.
+    from django.db.models import Model as _DjangoModel  # noqa: PLC0415
+
+    from world.items.models import ItemCheckModifier  # noqa: PLC0415
+
+    character = character_sheet.character
+    if isinstance(check_type, _DjangoModel) and character is not None:
+        item_mods = (
+            ItemCheckModifier.objects.filter(
+                template__instances__equipped_slots__character=character,
+                check_type=check_type,
+            )
+            .select_related("template")
+            .distinct()
+        )
+        contributions.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label=f"Equipped: {mod.template.name}",
+                value=mod.modifier_value,
+            )
+            for mod in item_mods
+        )
+
+    # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
+    # Appended last so the gathered condition/rollmod/scene ordering stays stable.
+    if extra_contributions:
+        contributions.extend(extra_contributions)
+
+    return ModifierBreakdown(contributions=contributions)

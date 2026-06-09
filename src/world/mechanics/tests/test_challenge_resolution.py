@@ -635,6 +635,77 @@ class ResolveFullTests(TestCase):
             self.approach.action_template = None
             self.approach.save()
 
+    @patch("actions.services.apply_resolution", return_value=[])
+    @patch("actions.services.select_consequence_from_result")
+    @patch("actions.services.perform_check")
+    def test_template_resolution_records_consequence_outcome(
+        self,
+        mock_check: object,
+        mock_select: object,
+        mock_apply: object,  # noqa: ARG002
+    ) -> None:
+        """The action-template challenge path persists a ConsequenceOutcome bound to the
+        CharacterChallengeRecord, with the template's pool + the selected consequence."""
+        from actions.factories import (
+            ActionTemplateFactory,
+            ConsequencePoolEntryFactory,
+            ConsequencePoolFactory,
+        )
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.outcome_models import ConsequenceOutcome
+        from world.checks.types import CheckResult, PendingResolution
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        # The challenge character needs a CharacterSheet for the outcome FK.
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+
+        check_result = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        cast(MagicMock, mock_check).return_value = check_result
+        cast(MagicMock, mock_select).return_value = PendingResolution(
+            check_result=check_result,
+            selected_consequence=self.success_consequence,
+        )
+
+        pool = ConsequencePoolFactory(name="Recording Template Pool")
+        ConsequencePoolEntryFactory(pool=pool, consequence=self.success_consequence)
+        template = ActionTemplateFactory(
+            check_type=self.approach.check_type,
+            consequence_pool=pool,
+        )
+        self.approach.action_template = template
+        self.approach.save()
+
+        try:
+            challenge = self._make_challenge()
+            resolve_challenge(character, challenge, self.approach, self.source)
+
+            record = CharacterChallengeRecord.objects.get(
+                character=character,
+                challenge_instance=challenge,
+            )
+            outcomes = list(ConsequenceOutcome.objects.filter(challenge_record=record))
+            assert len(outcomes) == 1, "Exactly one ConsequenceOutcome should be recorded"
+            outcome = outcomes[0]
+            assert outcome.challenge_record_id == record.pk
+            assert outcome.combat_interaction_id is None
+            assert outcome.pool_id == pool.pk
+            assert outcome.selected_consequence_id == self.success_consequence.pk
+            assert outcome.check_type_id == self.approach.check_type_id
+        finally:
+            self.approach.action_template = None
+            self.approach.save()
+
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_approach_consequence_override_in_full_flow(self, mock_check) -> None:
         """Approach consequence override works through full resolution."""

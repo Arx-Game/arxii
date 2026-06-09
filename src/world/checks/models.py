@@ -7,6 +7,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.checks.constants import EffectTarget, EffectType
 
+# Import outcome models so migrations and admin discover them.
+from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
+
 
 class CheckCategory(NaturalKeyMixin, SharedMemoryModel):
     """Grouping for check types (Social, Combat, Exploration, Magic)."""

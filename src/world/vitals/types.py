@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.checks.types import ModifierBreakdown
     from world.conditions.models import ConditionTemplate
 
 
@@ -21,3 +22,4 @@ class DamageConsequenceResult:
     dying: bool = False
     wounds_applied: list[ConditionTemplate] = field(default_factory=list)
     message: str = ""
+    modifier_breakdown: ModifierBreakdown | None = None

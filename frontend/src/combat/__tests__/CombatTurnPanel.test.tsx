@@ -32,11 +32,21 @@ vi.mock('@/combat/queries', () => ({
     isLoading: false,
     isError: false,
   }),
+  useConsequenceOutcomes: vi.fn().mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
     combos: (id: number) => ['combat', 'combos', id],
     availableActions: (id: number) => ['combat', 'available-actions', id],
+    consequenceOutcomes: (params: Record<string, unknown>) => [
+      'combat',
+      'consequence-outcomes',
+      params,
+    ],
   },
 }));
 

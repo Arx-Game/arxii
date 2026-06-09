@@ -1699,6 +1699,62 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/checks/consequence-outcomes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only endpoint for ConsequenceOutcome records.
+     *
+     *     Returns the roulette display recomputed from the persisted pool +
+     *     selected_consequence on every read.  Authenticated users may read any
+     *     record (list is all-records; no server-side ownership scoping because
+     *     staff need the full list and the frontend scopes by character via the
+     *     ``character`` filter).
+     *
+     *     Write operations are intentionally absent — outcomes are append-only and
+     *     written by the resolution pipeline.
+     */
+    get: operations['checks_consequence_outcomes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/consequence-outcomes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only endpoint for ConsequenceOutcome records.
+     *
+     *     Returns the roulette display recomputed from the persisted pool +
+     *     selected_consequence on every read.  Authenticated users may read any
+     *     record (list is all-records; no server-side ownership scoping because
+     *     staff need the full list and the frontend scopes by character via the
+     *     ``character`` filter).
+     *
+     *     Write operations are intentionally absent — outcomes are append-only and
+     *     written by the resolution pipeline.
+     */
+    get: operations['checks_consequence_outcomes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/classes/aspects/': {
     parameters: {
       query?: never;
@@ -12863,6 +12919,69 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    /**
+     * @description Read serializer for ConsequenceOutcome.
+     *
+     *     Recomputes the roulette display on every read from the persisted pool +
+     *     selected_consequence so the frontend always receives the full weighted
+     *     roulette (outcome_display) rather than storing it.
+     *
+     *     combat_interaction and challenge_record are exposed as plain integer ids to
+     *     avoid touching the range-partitioned scenes_interaction table at
+     *     serialization time.
+     */
+    ConsequenceOutcome: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character: number;
+      readonly check_type: number;
+      readonly pool: number;
+      readonly selected_consequence: number | null;
+      readonly modifier_total: number;
+      readonly summary: string;
+      /**
+       * @description Recompute the roulette from pool + selected_consequence on read.
+       *
+       *     Uses resolve_pool_consequences() — the same pool-walk used by
+       *     apply_pool_deterministically — to get the full flat list of
+       *     Consequence rows, then passes them with the persisted
+       *     selected_consequence to build_outcome_display() to mark the winner.
+       *
+       *     Returns a list of plain dicts matching OutcomeDisplay's fields.
+       */
+      readonly outcome_display: {
+        [key: string]: unknown;
+      }[];
+      readonly modifiers: components['schemas']['ConsequenceOutcomeModifier'][];
+      readonly combat_interaction_id: number;
+      readonly challenge_record_id: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Serializes a single snapshotted modifier contribution. */
+    ConsequenceOutcomeModifier: {
+      source_kind: components['schemas']['ConsequenceOutcomeModifierSourceKindEnum'];
+      source_label: string;
+      value: number;
+    };
+    /**
+     * @description * `condition` - Condition
+     *     * `rollmod` - Roll Modifier
+     *     * `scene` - Surroundings
+     *     * `equipment` - Equipment
+     *     * `effort` - Effort
+     *     * `fatigue` - Fatigue
+     *     * `strain` - Strain
+     * @enum {string}
+     */
+    ConsequenceOutcomeModifierSourceKindEnum:
+      | 'condition'
+      | 'rollmod'
+      | 'scene'
+      | 'equipment'
+      | 'effort'
+      | 'fatigue'
+      | 'strain';
     /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
     Covenant: {
       readonly id: number;
@@ -15021,7 +15140,7 @@ export interface components {
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order: number;
       option_kind: components['schemas']['OptionKindEnum'];
-      source_kind: components['schemas']['SourceKindEnum'];
+      source_kind: components['schemas']['MissionOptionSourceKindEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -15049,7 +15168,7 @@ export interface components {
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order: number;
       option_kind: components['schemas']['OptionKindEnum'];
-      source_kind: components['schemas']['SourceKindEnum'];
+      source_kind: components['schemas']['MissionOptionSourceKindEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -15200,6 +15319,12 @@ export interface components {
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
     };
+    /**
+     * @description * `authored` - Authored
+     *     * `challenge` - Challenge
+     * @enum {string}
+     */
+    MissionOptionSourceKindEnum: 'authored' | 'challenge';
     /**
      * @description List + detail serializer for MissionTemplate browse.
      *
@@ -16017,6 +16142,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CharacterRelationshipList'][];
+    };
+    PaginatedConsequenceOutcomeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ConsequenceOutcome'][];
     };
     PaginatedCovenantList: {
       /** @example 123 */
@@ -17751,7 +17891,7 @@ export interface components {
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order?: number;
       option_kind?: components['schemas']['OptionKindEnum'];
-      source_kind?: components['schemas']['SourceKindEnum'];
+      source_kind?: components['schemas']['MissionOptionSourceKindEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -19960,12 +20100,6 @@ export interface components {
       | 'SANCTUM_OWNER_BONUS'
       | 'PROJECT_CONTRIBUTION'
       | 'SANCTUM_DISSOLUTION_RECOVERY';
-    /**
-     * @description * `authored` - Authored
-     *     * `challenge` - Challenge
-     * @enum {string}
-     */
-    SourceKindEnum: 'authored' | 'challenge';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -23429,6 +23563,56 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  checks_consequence_outcomes_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        created_after?: string;
+        created_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        pool?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedConsequenceOutcomeList'];
+        };
+      };
+    };
+  };
+  checks_consequence_outcomes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this consequence outcome. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConsequenceOutcome'];
+        };
       };
     };
   };
@@ -32855,10 +33039,12 @@ export interface operations {
   npc_services_mission_details_list: {
     parameters: {
       query?: {
+        offer?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        role?: number;
       };
       header?: never;
       path?: never;
@@ -33142,6 +33328,8 @@ export interface operations {
   npc_services_permit_details_list: {
     parameters: {
       query?: {
+        building_kind?: number;
+        offer?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */

@@ -32,8 +32,10 @@ from flows.events.payloads import (
 )
 from flows.models.triggers import Trigger
 from world.achievements.constants import ConditionEventType
+from world.checks.constants import ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.services import perform_check
+from world.checks.types import ModifierContribution
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -1388,6 +1390,37 @@ def get_check_modifier(
             result.breakdown.append((instance, modifier_value))
 
     return result
+
+
+def condition_contributions(
+    character_sheet: "CharacterSheet",
+    check_type: CheckType,
+) -> list[ModifierContribution]:
+    """
+    Adapt get_check_modifier's breakdown into a list of ModifierContribution.
+
+    Each active condition that modifies the given check_type produces one
+    ModifierContribution with source_kind=CONDITION.  The label is the
+    condition's template name, plus the current stage name in parentheses
+    when the instance is at a stage (e.g. "Paralytic Poison (Numbness)").
+
+    This function does NOT reimplement get_check_modifier's logic — it
+    delegates entirely to that function and maps the result.
+    """
+    result = get_check_modifier(character_sheet, check_type)
+    contributions: list[ModifierContribution] = []
+    for instance, modifier_value in result.breakdown:
+        label = instance.condition.name
+        if instance.current_stage is not None:
+            label = f"{label} ({instance.current_stage.name})"
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CONDITION,
+                source_label=label,
+                value=modifier_value,
+            )
+        )
+    return contributions
 
 
 def get_resistance_modifier(

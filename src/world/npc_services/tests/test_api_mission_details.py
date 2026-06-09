@@ -75,6 +75,22 @@ class MissionOfferDetailsViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
 
+    def test_filter_by_role_scopes_results(self) -> None:
+        """?role= scopes to one role's details (the FE editor relies on it)."""
+        MissionOfferDetailsFactory(offer=self._make_mission_offer(), mission_template=self.template)
+        other_role = NPCRoleFactory(name="other-role")
+        other_offer = NPCServiceOfferFactory(
+            role=other_role, kind=OfferKind.MISSION, label="other-offer"
+        )
+        MissionOfferDetailsFactory(
+            offer=other_offer, mission_template=MissionTemplateFactory(name="other-template")
+        )
+
+        response = self.client.get(self.URL, {"role": self.role.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["role"], self.role.pk)
+
     def test_create_round_trip(self) -> None:
         offer = self._make_mission_offer()
         response = self.client.post(

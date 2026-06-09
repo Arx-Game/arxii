@@ -13,24 +13,18 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
-from world.checks.services import perform_check
+from world.checks.services import collect_check_modifiers, perform_check
 from world.vitals.constants import (
-    DEATH_BASE_DIFFICULTY,
     DEATH_CHECK_NAME,
     DEATH_HEALTH_THRESHOLD,
-    DEATH_SCALING_PER_PERCENT,
     DERIVED_STATUS_ALIVE,
     DERIVED_STATUS_DEAD,
     DERIVED_STATUS_DYING,
     DERIVED_STATUS_INCAPACITATED,
     ENDURANCE_CHECK_NAME,
-    KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_HEALTH_THRESHOLD,
-    KNOCKOUT_SCALING_PER_PERCENT,
     PERMANENT_WOUND_THRESHOLD,
     SURVIVABILITY_CHECK_CATEGORY,
-    WOUND_BASE_DIFFICULTY,
-    WOUND_SCALING_PER_PERCENT,
     CharacterLifeState,
 )
 from world.vitals.types import DamageConsequenceResult
@@ -41,8 +35,9 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
-    from world.checks.types import PendingResolution
+    from world.checks.types import ModifierBreakdown, PendingResolution
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+    from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
 
 
@@ -136,27 +131,38 @@ def derive_character_status(character_sheet: CharacterSheet | None) -> str:
 def calculate_knockout_difficulty(*, health_pct: float) -> int:
     """Scale knockout check difficulty by how far below 20% health.
 
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
+
     Returns 0 if above threshold (no check needed).
     """
     if health_pct > KNOCKOUT_HEALTH_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_below = int((KNOCKOUT_HEALTH_THRESHOLD - health_pct) * 100)
-    return KNOCKOUT_BASE_DIFFICULTY + (pct_below * KNOCKOUT_SCALING_PER_PERCENT)
+    return cfg.knockout_base_difficulty + (pct_below * cfg.knockout_scaling_per_percent)
 
 
 def calculate_death_difficulty(*, health_pct: float) -> int:
     """Scale death check difficulty by depth of negative health.
 
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
+
     Returns 0 if above zero (no check needed).
     """
     if health_pct > DEATH_HEALTH_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_below = int(abs(health_pct) * 100)
-    return DEATH_BASE_DIFFICULTY + (pct_below * DEATH_SCALING_PER_PERCENT)
+    return cfg.death_base_difficulty + (pct_below * cfg.death_scaling_per_percent)
 
 
 def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     """Scale wound check difficulty by how far damage exceeds 50% threshold.
+
+    Base difficulty and scaling are read from the VitalsConsequenceConfig singleton
+    so they can be tuned without a code deploy.
 
     Returns 0 if below threshold (no check needed).
     """
@@ -165,8 +171,9 @@ def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     damage_pct = damage / max_health
     if damage_pct < PERMANENT_WOUND_THRESHOLD:
         return 0
+    cfg = get_vitals_consequence_config()
     pct_over = int((damage_pct - PERMANENT_WOUND_THRESHOLD) * 100)
-    return WOUND_BASE_DIFFICULTY + (pct_over * WOUND_SCALING_PER_PERCENT)
+    return cfg.wound_base_difficulty + (pct_over * cfg.wound_scaling_per_percent)
 
 
 def _ensure_survival_category() -> CheckCategory:
@@ -240,6 +247,41 @@ def _unwrap_consequence(pending: PendingResolution) -> Consequence | None:
     return None if c.pk is None else c
 
 
+def _record_combat_outcome(  # noqa: PLR0913 - mirrors record_consequence_outcome's context fields
+    character_sheet: CharacterSheet,
+    check_type: CheckTypeHint,
+    pool: ConsequencePool,
+    pending: PendingResolution,
+    breakdown: ModifierBreakdown,
+    combat_interaction: Interaction | None,
+    summary: str,
+) -> None:
+    """Persist one survivability tier's resolution as a ConsequenceOutcome.
+
+    No-op when ``combat_interaction`` is None (e.g. the mechanics effect_handlers
+    path) — the exactly-one-source constraint forbids a sourceless record.
+
+    Side-effect only (the existing return values are untouched). The selected
+    Consequence is unwrapped from the pending resolution; an unsaved fallback
+    consequence persists as a null selected_consequence (the outcome still
+    records the pool + modifier provenance).
+    """
+    if combat_interaction is None:
+        return
+
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+    record_consequence_outcome(
+        character_sheet,
+        check_type,
+        pool,
+        _unwrap_consequence(pending),
+        breakdown,
+        combat_interaction=combat_interaction,
+        summary=summary,
+    )
+
+
 def _apply_condition_effects(pending: PendingResolution) -> Iterator[ConsequenceEffect]:
     """Yield APPLY_CONDITION effects (with a condition_template) from the selected consequence."""
     from world.checks.constants import EffectType  # noqa: PLC0415
@@ -298,6 +340,7 @@ def process_damage_consequences(
     damage_type: DamageType | None,
     *,
     extra_modifiers: int = 0,
+    combat_interaction: Interaction | None = None,
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
@@ -323,6 +366,12 @@ def process_damage_consequences(
         damage_dealt: How much damage was dealt this hit.
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
+        combat_interaction: The combat Interaction this resolution belongs to.
+            When provided, each firing tier persists a ConsequenceOutcome bound
+            to it (#850). When None (e.g. the mechanics effect_handlers path),
+            recording is skipped — the exactly-one-source constraint forbids a
+            sourceless record. Recording is a pure side effect and never changes
+            the returned DamageConsequenceResult.
     """
     if character_sheet is None:
         return DamageConsequenceResult(message="No vitals found")
@@ -350,29 +399,55 @@ def process_damage_consequences(
     )
     wound_pool = _wound_pool(damage_type)
     if wound_difficulty > 0 and wound_pool is not None:
+        wound_check_type = _ensure_endurance_check_type()
+        wound_breakdown = collect_check_modifiers(character_sheet, wound_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_endurance_check_type(),
+            wound_check_type,
             wound_difficulty,
             wound_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + wound_breakdown.total,
         )
-        result.wounds_applied.extend(_wounds_from(pending))
+        wounds = _wounds_from(pending)
+        if wounds:
+            result.wounds_applied.extend(wounds)
+            result.modifier_breakdown = wound_breakdown
+            _record_combat_outcome(
+                character_sheet,
+                wound_check_type,
+                wound_pool,
+                pending,
+                wound_breakdown,
+                combat_interaction,
+                "permanent wound",
+            )
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
     death_pool = _death_pool(damage_type)
     if death_difficulty > 0 and death_pool is not None:
+        death_check_type = _ensure_death_check_type()
+        death_breakdown = collect_check_modifiers(character_sheet, death_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_death_check_type(),
+            death_check_type,
             death_difficulty,
             death_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + death_breakdown.total,
         )
+        result.modifier_breakdown = death_breakdown
         if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
+            _record_combat_outcome(
+                character_sheet,
+                death_check_type,
+                death_pool,
+                pending,
+                death_breakdown,
+                combat_interaction,
+                "lethal hit",
+            )
             return result
 
     # 3. Knockout check (health between 0% and 20%)
@@ -381,16 +456,28 @@ def process_damage_consequences(
     )
     knockout_pool = _knockout_pool()
     if knockout_difficulty > 0 and knockout_pool is not None:
+        ko_check_type = _ensure_endurance_check_type()
+        ko_breakdown = collect_check_modifiers(character_sheet, ko_check_type)
         pending = resolve_vitals_consequence(
             character_sheet,
-            _ensure_endurance_check_type(),
+            ko_check_type,
             knockout_difficulty,
             knockout_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + ko_breakdown.total,
         )
+        result.modifier_breakdown = ko_breakdown
         if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
+            _record_combat_outcome(
+                character_sheet,
+                ko_check_type,
+                knockout_pool,
+                pending,
+                ko_breakdown,
+                combat_interaction,
+                "knockout",
+            )
             return result
 
     return result

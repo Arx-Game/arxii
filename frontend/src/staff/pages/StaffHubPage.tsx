@@ -105,6 +105,20 @@ export function StaffHubPage() {
             </CardContent>
           </Card>
         </Link>
+
+        <Link to="/staff/npc-services/roles">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>NPC Services</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Author NPC roles and the service offers they make — mission-giving and permit
+                issuance — on the unified offer framework.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );
