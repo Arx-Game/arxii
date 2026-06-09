@@ -41,7 +41,9 @@ from flows.events.payloads import (
     DamageAppliedPayload,
     DamagePreApplyPayload,
 )
-from world.checks.services import perform_check
+from world.checks.constants import ModifierSourceKind
+from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.types import ModifierContribution
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -215,7 +217,26 @@ class CombatTechniqueResolver:
             self.fatigue_category,
         )
         effort_mod = EFFORT_CHECK_MODIFIER.get(self.action.effort_level, 0)
-        extra_modifiers = effort_mod + self.pull_flat_bonus
+
+        # Route effort through the shared modifier seam so the combat check ALSO
+        # honors condition + rollmod sources (the #851 individualization lever),
+        # not only its effort.  The pull bonus stays an explicit additive on top
+        # of the seam total — it is already a labeled combat-pull power source.
+        extra_contributions: list[ModifierContribution] = []
+        if effort_mod:
+            extra_contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.EFFORT,
+                    source_label="Effort",
+                    value=effort_mod,
+                )
+            )
+        breakdown = collect_check_modifiers(
+            self.participant.character_sheet,
+            self.offense_check_type,
+            extra_contributions=extra_contributions,
+        )
+        extra_modifiers = breakdown.total + self.pull_flat_bonus
         character = self.participant.character_sheet.character
         return check_fn(
             character,

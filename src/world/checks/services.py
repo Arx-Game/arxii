@@ -318,6 +318,7 @@ def collect_check_modifiers(
     check_type: "CheckType",
     *,
     scene: object = None,  # noqa: ARG001 — reserved for P3 scene-modifier wiring
+    extra_contributions: list[ModifierContribution] | None = None,
 ) -> ModifierBreakdown:
     """Aggregate all modifier contributions for a check into a ModifierBreakdown.
 
@@ -333,6 +334,11 @@ def collect_check_modifiers(
         check_type: The CheckType being resolved.
         scene: Reserved for Phase 3 scene-modifier wiring (Tasks 3.1/3.2).
             Pass None; any non-None value is silently ignored until P3 lands.
+        extra_contributions: Caller-supplied, already-labeled contributions
+            (e.g. combat strain/affinity tilt, effort) to fold into the same
+            breakdown so every check honors every modifier source through one
+            seam.  Appended AFTER the gathered condition/rollmod contributions
+            to keep ordering stable.  Pass None when there are none.
 
     Returns:
         ModifierBreakdown whose .total is the sum of all contributions and
@@ -363,5 +369,10 @@ def collect_check_modifiers(
         )
 
     # SCENE / EQUIPMENT sources are wired in P3 (Tasks 3.1/3.2); not yet.
+
+    # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
+    # Appended last so the gathered condition/rollmod ordering stays stable.
+    if extra_contributions:
+        contributions.extend(extra_contributions)
 
     return ModifierBreakdown(contributions=contributions)

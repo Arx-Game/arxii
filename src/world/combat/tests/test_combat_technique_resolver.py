@@ -34,7 +34,12 @@ def _ledger(power: int) -> PowerLedger:
     return PowerLedger(entries=(), total=power)
 
 
-def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
+def _build_resolver(
+    *,
+    pull_flat_bonus: int = 0,
+    base_power: int = 20,
+    effort_level: str = EffortLevel.MEDIUM,
+):
     """Helper to build a CombatTechniqueResolver with sane defaults."""
     encounter = CombatEncounterFactory(round_number=1)
     pool = ThreatPoolFactory()
@@ -58,7 +63,7 @@ def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
         focused_category=ActionCategory.PHYSICAL,
         focused_action=technique,
         focused_opponent_target=opponent,
-        effort_level=EffortLevel.MEDIUM,
+        effort_level=effort_level,
     )
     return CombatTechniqueResolver(
         participant=participant,
@@ -82,6 +87,45 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
         kwargs = mock_perform.call_args.kwargs
         # extra_modifiers contains pull bonus + effort modifier (MEDIUM = 0)
         self.assertGreaterEqual(kwargs["extra_modifiers"], 3)
+
+    def test_effort_routed_as_labeled_contribution(self) -> None:
+        """Effort must be expressed as an EFFORT ModifierContribution routed through
+        collect_check_modifiers, with the same magnitude as EFFORT_CHECK_MODIFIER,
+        and the breakdown total (plus pull bonus) reaches perform_check."""
+        from world.checks.constants import ModifierSourceKind
+        from world.fatigue.constants import EFFORT_CHECK_MODIFIER
+
+        resolver = _build_resolver(pull_flat_bonus=3, effort_level=EffortLevel.HIGH)
+        expected_effort = EFFORT_CHECK_MODIFIER[EffortLevel.HIGH]
+        self.assertEqual(expected_effort, 2)
+
+        captured: dict = {}
+        from world.checks import services as checks_services
+
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            captured["extra_contributions"] = kwargs.get("extra_contributions")
+            return real_collect(sheet, check_type, **kwargs)
+
+        with (
+            patch("world.combat.services.perform_check") as mock_perform,
+            patch(
+                "world.combat.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolver._roll_check()
+
+        extras = captured["extra_contributions"]
+        effort_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.EFFORT]
+        self.assertEqual(len(effort_contribs), 1)
+        self.assertEqual(effort_contribs[0].value, expected_effort)
+        self.assertEqual(effort_contribs[0].source_label, "Effort")
+
+        # Bare character: breakdown total == effort, plus pull_flat_bonus == 3.
+        self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], expected_effort + 3)
 
 
 class CombatTechniqueResolverApplyDamageTests(TestCase):
