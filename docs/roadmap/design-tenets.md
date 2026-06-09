@@ -243,6 +243,29 @@ entry, or consent. Drama is opt-in and foreseeable (per "Risk is a conscious
 player choice") — never sprung on a player as a non-consented consequence.
 Within those bounds, lean in.
 
+### Exact numbers in the ledger, descriptive labels in the fiction
+
+Show-the-number and default-to-narrative aren't really in tension — they live in
+different registers, and the line between "a currency" and "a merely descriptive
+quantity" is genuinely fuzzy, so don't try to sort every number into one bin. The
+rule that actually holds: **the player's own decision-making surface shows the
+exact quantity; the IC fiction renders that same quantity with adjectives and
+labels.** Keep the figure precise wherever a player budgets or races on it; never
+let an IC mouth or a piece of prose emit a raw number.
+
+A player weighing whether a deed was worth the action points, or how close they
+are to a path threshold, needs legend as an exact figure — that's the ledger, and
+the ledger is exact. But an NPC never *says* "nineteen resonance" in character;
+they say "two knights less a pawn." Legend, resonance, how hard a blow lands, how
+much power stands behind a working — all are exact where the player acts and
+qualitative where the world speaks them.
+
+A sketch we're carrying for that descriptive register (well past MVP, noted so it
+stays consistent as it comes up): resonance magnitudes map onto chess pieces —
+~1 a pawn, ~10 a knight, ~100 a bishop, ~1,000 a rook, ~10,000 a king, ~100,000 a
+queen — so "19 resonance" is spoken as "two knights less a pawn." A scale to grow
+into, not a committed system.
+
 ## Designing systems
 
 ### Walk every user's view, end to end
