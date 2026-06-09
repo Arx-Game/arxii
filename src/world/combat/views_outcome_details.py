@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -369,6 +370,7 @@ class ActionOutcomeDetailsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OutcomeDetailSerializer(many=True))
     def get(self, request: Request) -> Response:
         query = OutcomeDetailsQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
