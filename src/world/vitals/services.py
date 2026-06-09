@@ -35,8 +35,9 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
-    from world.checks.types import PendingResolution
+    from world.checks.types import ModifierBreakdown, PendingResolution
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+    from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
 
 
@@ -246,6 +247,41 @@ def _unwrap_consequence(pending: PendingResolution) -> Consequence | None:
     return None if c.pk is None else c
 
 
+def _record_combat_outcome(  # noqa: PLR0913 - mirrors record_consequence_outcome's context fields
+    character_sheet: CharacterSheet,
+    check_type: CheckTypeHint,
+    pool: ConsequencePool,
+    pending: PendingResolution,
+    breakdown: ModifierBreakdown,
+    combat_interaction: Interaction | None,
+    summary: str,
+) -> None:
+    """Persist one survivability tier's resolution as a ConsequenceOutcome.
+
+    No-op when ``combat_interaction`` is None (e.g. the mechanics effect_handlers
+    path) — the exactly-one-source constraint forbids a sourceless record.
+
+    Side-effect only (the existing return values are untouched). The selected
+    Consequence is unwrapped from the pending resolution; an unsaved fallback
+    consequence persists as a null selected_consequence (the outcome still
+    records the pool + modifier provenance).
+    """
+    if combat_interaction is None:
+        return
+
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+    record_consequence_outcome(
+        character_sheet,
+        check_type,
+        pool,
+        _unwrap_consequence(pending),
+        breakdown,
+        combat_interaction=combat_interaction,
+        summary=summary,
+    )
+
+
 def _apply_condition_effects(pending: PendingResolution) -> Iterator[ConsequenceEffect]:
     """Yield APPLY_CONDITION effects (with a condition_template) from the selected consequence."""
     from world.checks.constants import EffectType  # noqa: PLC0415
@@ -304,6 +340,7 @@ def process_damage_consequences(
     damage_type: DamageType | None,
     *,
     extra_modifiers: int = 0,
+    combat_interaction: Interaction | None = None,
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
@@ -329,6 +366,12 @@ def process_damage_consequences(
         damage_dealt: How much damage was dealt this hit.
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
+        combat_interaction: The combat Interaction this resolution belongs to.
+            When provided, each firing tier persists a ConsequenceOutcome bound
+            to it (#850). When None (e.g. the mechanics effect_handlers path),
+            recording is skipped — the exactly-one-source constraint forbids a
+            sourceless record. Recording is a pure side effect and never changes
+            the returned DamageConsequenceResult.
     """
     if character_sheet is None:
         return DamageConsequenceResult(message="No vitals found")
@@ -369,6 +412,15 @@ def process_damage_consequences(
         if wounds:
             result.wounds_applied.extend(wounds)
             result.modifier_breakdown = wound_breakdown
+            _record_combat_outcome(
+                character_sheet,
+                wound_check_type,
+                wound_pool,
+                pending,
+                wound_breakdown,
+                combat_interaction,
+                "permanent wound",
+            )
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
@@ -387,6 +439,15 @@ def process_damage_consequences(
         if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
+            _record_combat_outcome(
+                character_sheet,
+                death_check_type,
+                death_pool,
+                pending,
+                death_breakdown,
+                combat_interaction,
+                "lethal hit",
+            )
             return result
 
     # 3. Knockout check (health between 0% and 20%)
@@ -408,6 +469,15 @@ def process_damage_consequences(
         if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
+            _record_combat_outcome(
+                character_sheet,
+                ko_check_type,
+                knockout_pool,
+                pending,
+                ko_breakdown,
+                combat_interaction,
+                "knockout",
+            )
             return result
 
     return result

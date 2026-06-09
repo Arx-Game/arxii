@@ -2206,7 +2206,19 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
+    # One ACTION-mode Interaction anchors every survivability ConsequenceOutcome
+    # this NPC action drives (#850). Authored by the Narrator persona because the
+    # NPC opponent has no PRIMARY persona.
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        create_npc_action_interaction,
+    )
     from world.vitals.services import is_dead  # noqa: PLC0415
+
+    npc_action_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_action_interaction = create_npc_action_interaction(
+        opponent_action=npc_action,
+        target_label=npc_action_label,
+    )
 
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
@@ -2241,6 +2253,7 @@ def _resolve_npc_action(
             character_sheet=target_participant.character_sheet,
             damage_dealt=dmg_result.damage_dealt,
             damage_type=npc_action.threat_entry.damage_type,
+            combat_interaction=npc_action_interaction,
         )
         outcome.damage_consequences.append(consequence)
 

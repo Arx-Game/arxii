@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.combat.models import (
         ClashContribution,
         CombatEncounter,
+        CombatOpponentAction,
         CombatParticipant,
         CombatRoundAction,
     )
@@ -83,6 +84,36 @@ def create_action_interaction(
         content=summary_label,
         mode=InteractionMode.ACTION,
         strain_committed=strain_committed,
+    )
+
+
+def create_npc_action_interaction(
+    *,
+    opponent_action: CombatOpponentAction,
+    target_label: str | None = None,
+) -> Interaction:
+    """Create one ACTION-mode Interaction for a resolving NPC action.
+
+    NPC opponents have no PRIMARY persona, so the interaction is authored by the
+    Narrator persona (same persona used for OUTCOME narration). It anchors the
+    survivability ConsequenceOutcome records (#850) created when the NPC's hit
+    drives a PC toward knockout/death/wound, so those outcomes link back to a
+    real pose-log row.
+
+    The encounter's scene is passed through (nullable) so the interaction
+    appears in the scene log on re-read.
+    """
+    from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    threat = opponent_action.threat_entry
+    content = f"{threat.name} at {target_label}" if target_label else threat.name
+    narrator = get_or_create_narrator_persona()
+    scene = opponent_action.opponent.encounter.scene
+    return Interaction.objects.create(
+        persona=narrator,
+        scene=scene,
+        content=content,
+        mode=InteractionMode.ACTION,
     )
 
 

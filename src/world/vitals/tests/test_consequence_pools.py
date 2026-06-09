@@ -454,3 +454,105 @@ class ProcessDamageConsequencesPoolTests(TestCase):
             20,
             "CONDITION contribution value must match the ConditionCheckModifier modifier_value",
         )
+
+
+class ProcessDamageConsequencesRecordingTests(TestCase):
+    """process_damage_consequences persists a ConsequenceOutcome when a combat_interaction
+    is threaded in, and skips recording when none is available."""
+
+    def _knockout_pool_with_unconscious(self):
+        """Build a knockout pool whose only FAILURE-tier consequence applies Unconscious."""
+        from world.vitals.services import get_vitals_consequence_config
+
+        failure_outcome = CheckOutcomeFactory(name="KO-Rec-Failure", success_level=-1)
+        unconscious_template = UnconsciousConditionFactory()
+        consequence = ConsequenceFactory(outcome_tier=failure_outcome, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=unconscious_template,
+            target="self",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        cfg = get_vitals_consequence_config()
+        cfg.knockout_pool = pool
+        cfg.save(update_fields=["knockout_pool"])
+        return failure_outcome, consequence, pool
+
+    def test_records_consequence_outcome_when_interaction_present(self) -> None:
+        """A firing knockout tier with a combat_interaction creates a ConsequenceOutcome
+        linked to that interaction, the firing pool + selected consequence, the firing
+        check type, a populated combat_interaction_timestamp, and modifier rows."""
+        from world.checks.outcome_models import ConsequenceOutcome
+        from world.scenes.factories import InteractionFactory
+        from world.vitals.services import process_damage_consequences
+
+        vitals = CharacterVitalsFactory(health=10, max_health=100)
+        character = vitals.character_sheet.character
+
+        failure_outcome, consequence, pool = self._knockout_pool_with_unconscious()
+        endurance_check_type = _ensure_endurance_check_type()
+
+        # An active condition with a +5 Endurance modifier so the breakdown has a row.
+        buff_template = ConditionTemplateFactory(name="KO-Rec-Buff", has_progression=False)
+        ConditionCheckModifierFactory(
+            condition=buff_template,
+            check_type=endurance_check_type,
+            modifier_value=5,
+        )
+        ConditionInstanceFactory(target=character, condition=buff_template)
+
+        interaction = InteractionFactory()
+
+        with force_check_outcome(failure_outcome):
+            process_damage_consequences(
+                character_sheet=character.sheet_data,
+                damage_dealt=5,
+                damage_type=None,
+                combat_interaction=interaction,
+            )
+
+        outcomes = list(ConsequenceOutcome.objects.filter(character=vitals.character_sheet))
+        self.assertEqual(len(outcomes), 1, "Exactly one ConsequenceOutcome should be recorded")
+        outcome = outcomes[0]
+        self.assertEqual(outcome.combat_interaction_id, interaction.pk)
+        self.assertIsNone(outcome.challenge_record_id)
+        self.assertEqual(outcome.combat_interaction_timestamp, interaction.timestamp)
+        self.assertEqual(outcome.pool_id, pool.pk)
+        self.assertEqual(outcome.selected_consequence_id, consequence.pk)
+        self.assertEqual(outcome.check_type_id, endurance_check_type.pk)
+
+        # Modifier rows mirror the breakdown (the +5 CONDITION contribution).
+        condition_rows = [
+            m for m in outcome.modifiers.all() if m.source_kind == ModifierSourceKind.CONDITION
+        ]
+        self.assertEqual(len(condition_rows), 1)
+        self.assertEqual(condition_rows[0].value, 5)
+        self.assertEqual(outcome.modifier_total, 5)
+
+    def test_no_interaction_skips_recording(self) -> None:
+        """With no combat_interaction (e.g. the effect_handlers path) the resolution still
+        applies effects but writes no ConsequenceOutcome (the exactly-one-source constraint
+        forbids a sourceless record)."""
+        from world.checks.outcome_models import ConsequenceOutcome
+        from world.vitals.services import process_damage_consequences
+
+        vitals = CharacterVitalsFactory(health=10, max_health=100)
+        character = vitals.character_sheet.character
+
+        failure_outcome, _consequence, _pool = self._knockout_pool_with_unconscious()
+
+        with force_check_outcome(failure_outcome):
+            result = process_damage_consequences(
+                character_sheet=character.sheet_data,
+                damage_dealt=5,
+                damage_type=None,
+            )
+
+        self.assertTrue(result.knocked_out)
+        self.assertEqual(
+            ConsequenceOutcome.objects.filter(character=vitals.character_sheet).count(),
+            0,
+            "No ConsequenceOutcome should be written when no combat_interaction is provided",
+        )
