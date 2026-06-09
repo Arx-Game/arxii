@@ -46,3 +46,13 @@ def load_persisted_ledger(interaction_id: int) -> PowerLedger | None:
         for row in rows
     )
     return PowerLedger(entries=entries, total=entries[-1].running_total)
+
+
+def viewer_can_see_ledger(interaction: Interaction, user: object) -> bool:
+    """True iff the user is staff or plays the character behind interaction.persona."""
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        return True
+    played = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+    return interaction.persona.character_sheet_id in played
