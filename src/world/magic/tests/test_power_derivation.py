@@ -767,3 +767,70 @@ class AuraPowerTermTests(TestCase):
         AuraPowerConfigFactory(affinity_alignment_bonus=20)
         ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
         self.assertEqual(aura_power_term(ctx), 0)
+
+
+class ThreadPowerTermTests(TestCase):
+    def setUp(self):
+        from world.magic.factories import ResonanceFactory
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.resonance = ResonanceFactory()
+
+    def _thread(self, level=0):
+        from world.magic.factories import ThreadFactory
+
+        return ThreadFactory(owner=self.sheet, resonance=self.resonance, level=level)
+
+    def test_empty_returns_zero(self):
+        from world.magic.services.power_terms import PowerTermContext, thread_power_term
+
+        ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
+        self.assertEqual(thread_power_term(ctx), 0)
+
+    def test_sums_intensity_bump_for_passive_tier0(self):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadPullEffectFactory
+        from world.magic.services.power_terms import (
+            ApplicableThread,
+            PowerTermContext,
+            thread_power_term,
+        )
+
+        thread = self._thread(level=0)  # multiplier max(1, 0//10) = 1
+        ThreadPullEffectFactory(
+            as_intensity_bump=True,
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=0,
+            intensity_bump_amount=3,
+        )
+        ctx = PowerTermContext(
+            sheet=self.sheet,
+            technique=None,
+            applicable_threads=[ApplicableThread(thread=thread, pull_tier=0)],
+        )
+        self.assertEqual(thread_power_term(ctx), 3)
+
+    def test_flat_bonus_ignored(self):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadPullEffectFactory
+        from world.magic.services.power_terms import (
+            ApplicableThread,
+            PowerTermContext,
+            thread_power_term,
+        )
+
+        thread = self._thread(level=0)
+        ThreadPullEffectFactory(  # FLAT_BONUS (default) must NOT contribute to power
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=0,
+            flat_bonus_amount=9,
+        )
+        ctx = PowerTermContext(
+            sheet=self.sheet,
+            technique=None,
+            applicable_threads=[ApplicableThread(thread=thread, pull_tier=0)],
+        )
+        self.assertEqual(thread_power_term(ctx), 0)

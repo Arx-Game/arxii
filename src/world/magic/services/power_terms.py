@@ -125,16 +125,27 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     return int(alignment + standing)
 
 
-def thread_power_term(_ctx: PowerTermContext) -> int:
-    """Contribution from applicable threads (tier-0 passive + active pulls). Returns 0 (stub).
+def thread_power_term(ctx: PowerTermContext) -> int:
+    """Out-of-combat per-thread INTENSITY_BUMP contribution (#768).
 
-    The full implementation requires knowing which threads are applicable to
-    the action and at what pull tier. Applicable threads are passed in via
-    ``_ctx.applicable_threads`` — the stub is ready to receive them.
+    Mirrors the combat CombatPull INTENSITY_BUMP path: for each applicable
+    thread, resolve its pull effects across tiers 0..pull_tier (the existing
+    charge-free ``resolve_pull_effects`` scaler) and sum INTENSITY_BUMP
+    scaled values. Tier-0 passive contributions are included because the
+    resolver always covers tier 0.
     """
-    # TODO: implement per-thread tier contribution once out-of-combat pull
-    # mechanics are wired (mirrors the combat CombatPull path)
-    return 0
+    from world.magic.constants import EffectKind  # noqa: PLC0415
+    from world.magic.services.resonance import resolve_pull_effects  # noqa: PLC0415
+
+    total = 0
+    for applicable in ctx.applicable_threads:
+        resolved = resolve_pull_effects([applicable.thread], applicable.pull_tier, in_combat=False)
+        total += sum(
+            r.scaled_value
+            for r in resolved
+            if r.kind == EffectKind.INTENSITY_BUMP and r.scaled_value
+        )
+    return total
 
 
 # ---------------------------------------------------------------------------
