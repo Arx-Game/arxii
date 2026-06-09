@@ -70,13 +70,14 @@ frontend is the primary game interface — design every feature for modern web U
 a secondary compatibility goal, **not** the design target: do not design features
 around text-command-and-response patterns.
 
-The backend is **action-centric, not flow-based**: both the web frontend
-(WebSocket / REST dispatch) and telnet commands converge on `action.run()`. An
-`Action` (`src/actions/`) owns its prerequisites (permission checks) and execution,
-calling **service functions** (`src/flows/service_functions/`) for state changes.
-**Flows** (`src/flows/`) are a reactive, event-driven layer (triggers), **not** the
-primary path. Game logic lives in actions and the service functions they call;
-commands are a thin telnet-compatibility layer with no business logic.
+The backend is **action-centric**: both the web frontend (WebSocket / REST
+dispatch) and telnet commands converge on `action.run()`. An `Action`
+(`src/actions/`) owns its prerequisites (permission checks) and execution, calling
+**service functions** (`src/flows/service_functions/`) for state changes. Game logic
+lives in actions and the service functions they call; commands are a thin
+telnet-compatibility layer with no business logic. **Flows** (`src/flows/`) are a
+separate reactive layer — triggers run flows in response to emitted events (e.g.
+condition decay, reactive effects).
 
 For each layer's detail, read the code-adjacent app guides (also loaded when you
 work in those dirs): **`src/actions/CLAUDE.md`** (action lifecycle, enhancements,
