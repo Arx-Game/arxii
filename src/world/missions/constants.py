@@ -101,24 +101,24 @@ class MissionStatus(models.TextChoices):
     EXPIRED = "expired", "Expired"
 
 
-class AccessTier(models.TextChoices):
-    """Who is allowed to be offered a :class:`~world.missions.models.MissionTemplate`.
+class MissionVisibility(models.TextChoices):
+    """Who can see / be offered a :class:`~world.missions.models.MissionTemplate` (#870).
 
-    Intentionally minimal — Phase B-7 ships just the two values the
-    in-testing/live workflow needs. Future tiers (e.g. members of a giver's
-    org, GMs at a minimum level, distinction-gated) will land after a
-    dedicated permission-design brainstorm; the enum is the expansion seam.
+    Visibility IS eligibility (one predicate, no two-predicate split):
 
-    OPEN — anyone the existing predicate / cooldown / level-band / arc-scope
-    filters allow (current default behavior).
-    STAFF_ONLY — only ``is_staff_observer`` characters; the "in testing"
-    state. Other filters still apply for staff; this is purely the audience
-    gate. Production default for new templates: every mission is testing-only
-    until the author flips it to OPEN.
+    OPEN — everyone; the ``availability_rule`` predicate is not consulted.
+    RESTRICTED — eligibility = the ``availability_rule`` predicate; whoever
+    passes it sees the template. A RESTRICTED template with an empty rule
+    admits no PC at all — the emergent "staff-only / in testing" state and
+    the production-safe default for new templates.
+
+    Staff (``is_staff_observer``) always bypass both modes. There is
+    deliberately no STAFF_ONLY value — staff-only is the degenerate case of
+    "no PC is eligible", not a separate audience tier.
     """
 
     OPEN = "open", "Open"
-    STAFF_ONLY = "staff_only", "Staff Only"
+    RESTRICTED = "restricted", "Restricted"
 
 
 class GiverKind(models.TextChoices):

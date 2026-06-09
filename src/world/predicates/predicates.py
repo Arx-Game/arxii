@@ -431,6 +431,64 @@ def _resolve_min_society_standing(ctx: ResolverContext, *, society: str, tier: s
     return _tier_rank(current_tier) >= threshold_rank
 
 
+def _resolve_min_org_rank(ctx: ResolverContext, *, org: str, rank: int) -> bool:
+    """True if the presented persona holds at least ``rank`` in the org (#870).
+
+    ``OrganizationMembership.rank`` is 1=leader … 5=lowest, so "at least
+    rank N" means ``membership.rank <= rank`` — e.g. ``rank=3`` admits
+    ranks 1, 2, and 3. Distinct from ``min_org_reputation``, which gates
+    on the reputation *tier*, not the membership rank.
+
+    Persona-aware + fail-closed: no presented persona → False; no
+    membership row for (presented_persona, org) → False.
+    """
+    if ctx.presented_persona is None:
+        return False
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return OrganizationMembership.objects.filter(
+        persona=ctx.presented_persona,
+        organization__name=org,
+        rank__lte=rank,
+    ).exists()
+
+
+def _resolve_min_resonance_level(ctx: ResolverContext, *, resonance: str, amount: int) -> bool:
+    """True if the character's lifetime-earned total in the resonance is >= ``amount`` (#870).
+
+    Gates on ``CharacterResonance.lifetime_earned`` (monotonic attunement),
+    NOT the spendable ``balance`` — spending resonance currency must never
+    revoke eligibility a character has already earned. Distinct from
+    ``has_resonance``, which tests bare row existence. No row → fail closed
+    (the character isn't associated with the resonance at all).
+    """
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+    return CharacterResonance.objects.filter(
+        character_sheet=ctx.sheet,
+        resonance__name=resonance,
+        lifetime_earned__gte=amount,
+    ).exists()
+
+
+def _resolve_is_member_of_society(ctx: ResolverContext, *, society: str) -> bool:
+    """True if the presented persona belongs to ANY org in the society (#870).
+
+    First-class rather than an OR over ``is_member_of_org`` leaves — org
+    rosters change, and an authored org enumeration silently rots when a
+    new org joins the society. Persona-aware + fail-closed like
+    ``is_member_of_org``: no presented persona → False.
+    """
+    if ctx.presented_persona is None:
+        return False
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return OrganizationMembership.objects.filter(
+        persona=ctx.presented_persona,
+        organization__society__name=society,
+    ).exists()
+
+
 # Leaf-name -> resolver. The structural evaluator never reads this; only
 # CharacterPredicateContext dispatches through it.
 LEAF_RESOLVERS: LeafRegistry = {
@@ -448,7 +506,10 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_npc_standing": _resolve_min_npc_standing,
     "has_item": _resolve_has_item,
     "is_member_of_org": _resolve_is_member_of_org,
+    "is_member_of_society": _resolve_is_member_of_society,
+    "min_org_rank": _resolve_min_org_rank,
     "min_org_reputation": _resolve_min_org_reputation,
+    "min_resonance_level": _resolve_min_resonance_level,
     "min_society_standing": _resolve_min_society_standing,
 }
 

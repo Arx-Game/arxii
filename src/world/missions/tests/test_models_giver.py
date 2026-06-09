@@ -162,9 +162,10 @@ class MissionGiverIsPublishableTests(TestCase):
 
     Drafty givers (target unset) pass clean() at the model layer but
     fail is_publishable — the authoring UI / admin surface uses this
-    as the gate before flipping a template from STAFF_ONLY to OPEN
-    (Phase-B7 access_tier transition), and as a 'needs-work' signal.
-    Runtime enforcement in offer_missions is deferred to Phase D.
+    as the gate before opening a template up (flipping
+    ``MissionTemplate.visibility`` to OPEN, #870), and as a
+    'needs-work' signal. Runtime enforcement in offer_missions is
+    deferred to Phase D.
     """
 
     def test_room_trigger_publishable_when_target_set(self) -> None:

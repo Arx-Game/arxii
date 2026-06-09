@@ -8,8 +8,10 @@
  * handled server-side; the saved name comes back in the response
  * and a toast surfaces any rename.
  *
- * availability_rule defaults to {} (predicate authoring is handled
- * by the existing PredicateBuilder on the detail surface).
+ * Visibility defaults to "restricted" with an empty rule — the emergent
+ * staff-only draft state (#870). Picking RESTRICTED reveals the
+ * PredicateBuilder so the audience rule can be authored inline; OPEN
+ * skips the rule entirely (it is not consulted at runtime).
  */
 
 import { useState } from 'react';
@@ -29,9 +31,15 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 
 import { CategoryMultiSelect } from '../components/CategoryMultiSelect';
-import { useCreateMissionTemplate } from '../queries';
+import {
+  coercePredicate,
+  PredicateBuilder,
+  validatePredicate,
+  type PredicateNode,
+} from '../components/PredicateBuilder';
+import { useCreateMissionTemplate, usePredicateLeaves } from '../queries';
 import { ApiValidationError, flattenErrorMessage } from '../api';
-import type { ArcScope, AccessTier } from '../types';
+import type { ArcScope, MissionVisibility } from '../types';
 import type { components } from '@/generated/api';
 
 type RewardGroupRule = components['schemas']['RewardGroupRuleEnum'];
@@ -50,9 +58,9 @@ const REWARD_RULES: { value: RewardGroupRule; label: string }[] = [
   { value: 'by_participation', label: 'By participation' },
 ];
 
-const ACCESS_TIERS: { value: AccessTier; label: string }[] = [
-  { value: 'staff_only', label: 'Staff only (draft)' },
-  { value: 'open', label: 'Open' },
+const VISIBILITIES: { value: MissionVisibility; label: string }[] = [
+  { value: 'restricted', label: 'Restricted (rule-gated; empty rule = staff-only draft)' },
+  { value: 'open', label: 'Open (everyone)' },
 ];
 
 function cooldownToISO(amount: number, unit: CooldownUnit): string {
@@ -153,8 +161,12 @@ export function CreateMissionPage() {
   const [cooldownAmount, setCooldownAmount] = useState(1);
   const [cooldownUnit, setCooldownUnit] = useState<CooldownUnit>('days');
   const [rewardRule, setRewardRule] = useState<RewardGroupRule>('all_equal');
-  const [accessTier, setAccessTier] = useState<AccessTier>('staff_only');
+  const [visibility, setVisibility] = useState<MissionVisibility>('restricted');
+  const [availabilityRule, setAvailabilityRule] = useState<PredicateNode>({});
   const [categories, setCategories] = useState<number[]>([]);
+  const leaves = usePredicateLeaves();
+  const ruleErrors =
+    visibility === 'restricted' ? validatePredicate(availabilityRule, leaves.data ?? []) : [];
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [localError, setLocalError] = useState<string | null>(null);
@@ -192,7 +204,9 @@ export function CreateMissionPage() {
         percent_replace: percentReplace,
         cooldown: cooldownToISO(cooldownAmount, cooldownUnit),
         reward_group_rule: rewardRule,
-        access_tier: accessTier,
+        visibility,
+        availability_rule:
+          visibility === 'restricted' ? coercePredicate(availabilityRule, leaves.data ?? []) : {},
         categories,
       });
       if (created.name !== submittedName) {
@@ -339,13 +353,13 @@ export function CreateMissionPage() {
               </SelectContent>
             </Select>
           </FormRow>
-          <FormRow label="Access tier" error={fieldErrors.access_tier}>
-            <Select value={accessTier} onValueChange={(v) => setAccessTier(v as AccessTier)}>
-              <SelectTrigger id="field-access-tier">
+          <FormRow label="Visibility" error={fieldErrors.visibility}>
+            <Select value={visibility} onValueChange={(v) => setVisibility(v as MissionVisibility)}>
+              <SelectTrigger id="field-visibility">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ACCESS_TIERS.map((opt) => (
+                {VISIBILITIES.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
@@ -354,6 +368,26 @@ export function CreateMissionPage() {
             </Select>
           </FormRow>
         </div>
+        {visibility === 'restricted' ? (
+          <div data-testid="create-availability-rule">
+            <Label className="mb-1 block">Availability rule (the audience gate)</Label>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Whoever passes this rule sees the mission; staff always do. Leave empty to keep it
+              staff-only while in testing.
+            </p>
+            <PredicateBuilder value={availabilityRule} onChange={setAvailabilityRule} />
+            {ruleErrors.length > 0 ? (
+              <ul className="mt-1 list-inside list-disc text-xs text-destructive">
+                {ruleErrors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
+            ) : null}
+            {fieldErrors.availability_rule ? (
+              <p className="mt-1 text-xs text-destructive">{fieldErrors.availability_rule}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div>
           <Label className="mb-1 block">Categories</Label>
           <CategoryMultiSelect value={categories} onChange={setCategories} />
@@ -365,7 +399,7 @@ export function CreateMissionPage() {
           <Button variant="outline" onClick={() => navigate('/staff/missions')}>
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={create.isPending}>
+          <Button onClick={onSubmit} disabled={create.isPending || ruleErrors.length > 0}>
             Create Mission
           </Button>
         </div>

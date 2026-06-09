@@ -25,7 +25,7 @@ export type MissionInstance = components['schemas']['MissionInstance'];
 export type MissionGiver = components['schemas']['MissionGiver'];
 export type MissionGiverRequest = components['schemas']['MissionGiverRequest'];
 
-export type AccessTier = components['schemas']['AccessTierEnum'];
+export type MissionVisibility = components['schemas']['MissionVisibilityEnum'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
 
 /** Filter knobs for the browser page. Subset of D1's MissionTemplateFilterSet. */
@@ -34,7 +34,7 @@ export interface MissionTemplateFilters {
   risk_tier?: number;
   is_active?: boolean;
   arc_scope?: ArcScope;
-  access_tier?: AccessTier;
+  visibility?: MissionVisibility;
   category?: string;
   org?: string;
   level_band_contains?: number;

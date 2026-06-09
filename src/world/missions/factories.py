@@ -8,13 +8,13 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.missions.constants import (
-    AccessTier,
     ArcScope,
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
     GiverKind,
     MissionStatus,
+    MissionVisibility,
     OptionKind,
     OptionSource,
     RewardGroupRule,
@@ -79,20 +79,20 @@ class MissionTemplateFactory(DjangoModelFactory):
     reward_group_rule = RewardGroupRule.ALL_EQUAL
     is_active = True
     # Factory default differs from MODEL default: the model defaults to
-    # STAFF_ONLY (production-safe — new authored templates are in testing
-    # until staff publishes them). The factory defaults to OPEN so the
+    # RESTRICTED (production-safe — new authored templates are emergent
+    # staff-only until opened, #870). The factory defaults to OPEN so the
     # entire test suite keeps surfacing templates to non-staff characters
-    # without every caller passing access_tier. Tests covering the
-    # STAFF_ONLY tier set access_tier explicitly.
+    # without every caller passing visibility. Tests covering RESTRICTED
+    # set visibility explicitly.
     #
     # NOTE: factory_boy's ``django_get_or_create`` silently drops non-lookup
     # kwargs when the row pre-exists. If a test calls
-    # ``MissionTemplateFactory(name="x", access_tier=AccessTier.STAFF_ONLY)``
+    # ``MissionTemplateFactory(name="x", visibility=MissionVisibility.RESTRICTED)``
     # after another call has already created name="x" (with the default OPEN),
-    # the second call returns the existing OPEN row and the access_tier kwarg
-    # is silently dropped. Tests that care about the tier MUST use a unique
-    # name (the convention in OfferMissionsAccessTierTests).
-    access_tier = AccessTier.OPEN
+    # the second call returns the existing OPEN row and the visibility kwarg
+    # is silently dropped. Tests that care about visibility MUST use a
+    # unique name.
+    visibility = MissionVisibility.OPEN
 
 
 class MissionNodeFactory(DjangoModelFactory):

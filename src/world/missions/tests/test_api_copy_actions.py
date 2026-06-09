@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.checks.factories import CheckTypeFactory
-from world.missions.constants import AccessTier, OptionKind, OptionSource
+from world.missions.constants import MissionVisibility, OptionKind, OptionSource
 from world.missions.factories import (
     MissionNodeFactory,
     MissionOptionFactory,
@@ -25,7 +25,7 @@ class CopyTemplateActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-copy-tmpl", is_staff=True)
-        cls.source = MissionTemplateFactory(name="Source", access_tier=AccessTier.OPEN)
+        cls.source = MissionTemplateFactory(name="Source", visibility=MissionVisibility.OPEN)
         cls.entry = MissionNodeFactory(template=cls.source, key="entry", is_entry=True)
         cls.target = MissionNodeFactory(template=cls.source, key="target")
         cls.check_type = CheckTypeFactory()
@@ -55,8 +55,10 @@ class CopyTemplateActionTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["name"], "Source (Copy)")
-        # Copy always lands STAFF_ONLY regardless of source tier.
-        self.assertEqual(response.data["access_tier"], AccessTier.STAFF_ONLY)
+        # Copy always lands staff-only (#870): RESTRICTED + emptied rule,
+        # regardless of the source's visibility/rule.
+        self.assertEqual(response.data["visibility"], MissionVisibility.RESTRICTED)
+        self.assertEqual(response.data["availability_rule"], {})
 
     def test_copy_duplicates_all_nodes(self) -> None:
         res = self.client.post(

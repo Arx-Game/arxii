@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from core_management.permissions import is_staff_observer
 from world.checks.services import perform_check
-from world.missions.constants import AccessTier, MissionStatus
+from world.missions.constants import MissionStatus
 from world.missions.models import MissionInstance
+from world.missions.services.visibility import template_visible_to
 from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.effects import EffectResult, dispatch_offer_effect
 from world.npc_services.models import (
@@ -229,8 +229,8 @@ def _is_offer_eligible(  # noqa: PLR0913
     4. Offer-level cooldown: no active ``OfferCooldown`` for (offer, persona).
     5. For MISSION offers only: PC cap (cached), per-(persona × role)
        one-in-flight (cached), template-level gates (``is_active``,
-       ``access_tier``, ``level_band``), and the AND-composed predicate
-       ``template.availability_rule`` ∧ ``details.requirements_override``
+       ``visibility``/``availability_rule`` via ``template_visible_to``,
+       ``level_band``), AND-composed with ``details.requirements_override``
        (see ``_mission_gates_pass``).
     6. Offer's own ``eligibility_rule`` predicate.
 
@@ -277,10 +277,11 @@ def _mission_gates_pass(  # noqa: PLR0911
     """Apply the MISSION-only gates from ``_is_offer_eligible`` (#686).
 
     Ordered cheapest-first: cached PC/role gates → details lookup → template
-    field gates → composed predicate. Template-side gates (``is_active``,
-    ``access_tier``, ``level_band``, ``availability_rule``) are enforced
-    here per spec — eligibility composes ``template.availability_rule`` ∧
-    ``details.requirements_override`` ∧ ``offer.eligibility_rule``.
+    field gates → composed predicate. Template-side visibility (#870:
+    ``visibility`` + ``availability_rule`` + staff bypass) is enforced via
+    the single ``template_visible_to`` gate; eligibility then composes
+    ``details.requirements_override`` ∧ ``offer.eligibility_rule`` (offer-
+    specific, orthogonal to template visibility).
     """
     if cache.pc_at_npc_cap:
         return False
@@ -294,7 +295,7 @@ def _mission_gates_pass(  # noqa: PLR0911
     template = details.mission_template
     if not template.is_active:
         return False
-    if template.access_tier == AccessTier.STAFF_ONLY and not is_staff_observer(character):
+    if not template_visible_to(template, character, persona=persona):
         return False
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is None:
@@ -306,8 +307,6 @@ def _mission_gates_pass(  # noqa: PLR0911
     if not (template.level_band_min <= sheet.current_level <= template.level_band_max):
         return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
-    if template.availability_rule and not evaluate(template.availability_rule, ctx):
-        return False
     if details.requirements_override and not evaluate(details.requirements_override, ctx):
         return False
     return True

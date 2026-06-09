@@ -47,14 +47,14 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
 
     Read-only fields cover the authoring footprint: name, summary,
     epilogue, level band, risk tier, weighting, era association, scope,
-    cooldown, reward-group rule, active flag, access tier, categories,
+    cooldown, reward-group rule, active flag, visibility, categories,
     availability rule.
 
-    Access-tier flip is unguarded post-#686 — the legacy
-    ``MissionGiver.is_publishable`` guard was stripped with the
-    giver editor surface; an equivalent guard against the new
-    ``NPCRole`` + ``NPCServiceOffer`` catalog will land with the
-    npc-services authoring follow-up.
+    The visibility flip is a straight write (#870): there is no
+    "publish to nobody" failure mode to guard against — a RESTRICTED
+    template whose rule admits no PC simply IS staff-only, a valid
+    emergent state. ``availability_rule`` IS validated (well-formedness;
+    a malformed tree would crash every later availability check).
     """
 
     class Meta:
@@ -74,7 +74,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             "cooldown",
             "reward_group_rule",
             "is_active",
-            "access_tier",
+            "visibility",
             "categories",
             "availability_rule",
         ]
@@ -127,16 +127,21 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
 
-    def validate_access_tier(self, value: str) -> str:
-        """Access tier flip is unguarded post-#686.
+    def validate_availability_rule(self, value: dict) -> dict:
+        """Reject malformed predicate trees at author time (#870).
 
-        The previous guard checked "every attached MissionGiver must be
-        publishable" via the giver.templates M2M. That M2M dropped with
-        the legacy giver surface. The equivalent guard for the new
-        ``NPCRole`` + ``NPCServiceOffer`` catalog (e.g. "every offer's
-        role must be active") is a follow-up — for now the tier flip is
-        a straight write.
+        Under visibility=eligibility the rule IS the audience gate, and a
+        malformed tree (unknown leaf, missing/mistyped param, bad shape)
+        doesn't fail at save — it crashes every later availability check
+        that evaluates it. ``validate_predicate_tree`` ports the FE
+        builder's checks server-side, plus param type checks against the
+        same introspected leaf catalog the builder renders from.
         """
+        from world.predicates.validation import validate_predicate_tree  # noqa: PLC0415
+
+        errors = validate_predicate_tree(value)
+        if errors:
+            raise serializers.ValidationError(errors)
         return value
 
     def create(self, validated_data: dict) -> MissionTemplate:  # type: ignore[override]

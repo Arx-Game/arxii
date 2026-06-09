@@ -280,6 +280,13 @@ SPECTACULAR_SETTINGS = {
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
+    # Several models share a `visibility` field name with different choice
+    # sets; without an override spectacular emits hash-suffixed collision
+    # names (e.g. VisibilityBe1Enum) that churn whenever a new collision
+    # appears. Pin ours explicitly.
+    "ENUM_NAME_OVERRIDES": {
+        "MissionVisibilityEnum": "world.missions.constants.MissionVisibility.choices",
+    },
 }
 
 # Patch django-filter 2.4.0 compatibility with Django 5.2.
