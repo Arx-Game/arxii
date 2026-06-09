@@ -32,6 +32,7 @@ from world.magic.models import (
     Affinity,
     AffinityInteraction,
     AnimaRitualPerformance,
+    AuraPowerConfig,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -2313,6 +2314,17 @@ class TechniqueBudgetConfigFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("pk",)
 
     pk = 1
+
+
+class AuraPowerConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AuraPowerConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+    affinity_alignment_bonus = 0
+    resonance_standing_bonus = 0
+    resonance_standing_cap = 0
 
 
 class TechniqueTierBudgetFactory(factory.django.DjangoModelFactory):

@@ -19,12 +19,16 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
     MishapPoolTierFactory,
+    ResonanceFactory,
     SoulfrayConfigFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadPullEffectFactory,
 )
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
@@ -172,6 +176,56 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
 
         anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
         assert anima.current < 20
+
+    def test_enhanced_action_resolves_with_passive_thread_present(self) -> None:
+        """A passive tier-0 thread anchored to the enhancing technique does not
+        break the enhanced-action path (#768 Task 7 wiring regression).
+
+        ``_resolve_enhanced_action`` now builds applicable threads from the
+        caster's sheet and forwards them to ``use_technique``. This proves the
+        new wiring resolves cleanly when a passive in-scope thread exists.
+        (The enhanced-action path does not surface the cast power ledger on the
+        result, so this asserts successful resolution rather than a power delta.)
+        """
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
+        resonance = ResonanceFactory()
+        ThreadFactory(
+            owner=initiator_sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=self.charm_technique,
+            level=0,
+        )
+        ThreadPullEffectFactory(
+            as_intensity_bump=True,
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=resonance,
+            tier=0,
+            intensity_bump_amount=5,
+        )
+
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=self.charm_technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.technique_result is not None
+        assert result.action_resolution is not None
+        assert result.action_resolution.main_result is not None
 
     def test_enhancement_rejected_without_record(self) -> None:
         """Cannot attach a technique without a matching ActionEnhancement (raises

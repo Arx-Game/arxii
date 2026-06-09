@@ -46,7 +46,7 @@ is the effective power (floored at 0).
 | 1 | **BASE** | `stats.intensity` from `get_runtime_technique_stats` (identity + process modifiers, Audere intensity, tier penalty, social safety) | `SET` to channeled intensity |
 | 2 | **MULTIPLIER** | `power_multiplier` `ModifierTarget` via `get_modifier_breakdown` + `get_condition_modifier_breakdown`. Immunity-blocked sources excluded. | Single aggregate `×(1 + Σ%/100)` applied to BASE only — one `multiply` call, never per-source, to avoid repeated rounding drift |
 | 3 | **FLAT_MODIFIER** | Per-source additive power modifiers via `get_modifier_breakdown` (immunity-blocked excluded) + per-condition rows via `get_condition_modifier_breakdown` | `ADD` per non-zero source |
-| 4 | **TERM** | `get_power_term_providers()` — level live; aura/thread stubs | `ADD` per provider |
+| 4 | **TERM** | `get_power_term_providers()` — level, aura, and thread all live (#768) | `ADD` per provider |
 | 5 | **ENVIRONMENT** | Cast-time `evaluate_resonance_environment` AMPLIFY magnitude only | `ADD` if `kind == AMPLIFY and magnitude > 0` |
 
 Then, in the combat resolver (`CombatTechniqueResolver.__call__`):
