@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.conditions.models import CapabilityType
-    from world.magic.models import Thread
+    from world.magic.models import Resonance, Thread
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,20 @@ class ResonancePullResult:
     resonance_spent: int
     anima_spent: int
     resolved_effects: list[ResolvedPullEffect]
+
+
+@dataclass(frozen=True)
+class CastPullDeclaration:
+    """A paid thread pull declared as part of an out-of-combat technique cast (#768).
+
+    The caster commits ``resonance`` at ``tier`` across ``threads``; charged via
+    ``spend_resonance_for_pull`` only after the cast clears its soulfray/pre-cast
+    gates. All threads must share ``resonance`` and pass anchor-in-action checks.
+    """
+
+    resonance: Resonance
+    tier: int
+    threads: tuple[Thread, ...]
 
 
 @dataclass(frozen=True)

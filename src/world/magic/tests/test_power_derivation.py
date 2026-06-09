@@ -834,3 +834,20 @@ class ThreadPowerTermTests(TestCase):
             applicable_threads=[ApplicableThread(thread=thread, pull_tier=0)],
         )
         self.assertEqual(thread_power_term(ctx), 0)
+
+
+class CastPullDeclarationTests(TestCase):
+    def test_is_frozen_dataclass(self):
+        import dataclasses
+
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.types.pull import CastPullDeclaration
+
+        res = ResonanceFactory()
+        thread = ThreadFactory(resonance=res)
+        decl = CastPullDeclaration(resonance=res, tier=2, threads=(thread,))
+        self.assertEqual(decl.tier, 2)
+        self.assertEqual(decl.resonance, res)
+        self.assertEqual(decl.threads, (thread,))
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            decl.tier = 3  # frozen
