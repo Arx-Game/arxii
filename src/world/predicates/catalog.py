@@ -13,13 +13,12 @@ from __future__ import annotations
 import inspect
 import typing
 
-from world.predicates.predicates import LEAF_RESOLVERS
 from world.predicates.types import LeafResolver
 
 _TYPE_TAGS: dict[type, str] = {int: "int", bool: "bool", str: "str", float: "float"}
 
 
-def annotation_tag(annotation: object) -> str:
+def _annotation_tag(annotation: object) -> str:
     """Map a resolver param annotation to a string tag the FE can switch on.
 
     The FE builder coerces ``<Input>`` strings into the right Python type
@@ -47,15 +46,10 @@ def leaf_params(resolver: LeafResolver) -> list[dict[str, str]]:
         # forward reference (NameError) or a non-evaluable annotation
         # (TypeError / AttributeError on inner typing surfaces), fall
         # back to the raw (string) annotation — which falls through to
-        # "str" via the isinstance check in annotation_tag.
+        # "str" via the isinstance check in _annotation_tag.
         hints = {}
     return [
-        {"name": name, "type": annotation_tag(hints.get(name, param.annotation))}
+        {"name": name, "type": _annotation_tag(hints.get(name, param.annotation))}
         for name, param in list(sig.parameters.items())[1:]
         if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
     ]
-
-
-def leaf_param_specs() -> dict[str, list[dict[str, str]]]:
-    """Param specs for every registered leaf, keyed by leaf name."""
-    return {name: leaf_params(resolver) for name, resolver in LEAF_RESOLVERS.items()}

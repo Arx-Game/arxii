@@ -103,6 +103,23 @@ class MalformedTreeTests(SimpleTestCase):
     def test_params_not_a_dict(self) -> None:
         self._assert_one_error({"leaf": "min_character_level", "params": [1]}, "must be an object")
 
+    def test_unknown_tier_value_rejected(self) -> None:
+        # Adversarial-review regression: _tier_rank raises KeyError on any
+        # value outside _TIER_ORDER (even a case mismatch), which would
+        # crash every later availability check — reject at author time.
+        self._assert_one_error(
+            {"leaf": "min_org_reputation", "params": {"org": "Guild", "tier": "Honored"}},
+            "must be one of",
+        )
+        self._assert_one_error(
+            {"leaf": "min_society_standing", "params": {"society": "S", "tier": "bogus"}},
+            "must be one of",
+        )
+
+    def test_known_tier_value_accepted(self) -> None:
+        rule = {"leaf": "min_org_reputation", "params": {"org": "Guild", "tier": "honored"}}
+        self.assertEqual(validate_predicate_tree(rule), [])
+
     def test_error_paths_locate_the_bad_node(self) -> None:
         rule = {"op": "AND", "of": [{}, {"leaf": "no_such_leaf", "params": {}}]}
         errors = validate_predicate_tree(rule)

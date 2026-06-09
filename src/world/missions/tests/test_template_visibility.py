@@ -21,8 +21,10 @@ from world.missions.factories import (
 from world.missions.services.trigger_dispatch import maybe_dispatch_on_enter
 from world.missions.services.visibility import template_visible_to
 
-# Deterministic always-false predicate: empty OR evaluates False.
-_ALWAYS_FALSE = {"op": "OR", "of": []}
+# Deterministic always-false LEAFY predicate (fresh sheets are level 0) —
+# exercises the evaluate path, unlike a leafless tree which the
+# no-actual-gates guard short-circuits.
+_ALWAYS_FALSE = {"leaf": "min_character_level", "params": {"level": 99}}
 # Deterministic always-true predicate against a fresh level-0 sheet.
 _LEVEL_ZERO_OK = {"leaf": "min_character_level", "params": {"level": 0}}
 
@@ -65,6 +67,23 @@ class TemplateVisibleToTests(TestCase):
         # raw evaluator) — the safe default for new/in-testing templates.
         template = MissionTemplateFactory(visibility=MissionVisibility.RESTRICTED)
         self.assertFalse(template_visible_to(template, _pc()))
+
+    def test_restricted_leafless_group_is_emergent_staff_only(self) -> None:
+        # Adversarial-review regression: the FE builder produces
+        # {"op": "AND", "of": []} in one click, and evaluate() treats an
+        # empty AND as vacuously True. A leafless tree must read as "no
+        # gates authored" (staff-only), not as open-to-everyone.
+        for leafless in (
+            {"op": "AND", "of": []},
+            {"op": "AND", "of": [{"op": "AND", "of": []}]},
+            {"op": "NOT", "of": [{}]},
+        ):
+            template = MissionTemplateFactory(
+                name=f"leafless-{leafless!r}",
+                visibility=MissionVisibility.RESTRICTED,
+                availability_rule=leafless,
+            )
+            self.assertFalse(template_visible_to(template, _pc()), leafless)
 
     def test_staff_bypass_restricted_failing_rule(self) -> None:
         template = MissionTemplateFactory(

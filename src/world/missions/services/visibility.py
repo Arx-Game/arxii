@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from core_management.permissions import is_staff_observer
 from world.missions.constants import MissionVisibility
-from world.predicates.predicates import CharacterPredicateContext, evaluate
+from world.predicates.predicates import KEY_LEAF, KEY_OF, CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -54,9 +54,20 @@ def template_visible_to(
     if is_staff_observer(character):
         return True
     rule = template.availability_rule or {}
-    if not rule:
-        # RESTRICTED with no gates admits no PC — the emergent staff-only
-        # state. (evaluate({}) is vacuously True, so guard explicitly.)
+    if not _contains_leaf(rule):
+        # RESTRICTED with no actual gates admits no PC — the emergent
+        # staff-only state. This must catch not just {} but any leafless
+        # tree: evaluate({}) and evaluate({"op": "AND", "of": []}) are
+        # both vacuously True, and the FE builder produces an empty AND
+        # group in one click — without this guard that one click would
+        # silently open an in-testing mission to every PC.
         return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(rule, ctx)
+
+
+def _contains_leaf(rule: dict) -> bool:
+    """True if the tree has at least one leaf node (i.e. an actual gate)."""
+    if KEY_LEAF in rule:
+        return True
+    return any(_contains_leaf(child) for child in rule.get(KEY_OF, []) if isinstance(child, dict))

@@ -447,12 +447,14 @@ class MissionTemplateGateCompositionTests(TestCase):
         self.assertNotIn(offer, available_offers(session))
 
     def test_restricted_failing_rule_blocks(self):
-        """RESTRICTED: the availability_rule IS eligibility; empty OR == False."""
+        """RESTRICTED: the availability_rule IS eligibility. Leafy always-false
+        rule (fresh PCs are level 0) so the evaluate path is exercised, not
+        the leafless-tree staff-only guard."""
         character, persona = _make_pc()
         role = NPCRoleFactory()
         offer, _, template = _make_mission_offer(role)
         template.visibility = MissionVisibility.RESTRICTED
-        template.availability_rule = {"op": "OR", "of": []}
+        template.availability_rule = {"leaf": "min_character_level", "params": {"level": 99}}
         template.save(update_fields=["visibility", "availability_rule"])
         session = start_interaction(role=role, persona=persona, character=character)
         self.assertNotIn(offer, available_offers(session))

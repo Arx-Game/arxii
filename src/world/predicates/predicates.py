@@ -446,15 +446,11 @@ def _resolve_min_org_rank(ctx: ResolverContext, *, org: str, rank: int) -> bool:
         return False
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
-    member_rank = (
-        OrganizationMembership.objects.filter(
-            persona=ctx.presented_persona,
-            organization__name=org,
-        )
-        .values_list("rank", flat=True)
-        .first()
-    )
-    return member_rank is not None and member_rank <= rank
+    return OrganizationMembership.objects.filter(
+        persona=ctx.presented_persona,
+        organization__name=org,
+        rank__lte=rank,
+    ).exists()
 
 
 def _resolve_min_resonance_level(ctx: ResolverContext, *, resonance: str, amount: int) -> bool:

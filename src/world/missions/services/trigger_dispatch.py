@@ -82,6 +82,13 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     if _holds_active_trigger_mission(character):
         return None
 
+    # No persona is passed: room-entry/examine has no presented-persona
+    # context, and substituting the PRIMARY persona would leak the true
+    # identity's memberships onto a masked character. Consequence:
+    # persona-keyed leaves (org/society membership, rank, standing) fail
+    # closed on the trigger path — a RESTRICTED template gated solely on
+    # them dispatches only to staff here until presented-persona plumbing
+    # lands (#870 follow-up).
     eligible = [
         template
         for template in giver.templates.all()

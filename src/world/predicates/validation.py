@@ -7,8 +7,9 @@ a ``KeyError`` inside ``offer_missions``/trigger dispatch). This module
 rejects malformed trees at author time instead, so the serializer can 400.
 
 Ports the checks the FE builder already runs (``validatePredicate`` in
-``PredicateBuilder.tsx``) and adds param *type* checks against the same
-introspected catalog the builder renders from (``catalog.leaf_params``):
+``PredicateBuilder.tsx``) and adds param *type* and *value* checks against
+the same introspected catalog the builder renders from
+(``catalog.leaf_params``):
 
 - structure: every node is ``{}``, a ``{"op", "of"}`` group, or a
   ``{"leaf", "params"}`` leaf; ``op`` ∈ AND/OR/NOT; ``of`` is a list;
@@ -16,7 +17,8 @@ introspected catalog the builder renders from (``catalog.leaf_params``):
 - leaf names: non-empty and present in ``LEAF_RESOLVERS``
 - params: every declared param present and non-blank, no undeclared
   extras (they'd ``TypeError`` at resolver call time), values matching
-  the declared type tag
+  the declared type tag, and values within the allowed set for params
+  whose resolver raises on out-of-set values (tier strings)
 
 Returns human-readable error strings (empty list == valid) rather than
 raising, so callers compose the errors into their own ValidationError
@@ -27,12 +29,14 @@ by the shared introspected catalog.
 
 from __future__ import annotations
 
-from world.predicates.catalog import leaf_param_specs
+from world.predicates.catalog import leaf_params
 from world.predicates.predicates import (
+    _TIER_ORDER,
     KEY_LEAF,
     KEY_OF,
     KEY_OP,
     KEY_PARAMS,
+    LEAF_RESOLVERS,
     OP_AND,
     OP_NOT,
     OP_OR,
@@ -50,34 +54,39 @@ _TAG_CHECKS = {
     "str": lambda v: isinstance(v, str),
 }
 
+# Params constrained beyond their primitive type, keyed (leaf, param).
+# ``_tier_rank`` raises KeyError for any value outside ``_TIER_ORDER``
+# (deliberately loud — but the loud failure fires inside every later
+# availability check, so reject out-of-set values at author time too).
+_PARAM_ALLOWED_VALUES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("min_org_reputation", "tier"): _TIER_ORDER,
+    ("min_society_standing", "tier"): _TIER_ORDER,
+}
+
 
 def validate_predicate_tree(rule: object) -> list[str]:
     """Validate a rule tree's well-formedness; return error strings (empty == valid)."""
     errors: list[str] = []
-    _walk(rule, errors, leaf_param_specs(), path="root")
+    _walk(rule, errors, path="root")
     return errors
 
 
-def _walk(
-    node: object, errors: list[str], specs: dict[str, list[dict[str, str]]], path: str
-) -> None:
+def _walk(node: object, errors: list[str], path: str) -> None:
     if not isinstance(node, dict):
         errors.append(f"{path}: node must be an object, got {type(node).__name__}.")
         return
     if not node:  # {} == no gate
         return
     if KEY_OP in node:
-        _walk_group(node, errors, specs, path)
+        _walk_group(node, errors, path)
         return
     if KEY_LEAF in node:
-        _walk_leaf(node, errors, specs, path)
+        _walk_leaf(node, errors, path)
         return
     errors.append(f"{path}: node must be empty, an op group, or a leaf.")
 
 
-def _walk_group(
-    node: dict, errors: list[str], specs: dict[str, list[dict[str, str]]], path: str
-) -> None:
+def _walk_group(node: dict, errors: list[str], path: str) -> None:
     op = node[KEY_OP]
     if op not in _VALID_OPS:
         errors.append(f"{path}: unknown op {op!r} (expected one of {', '.join(_VALID_OPS)}).")
@@ -89,24 +98,23 @@ def _walk_group(
     if op == OP_NOT and len(of) != 1:
         errors.append(f"{path}: NOT must have exactly one operand, got {len(of)}.")
     for i, child in enumerate(of):
-        _walk(child, errors, specs, f"{path}.{op}[{i}]")
+        _walk(child, errors, f"{path}.{op}[{i}]")
 
 
-def _walk_leaf(
-    node: dict, errors: list[str], specs: dict[str, list[dict[str, str]]], path: str
-) -> None:
+def _walk_leaf(node: dict, errors: list[str], path: str) -> None:
     leaf = node[KEY_LEAF]
     if not leaf or not isinstance(leaf, str):
         errors.append(f"{path}: leaf name must be a non-empty string.")
         return
-    declared = specs.get(leaf)
-    if declared is None:
+    resolver = LEAF_RESOLVERS.get(leaf)
+    if resolver is None:
         errors.append(f"{path}: unknown leaf {leaf!r}.")
         return
     params = node.get(KEY_PARAMS, {})
     if not isinstance(params, dict):
         errors.append(f"{path}: 'params' must be an object.")
         return
+    declared = leaf_params(resolver)
     declared_names = {spec["name"] for spec in declared}
     errors.extend(
         f"{path}: leaf {leaf!r} got unexpected param {extra!r}."
@@ -122,4 +130,11 @@ def _walk_leaf(
             errors.append(
                 f"{path}: leaf {leaf!r} param {name!r} must be of type {tag}, "
                 f"got {type(value).__name__}."
+            )
+            continue
+        allowed = _PARAM_ALLOWED_VALUES.get((leaf, name))
+        if allowed is not None and value not in allowed:
+            errors.append(
+                f"{path}: leaf {leaf!r} param {name!r} must be one of "
+                f"{', '.join(allowed)}; got {value!r}."
             )
