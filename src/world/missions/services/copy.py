@@ -4,8 +4,8 @@ Three operations:
 - ``copy_template`` — duplicate a whole MissionTemplate (including its
   full graph: every node + option + route + candidate + reward). All
   route target_nodes stay internal to the new template (clone-to-clone
-  re-pointing). Lands with ``access_tier=STAFF_ONLY`` so the author can
-  fix flavor before publishing.
+  re-pointing). Lands staff-only (visibility=RESTRICTED + empty rule,
+  #870) so the author can fix flavor before opening it up.
 - ``copy_node`` — duplicate a single node within its current template
   (with its options/routes/candidates/rewards). Routes keep their
   original target_node FKs — the copy is "stuck" until the author
@@ -32,7 +32,7 @@ from collections import deque
 
 from django.db import transaction
 
-from world.missions.constants import AccessTier
+from world.missions.constants import MissionVisibility
 from world.missions.models import (
     MissionNode,
     MissionOption,
@@ -192,8 +192,8 @@ def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> Mi
     ``"<source.name> (copy)"``. Caller-provided ``new_name`` is also
     auto-suffixed if it collides — copy never errors on name conflict.
     All routes' target_node FKs stay internal (re-pointed to copies).
-    Lands with ``access_tier=STAFF_ONLY`` so the author can fix flavor
-    before publishing.
+    Lands staff-only (visibility=RESTRICTED + empty availability_rule,
+    #870) so the author can fix flavor before opening it up.
     """
     from django.db import IntegrityError  # noqa: PLC0415
 
@@ -214,9 +214,13 @@ def copy_template(source: MissionTemplate, *, new_name: str | None = None) -> Mi
         "percent_replace": source.percent_replace,
         "cooldown": source.cooldown,
         "reward_group_rule": source.reward_group_rule,
-        "availability_rule": dict(source.availability_rule or {}),
+        # Copies always land staff-only: RESTRICTED + empty rule admits no PC
+        # (#870 — the emergent in-testing state). The source's rule is NOT
+        # carried over, since under visibility=eligibility it would make the
+        # copy immediately visible to whoever passes it.
+        "availability_rule": {},
         "is_active": source.is_active,
-        "access_tier": AccessTier.STAFF_ONLY,  # copies always land unpublished
+        "visibility": MissionVisibility.RESTRICTED,
     }
 
     final_name = next_available_name(base, MissionTemplate.objects.all())

@@ -10,7 +10,7 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from world.missions.constants import AccessTier, ArcScope
+from world.missions.constants import ArcScope, MissionVisibility
 from world.missions.factories import MissionTemplateFactory
 from world.missions.models import MissionTemplate
 from world.stories.factories import EraFactory
@@ -80,18 +80,18 @@ class MissionTemplateModelTests(TestCase):
                 percent_replace=101,
             )
 
-    def test_factory_defaults_to_open_tier(self) -> None:
-        # The factory defaults to OPEN so the entire pre-Phase-B-7 test
-        # suite (which never specified access_tier) keeps surfacing
-        # templates to non-staff characters. Production templates default
-        # to STAFF_ONLY at the MODEL level — see the next test.
-        self.assertEqual(self.template.access_tier, AccessTier.OPEN)
+    def test_factory_defaults_to_open_visibility(self) -> None:
+        # The factory defaults to OPEN so the entire test suite (which
+        # never specified visibility) keeps surfacing templates to
+        # non-staff characters. Production templates default to
+        # RESTRICTED at the MODEL level — see the next test.
+        self.assertEqual(self.template.visibility, MissionVisibility.OPEN)
 
-    def test_model_default_is_staff_only(self) -> None:
-        # Production-safe default: new templates start in testing
-        # (staff-only audience) and the author flips access_tier=OPEN when
-        # they're ready to publish. The factory overrides this for test
-        # ergonomics.
+    def test_model_default_is_restricted(self) -> None:
+        # Production-safe default (#870): new templates start RESTRICTED
+        # with an empty rule — the emergent staff-only "in testing" state
+        # — and the author flips visibility=OPEN (or authors a rule) when
+        # ready. The factory overrides this for test ergonomics.
         bare = MissionTemplate(
             name="Bare-Default",
             summary="x",
@@ -101,9 +101,9 @@ class MissionTemplateModelTests(TestCase):
             arc_scope=ArcScope.GLOBAL,
             cooldown=timedelta(hours=1),
         )
-        # Don't save — the access_tier default is the field default;
+        # Don't save — the visibility default is the field default;
         # just inspect the unsaved instance's attribute.
-        self.assertEqual(bare.access_tier, AccessTier.STAFF_ONLY)
+        self.assertEqual(bare.visibility, MissionVisibility.RESTRICTED)
 
     def test_era_set_null_on_era_delete(self) -> None:
         template_pk = self.template.pk

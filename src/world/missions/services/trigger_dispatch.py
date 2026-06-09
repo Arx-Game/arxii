@@ -3,7 +3,8 @@
 When a character enters a ``ROOM_TRIGGER`` room or examines an
 ``ENVIRONMENTAL_DETAIL`` object, the giver bound to that object may hand the
 character a mission drawn from its ``templates`` pool. Each template self-gates
-via its own ``availability_rule`` (Option A), so dispatch just filters the pool
+via the unified visibility gate (``template_visible_to`` — OPEN/RESTRICTED +
+``availability_rule`` + staff bypass, #870), so dispatch just filters the pool
 to what the character is eligible for and draws one at uniform weight.
 
 Guards (the anti-nag layer): the giver must be active; the character must not
@@ -26,9 +27,9 @@ from django.utils import timezone
 from world.checks.outcome_utils import select_weighted
 from world.missions.constants import GiverKind, MissionStatus
 from world.missions.models import MissionGiver, MissionGiverCooldown, MissionInstance
+from world.missions.services.visibility import template_visible_to
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import send_narrative_message
-from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -81,11 +82,10 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     if _holds_active_trigger_mission(character):
         return None
 
-    ctx = CharacterPredicateContext(character)
     eligible = [
         template
         for template in giver.templates.all()
-        if template.is_active and evaluate(template.availability_rule or {}, ctx)
+        if template.is_active and template_visible_to(template, character)
     ]
     if not eligible:
         return None
