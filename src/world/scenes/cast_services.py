@@ -86,22 +86,12 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     so the caller can surface ward/environment clauses in the OUTCOME pose.
     """
     from world.magic.services import use_technique  # noqa: PLC0415
-    from world.magic.services.cast_threads import build_cast_applicable_threads  # noqa: PLC0415
-    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+    from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
 
     action_template = technique.action_template
     context = ResolutionContext(character=character, target=target)
 
-    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
-    location_id = location.pk if location is not None else None
-    sheet = _get_character_sheet(character)
-    applicable_threads = (
-        build_cast_applicable_threads(
-            sheet, technique, location_id=location_id, cast_pull=cast_pull
-        )
-        if sheet is not None
-        else None
-    )
+    applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
 
     captured: dict[str, PowerLedger] = {}
 

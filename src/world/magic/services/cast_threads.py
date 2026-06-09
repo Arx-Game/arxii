@@ -16,9 +16,36 @@ from world.magic.services.resonance import _anchor_in_action
 from world.magic.types.pull import PullActionContext
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
     from world.magic.types.pull import CastPullDeclaration
+
+
+def applicable_threads_for_cast(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — caster is any game object; resolved to a sheet
+    technique: Technique | None,
+    *,
+    cast_pull: CastPullDeclaration | None = None,
+) -> list[ApplicableThread] | None:
+    """Resolve a caster's applicable threads for an out-of-combat cast.
+
+    Convenience wrapper for the non-combat cast callers: resolves the caster's
+    ``CharacterSheet`` and current room from the ObjectDB ``character``, then
+    delegates to :func:`build_cast_applicable_threads`. Returns ``None`` for an
+    NPC without a sheet (so ``use_technique`` falls back to its baseline path).
+    """
+    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return None
+    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    location_id = location.pk if location is not None else None
+    return build_cast_applicable_threads(
+        sheet, technique, location_id=location_id, cast_pull=cast_pull
+    )
 
 
 def build_cast_applicable_threads(
