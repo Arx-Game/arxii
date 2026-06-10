@@ -265,8 +265,13 @@ function AlterationGateAlert() {
   const { data } = usePendingAlterations();
   const pendings = data?.results ?? [];
   if (pendings.length === 0) return null;
-  const names = [...new Set(pendings.map((p) => p.character_name))].join(', ');
-  const verb = pendings.length === 1 ? 'carries' : 'carry';
+  const uniqueNames = [...new Set(pendings.map((p) => p.character_name))];
+  const names = uniqueNames.join(', ');
+  // Singular/plural keyed on distinct characters (one alt can carry several scars).
+  const message =
+    uniqueNames.length === 1
+      ? `${names} carries an unresolved Mage Scar — that character's XP spending is blocked until it is resolved.`
+      : `${names} carry unresolved Mage Scars — their XP spending is blocked until those scars are resolved.`;
   return (
     <div
       data-testid="alteration-gate-alert"
@@ -274,8 +279,7 @@ function AlterationGateAlert() {
       className="mb-6 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
     >
       <p>
-        {names} {verb} an unresolved Mage Scar — that character&apos;s XP spending is blocked until
-        it is resolved.{' '}
+        {message}{' '}
         <Link to="/magic/alterations" className="font-semibold underline underline-offset-2">
           Resolve it
         </Link>
