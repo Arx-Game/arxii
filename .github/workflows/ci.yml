@@ -178,15 +178,29 @@ jobs:
   # frontend/src/generated/api.d.ts exactly the way `just gen-api-types`
   # does (spectacular → openapi-typescript → prettier) and fails when the
   # committed files differ — so the generated types can't silently rot
-  # against the backend schema. No database needed: spectacular against a
-  # fresh, unmigrated SQLite produces a byte-identical schema (verified),
-  # so the job skips Postgres/migrate entirely.
+  # against the backend schema. The schema is DB-backend-sensitive
+  # (SQLite's 64-bit integer ranges produce int64 formats PG doesn't, and
+  # one path param needs a migrated table), so this regenerates against a
+  # migrated Postgres — trust-auth service container, no password exists.
   api-types-drift:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: arxii_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      DATABASE_URL: sqlite:////tmp/drift.db
+      DATABASE_URL: postgresql://postgres@localhost:5432/arxii_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
       CLOUDINARY_API_SECRET: test-secret
@@ -200,6 +214,8 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
+      - name: Run migrations
+        run: uv run arx manage migrate
       - uses: pnpm/action-setup@v6
         with:
           version: 9
