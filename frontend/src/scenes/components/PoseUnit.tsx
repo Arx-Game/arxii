@@ -17,6 +17,7 @@ import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
+import { ReactionStrip } from './ReactionStrip';
 import { postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
@@ -221,6 +222,7 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
         <PoseUnitDetailPanel actionInteractionIds={actionInteractionIds} />
       )}
 
+      <ReactionStrip windows={interaction.reaction_windows ?? []} sceneId={sceneId} />
       <ReactionsFooter interaction={interaction} sceneId={sceneId} />
     </div>
   );

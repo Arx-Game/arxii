@@ -8,6 +8,7 @@ from world.scenes.interaction_views import (
     InteractionViewSet,
 )
 from world.scenes.place_views import PlaceViewSet
+from world.scenes.reaction_views import ReactionWindowViewSet
 from world.scenes.views import (
     PersonaViewSet,
     SceneSummaryRevisionViewSet,
@@ -38,6 +39,11 @@ router.register(
     r"action-requests",
     SceneActionRequestViewSet,
     basename="sceneactionrequest",
+)
+router.register(
+    r"reaction-windows",
+    ReactionWindowViewSet,
+    basename="reactionwindow",
 )
 
 urlpatterns = [

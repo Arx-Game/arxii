@@ -56,6 +56,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
 
 
@@ -83,6 +84,9 @@ class InteractionViewSet(
         context = super().get_serializer_context()
         entries = get_account_roster_entries(self.request)
         context["roster_entry_ids"] = {e.pk for e in entries} if entries else set()
+        # Per-viewer my_reaction on reaction windows (#904) — context, never
+        # Prefetch(to_attr) on the shared instances.
+        context["persona_ids"] = set(get_account_personas(self.request))
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:
@@ -117,6 +121,17 @@ class InteractionViewSet(
                 "action_links",
                 queryset=InteractionAction.objects.select_related("action_interaction"),
                 to_attr="cached_action_links",
+            ),
+            Prefetch(
+                "reaction_windows",
+                queryset=ReactionWindow.objects.prefetch_related(
+                    Prefetch(
+                        "reactions",
+                        queryset=WindowReaction.objects.select_related("reactor_persona"),
+                        to_attr="cached_reaction_rows",
+                    )
+                ),
+                to_attr="cached_reaction_windows",
             ),
         )
 
@@ -308,6 +323,9 @@ class InteractionViewSet(
         interaction.cached_favorites = []
         interaction.cached_reactions = []
         interaction.cached_action_links = []
+        # ENTRY poses opened a window above; let the serializer query it (no
+        # cached attr) so the fresh response includes the reactable strip.
+        interaction.cached_reaction_windows = None
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )

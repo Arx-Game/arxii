@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.scenes.constants import InteractionMode, PoseKind
@@ -45,6 +46,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     persona = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
+    reaction_windows = serializers.SerializerMethodField()
     receiver_persona_ids = serializers.SerializerMethodField()
     place_name = serializers.SerializerMethodField()
     target_persona_ids = serializers.SerializerMethodField()
@@ -67,6 +69,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "timestamp",
             "is_favorited",
             "reactions",
+            "reaction_windows",
             "receiver_persona_ids",
             "place_name",
             "target_persona_ids",
@@ -95,6 +98,64 @@ class InteractionListSerializer(serializers.ModelSerializer):
         if not roster_entry_ids:
             return False
         return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
+
+    def get_reaction_windows(self, obj: Interaction) -> list[dict]:
+        """Reaction windows on this event (#904): choices, reactions, my_reaction.
+
+        ``my_reaction`` is per-viewer and flows through serializer context
+        (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+        """
+        from world.scenes.reaction_services import get_reaction_kind  # noqa: PLC0415
+
+        windows = getattr(obj, "cached_reaction_windows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if windows is None:
+            windows = list(obj.reaction_windows.all())
+        if not windows:
+            return []
+
+        viewer_persona_ids: set[int] = self.context.get("persona_ids", set())
+        payloads: list[dict] = []
+        for window in windows:
+            rows = getattr(window, "cached_reaction_rows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+            if rows is None:
+                rows = list(window.reactions.select_related("reactor_persona"))
+            try:
+                config = get_reaction_kind(window.kind)
+            except DjangoValidationError:
+                continue  # consumer app gone; render nothing rather than 500
+            my_reaction = next(
+                (r.choice for r in rows if r.reactor_persona_id in viewer_persona_ids),
+                None,
+            )
+            if config.public:
+                reactions = [
+                    {
+                        "persona_id": r.reactor_persona_id,
+                        "persona_name": r.reactor_persona.name,
+                        "choice": r.choice,
+                    }
+                    for r in rows
+                ]
+            else:
+                reactions = []
+            counts: dict[str, int] = {}
+            for r in rows:
+                counts[r.choice] = counts.get(r.choice, 0) + 1
+            payloads.append(
+                {
+                    "id": window.pk,
+                    "kind": window.kind,
+                    "is_open": window.is_open,
+                    "public": config.public,
+                    "choices": [
+                        {"slug": c.slug, "label": c.label} for c in config.choices_for(window)
+                    ],
+                    "reactions": reactions,
+                    "counts": counts,
+                    "my_reaction": my_reaction,
+                }
+            )
+        return payloads
 
     def get_reactions(self, obj: Interaction) -> list[ReactionAggregation]:
         """Aggregate emoji counts with reacted-by-current-user flag."""
