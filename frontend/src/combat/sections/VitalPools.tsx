@@ -46,8 +46,11 @@ export interface VitalPoolsProps {
  * The API only returns health/max_health for the viewer's own character.
  * We detect "own" by finding the first participant with a non-null health value.
  * If none have health (observer mode or all-null), returns undefined.
+ *
+ * Exported: CombatTurnPanel reuses this to locate the puppeted participant for
+ * the active-Audere strip (Participant exposes no character/sheet id field).
  */
-function findViewerParticipant(participants: Participant[]): Participant | undefined {
+export function findViewerParticipant(participants: Participant[]): Participant | undefined {
   return participants.find((p) => p.health !== null && p.health !== undefined);
 }
 
