@@ -9435,18 +9435,6 @@ paths:
         schema:
           type: string
         required: true
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       tags:
       - magic
       security:
@@ -9456,7 +9444,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedLibraryEntryList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/LibraryEntry'
           description: ''
   /api/magic/pending-alterations/{id}/resolve/:
     post:
@@ -30492,29 +30482,6 @@ components:
       - next
       - previous
       - results
-    PaginatedLibraryEntryList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/LibraryEntry'
     PaginatedMissionCategoryList:
       type: object
       required:

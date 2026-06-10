@@ -698,7 +698,7 @@ export class AlterationResolveError extends Error {
  */
 export async function getPendingAlterations(): Promise<PaginatedPendingAlterationList> {
   const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/`);
-  if (!res.ok) throw new Error('Failed to load pending alterations');
+  if (!res.ok) await parseErrorDetail(res, 'Failed to load pending alterations');
   return res.json() as Promise<PaginatedPendingAlterationList>;
 }
 
@@ -708,7 +708,7 @@ export async function getPendingAlterations(): Promise<PaginatedPendingAlteratio
  */
 export async function getAlterationLibrary(pendingId: number): Promise<AlterationLibraryEntry[]> {
   const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/${pendingId}/library/`);
-  if (!res.ok) throw new Error('Failed to load the alteration library');
+  if (!res.ok) await parseErrorDetail(res, 'Failed to load the alteration library');
   return res.json() as Promise<AlterationLibraryEntry[]>;
 }
 
@@ -736,7 +736,9 @@ export async function resolveAlteration(
         message = body.detail;
       } else {
         fieldErrors = Object.fromEntries(
-          Object.entries(body).map(([k, v]) => [k, Array.isArray(v) ? v.map(String) : [String(v)]])
+          Object.entries(body)
+            .filter(([k]) => k !== 'detail')
+            .map(([k, v]) => [k, Array.isArray(v) ? v.map(String) : [String(v)]])
         );
         message = fieldErrors.non_field_errors?.[0] ?? message;
       }

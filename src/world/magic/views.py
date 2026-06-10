@@ -658,7 +658,7 @@ class PendingAlterationViewSet(
         )
 
     @extend_schema(responses={200: LibraryEntrySerializer(many=True)})
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"], pagination_class=None)
     def library(self, request, pk=None):
         """Browse tier-matched library entries for a pending alteration."""
         pending = self.get_object()

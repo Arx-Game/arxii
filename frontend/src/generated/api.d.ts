@@ -16736,21 +16736,6 @@ export interface components {
       previous: string | null;
       results: components['schemas']['JournalEntry'][];
     };
-    PaginatedLibraryEntryList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['LibraryEntry'][];
-    };
     PaginatedMissionCategoryList: {
       /** @example 123 */
       count: number;
@@ -29787,12 +29772,7 @@ export interface operations {
   };
   magic_pending_alterations_library_list: {
     parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
+      query?: never;
       header?: never;
       path: {
         id: string;
@@ -29806,7 +29786,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedLibraryEntryList'];
+          'application/json': components['schemas']['LibraryEntry'][];
         };
       };
     };

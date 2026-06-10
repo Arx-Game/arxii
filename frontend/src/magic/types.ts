@@ -349,7 +349,10 @@ export interface TechniqueCostBreakdown {
 export type PowerLedger = components['schemas']['PowerLedger'];
 export type PowerLedgerEntry = components['schemas']['PowerLedgerEntry'];
 
-// --- Pending alterations (Mage Scars), #877 ---
+// ---------------------------------------------------------------------------
+// Pending alterations (Mage Scars), #877
+// ---------------------------------------------------------------------------
+
 export type PendingAlteration = components['schemas']['PendingAlteration'];
 export type PaginatedPendingAlterationList =
   components['schemas']['PaginatedPendingAlterationList'];
@@ -367,6 +370,13 @@ export interface AlterationLibraryPickPayload {
   library_template_id: number;
 }
 
+/**
+ * Scratch-path payload for POST /api/magic/pending-alterations/{id}/resolve/.
+ *
+ * `parent_template_id` (lineage) is deliberately omitted — staff-only concept
+ * with no player-facing flow; the wire schema accepts it but this surface never
+ * sends it.
+ */
 export interface AlterationScratchPayload {
   name: string;
   player_description: string;
