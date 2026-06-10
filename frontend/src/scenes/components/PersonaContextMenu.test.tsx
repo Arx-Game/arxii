@@ -33,6 +33,7 @@ vi.mock('@/store/hooks', () => ({
 }));
 
 import { PersonaContextMenu } from './PersonaContextMenu';
+import { createActionRequest } from '../actionQueries';
 
 function makeAction(
   overrides: Partial<PlayerActionsResponse['results'][0]> = {}
@@ -192,6 +193,69 @@ describe('PersonaContextMenu', () => {
         targetPersonaId: 10,
       })
     );
+  });
+
+  it('fires the action with whisper delivery from the submenu (#903)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createActionRequest).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof createActionRequest>>
+    );
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    // Radix submenu interaction is keyboard-driven in jsdom (hover grace-area
+    // math needs real pointer coordinates). ArrowDown focuses the first action,
+    // ArrowRight opens its submenu on the first entry (Default), two more
+    // ArrowDowns reach "Subtly (target only)" (Default → Openly → Subtly).
+    await user.keyboard('{ArrowDown}{ArrowRight}');
+    await screen.findByText('Subtly (target only)');
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '1',
+        expect.objectContaining({
+          action_key: 'intimidate',
+          target_persona_id: 10,
+          delivery: 'whisper',
+        })
+      );
+    });
+  });
+
+  it('fires the default entry with no delivery so the backend resolves it (#903)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createActionRequest).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof createActionRequest>>
+    );
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    // ArrowRight opens the submenu with the first entry (Default) focused.
+    await user.keyboard('{ArrowDown}{ArrowRight}');
+    await screen.findByText(/^Default/);
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '1',
+        expect.objectContaining({ action_key: 'intimidate', delivery: undefined })
+      );
+    });
   });
 
   it('does not show "Attach to Pose" section when onAttachAction is not provided', async () => {

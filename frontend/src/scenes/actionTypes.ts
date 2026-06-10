@@ -23,6 +23,8 @@ export interface ActionCheckType {
 export interface ActionTemplateMinimal {
   id: number;
   name: string;
+  /** Default audience routing for the action's result echo (#903). */
+  default_delivery: string;
 }
 
 export interface ActionRef {
