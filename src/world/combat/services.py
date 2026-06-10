@@ -76,6 +76,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterRiskAcknowledgement,
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
@@ -700,6 +701,23 @@ def add_participant(
     )
 
 
+def acknowledge_encounter_risk(
+    encounter: CombatEncounter,
+    character_sheet: CharacterSheet,
+) -> EncounterRiskAcknowledgement:
+    """Idempotently record that a character acknowledged the encounter's risk (#777).
+
+    Called at every voluntary entry: self-join, hostile-cast initiation, and
+    consent-accept. The level is snapshotted at first acknowledgement.
+    """
+    ack, _created = EncounterRiskAcknowledgement.objects.get_or_create(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        defaults={"acknowledged_risk_level": encounter.risk_level},
+    )
+    return ack
+
+
 def join_encounter(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -730,12 +748,14 @@ def join_encounter(
         from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
         covenant_role = precedence_role_for_combat(character_sheet)
-    return CombatParticipant.objects.create(
+    participant = CombatParticipant.objects.create(
         encounter=encounter,
         character_sheet=character_sheet,
         covenant_role=covenant_role,
         status=ParticipantStatus.ACTIVE,
     )
+    acknowledge_encounter_risk(encounter, character_sheet)
+    return participant
 
 
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:

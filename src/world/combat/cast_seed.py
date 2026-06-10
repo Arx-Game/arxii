@@ -4,9 +4,11 @@ When a PC casts a HOSTILE technique at another PC outside an existing fight, the
 cast becomes the caster's opening combat declaration. This module wires that
 intent into the existing combat lifecycle by REUSING the established services
 (``add_participant`` / ``join_encounter`` / ``add_opponent`` /
-``begin_declaration_phase`` / ``declare_action``). It builds no new combat
-machinery — it only orchestrates the existing pieces and derives the target
-opponent's stat kwargs from the target PC's CharacterSheet.
+``begin_declaration_phase`` / ``declare_action`` / ``acknowledge_encounter_risk``),
+deriving the target opponent's stat kwargs from the target PC's CharacterSheet.
+It also owns the cast-side risk gate (#777):
+``encounter_requiring_risk_acknowledgement`` decides whether a hostile cast must
+pause for the target's consent before feeding a high-risk encounter.
 """
 
 from __future__ import annotations
@@ -16,14 +18,22 @@ from typing import TYPE_CHECKING, TypedDict
 from django.db import transaction
 
 from world.combat.constants import (
+    RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
     EncounterStatus,
     EncounterType,
+    OpponentStatus,
     OpponentTier,
     ParticipantStatus,
     RiskLevel,
 )
-from world.combat.models import CombatEncounter, CombatParticipant
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponent,
+    CombatParticipant,
+    EncounterRiskAcknowledgement,
+)
 from world.combat.services import (
+    acknowledge_encounter_risk,
     add_opponent,
     add_participant,
     begin_declaration_phase,
@@ -84,6 +94,49 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
     )
 
 
+def _feedable_encounter(scene: Scene) -> CombatEncounter | None:
+    """The scene's encounter a cast can feed (DECLARING or BETWEEN_ROUNDS), if any."""
+    return CombatEncounter.objects.filter(
+        scene=scene,
+        status__in=[EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS],
+    ).first()
+
+
+def encounter_requiring_risk_acknowledgement(
+    scene: Scene,
+    character_sheet: CharacterSheet,
+) -> CombatEncounter | None:
+    """Return the encounter that gates a hostile cast at this character, if any (#777).
+
+    Non-None when ALL hold: a feedable encounter exists in the scene; its risk
+    level requires acknowledgement; the character is not already actively in it
+    (participant or opponent); and they have no acknowledgement on record.
+    """
+    encounter = _feedable_encounter(scene)
+    if encounter is None:
+        return None
+    if encounter.risk_level not in RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT:
+        return None
+    if CombatParticipant.objects.filter(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        status=ParticipantStatus.ACTIVE,
+    ).exists():
+        return None
+    if CombatOpponent.objects.filter(
+        encounter=encounter,
+        objectdb=character_sheet.character,
+        status=OpponentStatus.ACTIVE,
+    ).exists():
+        return None
+    if EncounterRiskAcknowledgement.objects.filter(
+        encounter=encounter,
+        character_sheet=character_sheet,
+    ).exists():
+        return None
+    return encounter
+
+
 def _caster_participant(
     encounter: CombatEncounter,
     caster_sheet: CharacterSheet,
@@ -127,10 +180,7 @@ def seed_or_feed_encounter_from_cast(
         The seeded or fed CombatEncounter, in DECLARING status with the caster's
         opening action declared.
     """
-    encounter = CombatEncounter.objects.filter(
-        scene=scene,
-        status__in=[EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS],
-    ).first()
+    encounter = _feedable_encounter(scene)
     if encounter is None:
         encounter = CombatEncounter.objects.create(
             room=room,
@@ -141,8 +191,24 @@ def seed_or_feed_encounter_from_cast(
         )
 
     caster_participant = _caster_participant(encounter, caster_sheet)
+    # Idempotent: the DECLARING self-join path already recorded an ack inside
+    # join_encounter; this covers the add_participant and already-participating
+    # branches (casting is voluntary entry).
+    acknowledge_encounter_risk(encounter, caster_sheet)
 
-    opponent = add_opponent(encounter, **_opponent_kwargs_from_sheet(target_sheet))
+    existing_opponent = CombatOpponent.objects.filter(
+        encounter=encounter,
+        objectdb=target_sheet.character,
+    ).first()
+    if existing_opponent is not None and existing_opponent.status != OpponentStatus.ACTIVE:
+        msg = (
+            f"Cannot target {target_sheet.character.key}: already "
+            f"{existing_opponent.get_status_display().lower()} in this encounter."
+        )
+        raise ValueError(msg)
+    opponent = existing_opponent or add_opponent(
+        encounter, **_opponent_kwargs_from_sheet(target_sheet)
+    )
 
     if encounter.status == EncounterStatus.BETWEEN_ROUNDS:
         begin_declaration_phase(encounter)

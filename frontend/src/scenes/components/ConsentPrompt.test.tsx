@@ -179,6 +179,32 @@ describe('ConsentPrompt', () => {
     });
   });
 
+  it('shows a risk warning when combat_risk_level is set', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, combat_risk_level: 'lethal' }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText(/LETHAL/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/wades your character into the combat encounter/)).toBeInTheDocument();
+  });
+
+  it('does NOT show a risk warning when combat_risk_level is null', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, combat_risk_level: null }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('Darth Maul')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/wades your character/i)).not.toBeInTheDocument();
+  });
+
   it('renders multiple pending requests', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({
       results: [MOCK_REQUEST, MOCK_REQUEST_WITH_TECHNIQUE],
