@@ -32,8 +32,8 @@ describe('fetchCharacterVitals', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/api/vitals/7/');
   });
 
-  it('returns null on 404 (no permission) instead of throwing', async () => {
-    mockApiFetch.mockResolvedValue({ ok: false, status: 404 } as Response);
+  it.each([401, 403, 404])('returns null on %i instead of throwing', async (status) => {
+    mockApiFetch.mockResolvedValue({ ok: false, status } as Response);
     await expect(fetchCharacterVitals(7)).resolves.toBeNull();
   });
 

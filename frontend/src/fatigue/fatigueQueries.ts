@@ -32,7 +32,7 @@ export function useRestMutation() {
   return useMutation({
     mutationFn: restCommand,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fatigue-status'] }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['character-vitals'] }).catch(() => {});
     },
   });
 }

@@ -1,17 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
 import type { FatigueStatus } from '@/fatigue/fatigueQueries';
 
-export type CharacterStatus = 'alive' | 'dying' | 'incapacitated' | 'dead';
+export type CharacterStatus = components['schemas']['CharacterVitalsStatusEnum'];
 
-export interface CharacterVitalsData {
-  health: number;
-  max_health: number;
-  health_percentage: number;
-  wound_description: string;
-  status: CharacterStatus;
+export type CharacterVitalsData = Omit<components['schemas']['CharacterVitals'], 'fatigue'> & {
+  // Generated VitalsFatigue types zone as plain string; FatigueStatus keeps the
+  // FatigueZone union that FatigueDisplay's Record lookups depend on.
   fatigue: FatigueStatus;
-}
+};
 
 /**
  * Fetch the vitals panel payload for a character (CharacterSheet pk).
