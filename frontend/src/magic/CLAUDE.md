@@ -212,7 +212,7 @@ The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
 
 ### `__tests__/alterationQueries.test.tsx`
 
-8 unit tests covering `usePendingAlterations` (auth-guard, 30 s poll, returns undefined when logged out), `useAlterationLibrary` (enabled/disabled by pendingId), and `useResolveAlteration` (mutation dispatches, cache invalidation).
+8 unit tests covering `usePendingAlterations` (fetch happy path; no fetch while logged out via the auth guard), `useAlterationLibrary` (enabled/disabled by pendingId), `useResolveAlteration` (payload pass-through, cache invalidation), and `magicKeys` shape assertions.
 
 ### `components/alterations/AlterationResolveDialog.tsx`
 
@@ -220,7 +220,7 @@ Two-tab dialog (Library / Author) for resolving a single `PendingAlteration`. Li
 
 ### `components/alterations/AlterationAuthorForm.tsx`
 
-Controlled form for the scratch-authoring resolution path. Magnitude fields are `<select>` elements constrained to `0..tierCap` (cap read from `getTierCaps(tier)`). Damage type is a required `<select>` gated to visible only when `weakness_magnitude > 0`. At tiers 4–5, `is_visible` is forced to `true` and the toggle is hidden. All description fields display a 40-character counter; `MIN_ALTERATION_DESCRIPTION_LENGTH` is the minimum enforced client-side.
+Controlled form for the scratch-authoring resolution path (caps arrive via the `caps` prop, derived by the dialog from `getTierCaps(pending)`). Magnitude fields are native `<select>`s offering only `0..cap`. The damage-type `<select>` is always visible but disabled at `weakness_magnitude === 0` and submit-required when > 0. At tiers 4–5 the visibility switch renders checked and disabled (`is_visible_at_rest` forced `true` in the payload). Both description textareas show “n / 40 minimum” counters; `MIN_ALTERATION_DESCRIPTION_LENGTH` gates submit client-side.
 
 ### `__tests__/AlterationResolveDialog.test.tsx`
 
