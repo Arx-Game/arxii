@@ -500,6 +500,8 @@ class MotifSerializer(serializers.ModelSerializer):
 class PendingAlterationSerializer(serializers.ModelSerializer):
     """Read-only serializer for pending alterations shown on character sheet."""
 
+    character_id = serializers.IntegerField(source="character.pk", read_only=True)
+    character_name = serializers.SerializerMethodField()
     origin_affinity_name = serializers.CharField(
         source="origin_affinity.name",
         read_only=True,
@@ -518,6 +520,8 @@ class PendingAlterationSerializer(serializers.ModelSerializer):
         model = PendingAlteration
         fields = [
             "id",
+            "character_id",
+            "character_name",
             "status",
             "tier",
             "tier_display",
@@ -527,6 +531,11 @@ class PendingAlterationSerializer(serializers.ModelSerializer):
             "triggering_scene",
             "created_at",
         ]
+
+    def get_character_name(self, obj: PendingAlteration) -> str:
+        """Return the primary persona name for the pending's sheet."""
+        persona = getattr(obj.character, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
 
     def get_tier_caps(self, obj: PendingAlteration) -> dict:
         return ALTERATION_TIER_CAPS.get(obj.tier, {})
@@ -649,6 +658,13 @@ class AlterationResolutionSerializer(serializers.Serializer):
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+class AlterationResolutionResponseSerializer(serializers.Serializer):
+    """Wire shape returned by the resolve action."""
+
+    status = serializers.CharField()
+    event_id = serializers.IntegerField()
 
 
 # =============================================================================
