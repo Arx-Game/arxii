@@ -60,12 +60,37 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
+// Mock the magic queries module — ActionPanel uses useThreads to map thread → resonance.
+vi.mock('@/magic/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/magic/queries')>();
+  return {
+    ...actual,
+    useThreads: vi.fn(),
+  };
+});
+
+// Stub ThreadPullPicker (mirrors ActionDeclarationCard.test.tsx) — but expose
+// onPullsChange via a button so tests can drive pull selection.
+vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
+  ThreadPullPicker: (props: {
+    onPullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void;
+  }) => (
+    <div data-testid="thread-pull-picker-stub">
+      <button type="button" onClick={() => props.onPullsChange({ 7: 2 })}>
+        stub-pull-7-tier2
+      </button>
+    </div>
+  ),
+}));
+
 import {
   fetchAvailableActions,
   createActionRequest,
   castTechnique,
   useCastableTechniques,
 } from '../actionQueries';
+import { useThreads } from '@/magic/queries';
+import type { Thread } from '@/magic/types';
 import { ActionPanel } from './ActionPanel';
 
 function createWrapper() {
@@ -145,6 +170,14 @@ const MOCK_ACTIONS: PlayerActionsResponse = {
 describe('ActionPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useThreads).mockReturnValue({
+      data: {
+        results: [
+          { id: 7, resonance: 4 } as Thread,
+          { id: 9, resonance: 4 } as Thread,
+        ],
+      },
+    } as unknown as ReturnType<typeof useThreads>);
   });
 
   it('renders actions after opening the panel', async () => {
@@ -754,5 +787,145 @@ describe('ActionPanel', () => {
 
     // createActionRequest should NOT have been called yet
     expect(createActionRequest).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Thread-pull picker in the cast dialog (#854)
+  // -------------------------------------------------------------------------
+
+  function mockEmberTouchCastables() {
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+  }
+
+  async function mockRosterWithPersona() {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'TestChar',
+          character_id: 42,
+          profile_picture_url: null,
+          primary_persona_id: 77,
+        },
+      ],
+    } as ReturnType<typeof useMyRosterEntriesQuery>);
+  }
+
+  it('renders the thread-pull picker once a technique is selected, not before', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchCastables();
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    // Open the cast section — picker must NOT render before a technique is chosen.
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('thread-pull-picker-stub')).not.toBeInTheDocument();
+
+    // Select the technique — picker appears.
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
+    });
+  });
+
+  it('sends the pull payload when a paid pull is selected before casting', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchCastables();
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    await mockRosterWithPersona();
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
+    });
+
+    // Drive the stubbed picker: select thread 7 at tier 2.
+    await user.click(screen.getByRole('button', { name: 'stub-pull-7-tier2' }));
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          initiator_persona: 77,
+          technique_id: 10,
+          pull: { resonance_id: 4, tier: 2, thread_ids: [7] },
+        })
+      );
+    });
+  });
+
+  it('omits the pull key entirely when no paid pull is selected', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchCastables();
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    await mockRosterWithPersona();
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalled();
+    });
+    const params = vi.mocked(castTechnique).mock.calls[0][1];
+    expect(params).not.toHaveProperty('pull');
   });
 });

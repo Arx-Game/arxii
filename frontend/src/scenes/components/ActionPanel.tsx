@@ -13,7 +13,16 @@ import {
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
-import type { PlayerAction, AvailableEnhancement, CastableTechnique, CastResponse } from '../actionTypes';
+import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
+import { useThreads } from '@/magic/queries';
+import type { ApplicablePullsRequest, Thread } from '@/magic/types';
+import type {
+  PlayerAction,
+  AvailableEnhancement,
+  CastableTechnique,
+  CastPullRequestBody,
+  CastResponse,
+} from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
@@ -48,6 +57,10 @@ export function ActionPanel({ sceneId }: Props) {
   const [castTargetPersonaId, setCastTargetPersonaId] = useState<number | null>(null);
   const [castPickingTarget, setCastPickingTarget] = useState(false);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
+  // Thread-pull state for the cast flow (#854) — thread id → committed tier.
+  const [selectedPulls, setSelectedPulls] = useState<Record<number, 0 | 1 | 2 | 3>>({});
+  const [showInapplicablePulls, setShowInapplicablePulls] = useState(false);
+  const [pullNotice, setPullNotice] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -79,11 +92,35 @@ export function ActionPanel({ sceneId }: Props) {
     open ? initiatorPersonaId : null
   );
 
+  // Threads — used to map a pulled thread id back to its resonance for the
+  // cast payload and to enforce the single-(resonance, tier)-group constraint.
+  const { data: threadsData } = useThreads();
+  const threadById = useMemo(() => {
+    const map = new Map<number, Thread>();
+    for (const thread of threadsData?.results ?? []) {
+      map.set(thread.id, thread);
+    }
+    return map;
+  }, [threadsData]);
+
+  // Applicability context for the thread-pull picker — only while a technique
+  // is selected in the open cast section.
+  const pullsContext = useMemo<ApplicablePullsRequest | null>(() => {
+    if (!castOpen || !selectedTechnique || characterId === null) return null;
+    return {
+      character_sheet_id: characterId,
+      technique_id: selectedTechnique.id,
+      target_persona_id: castTargetPersonaId,
+      scene_id: Number(sceneId),
+    };
+  }, [castOpen, selectedTechnique, characterId, castTargetPersonaId, sceneId]);
+
   const performCast = useMutation({
     mutationFn: (params: {
       technique_id: number;
       target_persona?: number | null;
       strain_commitment?: number;
+      pull?: CastPullRequestBody;
     }) =>
       castTechnique(sceneId, {
         initiator_persona: initiatorPersonaId!,
@@ -95,6 +132,8 @@ export function ActionPanel({ sceneId }: Props) {
       setSelectedTechnique(null);
       setCastTargetPersonaId(null);
       setCastPickingTarget(false);
+      setSelectedPulls({});
+      setPullNotice(null);
       if (data.result?.power_ledger) {
         // Immediate cast: keep the panel open showing the ledger (#859).
         setCastLedgerResult(data);
@@ -219,13 +258,58 @@ export function ActionPanel({ sceneId }: Props) {
     setSelectedTechnique(technique);
     setCastTargetPersonaId(null);
     setCastLedgerResult(null);
+    setSelectedPulls({});
+    setPullNotice(null);
+  }
+
+  /**
+   * Constrain pull selection to a single (resonance, tier) group — the cast
+   * payload's pull declaration is singular, so any newly raised pull reverts
+   * every other paid pull that disagrees on resonance or tier.
+   */
+  function handlePullsChange(next: Record<number, 0 | 1 | 2 | 3>) {
+    const changed = Object.entries(next).find(
+      ([id, tier]) => (selectedPulls[Number(id)] ?? 0) !== tier && tier > 0
+    );
+    if (changed) {
+      const changedId = Number(changed[0]);
+      const changedTier = changed[1];
+      const changedResonance = threadById.get(changedId)?.resonance;
+      let reverted = 0;
+      const constrained = { ...next };
+      for (const [idStr, tier] of Object.entries(next)) {
+        const id = Number(idStr);
+        if (id === changedId || tier === 0) continue;
+        if (tier !== changedTier || threadById.get(id)?.resonance !== changedResonance) {
+          constrained[id] = 0;
+          reverted++;
+        }
+      }
+      setPullNotice(reverted > 0 ? 'Pulls in one cast share a single resonance and tier.' : null);
+      setSelectedPulls(constrained);
+      return;
+    }
+    setSelectedPulls(next);
   }
 
   function handleCastCommit() {
     if (!selectedTechnique || initiatorPersonaId === null) return;
+    const paid = Object.entries(selectedPulls).filter(([, tier]) => tier > 0);
+    let pull: CastPullRequestBody | undefined;
+    if (paid.length > 0) {
+      const firstThread = threadById.get(Number(paid[0][0]));
+      if (firstThread) {
+        pull = {
+          resonance_id: firstThread.resonance,
+          tier: paid[0][1] as 1 | 2 | 3,
+          thread_ids: paid.map(([id]) => Number(id)),
+        };
+      }
+    }
     performCast.mutate({
       technique_id: selectedTechnique.id,
       target_persona: castTargetPersonaId ?? null,
+      ...(pull ? { pull } : {}),
     });
   }
 
@@ -385,6 +469,8 @@ export function ActionPanel({ sceneId }: Props) {
                     setCastTargetPersonaId(null);
                     setCastPickingTarget(false);
                     setCastLedgerResult(null);
+                    setSelectedPulls({});
+                    setPullNotice(null);
                   } else {
                     setCastLedgerResult(null);
                   }
@@ -503,6 +589,24 @@ export function ActionPanel({ sceneId }: Props) {
                             : 'Choose persona…'}
                         </button>
                       </div>
+
+                      {/* Thread pulls — optional resonance surge on this cast */}
+                      {pullsContext && characterId !== null && (
+                        <div className="border-t border-border/50 pt-2">
+                          <ThreadPullPicker
+                            characterSheetId={characterId}
+                            actionContext={pullsContext}
+                            selectedPulls={selectedPulls}
+                            onPullsChange={handlePullsChange}
+                            showInapplicable={showInapplicablePulls}
+                            onToggleInapplicable={setShowInapplicablePulls}
+                            onAutoRevertNotice={setPullNotice}
+                          />
+                          {pullNotice && (
+                            <p className="mt-1 text-xs text-amber-400">{pullNotice}</p>
+                          )}
+                        </div>
+                      )}
 
                       <Button
                         size="sm"
