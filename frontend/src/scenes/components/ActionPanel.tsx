@@ -12,8 +12,8 @@ import {
   useCastableTechniques,
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
-import type { PlayerAction, AvailableEnhancement, CastableTechnique, CastResponse } from '../actionTypes';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
+import type { PlayerAction, AvailableEnhancement, CastableTechnique, CastResponse } from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
@@ -253,7 +253,14 @@ export function ActionPanel({ sceneId }: Props) {
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // A dismissed ledger is stale on the next open — drop it.
+          if (!next) setCastLedgerResult(null);
+        }}
+      >
         <PopoverTrigger asChild>
           <Button size="icon" className="h-12 w-12 rounded-full shadow-lg">
             <Swords className="h-5 w-5" />
@@ -377,6 +384,7 @@ export function ActionPanel({ sceneId }: Props) {
                     setSelectedTechnique(null);
                     setCastTargetPersonaId(null);
                     setCastPickingTarget(false);
+                    setCastLedgerResult(null);
                   } else {
                     setCastLedgerResult(null);
                   }

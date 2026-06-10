@@ -628,12 +628,13 @@ describe('ActionPanel', () => {
     });
     expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument();
 
-    // Clicking Done removes the ledger result
+    // Clicking Done removes the ledger result and closes the panel
     await user.click(screen.getByRole('button', { name: /done/i }));
 
     await waitFor(() => {
       expect(screen.queryByTestId('cast-ledger-result')).not.toBeInTheDocument();
     });
+    expect(document.getElementById('cast-section')).toBeNull();
   });
 
   it('closes the panel normally after a benign (pending) cast', async () => {
