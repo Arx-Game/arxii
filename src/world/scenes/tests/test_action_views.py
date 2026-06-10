@@ -11,14 +11,20 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterStatus
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
+    ResonanceFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadPullCostFactory,
 )
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
 from world.scenes.factories import (
     PlaceFactory,
     SceneActionRequestFactory,
@@ -421,6 +427,150 @@ class CastEndpointTestCase(APITestCase):
         # power_ledger key must be present (value may be None for benign casts
         # without environment modifiers, but the field must not be silently absent)
         assert "power_ledger" in respond_response.data["result"]
+
+    # ------------------------------------------------------------------
+    # Pull-declaration tests (#854)
+    # ------------------------------------------------------------------
+
+    _PULL_TIER = 2
+    _PULL_RESONANCE_COST = 3
+    _STARTING_BALANCE = 10
+
+    def _make_pull_fixture(self, *, hostile: bool = False):
+        """Build a TECHNIQUE-anchored thread, resonance balance, and pull tier cost.
+
+        Returns (technique, character_resonance, resonance, thread) so the
+        caller can compose the POST payload and verify balance changes.
+        Fresh rows per test — balance mutations must not leak via the identity map.
+        """
+        from world.scenes.tests.cast_test_helpers import (
+            make_benign_castable_technique,
+            make_hostile_castable_technique,
+        )
+
+        technique = (
+            make_hostile_castable_technique() if hostile else make_benign_castable_technique()
+        )
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        resonance = ResonanceFactory()
+        thread = ThreadFactory(
+            owner=self.identity,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+            level=0,
+        )
+        character_resonance = CharacterResonanceFactory(
+            character_sheet=self.identity,
+            resonance=resonance,
+            balance=self._STARTING_BALANCE,
+            lifetime_earned=self._STARTING_BALANCE,
+        )
+        ThreadPullCostFactory(
+            tier=self._PULL_TIER,
+            resonance_cost=self._PULL_RESONANCE_COST,
+            anima_per_thread=1,
+            label="firm",
+        )
+        return technique, character_resonance, resonance, thread
+
+    def test_immediate_cast_with_pull_charges_and_succeeds(self) -> None:
+        """POST with pull declaration on a self-cast → 201 RESOLVED; balance debited."""
+        technique, character_resonance, resonance, thread = self._make_pull_fixture()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "pull": {
+                "resonance_id": resonance.pk,
+                "tier": self._PULL_TIER,
+                "thread_ids": [thread.pk],
+            },
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["status"] == ActionRequestStatus.RESOLVED
+        character_resonance.refresh_from_db()
+        assert character_resonance.balance == self._STARTING_BALANCE - self._PULL_RESONANCE_COST
+
+    def test_cast_pull_unaffordable_returns_400(self) -> None:
+        """Zero balance on a pull attempt → 400; no new RESOLVED request row created."""
+        technique, character_resonance, resonance, thread = self._make_pull_fixture()
+        character_resonance.balance = 0
+        character_resonance.save(update_fields=["balance"])
+
+        before_count = SceneActionRequest.objects.count()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "pull": {
+                "resonance_id": resonance.pk,
+                "tier": self._PULL_TIER,
+                "thread_ids": [thread.pk],
+            },
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # The whole cast rolled back — no new request rows.
+        assert SceneActionRequest.objects.count() == before_count
+
+    def test_hostile_cast_with_pull_rejected(self) -> None:
+        """Declaring a pull on a hostile cast → 400; 'pull' key in the error payload."""
+        technique, _cr, resonance, thread = self._make_pull_fixture(hostile=True)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "target_persona": self.target_persona.pk,
+            "pull": {
+                "resonance_id": resonance.pk,
+                "tier": self._PULL_TIER,
+                "thread_ids": [thread.pk],
+            },
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "pull" in response.data
+
+    def test_benign_cast_with_pull_creates_declaration(self) -> None:
+        """Benign cast at another PC with pull returns PENDING; pull declaration row created."""
+        technique, character_resonance, resonance, thread = self._make_pull_fixture()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "target_persona": self.target_persona.pk,
+            "pull": {
+                "resonance_id": resonance.pk,
+                "tier": self._PULL_TIER,
+                "thread_ids": [thread.pk],
+            },
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["status"] == ActionRequestStatus.PENDING
+        request_id = response.data["id"]
+        assert SceneCastPullDeclaration.objects.filter(request_id=request_id).exists()
+        character_resonance.refresh_from_db()
+        assert character_resonance.balance == self._STARTING_BALANCE
+
+    def test_cast_response_includes_action_interaction(self) -> None:
+        """Immediate cast response exposes action_interaction as the FK integer."""
+        technique = make_castable_technique()
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+        }
+        response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "action_interaction" in response.data
+        request_id = response.data["id"]
+        db_request = SceneActionRequest.objects.get(pk=request_id)
+        assert response.data["action_interaction"] == db_request.action_interaction_id
 
 
 class CastableTechniquesEndpointTestCase(APITestCase):

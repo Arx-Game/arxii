@@ -176,6 +176,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "difficulty_choice",
             "resolved_difficulty",
             "result_interaction",
+            "action_interaction",
             "strain_commitment",
             "created_at",
             "resolved_at",
@@ -185,6 +186,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "status",
             "resolved_difficulty",
             "result_interaction",
+            "action_interaction",
             "created_at",
             "resolved_at",
         ]
