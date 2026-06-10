@@ -539,6 +539,167 @@ describe('ActionPanel', () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Immediate cast (#859): power ledger takeover
+  // -------------------------------------------------------------------------
+
+  it('shows cast-ledger-result with Done button after an immediate cast', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    vi.mocked(castTechnique).mockResolvedValue({
+      id: 1,
+      status: 'resolved',
+      result: {
+        action_key: 'cast',
+        power_ledger: {
+          entries: [
+            {
+              stage: 'base',
+              source_label: 'Channeled',
+              op: 'add',
+              amount: 10,
+              running_total: 10,
+            },
+          ],
+          total: 10,
+        },
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: null,
+      },
+      action_interaction: 42,
+    });
+    const user = userEvent.setup();
+
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'TestChar',
+          character_id: 42,
+          profile_picture_url: null,
+          primary_persona_id: 77,
+        },
+      ],
+    } as ReturnType<typeof useMyRosterEntriesQuery>);
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    // Open the panel
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    // Open cast section
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+
+    // Select technique
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    // Commit
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    // Ledger takeover should appear
+    await waitFor(() => {
+      expect(screen.getByTestId('cast-ledger-result')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument();
+
+    // Clicking Done removes the ledger result
+    await user.click(screen.getByRole('button', { name: /done/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('cast-ledger-result')).not.toBeInTheDocument();
+    });
+  });
+
+  it('closes the panel normally after a benign (pending) cast', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    vi.mocked(castTechnique).mockResolvedValue({ id: 2, status: 'pending' });
+    const user = userEvent.setup();
+
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'TestChar',
+          character_id: 42,
+          profile_picture_url: null,
+          primary_persona_id: 77,
+        },
+      ],
+    } as ReturnType<typeof useMyRosterEntriesQuery>);
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Ember Touch'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    // Panel should close — no cast-ledger-result
+    await waitFor(() => {
+      expect(screen.queryByTestId('cast-ledger-result')).not.toBeInTheDocument();
+    });
+    // Cast section heading is no longer visible (panel closed)
+    await waitFor(() => {
+      expect(screen.queryByText('Ember Touch')).not.toBeInTheDocument();
+    });
+  });
+
   it('opens TargetPicker when a targeted action is clicked', async () => {
     const actions: PlayerActionsResponse = {
       count: 1,

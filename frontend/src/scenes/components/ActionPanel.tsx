@@ -12,7 +12,8 @@ import {
   useCastableTechniques,
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
-import type { PlayerAction, AvailableEnhancement, CastableTechnique } from '../actionTypes';
+import type { PlayerAction, AvailableEnhancement, CastableTechnique, CastResponse } from '../actionTypes';
+import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
@@ -46,6 +47,7 @@ export function ActionPanel({ sceneId }: Props) {
   const [selectedTechnique, setSelectedTechnique] = useState<CastableTechnique | null>(null);
   const [castTargetPersonaId, setCastTargetPersonaId] = useState<number | null>(null);
   const [castPickingTarget, setCastPickingTarget] = useState(false);
+  const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -87,14 +89,19 @@ export function ActionPanel({ sceneId }: Props) {
         initiator_persona: initiatorPersonaId!,
         ...params,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
-      setOpen(false);
-      setCastOpen(false);
       setSelectedTechnique(null);
       setCastTargetPersonaId(null);
       setCastPickingTarget(false);
+      if (data.result?.power_ledger) {
+        // Immediate cast: keep the panel open showing the ledger (#859).
+        setCastLedgerResult(data);
+      } else {
+        setOpen(false);
+        setCastOpen(false);
+      }
     },
   });
 
@@ -211,6 +218,7 @@ export function ActionPanel({ sceneId }: Props) {
   function handleTechniqueSelect(technique: CastableTechnique) {
     setSelectedTechnique(technique);
     setCastTargetPersonaId(null);
+    setCastLedgerResult(null);
   }
 
   function handleCastCommit() {
@@ -369,6 +377,8 @@ export function ActionPanel({ sceneId }: Props) {
                     setSelectedTechnique(null);
                     setCastTargetPersonaId(null);
                     setCastPickingTarget(false);
+                  } else {
+                    setCastLedgerResult(null);
                   }
                 }}
                 aria-expanded={castOpen}
@@ -387,15 +397,32 @@ export function ActionPanel({ sceneId }: Props) {
 
               {castOpen && (
                 <div id="cast-section" className="mt-2 space-y-2">
-                  {isCastLoading && (
+                  {castLedgerResult?.result?.power_ledger && (
+                    <div className="space-y-2" data-testid="cast-ledger-result">
+                      <PowerLedgerPanel ledger={castLedgerResult.result.power_ledger} />
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setCastLedgerResult(null);
+                          setOpen(false);
+                          setCastOpen(false);
+                        }}
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  )}
+
+                  {!castLedgerResult && isCastLoading && (
                     <p className="text-xs text-muted-foreground">Loading techniques...</p>
                   )}
 
-                  {!isCastLoading && castableTechniques.length === 0 && (
+                  {!castLedgerResult && !isCastLoading && castableTechniques.length === 0 && (
                     <p className="text-xs text-muted-foreground">No castable techniques.</p>
                   )}
 
-                  {!isCastLoading && castableTechniques.length > 0 && (
+                  {!castLedgerResult && !isCastLoading && castableTechniques.length > 0 && (
                     <div className="space-y-1">
                       {castableTechniques.map((tech) => {
                         const isSelected = selectedTechnique?.id === tech.id;
@@ -426,7 +453,7 @@ export function ActionPanel({ sceneId }: Props) {
                     </div>
                   )}
 
-                  {selectedTechnique && (
+                  {!castLedgerResult && selectedTechnique && (
                     <div className="space-y-2 rounded border border-muted p-2">
                       <p className="text-xs font-medium">{selectedTechnique.name}</p>
 
