@@ -715,6 +715,42 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
         self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
         self.assertIn("fizzles", cast.request.result_interaction.content)
 
+    def test_consent_accept_fizzles_on_charge_time_magic_error(self) -> None:
+        """A pull that passes the preview but fails at charge time fizzles, never errors.
+
+        A TRAIT-anchored thread passes declaration-time validation (owned, active,
+        resonance-matched) and the affordability preview, but the cast's
+        PullActionContext carries only involved_techniques, so the anchor-in-action
+        check inside spend_resonance_for_pull raises a MagicError at charge time.
+        The consent accept must degrade to the fizzle path, not surface the error.
+        """
+        technique, character_resonance, pull = self._make_pull_fixture()
+        trait_thread = ThreadFactory(
+            owner=self.caster.character_sheet,
+            resonance=pull.resonance,
+            level=0,
+        )
+        trait_pull = CastPullDeclaration(
+            resonance=pull.resonance,
+            tier=self.PULL_TIER,
+            threads=(trait_thread,),
+        )
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=trait_pull,
+        )
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
+        self.assertIn("fizzles", cast.request.result_interaction.content)
+
     def test_hostile_cast_with_pull_raises(self) -> None:
         """Declaring a pull on a hostile cast is rejected before any row is written."""
         technique, _character_resonance, pull = self._make_pull_fixture(hostile=True)

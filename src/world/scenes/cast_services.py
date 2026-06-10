@@ -250,10 +250,11 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
     cast resolves pull-less and the OUTCOME pose carries a fizzle note.
 
     Note:
-        If the caster's resonance balance passes the unlocked affordability preview
-        but is drained by a concurrent spend before the locked charge fires, the
-        resulting ``ResonanceInsufficient`` is caught and the cast degrades to the
-        fizzle path rather than surfacing as an error.
+        The affordability preview is unlocked and does not cover every charge-time
+        gate (anchor-in-action, worn facets, engagement, protagonism locks, or a
+        balance drained by a concurrent spend). Any ``MagicError`` raised while
+        charging the pull is caught and the cast degrades to the fizzle path
+        rather than surfacing as an error to the consent accepter.
     """
     from world.magic.services.resonance import preview_resonance_pull  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
@@ -282,7 +283,7 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
         else:
             fizzle_note = _PULL_FIZZLE_NOTE
 
-    from world.magic.exceptions import ResonanceInsufficient  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
 
     try:
         with transaction.atomic():
@@ -296,9 +297,12 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
                 cast_pull=cast_pull,
                 fizzle_note=fizzle_note,
             )
-    except ResonanceInsufficient:
-        # Balance drained between the unlocked preview and the locked charge —
-        # degrade to the fizzle path instead of failing the consent accept.
+    except MagicError:
+        if cast_pull is None:
+            raise
+        # Charge-time pull failure after an affordable preview (drained balance,
+        # anchor no longer in action, lock acquired, …) — degrade to the fizzle
+        # path instead of failing the consent accept.
         with transaction.atomic():
             result, _power_ledger, _pose = _resolve_and_pose_cast(
                 request=action_request,
