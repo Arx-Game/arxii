@@ -577,6 +577,8 @@ export function useResolveAlteration() {
       payload: AlterationResolvePayload;
     }) => api.resolveAlteration(pendingId, payload),
     onSuccess: () => {
+      // Prefix-invalidates alterationLibrary(id) queries too — intended: a
+      // resolved pending's library snapshot is dead weight.
       qc.invalidateQueries({ queryKey: magicKeys.pendingAlterations() }).catch(() => {});
     },
   });

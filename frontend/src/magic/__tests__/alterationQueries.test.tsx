@@ -9,9 +9,6 @@ import type { ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { authSlice } from '@/store/authSlice';
-import { gameSlice } from '@/store/gameSlice';
-import { rouletteSlice } from '@/store/rouletteSlice';
-import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
 import {
   usePendingAlterations,
   useAlterationLibrary,
@@ -20,38 +17,15 @@ import {
 } from '../queries';
 import type { PaginatedPendingAlterationList } from '../types';
 
-// Mock the API module using the same synchronous pattern as queries.test.tsx.
+// Mock only the four api functions this file exercises.
 // AlterationResolveError is inlined in the factory so it is available at
 // hoist time (vi.mock factories are hoisted before class declarations).
 vi.mock('../api', () => ({
-  getSoulTetherDetail: vi.fn(),
-  getPendingSineatingOffers: vi.fn(),
-  getPendingStageAdvanceOffers: vi.fn(),
-  getPendingSineatingOffer: vi.fn(),
-  getPendingStageAdvanceOffer: vi.fn(),
-  getThreads: vi.fn(),
-  getThread: vi.fn(),
-  getCharacterResonances: vi.fn(),
-  dissolveSoulTether: vi.fn(),
-  requestSineating: vi.fn(),
-  respondToSineating: vi.fn(),
-  performRescue: vi.fn(),
-  respondToStageAdvance: vi.fn(),
-  getThreadHubSummary: vi.fn(),
-  getTeachingOffers: vi.fn(),
-  weaveThread: vi.fn(),
-  patchThreadNarrative: vi.fn(),
-  retireThread: vi.fn(),
-  imbueThreadAuto: vi.fn(),
-  crossXPLock: vi.fn(),
-  commitPull: vi.fn(),
-  acceptTeachingOffer: vi.fn(),
-  __resetImbuingRitualIdCacheForTests: vi.fn(),
   getPendingAlterations: vi.fn(),
   getAlterationLibrary: vi.fn(),
   resolveAlteration: vi.fn(),
-  // AlterationResolveError inlined so instanceof checks in later test files
-  // keep working even though vi.mock factories are hoisted before class decls.
+  // AlterationResolveError inlined so instanceof checks keep working even
+  // though vi.mock factories are hoisted before class declarations.
   AlterationResolveError: class AlterationResolveError extends Error {
     fieldErrors: Record<string, string[]>;
     constructor(message: string, fieldErrors: Record<string, string[]> = {}) {
@@ -102,9 +76,6 @@ function createAuthStore(authenticated: boolean) {
   const store = configureStore({
     reducer: {
       auth: authSlice.reducer,
-      game: gameSlice.reducer,
-      roulette: rouletteSlice.reducer,
-      deepLinkModal: deepLinkModalSlice.reducer,
     },
   });
 
@@ -139,6 +110,32 @@ function createWrapper(authenticated = true) {
       </Provider>
     );
   };
+}
+
+/**
+ * Like createWrapper but returns the QueryClient alongside the wrapper so
+ * tests can inspect cache state (e.g. isInvalidated) after a mutation.
+ */
+function createWrapperWithClient(authenticated = true) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+      },
+    },
+  });
+  const store = createAuthStore(authenticated);
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <Provider store={store}>
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      </Provider>
+    );
+  }
+
+  return { wrapper: Wrapper, client };
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +259,39 @@ describe('useResolveAlteration', () => {
     });
 
     expect(api.resolveAlteration).toHaveBeenCalledWith(7, { library_template_id: 11 });
+  });
+
+  it('invalidates the pending-alterations query after a successful resolve', async () => {
+    const mockResponse = {
+      pending_id: 7,
+      character_name: 'Velenosa',
+      alteration_name: 'Shadow Touch',
+      player_description: 'A subtle mark.',
+      observer_description: 'Subtle shadow.',
+      weakness_damage_type_id: null,
+      weakness_magnitude: 0,
+      resonance_bonus_magnitude: 1,
+      social_reactivity_magnitude: 0,
+      is_visible_at_rest: false,
+    };
+    vi.mocked(api.resolveAlteration).mockResolvedValue(mockResponse);
+
+    const { wrapper, client } = createWrapperWithClient();
+
+    // Seed the pending-alterations cache so its query state is trackable.
+    client.setQueryData(['magic', 'pending-alterations'], PENDING_FIXTURE);
+
+    const { result } = renderHook(() => useResolveAlteration(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ pendingId: 7, payload: { library_template_id: 11 } });
+    });
+
+    // The query has no active observer so it stays invalidated rather than
+    // auto-refetching — assert the cache entry is marked stale/invalid.
+    await waitFor(() => {
+      expect(client.getQueryState(['magic', 'pending-alterations'])?.isInvalidated).toBe(true);
+    });
   });
 });
 
