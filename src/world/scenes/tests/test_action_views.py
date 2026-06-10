@@ -11,16 +11,11 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterStatus
-from world.magic.constants import TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
-    CharacterResonanceFactory,
     CharacterTechniqueFactory,
-    ResonanceFactory,
     TechniqueFactory,
-    ThreadFactory,
-    ThreadPullCostFactory,
 )
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
@@ -30,7 +25,7 @@ from world.scenes.factories import (
     SceneActionRequestFactory,
     SceneFactory,
 )
-from world.scenes.tests.cast_test_helpers import make_castable_technique
+from world.scenes.tests.cast_test_helpers import make_cast_pull_fixture, make_castable_technique
 from world.scenes.types import EnhancedSceneActionResult
 
 
@@ -443,36 +438,14 @@ class CastEndpointTestCase(APITestCase):
         caller can compose the POST payload and verify balance changes.
         Fresh rows per test — balance mutations must not leak via the identity map.
         """
-        from world.scenes.tests.cast_test_helpers import (
-            make_benign_castable_technique,
-            make_hostile_castable_technique,
-        )
-
-        technique = (
-            make_hostile_castable_technique() if hostile else make_benign_castable_technique()
-        )
-        CharacterTechniqueFactory(character=self.identity, technique=technique)
-        resonance = ResonanceFactory()
-        thread = ThreadFactory(
-            owner=self.identity,
-            resonance=resonance,
-            target_kind=TargetKind.TECHNIQUE,
-            target_trait=None,
-            target_technique=technique,
-            level=0,
-        )
-        character_resonance = CharacterResonanceFactory(
-            character_sheet=self.identity,
-            resonance=resonance,
-            balance=self._STARTING_BALANCE,
-            lifetime_earned=self._STARTING_BALANCE,
-        )
-        ThreadPullCostFactory(
+        technique, character_resonance, resonance, thread = make_cast_pull_fixture(
+            self.identity,
+            hostile=hostile,
             tier=self._PULL_TIER,
             resonance_cost=self._PULL_RESONANCE_COST,
-            anima_per_thread=1,
-            label="firm",
+            starting_balance=self._STARTING_BALANCE,
         )
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
         return technique, character_resonance, resonance, thread
 
     def test_immediate_cast_with_pull_charges_and_succeeds(self) -> None:

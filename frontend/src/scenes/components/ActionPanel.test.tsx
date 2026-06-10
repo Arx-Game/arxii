@@ -178,6 +178,69 @@ describe('ActionPanel', () => {
     } as unknown as ReturnType<typeof useThreads>);
   });
 
+  // -------------------------------------------------------------------------
+  // Shared cast-dialog scaffolding: a single benign 'Ember Touch' castable, a
+  // roster entry with a primary persona, and the open-panel → Cast section →
+  // select-technique click sequence that every cast-dialog test repeats.
+  // -------------------------------------------------------------------------
+
+  function mockEmberTouchCastables() {
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+  }
+
+  async function mockRosterWithPersona() {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'TestChar',
+          character_id: 42,
+          profile_picture_url: null,
+          primary_persona_id: 77,
+        },
+      ],
+    } as ReturnType<typeof useMyRosterEntriesQuery>);
+  }
+
+  async function openCastDialogWithEmberTouch(user: ReturnType<typeof userEvent.setup>) {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchCastables();
+    await mockRosterWithPersona();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    // Open the panel
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+
+    // Open the cast section
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+
+    // Select the technique
+    await user.click(screen.getByText('Ember Touch'));
+  }
+
   it('renders actions after opening the panel', async () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
     const user = userEvent.setup();
@@ -500,56 +563,10 @@ describe('ActionPanel', () => {
   });
 
   it('selecting a technique then committing calls castTechnique with correct args', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    vi.mocked(useCastableTechniques).mockReturnValue({
-      data: [
-        {
-          id: 10,
-          name: 'Ember Touch',
-          anima_cost: 3,
-          tier: 1,
-          intensity: 2,
-          control: 1,
-          hostile: false,
-        },
-      ],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useCastableTechniques>);
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
     const user = userEvent.setup();
 
-    // Override the roster mock to provide a primary_persona_id
-    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
-    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
-      data: [
-        {
-          id: 1,
-          name: 'TestChar',
-          character_id: 42,
-          profile_picture_url: null,
-          primary_persona_id: 77,
-        },
-      ],
-    } as ReturnType<typeof useMyRosterEntriesQuery>);
-
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
-
-    const trigger = screen.getByRole('button');
-    await user.click(trigger);
-
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-
-    // Open the cast section
-    await user.click(screen.getByText('Cast'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-
-    // Select the technique
-    await user.click(screen.getByText('Ember Touch'));
+    await openCastDialogWithEmberTouch(user);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
@@ -575,21 +592,6 @@ describe('ActionPanel', () => {
   // -------------------------------------------------------------------------
 
   it('shows cast-ledger-result with Done button after an immediate cast', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    vi.mocked(useCastableTechniques).mockReturnValue({
-      data: [
-        {
-          id: 10,
-          name: 'Ember Touch',
-          anima_cost: 3,
-          tier: 1,
-          intensity: 2,
-          control: 1,
-          hostile: false,
-        },
-      ],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useCastableTechniques>);
     vi.mocked(castTechnique).mockResolvedValue({
       id: 1,
       status: 'resolved',
@@ -614,37 +616,7 @@ describe('ActionPanel', () => {
     });
     const user = userEvent.setup();
 
-    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
-    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
-      data: [
-        {
-          id: 1,
-          name: 'TestChar',
-          character_id: 42,
-          profile_picture_url: null,
-          primary_persona_id: 77,
-        },
-      ],
-    } as ReturnType<typeof useMyRosterEntriesQuery>);
-
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
-
-    // Open the panel
-    await user.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-
-    // Open cast section
-    await user.click(screen.getByText('Cast'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-
-    // Select technique
-    await user.click(screen.getByText('Ember Touch'));
+    await openCastDialogWithEmberTouch(user);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
@@ -669,52 +641,10 @@ describe('ActionPanel', () => {
   });
 
   it('closes the panel normally after a benign (pending) cast', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    vi.mocked(useCastableTechniques).mockReturnValue({
-      data: [
-        {
-          id: 10,
-          name: 'Ember Touch',
-          anima_cost: 3,
-          tier: 1,
-          intensity: 2,
-          control: 1,
-          hostile: false,
-        },
-      ],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useCastableTechniques>);
     vi.mocked(castTechnique).mockResolvedValue({ id: 2, status: 'pending' });
     const user = userEvent.setup();
 
-    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
-    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
-      data: [
-        {
-          id: 1,
-          name: 'TestChar',
-          character_id: 42,
-          profile_picture_url: null,
-          primary_persona_id: 77,
-        },
-      ],
-    } as ReturnType<typeof useMyRosterEntriesQuery>);
-
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Cast'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Ember Touch'));
+    await openCastDialogWithEmberTouch(user);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
@@ -791,38 +721,6 @@ describe('ActionPanel', () => {
   // Thread-pull picker in the cast dialog (#854)
   // -------------------------------------------------------------------------
 
-  function mockEmberTouchCastables() {
-    vi.mocked(useCastableTechniques).mockReturnValue({
-      data: [
-        {
-          id: 10,
-          name: 'Ember Touch',
-          anima_cost: 3,
-          tier: 1,
-          intensity: 2,
-          control: 1,
-          hostile: false,
-        },
-      ],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useCastableTechniques>);
-  }
-
-  async function mockRosterWithPersona() {
-    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
-    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
-      data: [
-        {
-          id: 1,
-          name: 'TestChar',
-          character_id: 42,
-          profile_picture_url: null,
-          primary_persona_id: 77,
-        },
-      ],
-    } as ReturnType<typeof useMyRosterEntriesQuery>);
-  }
-
   it('renders the thread-pull picker once a technique is selected, not before', async () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
     mockEmberTouchCastables();
@@ -853,25 +751,10 @@ describe('ActionPanel', () => {
   });
 
   it('sends the pull payload when a paid pull is selected before casting', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    mockEmberTouchCastables();
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
-    await mockRosterWithPersona();
     const user = userEvent.setup();
 
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Cast'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Ember Touch'));
+    await openCastDialogWithEmberTouch(user);
 
     await waitFor(() => {
       expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
@@ -895,23 +778,11 @@ describe('ActionPanel', () => {
   });
 
   it('reverts conflicting paid pulls to a single (resonance, tier) group', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    mockEmberTouchCastables();
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
-    await mockRosterWithPersona();
     const user = userEvent.setup();
 
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await openCastDialogWithEmberTouch(user);
 
-    await user.click(screen.getByRole('button'));
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Cast'));
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Ember Touch'));
     await waitFor(() => {
       expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
     });
@@ -936,25 +807,10 @@ describe('ActionPanel', () => {
   });
 
   it('omits the pull key entirely when no paid pull is selected', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
-    mockEmberTouchCastables();
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
-    await mockRosterWithPersona();
     const user = userEvent.setup();
 
-    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cast')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Cast'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Ember Touch'));
+    await openCastDialogWithEmberTouch(user);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();

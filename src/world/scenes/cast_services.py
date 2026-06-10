@@ -285,35 +285,28 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
 
     from world.magic.exceptions import MagicError  # noqa: PLC0415
 
-    try:
+    def _resolve(pull: CastPullDeclaration | None, note: str | None):
         with transaction.atomic():
-            result, _power_ledger, _pose = _resolve_and_pose_cast(
+            return _resolve_and_pose_cast(
                 request=action_request,
                 scene=action_request.scene,
                 caster_persona=action_request.initiator_persona,
                 target_persona=action_request.target_persona,
                 technique=action_request.technique,
                 strain_commitment=action_request.strain_commitment,
-                cast_pull=cast_pull,
-                fizzle_note=fizzle_note,
+                cast_pull=pull,
+                fizzle_note=note,
             )
+
+    try:
+        result, _power_ledger, _pose = _resolve(cast_pull, fizzle_note)
     except MagicError:
         if cast_pull is None:
             raise
         # Charge-time pull failure after an affordable preview (drained balance,
         # anchor no longer in action, lock acquired, …) — degrade to the fizzle
         # path instead of failing the consent accept.
-        with transaction.atomic():
-            result, _power_ledger, _pose = _resolve_and_pose_cast(
-                request=action_request,
-                scene=action_request.scene,
-                caster_persona=action_request.initiator_persona,
-                target_persona=action_request.target_persona,
-                technique=action_request.technique,
-                strain_commitment=action_request.strain_commitment,
-                cast_pull=None,
-                fizzle_note=_PULL_FIZZLE_NOTE,
-            )
+        result, _power_ledger, _pose = _resolve(None, _PULL_FIZZLE_NOTE)
     return result  # result.power_ledger is already set from _resolve_cast
 
 

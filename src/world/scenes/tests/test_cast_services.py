@@ -26,13 +26,11 @@ from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
-    CharacterResonanceFactory,
     CharacterTechniqueFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
     ThreadFactory,
-    ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
 from world.magic.services.gain import tag_room_resonance
@@ -55,6 +53,7 @@ from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
     grant_technique,
     make_benign_castable_technique,
+    make_cast_pull_fixture,
     make_hostile_castable_technique,
 )
 from world.scenes.types import EnhancedSceneActionResult
@@ -583,31 +582,14 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
         Returns (technique, character_resonance, pull). Fresh rows per test so
         balance mutations cannot leak across tests via the identity map.
         """
-        technique = (
-            make_hostile_castable_technique() if hostile else make_benign_castable_technique()
-        )
-        grant_technique(self.caster, technique)
-        resonance = ResonanceFactory()
-        thread = ThreadFactory(
-            owner=self.caster.character_sheet,
-            resonance=resonance,
-            target_kind=TargetKind.TECHNIQUE,
-            target_trait=None,
-            target_technique=technique,
-            level=0,
-        )
-        character_resonance = CharacterResonanceFactory(
-            character_sheet=self.caster.character_sheet,
-            resonance=resonance,
-            balance=self.STARTING_BALANCE,
-            lifetime_earned=self.STARTING_BALANCE,
-        )
-        ThreadPullCostFactory(
+        technique, character_resonance, resonance, thread = make_cast_pull_fixture(
+            self.caster.character_sheet,
+            hostile=hostile,
             tier=self.PULL_TIER,
             resonance_cost=self.PULL_RESONANCE_COST,
-            anima_per_thread=1,
-            label="firm",
+            starting_balance=self.STARTING_BALANCE,
         )
+        grant_technique(self.caster, technique)
         pull = CastPullDeclaration(resonance=resonance, tier=self.PULL_TIER, threads=(thread,))
         return technique, character_resonance, pull
 
