@@ -22,8 +22,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useTechniqueStyles, useEffectTypes } from '@/character-creation/queries';
 import { getGifts } from '@/character-creation/api';
 import type { components } from '@/generated/api';
+import { useDamageTypes } from '@/conditions/queries';
 import { TechniqueBuilderForm } from '../components/TechniqueBuilderForm';
-import type { CapabilityType, DamageType } from '../components/TechniquePayloadEditors';
+import type { CapabilityType } from '../components/TechniquePayloadEditors';
 
 // ---------------------------------------------------------------------------
 // Inline fetch helpers for conditions-module lookup lists
@@ -35,12 +36,6 @@ async function getCapabilities(): Promise<CapabilityType[]> {
   const res = await apiFetch('/api/conditions/capabilities/');
   if (!res.ok) throw new Error('Failed to load capabilities');
   return res.json() as Promise<CapabilityType[]>;
-}
-
-async function getDamageTypes(): Promise<DamageType[]> {
-  const res = await apiFetch('/api/conditions/damage-types/');
-  if (!res.ok) throw new Error('Failed to load damage types');
-  return res.json() as Promise<DamageType[]>;
 }
 
 async function getConditionTemplates(): Promise<ConditionTemplate[]> {
@@ -73,11 +68,7 @@ export function TechniqueBuilderPage() {
     queryFn: getCapabilities,
     staleTime: 60_000,
   });
-  const { data: damageTypesData = [], isLoading: damageTypesLoading } = useQuery({
-    queryKey: ['conditions', 'damage-types'],
-    queryFn: getDamageTypes,
-    staleTime: 60_000,
-  });
+  const { data: damageTypesData = [], isLoading: damageTypesLoading } = useDamageTypes();
   const { data: conditionsData = [], isLoading: conditionsLoading } = useQuery({
     queryKey: ['conditions', 'templates'],
     queryFn: getConditionTemplates,

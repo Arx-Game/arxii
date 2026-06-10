@@ -19,3 +19,15 @@ export async function fetchConditionInstance(id: number): Promise<ConditionInsta
   if (!res.ok) throw new Error('Failed to load condition instance');
   return res.json() as Promise<ConditionInstance>;
 }
+
+export type DamageType = components['schemas']['DamageType'];
+
+/**
+ * Fetch all damage types (staff-authored lookup data).
+ * GET /api/conditions/damage-types/
+ */
+export async function fetchDamageTypes(): Promise<DamageType[]> {
+  const res = await apiFetch('/api/conditions/damage-types/');
+  if (!res.ok) throw new Error('Failed to load damage types');
+  return res.json() as Promise<DamageType[]>;
+}

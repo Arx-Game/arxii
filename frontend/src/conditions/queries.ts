@@ -5,7 +5,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { fetchConditionInstance } from './api';
+import { fetchConditionInstance, fetchDamageTypes } from './api';
 
 /**
  * Fetch a single condition instance by pk.
@@ -17,5 +17,14 @@ export function useConditionInstance(id: number | null) {
     queryFn: () => fetchConditionInstance(id as number),
     enabled: id != null,
     staleTime: 30_000,
+  });
+}
+
+/** Damage types are staff-authored lookup data — cache aggressively. */
+export function useDamageTypes() {
+  return useQuery({
+    queryKey: ['conditions', 'damage-types'],
+    queryFn: fetchDamageTypes,
+    staleTime: 5 * 60_000,
   });
 }
