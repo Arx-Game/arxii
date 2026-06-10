@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from world.magic.exceptions import MagicError
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_filters import SceneActionRequestFilter
 from world.scenes.action_models import SceneActionRequest
@@ -186,7 +187,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
-    def cast(self, request: Request) -> Response:
+    def cast(self, request: Request) -> Response:  # noqa: C901
         """Submit a standalone technique cast.
 
         Routes per the consent/combat/immediate matrix:
@@ -212,6 +213,17 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         technique_id = vd["technique_id"]
         target_persona_id = vd.get("target_persona")
         strain_commitment = vd.get("strain_commitment", 0) or 0
+
+        cast_pull = None
+        pull_data = vd.get("pull")
+        if pull_data:
+            from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+            cast_pull = CastPullDeclaration(
+                resonance=pull_data["resonance"],
+                tier=pull_data["tier"],
+                threads=tuple(pull_data["threads"]),
+            )
 
         try:
             scene = Scene.objects.get(pk=scene_id, is_active=True)
@@ -241,11 +253,17 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 target_persona=target_persona,
                 technique=technique,
                 strain_commitment=strain_commitment,
+                cast_pull=cast_pull,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]
             return Response(
                 {"detail": messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except MagicError as exc:
+            return Response(
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
