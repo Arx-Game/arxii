@@ -13,12 +13,14 @@ from world.progression.models import KudosSourceCategory
 from world.progression.services.kudos import award_kudos
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
+    ActionDelivery,
     ActionRequestStatus,
     ConsentDecision,
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_resolvers import get_resolver
+from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
@@ -30,6 +32,25 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.magic.models import Technique
     from world.magic.types.pull import CastPullDeclaration
+    from world.scenes.place_models import Place
+
+
+def resolve_delivery(*, requested: str, template: ActionTemplate | None) -> str:
+    """Resolve the audience routing for an action: override > template > POSE (#903)."""
+    if requested:
+        return requested
+    if template is not None and template.default_delivery:
+        return template.default_delivery
+    return ActionDelivery.POSE
+
+
+def _current_place_for(persona: Persona) -> Place | None:
+    """The place the persona is presently at, or None."""
+    from world.scenes.place_models import PlacePresence  # noqa: PLC0415
+
+    presence = PlacePresence.objects.filter(persona=persona).select_related("place").first()
+    return presence.place if presence is not None else None
+
 
 # Cache for social_engagement category - initialized on first access.
 _SOCIAL_ENGAGEMENT_CATEGORY: KudosSourceCategory | None = None
@@ -93,6 +114,8 @@ def create_action_request(  # noqa: PLR0913
     technique: Technique | None = None,
     ritual_id: int | None = None,
     strain_commitment: int = 0,
+    delivery: str = "",
+    delivery_receivers: list[Persona] | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -120,12 +143,18 @@ def create_action_request(  # noqa: PLR0913
             initiator commits to this action. Persisted via the
             CommittingDeclaration mixin and consumed downstream when the
             interaction is recorded.
+        delivery: Explicit audience-routing override (#903). Blank defers to
+            the template's default_delivery at resolution time.
+        delivery_receivers: Explicit WHISPER audience. Empty/None = the
+            action target alone.
 
     Returns:
         The created SceneActionRequest in PENDING status.
 
     Raises:
-        ValidationError: If technique is provided but fails validation.
+        ValidationError: If technique is provided but fails validation, or if
+            TABLE_TALK delivery is requested while the initiator is not at a
+            place.
     """
     if technique is not None:
         _validate_technique_enhancement(
@@ -134,11 +163,20 @@ def create_action_request(  # noqa: PLR0913
             character_id=initiator_persona.character_sheet_id,
         )
 
+    # Validate only the EXPLICIT override here — the template default is
+    # resolved at resolution time (the template FK is attached later in the
+    # pipeline), where a placeless TABLE_TALK default falls back to POSE.
+    if delivery == ActionDelivery.TABLE_TALK and _current_place_for(initiator_persona) is None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        msg = "Table-talk delivery requires you to be at a place."
+        raise ValidationError(msg)
+
     snapshot_kwargs: dict[str, object] = {}
     if ritual_id is not None:
         snapshot_kwargs = _snapshot_kwargs_from_ritual(ritual_id)
 
-    return SceneActionRequest.objects.create(
+    request = SceneActionRequest.objects.create(
         scene=scene,
         initiator_persona=initiator_persona,
         target_persona=target_persona,
@@ -147,8 +185,12 @@ def create_action_request(  # noqa: PLR0913
         status=ActionRequestStatus.PENDING,
         technique=technique,
         strain_commitment=strain_commitment,
+        delivery=delivery,
         **snapshot_kwargs,
     )
+    if delivery_receivers:
+        request.delivery_receivers.set(delivery_receivers)
+    return request
 
 
 def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
@@ -453,12 +495,37 @@ def _create_result_interaction(
         receivers = [target_persona]
         target_personas = [target_persona]
 
+    # #903 — route the echo's audience by the resolved delivery. Invariant
+    # (from #900): the persisted log never shows more than the room heard —
+    # WHISPER mode and place scoping are receiver-scoped in feed + detail.
+    delivery = resolve_delivery(
+        requested=action_request.delivery,
+        template=action_request.action_template,
+    )
+    mode: str = InteractionMode.ACTION
+    place = None
+    interaction_receivers: list[Persona] | None = receivers
+    if delivery == ActionDelivery.WHISPER:
+        mode = InteractionMode.WHISPER
+        explicit = list(action_request.delivery_receivers.all())
+        if explicit:
+            interaction_receivers = explicit
+    elif delivery == ActionDelivery.TABLE_TALK:
+        place = _current_place_for(action_request.initiator_persona)
+        if place is not None:
+            # None (not []) → create_interaction auto-populates the audience
+            # from PlacePresence. The distinction is load-bearing.
+            interaction_receivers = None
+        # Place gone between create and resolution → stay a public pose.
+        # Never silently narrows a whisper; only widens a missing table.
+
     return create_interaction(
         persona=action_request.initiator_persona,
         content=content,
-        mode="action",
+        mode=mode,
         scene=action_request.scene,
-        receivers=receivers,
+        place=place,
+        receivers=interaction_receivers,
         target_personas=target_personas,
         strain_committed=strain_committed,
     )
