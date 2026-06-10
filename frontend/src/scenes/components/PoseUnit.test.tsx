@@ -16,13 +16,9 @@ vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
 }));
 
-import { useOutcomeDetails } from '@/combat/queries';
-const mockUseOutcomeDetails = vi.mocked(useOutcomeDetails);
-
-// Stub PoseUnitDetailPanel with the canonical data-testid.
-// Renders actionInteractionIds as text content so tests can assert the
-// correct IDs are forwarded; also calls the mocked useOutcomeDetails so
-// "called with [id]" assertions work.
+// Stub PoseUnitDetailPanel with the canonical data-testid. Renders
+// actionInteractionIds as text content so tests can assert the correct IDs
+// are forwarded; the real panel's fetching is covered by its own test file.
 vi.mock('./PoseUnitDetailPanel', () => ({
   PoseUnitDetailPanel: ({ actionInteractionIds }: { actionInteractionIds: number[] }) => (
     <div data-testid="pose-unit-detail-panel">{actionInteractionIds.join(',')}</div>
@@ -63,9 +59,6 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('PoseUnit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseOutcomeDetails.mockReturnValue({ data: [], isLoading: false } as ReturnType<
-      typeof useOutcomeDetails
-    >);
   });
 
   it('renders a POSE with two linked actions — header + 2 chips + body + reactions', () => {

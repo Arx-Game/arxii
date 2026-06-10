@@ -217,10 +217,14 @@ export interface CastRequestBody {
   pull?: CastPullRequestBody;
 }
 
+/** Immediate-path cast result (EnhancedSceneActionResultSerializer). */
 export interface CastResultPayload {
   action_key: string;
   power_ledger: PowerLedger | null;
-  [key: string]: unknown;
+  action_resolution: ActionResolutionData;
+  technique_result: TechniqueResultData | null;
+  /** Present when an anima ritual resolves; absent for all other action types. */
+  anima_recovery?: AnimaRecoveryData;
 }
 
 export interface CastResponse {
@@ -231,6 +235,10 @@ export interface CastResponse {
   result?: CastResultPayload;
   /** Narrator OUTCOME pose id (immediate path). */
   outcome_interaction?: number;
-  /** ACTION interaction id carrying the persisted ledger (immediate path). */
+  /**
+   * ACTION interaction id whose persisted ledger backs the gated
+   * action-outcome-details endpoint. For the in-response ledger data,
+   * read `result.power_ledger` instead.
+   */
   action_interaction?: number | null;
 }
