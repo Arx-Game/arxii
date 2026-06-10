@@ -17,9 +17,10 @@ export function PendingAlterationBanner() {
   const message =
     pendings.length === 1
       ? `Your magic has marked you — ${first.character_name} carries an unresolved ` +
-        `${first.tier_display} Mage Scar. XP spending is locked until it is faced.`
-      : `Your magic has marked you — ${pendings.length} unresolved Mage Scars are locking ` +
-        `XP spending.`;
+        `${first.tier_display} Mage Scar. That character's XP spending is blocked until it is faced.`
+      : `Your magic has marked you — ${pendings.length} unresolved Mage Scars are blocking ` +
+        `XP spending for the characters who bear them.`;
+  const linkText = pendings.length === 1 ? 'Resolve it' : 'Resolve them';
 
   return (
     <div
@@ -29,7 +30,7 @@ export function PendingAlterationBanner() {
     >
       <span>{message}</span>{' '}
       <Link to="/magic/alterations" className="font-semibold underline underline-offset-2">
-        Resolve it
+        {linkText}
       </Link>
     </div>
   );

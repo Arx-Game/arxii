@@ -281,7 +281,7 @@ function AlterationGateAlert() {
       <p>
         {message}{' '}
         <Link to="/magic/alterations" className="font-semibold underline underline-offset-2">
-          Resolve it
+          {uniqueNames.length === 1 ? 'Resolve it' : 'Resolve them'}
         </Link>
       </p>
     </div>

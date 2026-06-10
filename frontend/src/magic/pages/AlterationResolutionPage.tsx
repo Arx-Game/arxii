@@ -25,7 +25,7 @@ function formatDate(dateString: string): string {
 }
 
 export default function AlterationResolutionPage() {
-  const { data, isLoading } = usePendingAlterations();
+  const { data, isLoading, isError } = usePendingAlterations();
   const [resolving, setResolving] = useState<PendingAlteration | null>(null);
   const pendings = data?.results ?? [];
 
@@ -41,7 +41,16 @@ export default function AlterationResolutionPage() {
 
       {isLoading && <Skeleton className="h-32 w-full" />}
 
-      {!isLoading && pendings.length === 0 && (
+      {isError && (
+        <Card>
+          <CardContent className="py-8 text-center text-destructive" role="alert">
+            Could not load your pending alterations — the gate may still be active. Try again
+            shortly.
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && !isError && pendings.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
             No unresolved alterations. Your flesh is your own — for now.

@@ -57,29 +57,44 @@ const EMPTY_ALTERATIONS: PaginatedPendingAlterationList = {
   results: [],
 };
 
+function makePending(
+  overrides: Partial<PaginatedPendingAlterationList['results'][number]> = {}
+): PaginatedPendingAlterationList['results'][number] {
+  return {
+    id: 7,
+    character_id: 3,
+    character_name: 'Velenosa',
+    status: 'open' as const,
+    tier: 3,
+    tier_display: 'Touched',
+    tier_caps: {
+      social_cap: 3,
+      weakness_cap: 3,
+      resonance_cap: 3,
+      visibility_required: false,
+    } as unknown as Record<string, unknown>,
+    origin_affinity_name: 'Abyssal',
+    origin_resonance_name: 'Shadow',
+    triggering_scene: null,
+    created_at: '2026-06-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
 const ONE_PENDING: PaginatedPendingAlterationList = {
   count: 1,
   next: null,
   previous: null,
+  results: [makePending()],
+};
+
+const TWO_PENDING_DIFFERENT_CHARS: PaginatedPendingAlterationList = {
+  count: 2,
+  next: null,
+  previous: null,
   results: [
-    {
-      id: 7,
-      character_id: 3,
-      character_name: 'Velenosa',
-      status: 'open' as const,
-      tier: 3,
-      tier_display: 'Touched',
-      tier_caps: {
-        social_cap: 3,
-        weakness_cap: 3,
-        resonance_cap: 3,
-        visibility_required: false,
-      } as unknown as Record<string, unknown>,
-      origin_affinity_name: 'Abyssal',
-      origin_resonance_name: 'Shadow',
-      triggering_scene: null,
-      created_at: '2026-06-01T00:00:00Z',
-    },
+    makePending({ id: 7 }),
+    makePending({ id: 8, character_id: 4, character_name: 'Calista' }),
   ],
 };
 
@@ -167,5 +182,18 @@ describe('XpKudosPage — alteration gate alert', () => {
     await waitFor(() => expect(magicApi.getPendingAlterations).toHaveBeenCalled());
 
     expect(screen.queryByTestId('alteration-gate-alert')).not.toBeInTheDocument();
+  });
+
+  it('shows plural copy naming both characters when two different characters have pending alterations', async () => {
+    vi.mocked(magicApi.getPendingAlterations).mockResolvedValue(TWO_PENDING_DIFFERENT_CHARS);
+
+    renderWithProviders(<XpKudosPage />);
+
+    const alert = await screen.findByTestId('alteration-gate-alert');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveTextContent(/Velenosa, Calista carry unresolved Mage Scars/);
+
+    const link = screen.getByRole('link', { name: /resolve them/i });
+    expect(link).toHaveAttribute('href', '/magic/alterations');
   });
 });
