@@ -9,6 +9,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from actions.constants import ActionTargetType, GateRole, Pipeline
 from actions.models.consequence_pools import ConsequencePool
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.scenes.action_constants import ActionDelivery
 
 
 class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
@@ -71,6 +72,16 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
     accepts_pose_text = models.BooleanField(
         default=False,
         help_text="If true, dispatch may carry freeform pose_text echoed with the outcome.",
+    )
+    default_delivery = models.CharField(
+        max_length=20,
+        choices=ActionDelivery.choices,
+        default=ActionDelivery.POSE,
+        help_text=(
+            "Default audience routing for this action's result echo (#903). "
+            "Intimate/suggestive socials should author WHISPER; players may "
+            "override per use."
+        ),
     )
     ap_cost = models.PositiveIntegerField(
         default=0,
