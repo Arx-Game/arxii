@@ -201,7 +201,9 @@ def respond_to_action_request(
         decision: ConsentDecision value (ACCEPT or DENY).
 
     Returns:
-        EnhancedSceneActionResult if accepted and resolved, None if denied.
+        EnhancedSceneActionResult if accepted and resolved via the cast/action
+        pipeline. None if denied — or if the accepted cast resolved into combat
+        instead of a check result (the #777 hostile consent-accept path).
 
     Raises:
         ValueError: If the request is a non-standalone-cast with no action_template
@@ -234,8 +236,10 @@ def respond_to_action_request(
 
             _award_acceptance_kudos(action_request)
 
+            # result is None only for hostile consent-accepts (#777), which have
+            # an empty action_key and therefore never a resolver.
             resolver = get_resolver(action_request.action_key)
-            if resolver is not None:
+            if resolver is not None and result is not None:
                 resolver(action_request, result)
 
         return result
