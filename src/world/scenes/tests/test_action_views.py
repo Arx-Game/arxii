@@ -6,8 +6,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from actions.constants import ResolutionPhase
-from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterStatus
@@ -25,32 +23,11 @@ from world.scenes.factories import (
     SceneActionRequestFactory,
     SceneFactory,
 )
-from world.scenes.tests.cast_test_helpers import make_cast_pull_fixture, make_castable_technique
-from world.scenes.types import EnhancedSceneActionResult
-
-
-def _make_enhanced_result(action_key: str = "persuade") -> EnhancedSceneActionResult:
-    """Build a minimal EnhancedSceneActionResult for mocking."""
-    check_result = MagicMock()
-    check_result.outcome_name = "Success"
-    check_result.success_level = 1
-    main_result = StepResult(
-        step_label="main",
-        check_result=check_result,
-        consequence_id=None,
-    )
-    action_resolution = PendingActionResolution(
-        template_id=1,
-        character_id=1,
-        target_difficulty=45,
-        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
-        current_phase=ResolutionPhase.COMPLETE,
-        main_result=main_result,
-    )
-    return EnhancedSceneActionResult(
-        action_resolution=action_resolution,
-        action_key=action_key,
-    )
+from world.scenes.tests.cast_test_helpers import (
+    make_cast_pull_fixture,
+    make_castable_technique,
+    make_enhanced_result as _make_enhanced_result,
+)
 
 
 class SceneActionRequestViewSetTestCase(APITestCase):

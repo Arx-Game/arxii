@@ -31,8 +31,43 @@ from world.magic.factories import (
 from world.magic.models import CharacterResonance, Resonance, Technique, Thread
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.models import Persona
+from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
+
+# ---------------------------------------------------------------------------
+# Resolution-result fixture
+# ---------------------------------------------------------------------------
+
+
+def make_enhanced_result(action_key: str = "persuade") -> EnhancedSceneActionResult:
+    """Build a minimal EnhancedSceneActionResult for mocking resolution outcomes."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    from actions.constants import ResolutionPhase  # noqa: PLC0415
+    from actions.types import PendingActionResolution, StepResult  # noqa: PLC0415
+
+    check_result = MagicMock()
+    check_result.outcome_name = "Success"
+    check_result.success_level = 1
+    main_result = StepResult(
+        step_label="main",
+        check_result=check_result,
+        consequence_id=None,
+    )
+    action_resolution = PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
+    return EnhancedSceneActionResult(
+        action_resolution=action_resolution,
+        action_key=action_key,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Technique factories

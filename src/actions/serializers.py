@@ -45,6 +45,7 @@ class ActionTemplateMinimalSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
+    default_delivery = serializers.CharField(read_only=True)
 
 
 class ActionRefSerializer(serializers.Serializer):

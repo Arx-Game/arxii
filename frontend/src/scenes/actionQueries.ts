@@ -36,6 +36,8 @@ export async function createActionRequest(
     technique_id?: number;
     initiator_persona?: number;
     strain_commitment?: number;
+    /** Audience routing override (#903); omit to use the template default. */
+    delivery?: string;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -56,6 +58,9 @@ export async function createActionRequest(
   }
   if (body.strain_commitment !== undefined) {
     requestBody.strain_commitment = body.strain_commitment;
+  }
+  if (body.delivery !== undefined) {
+    requestBody.delivery = body.delivery;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',

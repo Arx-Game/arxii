@@ -33,6 +33,7 @@ vi.mock('@/store/hooks', () => ({
 }));
 
 import { PersonaContextMenu } from './PersonaContextMenu';
+import { createActionRequest } from '../actionQueries';
 
 function makeAction(
   overrides: Partial<PlayerActionsResponse['results'][0]> = {}
@@ -192,6 +193,54 @@ describe('PersonaContextMenu', () => {
         targetPersonaId: 10,
       })
     );
+  });
+
+  // Radix submenu interaction is keyboard-driven in jsdom (hover grace-area
+  // math needs real pointer coordinates). ArrowDown focuses the first action,
+  // ArrowRight opens its submenu with the first entry (Default) focused.
+  async function openIntimidateSubmenu() {
+    const user = userEvent.setup();
+    vi.mocked(createActionRequest).mockResolvedValue({ status: 'resolved' });
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapper() }
+    );
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    await user.keyboard('{ArrowDown}{ArrowRight}');
+    await screen.findByText(/^Default/);
+    return user;
+  }
+
+  it('fires the action with whisper delivery from the submenu (#903)', async () => {
+    const user = await openIntimidateSubmenu();
+    // Default → Openly → Subtly (target only)
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '1',
+        expect.objectContaining({
+          action_key: 'intimidate',
+          target_persona_id: 10,
+          delivery: 'whisper',
+        })
+      );
+    });
+  });
+
+  it('fires the default entry with no delivery so the backend resolves it (#903)', async () => {
+    const user = await openIntimidateSubmenu();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '1',
+        expect.objectContaining({ action_key: 'intimidate', delivery: undefined })
+      );
+    });
   });
 
   it('does not show "Attach to Pose" section when onAttachAction is not provided', async () => {
