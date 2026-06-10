@@ -13,6 +13,7 @@ from evennia.objects.models import ObjectDB
 from world.covenants.models import Covenant
 from world.scenes.models import Persona, Scene
 from world.skills.models import Skill
+from world.societies.constants import DeedKnowledgeSource
 from world.societies.models import (
     CharacterLegendSummary,
     CovenantLegendCredit,
@@ -66,6 +67,18 @@ def create_solo_deed(  # noqa: PLR0913
         event=None,
         spread_multiplier=config.default_spread_multiplier,
     )
+    if scene is not None:
+        # #902 — everyone on the scene list witnessed the deed's birth.
+        from world.societies.knowledge_services import (  # noqa: PLC0415
+            grant_deed_knowledge,
+            scene_witness_personas,
+        )
+
+        grant_deed_knowledge(
+            deed=entry,
+            personas=scene_witness_personas(scene),
+            source=DeedKnowledgeSource.WITNESSED,
+        )
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
@@ -132,6 +145,16 @@ def create_legend_event(  # noqa: PLR0913
             for persona in personas
         ]
     )
+    if scene is not None:
+        # #902 — scene-list witnesses know every deed born from the event.
+        from world.societies.knowledge_services import (  # noqa: PLC0415
+            grant_deed_knowledge,
+            scene_witness_personas,
+        )
+
+        witnesses = scene_witness_personas(scene)
+        for e in entries:
+            grant_deed_knowledge(deed=e, personas=witnesses, source=DeedKnowledgeSource.WITNESSED)
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))
