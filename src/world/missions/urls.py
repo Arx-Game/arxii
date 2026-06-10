@@ -7,6 +7,7 @@ from world.missions.views import (
     MissionCategoryViewSet,
     MissionGiverViewSet,
     MissionInstanceViewSet,
+    MissionJournalViewSet,
     MissionNodeViewSet,
     MissionOptionRouteCandidateViewSet,
     MissionOptionRouteRewardViewSet,
@@ -47,6 +48,8 @@ router.register(r"instances", MissionInstanceViewSet, basename="mission-instance
 router.register(r"categories", MissionCategoryViewSet, basename="missioncategory")
 # D5 predicate-leaf catalog (read-only; drives the Studio builder palette).
 router.register(r"predicate-leaves", PredicateLeafCatalogViewSet, basename="mission-predicate-leaf")
+# #885 player journal/beat surface — the one PLAYER-scoped missions API.
+router.register(r"journal", MissionJournalViewSet, basename="mission-journal")
 
 urlpatterns = [
     path("", include(router.urls)),

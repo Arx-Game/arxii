@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
+from world.narrative.models import (
+    AmbientStirLine,
+    Gemit,
+    NarrativeMessage,
+    NarrativeMessageDelivery,
+    UserStoryMute,
+)
 
 
 class NarrativeMessageDeliveryInline(admin.TabularInline):
@@ -52,3 +58,12 @@ class UserStoryMuteAdmin(admin.ModelAdmin):
     list_display = ("id", "account", "story", "muted_at")
     raw_id_fields = ("account", "story")
     readonly_fields = ("muted_at",)
+
+
+@admin.register(AmbientStirLine)
+class AmbientStirLineAdmin(admin.ModelAdmin):
+    """Staff-authored source-ambiguous room-stir pool (#885)."""
+
+    list_display = ("__str__", "weight", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("body",)

@@ -122,6 +122,14 @@ class JournalEntry:
     Built by ``world.missions.services.journal.journal_for(character)`` —
     one entry per :class:`~world.missions.models.MissionParticipant` row
     the character owns. Deterministically ordered by ``instance_id``.
+
+    The compass fields (#885) answer "where do I go to continue this":
+    ``compass_rooms`` is the publicly-knowable places the current beat can
+    happen — node-level locations always; per-option override rooms only
+    when the option is UNGATED (empty visibility rule). A gated option's
+    location is never leaked by the journal; if the author wants it known,
+    they write it into the node's flavor text. ``compass_anywhere`` is True
+    when at least one live-relevant option follows you (ANYWHERE).
     """
 
     instance_id: int
@@ -130,6 +138,62 @@ class JournalEntry:
     current_node_key: str | None
     is_contract_holder: bool
     deeds: tuple[JournalDeed, ...]
+    summary: str = ""
+    epilogue: str = ""  # populated only once the run is COMPLETE
+    current_node_flavor: str = ""
+    compass_rooms: tuple[str, ...] = ()
+    compass_anywhere: bool = False
+
+
+@dataclass(frozen=True)
+class BeatOption:
+    """One actionable option on the current beat, as the player sees it (#885).
+
+    Flattened off :class:`PresentedOption` for the player API — pks and
+    labels only, no ORM objects. ``approach_id`` is set for fanned-out
+    CHALLENGE entries (it must be echoed back on resolve).
+    """
+
+    option_id: int
+    approach_id: int | None
+    label: str
+    kind: str  # OptionKind value
+    check_type_name: str | None
+    base_risk: int
+
+
+@dataclass(frozen=True)
+class BeatView:
+    """The current beat of one run, as the acting character sees it (#885).
+
+    ``options`` carries only the LIVE options (location conjunct ∧
+    visibility predicate already applied) — visibility=eligibility, never
+    a greyed-out entry. Empty options with an active node means "nothing
+    you can do HERE" (the journal compass says where to go).
+    """
+
+    instance_id: int
+    template_name: str
+    node_key: str
+    flavor_text: str
+    options: tuple[BeatOption, ...]
+
+
+@dataclass(frozen=True)
+class ResolvedBeat:
+    """Typed result of resolving one beat option (#885).
+
+    ``story_text`` is the actor-facing narrative (also delivered as a
+    STORY NarrativeMessage); ``next_beat`` is None when the run completed
+    (``epilogue`` is then populated from the template bookend).
+    """
+
+    instance_id: int
+    outcome_name: str | None
+    story_text: str
+    is_terminal: bool
+    next_beat: BeatView | None
+    epilogue: str
 
 
 @dataclass(frozen=True)
