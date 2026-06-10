@@ -133,8 +133,10 @@ class InteractionViewSet(
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
                     visibility=InteractionVisibility.DEFAULT,
+                    place__isnull=True,
                     **time_bound,
                 )
+                .exclude(mode=InteractionMode.WHISPER)
                 .values("pk")
                 .union(
                     Interaction.objects.filter(
@@ -177,8 +179,11 @@ class InteractionViewSet(
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
                     visibility=InteractionVisibility.DEFAULT,
+                    place__isnull=True,
                     **time_bound,
-                ).values("pk"),
+                )
+                .exclude(mode=InteractionMode.WHISPER)
+                .values("pk"),
                 Interaction.objects.filter(
                     scene__isnull=True,
                     place__isnull=True,

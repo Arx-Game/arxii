@@ -205,6 +205,35 @@ class TestCanViewInteraction(TestCase):
         assert can_view_interaction(interaction, self.receiver_persona) is True
         assert can_view_interaction(interaction, self.outsider_persona) is False
 
+    def test_whisper_in_public_scene_only_receivers(self) -> None:
+        """A whisper must stay receiver-scoped even inside a public scene.
+
+        Regression: the public-scene branch used to win over whisper scoping,
+        exposing private RP to anyone reading the persisted log.
+        """
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        interaction = self._make_interaction(mode=InteractionMode.WHISPER, scene=scene)
+        assert can_view_interaction(interaction, self.writer_persona) is True
+        assert can_view_interaction(interaction, self.receiver_persona) is True
+        assert can_view_interaction(interaction, self.outsider_persona) is False
+        # Staff may still see non-very-private whispers (abuse policing).
+        assert can_view_interaction(interaction, self.outsider_persona, is_staff=True) is True
+
+    def test_whisper_in_private_scene_only_receivers(self) -> None:
+        """Scene participation does not grant access to a whisper in a private scene."""
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PRIVATE)
+        interaction = self._make_interaction(mode=InteractionMode.WHISPER, scene=scene)
+        assert can_view_interaction(interaction, self.receiver_persona) is True
+        assert can_view_interaction(interaction, self.outsider_persona) is False
+
+    def test_place_scoped_in_public_scene_only_receivers(self) -> None:
+        """Table talk stays place-scoped even when the scene is public."""
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        place = PlaceFactory()
+        interaction = self._make_interaction(scene=scene, place=place)
+        assert can_view_interaction(interaction, self.receiver_persona) is True
+        assert can_view_interaction(interaction, self.outsider_persona) is False
+
     def test_place_scoped_only_receivers(self) -> None:
         place = PlaceFactory()
         interaction = self._make_interaction(place=place)

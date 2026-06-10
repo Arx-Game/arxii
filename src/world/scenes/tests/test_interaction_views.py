@@ -9,10 +9,11 @@ from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
+    PlaceFactory,
     SceneFactory,
 )
 from world.scenes.models import Interaction, InteractionAction, InteractionFavorite
@@ -150,6 +151,109 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert "receivers" in response.data
         assert len(response.data["receivers"]) == 1
+
+
+class InteractionFeedPrivacyTests(APITestCase):
+    """Receiver-scoped interactions must never leak through scene-level visibility.
+
+    Regression for the public-scene leak: whispers and table talk in a PUBLIC
+    scene were readable by everyone in the persisted feed (list + retrieve),
+    even though the real-time push only went to writer + receivers.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        def build_account():
+            account = AccountFactory()
+            character = CharacterFactory()
+            roster_entry = RosterEntryFactory(character_sheet__character=character)
+            player_data = PlayerDataFactory(account=account)
+            RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+            return account, roster_entry.character_sheet.primary_persona
+
+        cls.writer_account, cls.writer_persona = build_account()
+        cls.receiver_account, cls.receiver_persona = build_account()
+        cls.outsider_account, cls.outsider_persona = build_account()
+        cls.staff_account = AccountFactory(is_staff=True)
+
+        cls.public_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        cls.pose = InteractionFactory(
+            persona=cls.writer_persona,
+            mode=InteractionMode.POSE,
+            scene=cls.public_scene,
+        )
+        cls.whisper = InteractionFactory(
+            persona=cls.writer_persona,
+            mode=InteractionMode.WHISPER,
+            scene=cls.public_scene,
+        )
+        InteractionReceiverFactory(interaction=cls.whisper, persona=cls.receiver_persona)
+        cls.place = PlaceFactory()
+        cls.table_talk = InteractionFactory(
+            persona=cls.writer_persona,
+            mode=InteractionMode.SAY,
+            scene=cls.public_scene,
+            place=cls.place,
+        )
+        InteractionReceiverFactory(interaction=cls.table_talk, persona=cls.receiver_persona)
+
+    def _result_ids(self, response) -> set[int]:
+        return {row["id"] for row in response.data["results"]}
+
+    def test_outsider_list_excludes_whisper_and_table_talk(self) -> None:
+        self.client.force_authenticate(user=self.outsider_account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        ids = self._result_ids(response)
+        assert self.pose.pk in ids
+        assert self.whisper.pk not in ids
+        assert self.table_talk.pk not in ids
+
+    def test_outsider_cannot_retrieve_whisper(self) -> None:
+        self.client.force_authenticate(user=self.outsider_account)
+        url = reverse("interaction-detail", kwargs={"pk": self.whisper.pk})
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_receiver_list_includes_whisper_and_table_talk(self) -> None:
+        self.client.force_authenticate(user=self.receiver_account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        ids = self._result_ids(response)
+        assert self.whisper.pk in ids
+        assert self.table_talk.pk in ids
+
+    def test_writer_list_includes_own_whisper(self) -> None:
+        self.client.force_authenticate(user=self.writer_account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert self.whisper.pk in self._result_ids(response)
+
+    def test_staff_sees_whisper_but_not_very_private(self) -> None:
+        very_private = InteractionFactory(
+            persona=self.writer_persona,
+            mode=InteractionMode.WHISPER,
+            scene=self.public_scene,
+            visibility=InteractionVisibility.VERY_PRIVATE,
+        )
+        InteractionReceiverFactory(interaction=very_private, persona=self.receiver_persona)
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        ids = self._result_ids(response)
+        assert self.whisper.pk in ids
+        assert very_private.pk not in ids
+
+    def test_no_persona_feed_excludes_whisper_and_table_talk(self) -> None:
+        """An account with no personas gets the public-only branch, minus receiver-scoped rows."""
+        bare_account = AccountFactory()
+        self.client.force_authenticate(user=bare_account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        ids = self._result_ids(response)
+        assert self.pose.pk in ids
+        assert self.whisper.pk not in ids
+        assert self.table_talk.pk not in ids
 
 
 class PoseSubmitViewTests(APITestCase):
