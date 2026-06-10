@@ -17,6 +17,9 @@ import type { components } from '@/generated/api';
 import type {
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
+  AlterationLibraryEntry,
+  AlterationResolvePayload,
+  AlterationResolveResponse,
   ApplicablePullsRequest,
   CharacterResonance,
   CrossXPLockRequest,
@@ -24,6 +27,7 @@ import type {
   DissolveRequest,
   ImbueRequest,
   ImbueResponse,
+  PaginatedPendingAlterationList,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
   PaginatedTeachingOfferList,
@@ -91,6 +95,7 @@ const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
 const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 const TECHNIQUES_URL = '/api/magic/techniques';
+const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -670,6 +675,77 @@ export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBri
   const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load rooms by property');
   return res.json() as Promise<RoomBrief[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Pending alterations (Mage Scars), #877
+// ---------------------------------------------------------------------------
+
+/** DRF validation failure from the resolve endpoint, keyed by field. */
+export class AlterationResolveError extends Error {
+  constructor(
+    message: string,
+    public readonly fieldErrors: Record<string, string[]>
+  ) {
+    super(message);
+    this.name = 'AlterationResolveError';
+  }
+}
+
+/**
+ * GET /api/magic/pending-alterations/
+ * Account-wide list; server defaults to status=OPEN rows only.
+ */
+export async function getPendingAlterations(): Promise<PaginatedPendingAlterationList> {
+  const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/`);
+  if (!res.ok) throw new Error('Failed to load pending alterations');
+  return res.json() as Promise<PaginatedPendingAlterationList>;
+}
+
+/**
+ * GET /api/magic/pending-alterations/{id}/library/
+ * Tier-matched library entries, matching-affinity entries first (server-ordered).
+ */
+export async function getAlterationLibrary(pendingId: number): Promise<AlterationLibraryEntry[]> {
+  const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/${pendingId}/library/`);
+  if (!res.ok) throw new Error('Failed to load the alteration library');
+  return res.json() as Promise<AlterationLibraryEntry[]>;
+}
+
+/**
+ * POST /api/magic/pending-alterations/{id}/resolve/
+ * Library path: { library_template_id }. Scratch path: full authoring payload.
+ * 400 → AlterationResolveError carrying DRF field errors (the validator raises
+ * everything as non_field_errors; only DRF field checks key by field).
+ */
+export async function resolveAlteration(
+  pendingId: number,
+  payload: AlterationResolvePayload
+): Promise<AlterationResolveResponse> {
+  const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/${pendingId}/resolve/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let fieldErrors: Record<string, string[]> = {};
+    let message = 'Failed to resolve the alteration';
+    try {
+      const body = (await res.json()) as Record<string, unknown>;
+      if (typeof body.detail === 'string') {
+        message = body.detail;
+      } else {
+        fieldErrors = Object.fromEntries(
+          Object.entries(body).map(([k, v]) => [k, Array.isArray(v) ? v.map(String) : [String(v)]])
+        );
+        message = fieldErrors.non_field_errors?.[0] ?? message;
+      }
+    } catch {
+      // body wasn't JSON; keep generic message
+    }
+    throw new AlterationResolveError(message, fieldErrors);
+  }
+  return res.json() as Promise<AlterationResolveResponse>;
 }
 
 // ---------------------------------------------------------------------------
