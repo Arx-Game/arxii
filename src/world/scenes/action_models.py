@@ -8,7 +8,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.models.commitments import CommittingDeclaration
-from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_constants import ActionRequestStatus, CastPullTier, DifficultyChoice
 
 
 class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
@@ -197,3 +197,40 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     def is_standalone_cast(self) -> bool:
         """A technique cast with no enhanced base action (derived, not stored)."""
         return bool(self.technique_id) and not self.action_template_id and not self.action_key
+
+
+class SceneCastPullDeclaration(SharedMemoryModel):
+    """A paid thread pull declared alongside a benign standalone cast (#854).
+
+    Persisted only for PENDING benign casts so the declaration survives until
+    consent-resolution. Immediate casts charge in-line and need no row; combat
+    pulls live on ``CombatPull`` in the combat app.
+    """
+
+    request = models.OneToOneField(
+        "scenes.SceneActionRequest",
+        on_delete=models.CASCADE,
+        related_name="pull_declaration",
+        help_text="The benign cast request this pull was declared with.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Resonance committed by the pull (all threads must share it).",
+    )
+    tier = models.PositiveSmallIntegerField(
+        choices=CastPullTier.choices,
+        help_text="Paid pull tier (1-3).",
+    )
+    threads = models.ManyToManyField(
+        "magic.Thread",
+        related_name="cast_pull_declarations",
+        help_text="Threads pulled; owned by the caster, sharing ``resonance``.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"Cast pull (tier {self.tier}) for request {self.request_id}"

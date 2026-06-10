@@ -3,10 +3,17 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from world.magic.constants import RitualExecutionKind
-from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory, TechniqueFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.constants import RitualExecutionKind, TargetKind
+from world.magic.factories import (
+    ResonanceFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
+    TechniqueFactory,
+    ThreadFactory,
+)
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
 from world.scenes.factories import (
     PersonaFactory,
     SceneActionRequestFactory,
@@ -201,3 +208,37 @@ class StandalonecastTests(TestCase):
             technique=self.technique,
         )
         assert request.is_standalone_cast is False
+
+
+class SceneCastPullDeclarationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.technique = TechniqueFactory()
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=cls.technique,
+        )
+        cls.request = SceneActionRequest.objects.create(
+            scene=SceneFactory(),
+            initiator_persona=cls.sheet.primary_persona,
+            technique=cls.technique,
+            status=ActionRequestStatus.PENDING,
+        )
+
+    def test_declaration_round_trip(self) -> None:
+        decl = SceneCastPullDeclaration.objects.create(
+            request=self.request,
+            resonance=self.resonance,
+            tier=2,
+        )
+        decl.threads.set([self.thread])
+        self.assertEqual(self.request.pull_declaration.tier, 2)
+        self.assertEqual(
+            list(self.request.pull_declaration.threads.values_list("pk", flat=True)),
+            [self.thread.pk],
+        )
