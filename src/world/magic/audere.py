@@ -60,6 +60,43 @@ class AudereThreshold(SharedMemoryModel):
         )
 
 
+class PendingAudereOffer(SharedMemoryModel):
+    """A poll-able Audere offer awaiting the player's accept/decline (#873).
+
+    Created by ``maybe_create_audere_offer`` when the eligibility gate opens
+    during a cast; deleted on respond, on staleness, or at encounter cleanup.
+    Advisory text is never stored — it is computed at serialization time so the
+    corruption warning is always current.
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="audere_offers",
+    )
+    fired_intensity = models.PositiveIntegerField(
+        help_text="Runtime intensity of the cast that opened the gate.",
+    )
+    soulfray_stage_order = models.PositiveSmallIntegerField(
+        help_text="Soulfray stage order at fire time (display snapshot).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet"],
+                name="one_pending_audere_per_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PendingAudereOffer(sheet={self.character_sheet_id}, intensity={self.fired_intensity})"
+        )
+
+
 @dataclass
 class AudereOfferResult:
     """Result of an Audere offer decision."""

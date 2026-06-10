@@ -34,7 +34,7 @@ pattern used by historic callers keeps working.
 # Keep Django's model registry aware of AudereThreshold by importing it via
 # the magic.models package load path. Historic callers also import the name
 # directly from world.magic.models.
-from world.magic.audere import AudereThreshold
+from world.magic.audere import AudereThreshold, PendingAudereOffer
 from world.magic.models.affinity import (
     Affinity,
     AffinityManager,
@@ -200,6 +200,8 @@ __all__ = [
     "MotifResonanceAssociation",
     "PathRitualGrant",
     "PendingAlteration",
+    # audere offer surface (#873, re-exported from world.magic.audere)
+    "PendingAudereOffer",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
     # endorsement (Spec C §2.2)
