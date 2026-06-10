@@ -117,6 +117,13 @@ class CastPullValidationTests(TestCase):
         ser = TechniqueCastCreateSerializer(data=self._data(thread_ids=[retired_thread.pk]))
         self.assertFalse(ser.is_valid())
 
+    def test_duplicate_thread_ids_rejected(self) -> None:
+        ser = TechniqueCastCreateSerializer(
+            data=self._data(thread_ids=[self.thread.pk, self.thread.pk])
+        )
+        self.assertFalse(ser.is_valid())
+        self.assertIn("pull", ser.errors)
+
     def test_cast_without_pull_still_valid(self) -> None:
         data = self._data()
         del data["pull"]

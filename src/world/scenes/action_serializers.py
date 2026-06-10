@@ -99,8 +99,11 @@ def _validate_cast_pull(attrs: dict) -> dict:
             retired_at__isnull=True,
         )
     )
-    if len(threads) != len(set(pull["thread_ids"])):
-        msg = "Each pulled thread must exist, be active, be yours, and match the resonance."
+    if len(threads) != len(pull["thread_ids"]):
+        msg = (
+            "Each pulled thread must exist, be active, be yours, match the "
+            "resonance, and appear only once."
+        )
         raise serializers.ValidationError({"pull": msg})
 
     pull["resonance"] = resonance
