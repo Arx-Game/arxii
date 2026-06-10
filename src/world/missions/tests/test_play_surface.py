@@ -104,10 +104,14 @@ class AnchorRecordingTests(TestCase):
 
 
 class LocationConjunctTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.here_room, cls.here = _room("Here")
-        cls.there_room, cls.there = _room("There")
+    # setUp (not setUpTestData): Django deepcopies class-level test data per
+    # test, and Evennia ObjectDB/RoomProfile instances acquire
+    # un-deepcopyable internals when the full suite has loaded typeclass
+    # machinery — fresh-per-test creation sidesteps the whole class of
+    # failures (passes standalone, breaks in `arx test` otherwise).
+    def setUp(self) -> None:
+        self.here_room, self.here = _room("Here")
+        self.there_room, self.there = _room("There")
 
     def _run(self, *, mode, node_rooms=(), option_rooms=(), in_room=True):
         template, entry, entry_option, *_ = _graph(
@@ -170,10 +174,10 @@ class LocationConjunctTests(TestCase):
 
 
 class JournalCompassTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.inn_room, cls.inn = _room("Lantern Row Inn")
-        cls.hall_room, cls.hall = _room("Merchants Guildhall")
+    # setUp, not setUpTestData — see LocationConjunctTests.
+    def setUp(self) -> None:
+        self.inn_room, self.inn = _room("Lantern Row Inn")
+        self.hall_room, self.hall = _room("Merchants Guildhall")
 
     def test_compass_lists_ungated_override_rooms(self) -> None:
         template, _entry, entry_option, *_ = _graph("compass-ungated")
@@ -219,9 +223,9 @@ class JournalCompassTests(TestCase):
 
 
 class PlayServiceTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.room, cls.profile = _room("Warehouse")
+    # setUp, not setUpTestData — see LocationConjunctTests.
+    def setUp(self) -> None:
+        self.room, self.profile = _room("Warehouse")
 
     def _start(self, name: str):
         template, _entry, entry_option, _second, second_option = _graph(name)
@@ -302,21 +306,19 @@ class PlayServiceTests(TestCase):
 
 
 class JournalApiTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.room, cls.profile = _room("Api Hall")
-        cls.account = AccountFactory(username="journal-player")
-        cls.character = _pc(cls.room)
-        (
-            cls.template,
-            cls.entry,
-            cls.entry_option,
-            cls.second,
-            cls.second_option,
-        ) = _graph("api-mission")
-        cls.instance = staff_assign_mission(cls.template, cls.character)
-
+    # setUp, not setUpTestData — see LocationConjunctTests.
     def setUp(self) -> None:
+        self.room, self.profile = _room("Api Hall")
+        self.account = AccountFactory(username="journal-player")
+        self.character = _pc(self.room)
+        (
+            self.template,
+            self.entry,
+            self.entry_option,
+            self.second,
+            self.second_option,
+        ) = _graph(f"api-mission-{self._testMethodName}")
+        self.instance = staff_assign_mission(self.template, self.character)
         self.client = APIClient()
         self.client.force_authenticate(self.account)
         patcher = mock.patch("world.missions.views._puppet_character", return_value=self.character)
