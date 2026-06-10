@@ -13126,6 +13126,7 @@ export interface components {
      *     * `rollmod` - Roll Modifier
      *     * `scene` - Surroundings
      *     * `equipment` - Equipment
+     *     * `character` - Character
      *     * `effort` - Effort
      *     * `fatigue` - Fatigue
      *     * `strain` - Strain
@@ -13136,6 +13137,7 @@ export interface components {
       | 'rollmod'
       | 'scene'
       | 'equipment'
+      | 'character'
       | 'effort'
       | 'fatigue'
       | 'strain';

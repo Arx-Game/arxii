@@ -23248,6 +23248,7 @@ components:
       - rollmod
       - scene
       - equipment
+      - character
       - effort
       - fatigue
       - strain
@@ -23257,6 +23258,7 @@ components:
         * `rollmod` - Roll Modifier
         * `scene` - Surroundings
         * `equipment` - Equipment
+        * `character` - Character
         * `effort` - Effort
         * `fatigue` - Fatigue
         * `strain` - Strain
