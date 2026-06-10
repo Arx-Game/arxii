@@ -10,8 +10,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
+import { useAppSelector } from '@/store/hooks';
 import type {
   AcceptTeachingOfferRequest,
+  AlterationResolvePayload,
   ApplicablePullsRequest,
   CrossXPLockRequest,
   DissolveRequest,
@@ -62,6 +64,10 @@ export const magicKeys = {
 
   characterAnima: (characterId: number) =>
     [...magicKeys.all, 'character-anima', characterId] as const,
+
+  pendingAlterations: () => [...magicKeys.all, 'pending-alterations'] as const,
+  alterationLibrary: (pendingId: number) =>
+    [...magicKeys.pendingAlterations(), 'library', pendingId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -522,6 +528,56 @@ export function useAuthorTechnique() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['techniques'] }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.all }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pending alterations (Mage Scars), #877
+// ---------------------------------------------------------------------------
+
+/**
+ * Account-wide OPEN pending alterations.
+ *
+ * Backs the site-wide PendingAlterationBanner, so it is auth-guarded like
+ * useRitualSessionInbox (rituals/queries.ts) to avoid 403s + error-boundary
+ * blowups on the login page. Polls at 30 s: overburn happens in live scenes
+ * outside REST flows, so the banner needs background freshness, but a 5 s
+ * site-wide poll would be wasteful for a rare state change.
+ */
+export function usePendingAlterations() {
+  const account = useAppSelector((s) => s.auth.account);
+  return useQuery({
+    queryKey: magicKeys.pendingAlterations(),
+    queryFn: () => api.getPendingAlterations(),
+    enabled: !!account,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+/** Tier-matched library entries for one pending. null = dialog closed. */
+export function useAlterationLibrary(pendingId: number | null) {
+  return useQuery({
+    queryKey: magicKeys.alterationLibrary(pendingId ?? 0),
+    queryFn: () => api.getAlterationLibrary(pendingId as number),
+    enabled: pendingId != null,
+  });
+}
+
+/** Resolve a pending via either path; refreshes the banner/page list on success. */
+export function useResolveAlteration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pendingId,
+      payload,
+    }: {
+      pendingId: number;
+      payload: AlterationResolvePayload;
+    }) => api.resolveAlteration(pendingId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.pendingAlterations() }).catch(() => {});
     },
   });
 }
