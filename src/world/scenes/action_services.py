@@ -443,6 +443,34 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     )
 
 
+def _route_delivery(
+    action_request: SceneActionRequest,
+    receivers: list[Persona],
+) -> tuple[str, Place | None, list[Persona] | None]:
+    """Map the resolved delivery onto (mode, place, receivers) (#903).
+
+    Invariant (from #900): the persisted log never shows more than the room
+    heard — WHISPER mode and place scoping are receiver-scoped in feed +
+    detail, so routing here is the whole privacy story.
+    """
+    delivery = resolve_delivery(
+        requested=action_request.delivery,
+        template=action_request.action_template,
+    )
+    if delivery == ActionDelivery.WHISPER:
+        explicit = list(action_request.delivery_receivers.all())
+        return InteractionMode.WHISPER, None, explicit or receivers
+    if delivery == ActionDelivery.TABLE_TALK:
+        place = _current_place_for(action_request.initiator_persona)
+        if place is not None:
+            # receivers=None (not []) → create_interaction auto-populates the
+            # audience from PlacePresence. The distinction is load-bearing.
+            return InteractionMode.ACTION, place, None
+        # Place gone between create and resolution → stay a public pose.
+        # Never silently narrows a whisper; only widens a missing table.
+    return InteractionMode.ACTION, None, receivers
+
+
 def _create_result_interaction(
     *,
     action_request: SceneActionRequest,
@@ -495,29 +523,7 @@ def _create_result_interaction(
         receivers = [target_persona]
         target_personas = [target_persona]
 
-    # #903 — route the echo's audience by the resolved delivery. Invariant
-    # (from #900): the persisted log never shows more than the room heard —
-    # WHISPER mode and place scoping are receiver-scoped in feed + detail.
-    delivery = resolve_delivery(
-        requested=action_request.delivery,
-        template=action_request.action_template,
-    )
-    mode: str = InteractionMode.ACTION
-    place = None
-    interaction_receivers: list[Persona] | None = receivers
-    if delivery == ActionDelivery.WHISPER:
-        mode = InteractionMode.WHISPER
-        explicit = list(action_request.delivery_receivers.all())
-        if explicit:
-            interaction_receivers = explicit
-    elif delivery == ActionDelivery.TABLE_TALK:
-        place = _current_place_for(action_request.initiator_persona)
-        if place is not None:
-            # None (not []) → create_interaction auto-populates the audience
-            # from PlacePresence. The distinction is load-bearing.
-            interaction_receivers = None
-        # Place gone between create and resolution → stay a public pose.
-        # Never silently narrows a whisper; only widens a missing table.
+    mode, place, interaction_receivers = _route_delivery(action_request, receivers)
 
     return create_interaction(
         persona=action_request.initiator_persona,

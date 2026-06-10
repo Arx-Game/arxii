@@ -15,6 +15,8 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 
+_PERSONA_MODEL = "scenes.Persona"
+
 
 class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     """A request to perform a social action against another character in a scene.
@@ -30,13 +32,13 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         help_text="The scene where this action takes place",
     )
     initiator_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="initiated_action_requests",
         help_text="The persona performing the action",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -61,7 +63,7 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         ),
     )
     delivery_receivers = models.ManyToManyField(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         blank=True,
         related_name="delivery_scoped_action_requests",
         help_text="Explicit WHISPER audience (#903). Empty = the action target alone.",

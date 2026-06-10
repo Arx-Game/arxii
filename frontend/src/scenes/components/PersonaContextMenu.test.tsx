@@ -197,9 +197,7 @@ describe('PersonaContextMenu', () => {
 
   it('fires the action with whisper delivery from the submenu (#903)', async () => {
     const user = userEvent.setup();
-    vi.mocked(createActionRequest).mockResolvedValue(
-      {} as Awaited<ReturnType<typeof createActionRequest>>
-    );
+    vi.mocked(createActionRequest).mockResolvedValue({});
 
     render(
       <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
@@ -232,9 +230,7 @@ describe('PersonaContextMenu', () => {
 
   it('fires the default entry with no delivery so the backend resolves it (#903)', async () => {
     const user = userEvent.setup();
-    vi.mocked(createActionRequest).mockResolvedValue(
-      {} as Awaited<ReturnType<typeof createActionRequest>>
-    );
+    vi.mocked(createActionRequest).mockResolvedValue({});
 
     render(
       <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">

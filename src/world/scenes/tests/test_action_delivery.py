@@ -1,13 +1,9 @@
 """Delivery routing on scene action requests (#903)."""
 
-from unittest.mock import MagicMock
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
-from actions.types import PendingActionResolution, StepResult
 from world.scenes.action_constants import ActionDelivery
 from world.scenes.action_services import (
     _create_result_interaction,
@@ -23,31 +19,7 @@ from world.scenes.factories import (
     SceneFactory,
 )
 from world.scenes.interaction_services import can_view_interaction
-from world.scenes.types import EnhancedSceneActionResult
-
-
-def _make_enhanced_result(action_key: str = "persuade") -> EnhancedSceneActionResult:
-    """Minimal result for routing tests — mirrors test_action_views' fixture."""
-    check_result = MagicMock()
-    check_result.outcome_name = "Success"
-    check_result.success_level = 1
-    main_result = StepResult(
-        step_label="main",
-        check_result=check_result,
-        consequence_id=None,
-    )
-    action_resolution = PendingActionResolution(
-        template_id=1,
-        character_id=1,
-        target_difficulty=45,
-        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
-        current_phase=ResolutionPhase.COMPLETE,
-        main_result=main_result,
-    )
-    return EnhancedSceneActionResult(
-        action_resolution=action_resolution,
-        action_key=action_key,
-    )
+from world.scenes.tests.cast_test_helpers import make_enhanced_result as _make_enhanced_result
 
 
 class SceneActionRequestDeliveryFieldTests(TestCase):
