@@ -8,7 +8,14 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.models.commitments import CommittingDeclaration
-from world.scenes.action_constants import ActionRequestStatus, CastPullTier, DifficultyChoice
+from world.scenes.action_constants import (
+    ActionDelivery,
+    ActionRequestStatus,
+    CastPullTier,
+    DifficultyChoice,
+)
+
+_PERSONA_MODEL = "scenes.Persona"
 
 
 class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
@@ -25,13 +32,13 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         help_text="The scene where this action takes place",
     )
     initiator_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="initiated_action_requests",
         help_text="The persona performing the action",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -44,6 +51,22 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     pose_text = models.TextField(
         blank=True,
         help_text="Freeform telling/pose echoed with the outcome (area/social actions).",
+    )
+    delivery = models.CharField(
+        max_length=20,
+        choices=ActionDelivery.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Resolved audience routing for the result echo (#903). Blank = "
+            "resolve from the template's default_delivery at resolution time."
+        ),
+    )
+    delivery_receivers = models.ManyToManyField(
+        _PERSONA_MODEL,
+        blank=True,
+        related_name="delivery_scoped_action_requests",
+        help_text="Explicit WHISPER audience (#903). Empty = the action target alone.",
     )
     effort_level = models.CharField(
         max_length=20,

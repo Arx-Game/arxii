@@ -7,7 +7,7 @@ from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.magic.services.hostility import is_technique_hostile
-from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 
 
@@ -186,6 +186,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "action_key",
             "action_template",
             "technique",
+            "delivery",
             "status",
             "difficulty_choice",
             "resolved_difficulty",
@@ -216,6 +217,12 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     difficulty_choice = serializers.CharField(max_length=20, required=False)
     technique_id = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+    delivery = serializers.ChoiceField(
+        choices=ActionDelivery.choices, required=False, allow_blank=True, default=""
+    )
+    delivery_receiver_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, allow_empty=True, default=list
+    )
 
     def validate(self, attrs: dict) -> dict:
         """Cap strain_commitment by the initiator's available anima.

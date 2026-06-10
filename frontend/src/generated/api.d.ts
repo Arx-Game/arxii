@@ -11722,6 +11722,7 @@ export interface components {
     ActionTemplateMinimal: {
       readonly id: number;
       readonly name: string;
+      readonly default_delivery: string;
     };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
@@ -13356,6 +13357,13 @@ export interface components {
      * @enum {string}
      */
     DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
+    /**
+     * @description * `pose` - Pose (whole room)
+     *     * `whisper` - Whisper (target only)
+     *     * `table_talk` - Table talk (your place)
+     * @enum {string}
+     */
+    DeliveryEnum: 'pose' | 'whisper' | 'table_talk';
     /**
      * @description * `trivial` - Trivial
      *     * `easy` - Easy
@@ -19913,6 +19921,14 @@ export interface components {
       action_template?: number | null;
       /** @description Technique used for this action, if any */
       technique?: number | null;
+      /**
+       * @description Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
+       *
+       *     * `pose` - Pose (whole room)
+       *     * `whisper` - Whisper (target only)
+       *     * `table_talk` - Table talk (your place)
+       */
+      delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       readonly status: components['schemas']['SceneActionStatusEnum'];
       /**
        * @description Difficulty level chosen or determined for this action
@@ -19955,6 +19971,14 @@ export interface components {
       action_template?: number | null;
       /** @description Technique used for this action, if any */
       technique?: number | null;
+      /**
+       * @description Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
+       *
+       *     * `pose` - Pose (whole room)
+       *     * `whisper` - Whisper (target only)
+       *     * `table_talk` - Table talk (your place)
+       */
+      delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       /**
        * @description Difficulty level chosen or determined for this action
        *

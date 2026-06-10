@@ -20122,7 +20122,11 @@ components:
         name:
           type: string
           readOnly: true
+        default_delivery:
+          type: string
+          readOnly: true
       required:
+      - default_delivery
       - id
       - name
     AggregateBeatContribution:
@@ -23709,6 +23713,16 @@ components:
         * `until_used` - Until Used (consumed on trigger)
         * `end_combat` - Until End of Combat
         * `permanent` - Permanent (until removed)
+    DeliveryEnum:
+      enum:
+      - pose
+      - whisper
+      - table_talk
+      type: string
+      description: |-
+        * `pose` - Pose (whole room)
+        * `whisper` - Whisper (target only)
+        * `table_talk` - Table talk (your place)
     DifficultyChoiceEnum:
       enum:
       - trivial
@@ -36196,6 +36210,16 @@ components:
           type: integer
           nullable: true
           description: Technique used for this action, if any
+        delivery:
+          description: |-
+            Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
+
+            * `pose` - Pose (whole room)
+            * `whisper` - Whisper (target only)
+            * `table_talk` - Table talk (your place)
+          oneOf:
+          - $ref: '#/components/schemas/DeliveryEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         status:
           allOf:
           - $ref: '#/components/schemas/SceneActionStatusEnum'
@@ -36287,6 +36311,16 @@ components:
           type: integer
           nullable: true
           description: Technique used for this action, if any
+        delivery:
+          description: |-
+            Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
+
+            * `pose` - Pose (whole room)
+            * `whisper` - Whisper (target only)
+            * `table_talk` - Table talk (your place)
+          oneOf:
+          - $ref: '#/components/schemas/DeliveryEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         difficulty_choice:
           allOf:
           - $ref: '#/components/schemas/DifficultyChoiceEnum'
