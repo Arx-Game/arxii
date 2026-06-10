@@ -7,6 +7,8 @@ from django.test import TestCase
 from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
+from world.progression.models import KudosSourceCategory
+from world.scenes import action_services
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -283,6 +285,25 @@ class GenericKudosOnAcceptTests(TestCase):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
         cls.action_template = ActionTemplateFactory()
+        # The social_engagement category is seeded by a RunPython migration
+        # (progression 0003), which the SQLite fast tier skips (#855) —
+        # get_or_create so the fast tier gets the row and the PG tier
+        # (where the migration already seeded it) doesn't collide.
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+    def setUp(self) -> None:
+        # _get_social_engagement_category memoizes at module level; a row
+        # cached from another test class's (rolled-back) transaction would
+        # leak in. Reset around every test so each run re-fetches (#855).
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
 
     @patch("world.scenes.action_services.award_kudos")
     @patch("world.scenes.action_services.start_action_resolution")
