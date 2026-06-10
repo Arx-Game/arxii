@@ -10,6 +10,9 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 
 import {
   assignMission,
+  getBeat,
+  listJournal,
+  resolveBeat,
   copyNode,
   copySubtree,
   copyTemplate,
@@ -34,6 +37,8 @@ import {
 import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './api';
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
+  BeatView,
+  JournalEntry,
   MissionCategory,
   MissionGiver,
   MissionGiverRequest,
@@ -68,6 +73,11 @@ export const missionKeys = {
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
+  journal: () => [...missionKeys.all, 'journal'] as const,
+  // roomKey threads the player's current room into the key so a move
+  // refetches liveness — the server computes "live here" from the puppet.
+  beat: (instanceId: number, roomKey: string) =>
+    [...missionKeys.all, 'beat', instanceId, roomKey] as const,
   giversFor: (filters: object) => [...missionKeys.givers(), filters] as const,
 };
 
@@ -302,5 +312,52 @@ export function useDeleteGiver() {
   return useMutation({
     mutationFn: (id: number) => deleteGiver(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.givers() }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// #885 player journal/beat hooks.
+// ---------------------------------------------------------------------------
+
+export function useJournal(): UseQueryResult<PaginatedResponse<JournalEntry>> {
+  return useQuery({
+    queryKey: missionKeys.journal(),
+    queryFn: listJournal,
+  });
+}
+
+/**
+ * The current beat for one run. `roomKey` is any stable identifier of the
+ * player's current room (name from game state is fine) — moving rooms
+ * changes the key, which refetches the live-here option set.
+ */
+export function useBeat(
+  instanceId: number | undefined,
+  roomKey: string
+): UseQueryResult<BeatView | null> {
+  return useQuery({
+    queryKey: missionKeys.beat(instanceId ?? 0, roomKey),
+    queryFn: () => getBeat(instanceId as number),
+    enabled: instanceId !== undefined,
+  });
+}
+
+export function useResolveBeat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      option_id,
+      approach_id,
+    }: {
+      instanceId: number;
+      option_id: number;
+      approach_id?: number | null;
+    }) => resolveBeat(instanceId, { option_id, approach_id }),
+    onSuccess: () => {
+      // Position, deeds, status, and liveness all changed.
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: [...missionKeys.all, 'beat'] }).catch(() => {});
+    },
   });
 }
