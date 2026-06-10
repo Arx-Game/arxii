@@ -254,8 +254,8 @@ the `magical-scars` branch.
 What was built:
 
 - **`PendingAlterationBanner`** — site-wide alert bar mounted in `Layout`, polling every 30 s
-  via `usePendingAlterations` (auth-guarded). Shows per-character copy when multiple
-  characters have open scars; links to `/magic/alterations`. `character_id` /
+  via `usePendingAlterations` (auth-guarded). Names the scarred character and tier when one
+  pending exists, count form for several; links to `/magic/alterations`. `character_id` /
   `character_name` fields added to `PendingAlterationSerializer` so the frontend can
   attribute each pending to the owning character.
 - **`AlterationGateAlert`** in `XpKudosPage` — secondary gate notice naming the specific
@@ -269,9 +269,9 @@ What was built:
   Author tab: `AlterationAuthorForm` with tier-cap-constrained fields (magnitude selects
   0..cap, damage type required iff weakness > 0, forced visibility at tiers 4–5, 40-char
   description counters). Both tabs use `forceMount` for persistence across tab switches.
-  Error banner falls back to `non_field_errors` for orphaned-field server errors.
-  `AlterationResolutionResponseSerializer` carries the resolved condition name back to the
-  frontend after a successful resolution.
+  Error banner renders the `non_field_errors` message plus any orphaned-field server errors.
+  `AlterationResolutionResponseSerializer` documents the resolve action's `{status, event_id}`
+  wire shape for the generated schema.
 - **`useAlterationLibrary`** — per-pending library query keyed by `alterationLibrary(id)`;
   consumes the `GET {id}/library/` endpoint. Returns a bare array (`pagination_class=None`
   on that action; the schema correctly reflects this via `@extend_schema`).
