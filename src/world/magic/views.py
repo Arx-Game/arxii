@@ -1416,6 +1416,65 @@ class StageAdvanceRespondView(APIView):
         return Response(out.data, status=status.HTTP_200_OK)
 
 
+class PendingAudereOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending Audere offers (#873).
+
+    GET /api/magic/audere/pending/
+    GET /api/magic/audere/pending/{id}/
+
+    Scoped to the authenticated user's character sheets (active tenures).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import PendingAudereOfferSerializer  # noqa: PLC0415
+
+        return PendingAudereOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
+
+        user = self.request.user
+        return (
+            PendingAudereOffer.objects.filter(
+                character_sheet__roster_entry__tenures__player_data__account=user,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            .select_related("character_sheet")
+            .order_by("-created_at")
+            .distinct()
+        )
+
+
+class AudereRespondView(APIView):
+    """Accept or decline a pending Audere offer (#873).
+
+    POST /api/magic/audere/respond/  {offer_id, accept}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate ownership + dispatch resolve_audere_offer; return the result."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            AudereOfferResultSerializer,
+            AudereRespondSerializer,
+        )
+
+        serializer = AudereRespondSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            AudereOfferResultSerializer(result).data,
+            status=status.HTTP_200_OK,
+        )
+
+
 # =============================================================================
 # Thread Hub Summary (GET /api/magic/thread-hub-summary/)
 # =============================================================================

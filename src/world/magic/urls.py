@@ -12,6 +12,7 @@ from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
     ApplicablePullsView,
+    AudereRespondView,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
     CharacterGiftViewSet,
@@ -20,6 +21,7 @@ from world.magic.views import (
     FacetViewSet,
     GiftViewSet,
     PendingAlterationViewSet,
+    PendingAudereOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
@@ -223,6 +225,22 @@ urlpatterns = [
         "soul-tether/stage-advance/respond/",
         StageAdvanceRespondView.as_view(),
         name="soul-tether-stage-advance-respond",
+    ),
+    # #873 — Audere offer inbox + respond
+    path(
+        "audere/pending/",
+        PendingAudereOfferViewSet.as_view({"get": "list"}),
+        name="audere-pending-list",
+    ),
+    path(
+        "audere/pending/<int:pk>/",
+        PendingAudereOfferViewSet.as_view({"get": "retrieve"}),
+        name="audere-pending-detail",
+    ),
+    path(
+        "audere/respond/",
+        AudereRespondView.as_view(),
+        name="audere-respond",
     ),
     *router.urls,
 ]

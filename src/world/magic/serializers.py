@@ -2052,6 +2052,111 @@ class StageAdvanceBonusResultSerializer(serializers.Serializer):
     declined = serializers.BooleanField()
 
 
+_ERR_NO_PENDING_AUDERE = "No pending Audere offer found."
+
+
+class PendingAudereOfferSerializer(serializers.ModelSerializer):
+    """Player-facing view of a pending Audere offer (#873). Read-only.
+
+    advisory_text is computed live (never stored) so the corruption
+    "character loss" warning is always current.
+    """
+
+    character_name = serializers.SerializerMethodField()
+    character_sheet_id = serializers.IntegerField(read_only=True)
+    advisory_text = serializers.SerializerMethodField()
+    intensity_bonus = serializers.SerializerMethodField()
+    anima_pool_bonus = serializers.SerializerMethodField()
+
+    class Meta:
+        from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
+
+        model = PendingAudereOffer
+        fields = [
+            "id",
+            "character_sheet_id",
+            "character_name",
+            "fired_intensity",
+            "soulfray_stage_order",
+            "intensity_bonus",
+            "anima_pool_bonus",
+            "advisory_text",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_character_name(self, obj: object) -> str:
+        """IC display name via the primary persona."""
+        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
+
+    def get_advisory_text(self, obj: object) -> str:
+        """Live corruption advisory; empty string when no stage-3+ corruption."""
+        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+
+        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
+
+    def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
+        """Intensity bonus the offer would grant (from the global threshold config)."""
+        from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+        threshold = AudereThreshold.objects.first()
+        return threshold.intensity_bonus if threshold else 0
+
+    def get_anima_pool_bonus(self, obj: object) -> int:  # noqa: ARG002
+        """Anima pool expansion the offer would grant (from the global threshold config)."""
+        from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+        threshold = AudereThreshold.objects.first()
+        return threshold.anima_pool_bonus if threshold else 0
+
+
+class AudereRespondSerializer(serializers.Serializer):
+    """Write serializer for the player's Audere decision. accept=false declines."""
+
+    offer_id = serializers.IntegerField()
+    accept = serializers.BooleanField()
+
+    def validate_offer_id(self, value: int):
+        """Resolve + ownership-check via the offer's character sheet."""
+        from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
+
+        try:
+            offer = PendingAudereOffer.objects.get(pk=value)
+        except PendingAudereOffer.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_NO_PENDING_AUDERE) from exc
+        request = self.context.get("request")
+        _resolve_account_sheet(offer.character_sheet_id, request)
+        return offer
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to resolve_audere_offer; surface typed errors as 400."""
+        from world.magic.audere import resolve_audere_offer  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            AudereOfferError,
+            AudereOfferStaleError,
+        )
+        from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+        offer = validated_data["offer_id"]
+        try:
+            return resolve_audere_offer(offer.pk, accept=validated_data["accept"])
+        except CharacterEngagement.DoesNotExist as exc:
+            # TOCTOU window: engagement deleted between the staleness re-check
+            # and offer_audere's locked read — surface as stale, not a 500.
+            raise serializers.ValidationError(AudereOfferStaleError.user_message) from exc
+        except AudereOfferError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class AudereOfferResultSerializer(serializers.Serializer):
+    """Read serializer for AudereOfferResult (audere.py dataclass)."""
+
+    accepted = serializers.BooleanField()
+    intensity_bonus_applied = serializers.IntegerField()
+    anima_pool_expanded_by = serializers.IntegerField()
+    advisory_text = serializers.CharField(allow_blank=True)
+
+
 class CrossXPLockSerializer(serializers.Serializer):
     """Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2)."""
 
