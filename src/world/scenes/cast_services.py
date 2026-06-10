@@ -33,7 +33,7 @@ from world.scenes.action_constants import (
     CAST_DIFFICULTY_BANDS,
     ActionRequestStatus,
 )
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.types import CastResult, EnhancedSceneActionResult
@@ -46,6 +46,8 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
     from world.scenes.models import Interaction, Persona, Scene
+
+_PULL_FIZZLE_NOTE = "The declared thread pull fizzles — the committed resonance is no longer there."
 
 
 def derive_cast_difficulty(technique: Technique) -> int:
@@ -133,6 +135,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     technique: Technique,
     result: EnhancedSceneActionResult,
     power_ledger: PowerLedger | None = None,
+    fizzle_note: str | None = None,
 ) -> Interaction:
     """Author the Narrator OUTCOME pose describing a resolved standalone cast."""
     main_result = result.action_resolution.main_result
@@ -147,6 +150,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         outcome_label=outcome_label,
         success_level=success_level,
         power_ledger=power_ledger,
+        fizzle_note=fizzle_note,
     )
 
     return create_interaction(
@@ -166,6 +170,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     target_persona: Persona | None,
     technique: Technique,
     strain_commitment: int,
+    cast_pull: CastPullDeclaration | None = None,
+    fizzle_note: str | None = None,
 ) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
@@ -182,6 +188,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         target=target,
         difficulty=difficulty,
         strain_commitment=strain_commitment,
+        cast_pull=cast_pull,
     )
 
     request.status = ActionRequestStatus.RESOLVED
@@ -196,6 +203,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         technique=technique,
         result=result,
         power_ledger=power_ledger,
+        fizzle_note=fizzle_note,
     )
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
@@ -227,7 +235,38 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
 
     Returns:
         The resolved EnhancedSceneActionResult from the cast pipeline.
+
+    A persisted ``SceneCastPullDeclaration`` is re-checked here: if the
+    committed pull is still payable it is charged with the cast; otherwise the
+    cast resolves pull-less and the OUTCOME pose carries a fizzle note.
     """
+    from world.magic.services.resonance import preview_resonance_pull  # noqa: PLC0415
+    from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+    declaration = SceneCastPullDeclaration.objects.filter(request=action_request).first()
+    cast_pull = None
+    fizzle_note = None
+    if declaration is not None:
+        threads = list(declaration.threads.filter(retired_at__isnull=True))
+        preview = (
+            preview_resonance_pull(
+                action_request.initiator_persona.character_sheet,
+                declaration.resonance,
+                declaration.tier,
+                threads,
+            )
+            if threads
+            else None
+        )
+        if preview is not None and preview.affordable:
+            cast_pull = CastPullDeclaration(
+                resonance=declaration.resonance,
+                tier=declaration.tier,
+                threads=tuple(threads),
+            )
+        else:
+            fizzle_note = _PULL_FIZZLE_NOTE
+
     with transaction.atomic():
         result, _power_ledger, _pose = _resolve_and_pose_cast(
             request=action_request,
@@ -236,17 +275,20 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
             target_persona=action_request.target_persona,
             technique=action_request.technique,
             strain_commitment=action_request.strain_commitment,
+            cast_pull=cast_pull,
+            fizzle_note=fizzle_note,
         )
     return result  # result.power_ledger is already set from _resolve_cast
 
 
-def request_technique_cast(
+def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
     target_persona: Persona | None = None,
     technique: Technique,
     strain_commitment: int = 0,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -256,13 +298,18 @@ def request_technique_cast(
         target_persona: The targeted persona, or None for self/room/no-target.
         technique: The technique being cast (must be castable standalone).
         strain_commitment: Extra anima committed beyond the technique baseline.
+        cast_pull: Optional declared thread pull. Charged in-line on the
+            immediate path; persisted as a ``SceneCastPullDeclaration`` on the
+            benign consent path; rejected on hostile casts (combat pulls go
+            through ``CombatPull``).
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
 
     Raises:
-        ValidationError: If the caster does not know the technique, or the
-            technique has no action template (not castable standalone).
+        ValidationError: If the caster does not know the technique, the
+            technique has no action template (not castable standalone), or a
+            pull is declared on a hostile cast.
     """
     knows_technique = CharacterTechnique.objects.filter(
         character_id=initiator_persona.character_sheet_id,
@@ -283,6 +330,9 @@ def request_technique_cast(
         and target_persona.character_sheet_id != initiator_persona.character_sheet_id
     ):
         if is_technique_hostile(technique):
+            if cast_pull is not None:
+                msg = "Pulls cannot be declared on hostile casts."
+                raise ValidationError(msg)
             return _route_hostile_cast(
                 scene=scene,
                 initiator_persona=initiator_persona,
@@ -295,6 +345,7 @@ def request_technique_cast(
             target_persona=target_persona,
             technique=technique,
             strain_commitment=strain_commitment,
+            cast_pull=cast_pull,
         )
 
     return _route_immediate_cast(
@@ -303,6 +354,7 @@ def request_technique_cast(
         target_persona=target_persona,
         technique=technique,
         strain_commitment=strain_commitment,
+        cast_pull=cast_pull,
     )
 
 
@@ -361,33 +413,47 @@ def _route_hostile_cast(
     return CastResult(request=request, encounter=encounter)
 
 
-def _route_benign_cast(
+def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
     target_persona: Persona,
     technique: Technique,
     strain_commitment: int,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
-    """Benign cast at another PC → PENDING request awaiting consent (resolved on accept)."""
-    request = _create_cast_request(
-        scene=scene,
-        initiator_persona=initiator_persona,
-        target_persona=target_persona,
-        technique=technique,
-        status=ActionRequestStatus.PENDING,
-        strain_commitment=strain_commitment,
-    )
+    """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
+
+    A declared pull is persisted (not charged) as a ``SceneCastPullDeclaration``
+    so it survives until consent-resolution re-checks affordability.
+    """
+    with transaction.atomic():
+        request = _create_cast_request(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+            status=ActionRequestStatus.PENDING,
+            strain_commitment=strain_commitment,
+        )
+        if cast_pull is not None:
+            declaration = SceneCastPullDeclaration.objects.create(
+                request=request,
+                resonance=cast_pull.resonance,
+                tier=cast_pull.tier,
+            )
+            declaration.threads.set(cast_pull.threads)
     return CastResult(request=request)
 
 
-def _route_immediate_cast(
+def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
     target_persona: Persona | None,
     technique: Technique,
     strain_commitment: int = 0,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
     with transaction.atomic():
@@ -406,6 +472,7 @@ def _route_immediate_cast(
             target_persona=target_persona,
             technique=technique,
             strain_commitment=strain_commitment,
+            cast_pull=cast_pull,
         )
 
     return CastResult(
