@@ -504,6 +504,36 @@ def collect_check_modifiers(
             for mod in item_mods
         )
 
+    # --- CHARACTER contributions (#767) ---
+    # Persistent CharacterModifier rows scoped to this check via a
+    # ModifierTarget whose target_check_type points at it (e.g. a
+    # distinction-granted "+penetration vs warded foes" buff). Generic: any
+    # check gains "+X to <check>" support by authoring a ModifierTarget row.
+    # Reuses the isinstance guard above: mocked check types must not hit the
+    # ORM, and a reverse OneToOne lookup on a MagicMock would raise anyway.
+    if isinstance(check_type, _DjangoModel):
+        # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct
+        # from this module's checks ModifierBreakdown — import aliased.
+        from world.mechanics.services import (  # noqa: PLC0415
+            get_modifier_breakdown as get_character_modifier_breakdown,
+        )
+
+        try:
+            scoped_target = check_type.modifier_target
+        except ObjectDoesNotExist:
+            scoped_target = None
+        if scoped_target is not None and scoped_target.is_active:
+            character_breakdown = get_character_modifier_breakdown(character_sheet, scoped_target)
+            contributions.extend(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CHARACTER,
+                    source_label=detail.source_name,
+                    value=detail.final_value,
+                )
+                for detail in character_breakdown.sources
+                if not detail.blocked_by_immunity and detail.final_value != 0
+            )
+
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
     if extra_contributions:

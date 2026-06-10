@@ -33,6 +33,7 @@ class ModifierSourceKind(models.TextChoices):
     ROLLMOD = "rollmod", "Roll Modifier"
     SCENE = "scene", "Surroundings"
     EQUIPMENT = "equipment", "Equipment"
+    CHARACTER = "character", "Character"
     EFFORT = "effort", "Effort"
     FATIGUE = "fatigue", "Fatigue"
     STRAIN = "strain", "Strain"

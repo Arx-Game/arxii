@@ -16,90 +16,19 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, OpponentTier
+from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
 from world.combat.factories import (
-    CombatEncounterFactory,
     CombatOpponentFactory,
-    CombatParticipantFactory,
-    ThreatPoolEntryFactory,
-    ThreatPoolFactory,
     wire_penetration_check_type,
 )
-from world.combat.models import CombatRoundAction
-from world.combat.services import CombatTechniqueResolver
+from world.combat.tests.penetration_helpers import _build_resolver, _ledger
 from world.conditions.factories import (
     DamageSuccessLevelMultiplierFactory,
     wire_penetration_factors,
 )
-from world.fatigue.constants import EffortLevel
 from world.magic.constants import PowerStage
-from world.magic.factories import (
-    EffectTypeFactory,
-    GiftFactory,
-    TechniqueDamageProfileFactory,
-    TechniqueFactory,
-)
-from world.magic.types.power_ledger import PowerLedger
 from world.traits.factories import CheckOutcomeFactory
-
-
-def _ledger(power: int) -> PowerLedger:
-    return PowerLedger(entries=(), total=power)
-
-
-def _build_resolver(*, barrier_strength=None, base_power=20, offense_sl=2):
-    """Build a resolver against an opponent with the given ward.
-
-    ``offense_check_fn`` returns a fixed offense success level so the offense
-    roll is deterministic and separable from the penetration roll.
-    """
-    encounter = CombatEncounterFactory(round_number=1)
-    pool = ThreatPoolFactory()
-    ThreatPoolEntryFactory(pool=pool, base_damage=30)
-    opponent = CombatOpponentFactory(
-        encounter=encounter,
-        tier=OpponentTier.MOOK,
-        health=200,
-        max_health=200,
-        threat_pool=pool,
-        barrier_strength=barrier_strength,
-    )
-    sheet = CharacterSheetFactory()
-    participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
-    technique = TechniqueFactory(
-        gift=GiftFactory(),
-        effect_type=EffectTypeFactory(name="Attack", base_power=base_power),
-        damage_profile=False,
-    )
-    # Profile whose budget scales with effective power (budget = base + power),
-    # so penetration scaling actually moves the resulting damage. The default
-    # auto-seeded profile has intensity_multiplier=0 (flat damage) which would
-    # mask power changes.
-    TechniqueDamageProfileFactory(
-        technique=technique,
-        base_damage=10,
-        damage_intensity_multiplier=Decimal("1.0"),
-        minimum_success_level=1,
-    )
-    action = CombatRoundAction.objects.create(
-        participant=participant,
-        round_number=1,
-        focused_category=ActionCategory.PHYSICAL,
-        focused_action=technique,
-        focused_opponent_target=opponent,
-        effort_level=EffortLevel.MEDIUM,
-    )
-    offense_fn = MagicMock(return_value=MagicMock(success_level=offense_sl))
-    return CombatTechniqueResolver(
-        participant=participant,
-        action=action,
-        pull_flat_bonus=0,
-        fatigue_category=ActionCategory.PHYSICAL,
-        offense_check_type=MagicMock(),
-        offense_check_fn=offense_fn,
-    )
 
 
 class PenetrationContestTests(TestCase):
@@ -350,3 +279,38 @@ class PenetrationEndToEndTests(TestCase):
         )
         # Damage is applied normally (cast was not bounced).
         self.assertGreater(result.scaled_damage, 0)
+
+
+class PenetrationModifierSeamTests(TestCase):
+    """Penetration check honors the shared modifier seam (#767)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Seam Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Seam Partial"
+        )
+        wire_penetration_factors()
+        wire_penetration_check_type()
+
+    # --- Penetration honors the shared modifier seam (#767) -----------------
+
+    def test_penetration_check_receives_collected_modifiers(self) -> None:
+        resolver = _build_resolver(barrier_strength=10)
+        with (
+            patch("world.combat.services.perform_check") as mock_pen,
+            patch("world.combat.services.collect_check_modifiers") as mock_collect,
+        ):
+            mock_collect.return_value = MagicMock(total=4)
+            mock_pen.return_value = MagicMock(success_level=1)
+            resolver(power=20, ledger=_ledger(20))
+        # collect_check_modifiers called for the penetration check type...
+        pen_collect_calls = [
+            c for c in mock_collect.call_args_list if c.args[1].name == PENETRATION_CHECK_TYPE_NAME
+        ]
+        self.assertEqual(len(pen_collect_calls), 1)
+        self.assertEqual(pen_collect_calls[0].args[0], resolver.participant.character_sheet)
+        # ...and its total feeds the check as extra_modifiers.
+        self.assertEqual(mock_pen.call_args.kwargs["extra_modifiers"], 4)

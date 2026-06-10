@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from actions.models import ActionEnhancement
     from actions.models.consequence_pools import ConsequencePool
+    from integration_tests.game_content.combat import PenetrationContestResult
     from world.classes.models import Path
     from world.conditions.models import CapabilityType, ConditionStage
     from world.magic.audere import AudereThreshold
@@ -2229,6 +2230,8 @@ class MagicDevSeedResult:
     Composes all Phase 1 seed results into one dataclass.
     ``author_reference_corruption_content()`` returns None so it is not
     represented here; callers can query Wild Hunt / Web of Spiders rows directly.
+    ``penetration`` holds the penetration CheckType, factor ladder, and
+    check-scoped ModifierTarget seeded by seed_penetration_contest() (#767).
     """
 
     config: MagicConfigResult
@@ -2237,6 +2240,7 @@ class MagicDevSeedResult:
     cantrip_catalog: CantripStarterCatalogResult
     magic_content: MagicContentResult
     facet_thread_unlock: FacetThreadUnlockResult
+    penetration: PenetrationContestResult
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2309,6 +2313,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     7. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
     8. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
        Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
+    9. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
+       check-scoped ModifierTarget (#767)
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved.
@@ -2316,6 +2322,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     Returns:
         MagicDevSeedResult composing all sub-results.
     """
+    from integration_tests.game_content.combat import seed_penetration_contest  # noqa: PLC0415
     from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
 
     config = seed_magic_config()
@@ -2326,6 +2333,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     magic_content = MagicContent.create_all()
     facet_thread_unlock = seed_facet_thread_unlock()
     seed_starter_magic_story()
+    penetration = seed_penetration_contest()
 
     return MagicDevSeedResult(
         config=config,
@@ -2334,4 +2342,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         cantrip_catalog=cantrip_catalog,
         magic_content=magic_content,
         facet_thread_unlock=facet_thread_unlock,
+        penetration=penetration,
     )
