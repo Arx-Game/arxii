@@ -36141,6 +36141,11 @@ components:
           readOnly: true
           nullable: true
           description: The interaction recording the result of this action
+        action_interaction:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: ACTION-mode Interaction for this cast (carries the power ledger).
         strain_commitment:
           type: integer
           maximum: 2147483647
@@ -36164,6 +36169,7 @@ components:
           nullable: true
           description: When this action was resolved
       required:
+      - action_interaction
       - combat_risk_level
       - created_at
       - id

@@ -19899,6 +19899,8 @@ export interface components {
       readonly resolved_difficulty: number | null;
       /** @description The interaction recording the result of this action */
       readonly result_interaction: number | null;
+      /** @description ACTION-mode Interaction for this cast (carries the power ledger). */
+      readonly action_interaction: number | null;
       /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
