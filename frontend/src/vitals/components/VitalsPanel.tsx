@@ -2,17 +2,18 @@
  * VitalsPanel — read-only vitals on the character sheet (#521).
  *
  * Health + wound description, derived life status, anima, and the three
- * fatigue pools (reusing FatigueDisplay). Data is owner/staff-gated by
+ * fatigue pools (reusing FatigueBars). Data is owner/staff-gated by
  * /api/vitals/<id>/ — when the query yields null (403/404), the panel
  * renders nothing, so unauthorized viewers see no vitals section at all.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatBar } from '@/components/character/StatBar';
 import { cn } from '@/lib/utils';
 import { useCharacterAnima } from '@/magic/queries';
-import { FatigueDisplay } from '@/fatigue/components/FatigueDisplay';
+import { FatigueBars } from '@/fatigue/components/FatigueBars';
 import { useCharacterVitalsQuery } from '../vitalsQueries';
 import type { CharacterStatus } from '../vitalsQueries';
 
@@ -23,38 +24,28 @@ const STATUS_BADGE_CLASSES: Record<CharacterStatus, string> = {
   dead: 'bg-slate-200 text-slate-700 border-slate-400',
 };
 
-interface BarProps {
-  label: string;
-  current: number;
-  maximum: number;
-  fillClass: string;
-  note?: string;
-  testId: string;
-}
-
-function VitalBar({ label, current, maximum, fillClass, note, testId }: BarProps) {
-  const pct = maximum > 0 ? Math.max(0, Math.min(100, (current / maximum) * 100)) : 0;
-  return (
-    <div className="space-y-1" data-testid={testId}>
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <span className="tabular-nums text-muted-foreground">
-          {current}/{maximum}
-        </span>
-      </div>
-      <Progress value={pct} className="h-2" indicatorClassName={fillClass} />
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
-    </div>
-  );
-}
-
 export function VitalsPanel({ characterId }: { characterId: number }) {
-  const { data: vitals } = useCharacterVitalsQuery(characterId);
+  const { data: vitals, isLoading } = useCharacterVitalsQuery(characterId);
   const { data: anima } = useCharacterAnima(characterId);
+
+  if (isLoading) {
+    return (
+      <Card data-testid="vitals-panel-loading">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Vitals</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-2 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!vitals) return null;
 
-  const isWounded = vitals.max_health > 0 && vitals.health / vitals.max_health < 0.5;
+  const isWounded = vitals.health_percentage < 0.5;
 
   return (
     <Card data-testid="vitals-panel">
@@ -70,24 +61,24 @@ export function VitalsPanel({ characterId }: { characterId: number }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <VitalBar
+        <StatBar
           label="Health"
-          current={vitals.health}
-          maximum={vitals.max_health}
+          valueText={`${vitals.health}/${vitals.max_health}`}
+          percent={vitals.health_percentage * 100}
           fillClass={isWounded ? 'bg-amber-500' : 'bg-emerald-500'}
           note={vitals.wound_description || undefined}
           testId="vitals-health"
         />
         {anima && (
-          <VitalBar
+          <StatBar
             label="Anima"
-            current={anima.current}
-            maximum={anima.maximum}
+            valueText={`${anima.current}/${anima.maximum}`}
+            percent={anima.maximum > 0 ? (anima.current / anima.maximum) * 100 : 0}
             fillClass="bg-violet-500"
             testId="vitals-anima"
           />
         )}
-        <FatigueDisplay status={vitals.fatigue} className="border-0 shadow-none" />
+        <FatigueBars status={vitals.fatigue} />
       </CardContent>
     </Card>
   );

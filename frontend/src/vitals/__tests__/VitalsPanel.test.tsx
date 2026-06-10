@@ -30,10 +30,10 @@ const VITALS: CharacterVitalsData = {
   },
 };
 
-function setQueries(vitals: CharacterVitalsData | null, anima: unknown) {
+function setQueries(vitals: CharacterVitalsData | null, anima: unknown, isLoading = false) {
   mockVitalsQuery.mockReturnValue({
     data: vitals,
-    isLoading: false,
+    isLoading,
   } as unknown as ReturnType<typeof useCharacterVitalsQuery>);
   mockAnima.mockReturnValue({
     data: anima,
@@ -62,6 +62,21 @@ describe('VitalsPanel', () => {
     setQueries(null, null);
     const { container } = renderWithProviders(<VitalsPanel characterId={7} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders a loading skeleton while the vitals query is in flight', () => {
+    setQueries(null, null, true);
+    renderWithProviders(<VitalsPanel characterId={7} />);
+    expect(screen.getByTestId('vitals-panel-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('vitals-panel')).not.toBeInTheDocument();
+  });
+
+  it('uses the amber wounded fill when health is below half', () => {
+    setQueries(VITALS, null);
+    renderWithProviders(<VitalsPanel characterId={7} />);
+    const healthBar = screen.getByTestId('vitals-health');
+    expect(healthBar.querySelector('[class*="bg-amber-500"]')).not.toBeNull();
+    expect(healthBar.querySelector('[class*="bg-emerald-500"]')).toBeNull();
   });
 
   it('omits the anima bar when no anima record exists', () => {

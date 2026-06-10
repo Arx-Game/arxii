@@ -7,7 +7,7 @@ export type CharacterStatus = components['schemas']['CharacterVitalsStatusEnum']
 
 export type CharacterVitalsData = Omit<components['schemas']['CharacterVitals'], 'fatigue'> & {
   // Generated VitalsFatigue types zone as plain string; FatigueStatus keeps the
-  // FatigueZone union that FatigueDisplay's Record lookups depend on.
+  // FatigueZone union that FatigueBars' Record lookups depend on.
   fatigue: FatigueStatus;
 };
 
