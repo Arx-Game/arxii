@@ -27,6 +27,7 @@ from world.fatigue.services import (
     get_fatigue_penalty,
     get_fatigue_percentage,
     get_fatigue_zone,
+    get_full_status,
     get_or_create_fatigue_pool,
     reset_fatigue,
     rest,
@@ -754,3 +755,36 @@ class ApplyTechniqueFatigueTests(TestCase):
         ) as mock_check:
             apply_technique_fatigue(self.sheet, ActionCategory.PHYSICAL, 4, 0)
             mock_check.assert_called_once()
+
+
+class GetFullStatusPoolParamTests(TestCase):
+    """get_full_status takes a caller-supplied pool and never creates rows."""
+
+    def setUp(self):
+        FatiguePool.flush_instance_cache()
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        _setup_stat(cls.sheet.character, "stamina", 30, TraitCategory.PHYSICAL)
+        _setup_stat(cls.sheet.character, "composure", 20, TraitCategory.SOCIAL)
+        _setup_stat(cls.sheet.character, "stability", 20, TraitCategory.MENTAL)
+        _setup_stat(cls.sheet.character, "willpower", 20, TraitCategory.META)
+
+    def test_none_pool_returns_empty_defaults_without_creating(self) -> None:
+        status = get_full_status(self.sheet, pool=None)
+        self.assertFalse(FatiguePool.objects.filter(character_sheet=self.sheet).exists())
+        self.assertFalse(status["well_rested"])
+        self.assertFalse(status["rested_today"])
+        for category in ActionCategory:
+            self.assertEqual(status[category.value]["current"], 0)
+            self.assertGreater(status[category.value]["capacity"], 0)
+
+    def test_preloaded_pool_is_used(self) -> None:
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.physical_current = 5
+        pool.well_rested = True
+        pool.save()
+        status = get_full_status(self.sheet, pool=pool)
+        self.assertEqual(status["physical"]["current"], 5)
+        self.assertTrue(status["well_rested"])

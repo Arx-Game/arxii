@@ -39,7 +39,7 @@ class FatigueStatusView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        data = get_full_status(sheet)
+        data = get_full_status(sheet, pool=getattr(sheet, "fatigue", None))  # noqa: GETATTR_LITERAL
         return Response(data)
 
 

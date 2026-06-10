@@ -450,21 +450,24 @@ def rest(character_sheet: CharacterSheet) -> RestResult:
     )
 
 
-def get_full_status(character_sheet: CharacterSheet) -> dict:
+def get_full_status(character_sheet: CharacterSheet, *, pool: FatiguePool | None) -> dict:
     """Get fatigue status for all three categories in one pass.
 
     Args:
         character_sheet: The character's sheet.
+        pool: The character's FatiguePool, typically the instance-cached
+            reverse accessor (``getattr(sheet, "fatigue", None)``). None means
+            no row exists: zeros + False flags. A read path never creates rows.
 
     Returns:
         Dictionary with per-category status and global flags.
     """
-    pool = get_or_create_fatigue_pool(character_sheet)
+    well_rested = pool.well_rested if pool else False
     status: dict = {}
     for category in ActionCategory:
         cat = category.value
-        capacity = get_fatigue_capacity(character_sheet, cat)
-        current = pool.get_current(cat)
+        capacity = get_fatigue_capacity(character_sheet, cat, well_rested=well_rested)
+        current = pool.get_current(cat) if pool else 0
         pct = (current / capacity * 100) if capacity > 0 else (100.0 if current > 0 else 0.0)
         zone = _zone_from_percentage(pct)
         status[cat] = {
@@ -473,6 +476,6 @@ def get_full_status(character_sheet: CharacterSheet) -> dict:
             "percentage": round(pct, 1),
             "zone": zone,
         }
-    status["well_rested"] = pool.well_rested
-    status["rested_today"] = pool.rested_today
+    status["well_rested"] = well_rested
+    status["rested_today"] = pool.rested_today if pool else False
     return status
