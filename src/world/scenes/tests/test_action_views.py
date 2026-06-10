@@ -568,6 +568,7 @@ class CastEndpointTestCase(APITestCase):
         response = self.client.post(self._cast_url(), data, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert "action_interaction" in response.data
+        assert response.data["action_interaction"] is not None
         request_id = response.data["id"]
         db_request = SceneActionRequest.objects.get(pk=request_id)
         assert response.data["action_interaction"] == db_request.action_interaction_id
