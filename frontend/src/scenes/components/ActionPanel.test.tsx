@@ -72,9 +72,7 @@ vi.mock('@/magic/queries', async (importOriginal) => {
 // Stub ThreadPullPicker (mirrors ActionDeclarationCard.test.tsx) — but expose
 // onPullsChange via a button so tests can drive pull selection.
 vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
-  ThreadPullPicker: (props: {
-    onPullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void;
-  }) => (
+  ThreadPullPicker: (props: { onPullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void }) => (
     <div data-testid="thread-pull-picker-stub">
       <button type="button" onClick={() => props.onPullsChange({ 7: 2 })}>
         stub-pull-7-tier2
@@ -175,10 +173,7 @@ describe('ActionPanel', () => {
     vi.clearAllMocks();
     vi.mocked(useThreads).mockReturnValue({
       data: {
-        results: [
-          { id: 7, resonance: 4 } as Thread,
-          { id: 9, resonance: 4 } as Thread,
-        ],
+        results: [{ id: 7, resonance: 4 } as Thread, { id: 9, resonance: 4 } as Thread],
       },
     } as unknown as ReturnType<typeof useThreads>);
   });

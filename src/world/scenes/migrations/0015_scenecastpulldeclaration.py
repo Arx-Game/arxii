@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("magic", "0015_aurapowerconfig"),
         ("scenes", "0014_scenecheckmodifier"),
