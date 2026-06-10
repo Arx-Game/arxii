@@ -6,6 +6,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Zap } from 'lucide-react';
@@ -49,6 +52,7 @@ export function PersonaContextMenu({
       action_key: string;
       target_persona_id: number;
       technique_id?: number;
+      delivery?: string;
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
@@ -72,28 +76,52 @@ export function PersonaContextMenu({
         <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {/* Direct execute: fires the action immediately via REST, independent of
-            any pose in the composer. This is a "quick action" path. */}
+            any pose in the composer. This is a "quick action" path. The submenu
+            picks the audience (#903); the plain "Default" entry sends NO delivery
+            so the backend's template default stays the single fallback authority. */}
         {targetedActions.map((action) => {
           const techniqueId = action.ref.technique_id ?? undefined;
           const actionKey =
             action.ref.registry_key ??
             action.action_template?.name.toLowerCase() ??
             action.display_name.toLowerCase();
+          const fire = (delivery?: string) =>
+            performAction.mutate({
+              action_key: actionKey,
+              target_persona_id: personaId,
+              technique_id: techniqueId,
+              delivery,
+            });
+          const defaultDelivery = action.action_template?.default_delivery ?? 'pose';
           return (
-            <DropdownMenuItem
+            <DropdownMenuSub
               key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
-              disabled={performAction.isPending}
-              onClick={() =>
-                performAction.mutate({
-                  action_key: actionKey,
-                  target_persona_id: personaId,
-                  technique_id: techniqueId,
-                })
-              }
             >
-              <Zap className="mr-2 h-4 w-4" />
-              {action.display_name}
-            </DropdownMenuItem>
+              <DropdownMenuSubTrigger disabled={performAction.isPending}>
+                <Zap className="mr-2 h-4 w-4" />
+                {action.display_name}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire()}>
+                  Default ({defaultDelivery.replace('_', ' ')})
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire('pose')}>
+                  Openly (whole room)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={performAction.isPending}
+                  onClick={() => fire('whisper')}
+                >
+                  Subtly (target only)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={performAction.isPending}
+                  onClick={() => fire('table_talk')}
+                >
+                  At your table
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           );
         })}
         {/* Attach to Pose: stores the action in the composer so it is submitted

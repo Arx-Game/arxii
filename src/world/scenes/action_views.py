@@ -124,15 +124,35 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         strain_commitment = serializer.validated_data.get("strain_commitment", 0) or 0
 
-        action_request = create_action_request(
-            scene=scene,
-            initiator_persona=initiator_persona,
-            target_persona=target_persona,
-            action_key=action_key,
-            difficulty_choice=difficulty_choice,
-            technique=technique,
-            strain_commitment=strain_commitment,
-        )
+        delivery = serializer.validated_data.get("delivery", "")
+        receiver_ids = serializer.validated_data.get("delivery_receiver_ids", [])
+        delivery_receivers: list[Persona] = []
+        if receiver_ids:
+            delivery_receivers = list(Persona.objects.filter(pk__in=receiver_ids))
+            if len(delivery_receivers) != len(set(receiver_ids)):
+                return Response(
+                    {"detail": "One or more delivery receivers not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            action_request = create_action_request(
+                scene=scene,
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                action_key=action_key,
+                difficulty_choice=difficulty_choice,
+                technique=technique,
+                strain_commitment=strain_commitment,
+                delivery=delivery,
+                delivery_receivers=delivery_receivers,
+            )
+        except DjangoValidationError as exc:
+            messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]
+            return Response(
+                {"detail": messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return Response(
             SceneActionRequestSerializer(action_request).data,
