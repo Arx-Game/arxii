@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
@@ -49,6 +50,7 @@ from world.magic.factories import (
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
+from world.magic.types.pull import CastPullDeclaration
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import respond_to_action_request
@@ -56,6 +58,7 @@ from world.scenes.cast_services import (
     create_cast_outcome_pose,
     derive_cast_difficulty,
     request_technique_cast,
+    resolve_accepted_cast,
 )
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -64,6 +67,7 @@ from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
     grant_technique,
     make_benign_castable_technique,
+    make_cast_pull_fixture,
     make_hostile_castable_technique,
 )
 from world.scenes.types import CastResult, EnhancedSceneActionResult
@@ -570,6 +574,193 @@ class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase)
             baseline_total + bump,
             "Passive tier-0 INTENSITY_BUMP thread should raise cast power by its bump amount.",
         )
+
+
+class TestCastPullThroughCastServices(CastScenarioMixin):
+    """cast_pull threading (#854): immediate charge, benign persistence, consent fizzle.
+
+    A declared pull on an immediate cast charges resonance in-line through
+    ``use_technique``. On a benign (consent-gated) cast the declaration is
+    persisted as a ``SceneCastPullDeclaration`` and only charged when the
+    target accepts; if the committed resonance is no longer payable at accept
+    time, the cast still resolves but the pull fizzles with a narration note.
+    """
+
+    PULL_TIER = 2
+    PULL_RESONANCE_COST = 3
+    STARTING_BALANCE = 10
+
+    def _make_pull_fixture(self, *, hostile: bool = False):
+        """Build technique + TECHNIQUE-anchored thread + balance + tier cost + pull.
+
+        Returns (technique, character_resonance, pull). Fresh rows per test so
+        balance mutations cannot leak across tests via the identity map.
+        """
+        technique, character_resonance, resonance, thread = make_cast_pull_fixture(
+            self.caster.character_sheet,
+            hostile=hostile,
+            tier=self.PULL_TIER,
+            resonance_cost=self.PULL_RESONANCE_COST,
+            starting_balance=self.STARTING_BALANCE,
+        )
+        grant_technique(self.caster, technique)
+        pull = CastPullDeclaration(resonance=resonance, tier=self.PULL_TIER, threads=(thread,))
+        return technique, character_resonance, pull
+
+    def test_immediate_cast_with_pull_charges_resonance(self) -> None:
+        """A self-cast with a declared pull debits the resonance balance in-line."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(
+            character_resonance.balance,
+            self.STARTING_BALANCE - self.PULL_RESONANCE_COST,
+        )
+
+    def test_benign_cast_with_pull_persists_declaration(self) -> None:
+        """A benign cast at another PC persists the declaration without charging."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.PENDING)
+        declaration = cast.request.pull_declaration
+        self.assertEqual(declaration.tier, self.PULL_TIER)
+        self.assertEqual(list(declaration.threads.all()), list(pull.threads))
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
+
+    def test_consent_accept_honors_persisted_pull(self) -> None:
+        """Accepting a benign cast charges the persisted pull and resolves the request."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(
+            character_resonance.balance,
+            self.STARTING_BALANCE - self.PULL_RESONANCE_COST,
+        )
+
+    def test_consent_accept_fizzles_unaffordable_pull(self) -> None:
+        """If the committed resonance is gone at accept time, the cast resolves pull-less."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        character_resonance.balance = 0
+        character_resonance.save(update_fields=["balance"])
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, 0)
+        self.assertIn("fizzles", cast.request.result_interaction.content)
+
+    def test_consent_accept_fizzles_when_all_threads_retired(self) -> None:
+        """If the pulled thread is retired before accept, the cast resolves pull-less."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        # Retire the thread so it is excluded from re-check at accept time.
+        thread = pull.threads[0]
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
+        self.assertIn("fizzles", cast.request.result_interaction.content)
+
+    def test_consent_accept_fizzles_on_charge_time_magic_error(self) -> None:
+        """A pull that passes the preview but fails at charge time fizzles, never errors.
+
+        A TRAIT-anchored thread passes declaration-time validation (owned, active,
+        resonance-matched) and the affordability preview, but the cast's
+        PullActionContext carries only involved_techniques, so the anchor-in-action
+        check inside spend_resonance_for_pull raises a MagicError at charge time.
+        The consent accept must degrade to the fizzle path, not surface the error.
+        """
+        technique, character_resonance, pull = self._make_pull_fixture()
+        trait_thread = ThreadFactory(
+            owner=self.caster.character_sheet,
+            resonance=pull.resonance,
+            level=0,
+        )
+        trait_pull = CastPullDeclaration(
+            resonance=pull.resonance,
+            tier=self.PULL_TIER,
+            threads=(trait_thread,),
+        )
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=trait_pull,
+        )
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
+        self.assertIn("fizzles", cast.request.result_interaction.content)
+
+    def test_hostile_cast_with_pull_raises(self) -> None:
+        """Declaring a pull on a hostile cast is rejected before any row is written."""
+        technique, _character_resonance, pull = self._make_pull_fixture(hostile=True)
+
+        with self.assertRaises(ValidationError):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                target_persona=self.target,
+                technique=technique,
+                cast_pull=pull,
+            )
+
+        self.assertFalse(SceneActionRequest.objects.exists())
 
 
 class HostileCastRiskGateTests(CastScenarioMixin):

@@ -50,6 +50,72 @@ def _cap_strain_by_anima(attrs: dict) -> dict:
     return attrs
 
 
+class CastPullRequestSerializer(serializers.Serializer):
+    """Nested pull declaration on the cast endpoint (#854).
+
+    Field shapes mirror ThreadPullCommitRequestSerializer
+    (world/magic/serializers.py).
+    """
+
+    resonance_id = serializers.IntegerField()
+    tier = serializers.IntegerField(min_value=1, max_value=3)
+    thread_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        max_length=20,
+    )
+
+
+def _validate_cast_pull(attrs: dict) -> dict:
+    """Resolve + validate a declared pull against the initiator's sheet.
+
+    Attaches resolved instances to attrs["pull"]["resonance"|"threads"] so the
+    view can build a CastPullDeclaration without re-querying. Affordability and
+    anchor-involvement stay with spend_resonance_for_pull at charge time.
+    """
+    from world.magic.models import Resonance, Technique, Thread  # noqa: PLC0415
+    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    pull = attrs["pull"]
+    try:
+        technique = Technique.objects.select_related("effect_type").get(pk=attrs["technique_id"])
+    except Technique.DoesNotExist:
+        raise serializers.ValidationError({"technique_id": "Unknown technique."}) from None
+    if is_technique_hostile(technique):
+        msg = "Pulls cannot be declared on hostile casts — combat owns that flow."
+        raise serializers.ValidationError({"pull": msg})
+
+    try:
+        persona = Persona.objects.get(pk=attrs["initiator_persona"])
+    except Persona.DoesNotExist:
+        raise serializers.ValidationError({"initiator_persona": "Unknown persona."}) from None
+
+    try:
+        resonance = Resonance.objects.get(pk=pull["resonance_id"])
+    except Resonance.DoesNotExist:
+        raise serializers.ValidationError({"pull": "Unknown resonance."}) from None
+
+    threads = list(
+        Thread.objects.filter(
+            pk__in=pull["thread_ids"],
+            owner_id=persona.character_sheet_id,
+            resonance_id=resonance.pk,
+            retired_at__isnull=True,
+        )
+    )
+    if len(threads) != len(pull["thread_ids"]):
+        msg = (
+            "Each pulled thread must exist, be active, be yours, match the "
+            "resonance, and appear only once."
+        )
+        raise serializers.ValidationError({"pull": msg})
+
+    pull["resonance"] = resonance
+    pull["threads"] = threads
+    return attrs
+
+
 class TechniqueCastCreateSerializer(serializers.Serializer):
     """Validate input for the standalone technique cast endpoint."""
 
@@ -58,10 +124,14 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     technique_id = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+    pull = CastPullRequestSerializer(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
-        """Cap strain_commitment by the initiator's available anima (same rule as create)."""
-        return _cap_strain_by_anima(attrs)
+        """Cap strain by anima; resolve + validate a declared pull (#854)."""
+        attrs = _cap_strain_by_anima(attrs)
+        if attrs.get("pull"):
+            attrs = _validate_cast_pull(attrs)
+        return attrs
 
 
 class CastableTechniqueSerializer(serializers.Serializer):
@@ -120,6 +190,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "difficulty_choice",
             "resolved_difficulty",
             "result_interaction",
+            "action_interaction",
             "strain_commitment",
             "combat_risk_level",
             "created_at",
@@ -131,6 +202,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "combat_risk_level",
             "resolved_difficulty",
             "result_interaction",
+            "action_interaction",
             "created_at",
             "resolved_at",
         ]
