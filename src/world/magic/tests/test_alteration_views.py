@@ -141,5 +141,4 @@ class PendingAlterationViewSetTests(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         row = response.data["results"][0]
         assert row["character_id"] == self.sheet.pk
-        # Name comes from the sheet's primary persona; empty string when none exists.
-        assert "character_name" in row
+        assert row["character_name"] == self.sheet.primary_persona.name
