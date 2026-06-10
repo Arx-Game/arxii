@@ -70,10 +70,12 @@ class CastPullValidationTests(TestCase):
         )
         ser = TechniqueCastCreateSerializer(data=self._data(thread_ids=[other_thread.pk]))
         self.assertFalse(ser.is_valid())
+        self.assertIn("pull", ser.errors)
 
     def test_resonance_mismatch_rejected(self) -> None:
         ser = TechniqueCastCreateSerializer(data=self._data(resonance_id=ResonanceFactory().pk))
         self.assertFalse(ser.is_valid())
+        self.assertIn("pull", ser.errors)
 
     def test_tier_out_of_bounds_rejected(self) -> None:
         ser = TechniqueCastCreateSerializer(data=self._data(tier=4))
@@ -94,6 +96,7 @@ class CastPullValidationTests(TestCase):
         ser = TechniqueCastCreateSerializer(data=data)
         self.assertFalse(ser.is_valid())
         self.assertIn("pull", ser.errors)
+        self.assertIn("hostile", str(ser.errors["pull"][0]).lower())
 
     def test_retired_thread_rejected(self) -> None:
         """A thread with retired_at set must be rejected by pull validation.
@@ -116,6 +119,7 @@ class CastPullValidationTests(TestCase):
         )
         ser = TechniqueCastCreateSerializer(data=self._data(thread_ids=[retired_thread.pk]))
         self.assertFalse(ser.is_valid())
+        self.assertIn("pull", ser.errors)
 
     def test_duplicate_thread_ids_rejected(self) -> None:
         ser = TechniqueCastCreateSerializer(

@@ -76,20 +76,23 @@ def _validate_cast_pull(attrs: dict) -> dict:
     from world.scenes.models import Persona  # noqa: PLC0415
 
     pull = attrs["pull"]
-    technique = Technique.objects.filter(pk=attrs["technique_id"]).first()
-    if technique is not None and is_technique_hostile(technique):
+    try:
+        technique = Technique.objects.select_related("effect_type").get(pk=attrs["technique_id"])
+    except Technique.DoesNotExist:
+        raise serializers.ValidationError({"technique_id": "Unknown technique."}) from None
+    if is_technique_hostile(technique):
         msg = "Pulls cannot be declared on hostile casts — combat owns that flow."
         raise serializers.ValidationError({"pull": msg})
 
     try:
         persona = Persona.objects.get(pk=attrs["initiator_persona"])
-    except Persona.DoesNotExist as exc:
-        raise serializers.ValidationError({"initiator_persona": "Unknown persona."}) from exc
+    except Persona.DoesNotExist:
+        raise serializers.ValidationError({"initiator_persona": "Unknown persona."}) from None
 
     try:
         resonance = Resonance.objects.get(pk=pull["resonance_id"])
-    except Resonance.DoesNotExist as exc:
-        raise serializers.ValidationError({"pull": "Unknown resonance."}) from exc
+    except Resonance.DoesNotExist:
+        raise serializers.ValidationError({"pull": "Unknown resonance."}) from None
 
     threads = list(
         Thread.objects.filter(
