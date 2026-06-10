@@ -186,16 +186,14 @@ describe('useAlterationLibrary', () => {
       {
         id: 11,
         name: 'Shadow Touch',
+        tier: 3 as const,
         player_description: 'A subtle mark.',
         observer_description: 'Subtle shadow.',
-        weakness_damage_type_id: null,
+        origin_affinity_name: 'Abyssal',
         weakness_magnitude: 0,
         resonance_bonus_magnitude: 1,
         social_reactivity_magnitude: 0,
         is_visible_at_rest: false,
-        tier: 3,
-        affinity: 1,
-        affinity_name: 'Abyssal',
       },
     ];
     vi.mocked(api.getAlterationLibrary).mockResolvedValue(mockLibrary);
@@ -232,19 +230,7 @@ describe('useResolveAlteration', () => {
   });
 
   it('calls resolveAlteration with pendingId and payload on mutate', async () => {
-    const mockResponse = {
-      pending_id: 7,
-      character_name: 'Velenosa',
-      alteration_name: 'Shadow Touch',
-      player_description: 'A subtle mark.',
-      observer_description: 'Subtle shadow.',
-      weakness_damage_type_id: null,
-      weakness_magnitude: 0,
-      resonance_bonus_magnitude: 1,
-      social_reactivity_magnitude: 0,
-      is_visible_at_rest: false,
-    };
-    vi.mocked(api.resolveAlteration).mockResolvedValue(mockResponse);
+    vi.mocked(api.resolveAlteration).mockResolvedValue({ status: 'resolved', event_id: 42 });
 
     const { result } = renderHook(() => useResolveAlteration(), {
       wrapper: createWrapper(),
@@ -262,19 +248,7 @@ describe('useResolveAlteration', () => {
   });
 
   it('invalidates the pending-alterations query after a successful resolve', async () => {
-    const mockResponse = {
-      pending_id: 7,
-      character_name: 'Velenosa',
-      alteration_name: 'Shadow Touch',
-      player_description: 'A subtle mark.',
-      observer_description: 'Subtle shadow.',
-      weakness_damage_type_id: null,
-      weakness_magnitude: 0,
-      resonance_bonus_magnitude: 1,
-      social_reactivity_magnitude: 0,
-      is_visible_at_rest: false,
-    };
-    vi.mocked(api.resolveAlteration).mockResolvedValue(mockResponse);
+    vi.mocked(api.resolveAlteration).mockResolvedValue({ status: 'resolved', event_id: 42 });
 
     const { wrapper, client } = createWrapperWithClient();
 

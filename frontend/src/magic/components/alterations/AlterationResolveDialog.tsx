@@ -191,13 +191,13 @@ function LibraryEntryCard({
       <div className="flex items-center justify-between">
         <span className="font-medium">{entry.name}</span>
         <span className="flex gap-1">
-          {entry.weakness_magnitude > 0 && (
+          {(entry.weakness_magnitude ?? 0) > 0 && (
             <Badge variant="destructive">Weakness {entry.weakness_magnitude}</Badge>
           )}
-          {entry.resonance_bonus_magnitude > 0 && (
+          {(entry.resonance_bonus_magnitude ?? 0) > 0 && (
             <Badge variant="secondary">Resonance +{entry.resonance_bonus_magnitude}</Badge>
           )}
-          {entry.social_reactivity_magnitude > 0 && (
+          {(entry.social_reactivity_magnitude ?? 0) > 0 && (
             <Badge variant="outline">Social {entry.social_reactivity_magnitude}</Badge>
           )}
           {entry.is_visible_at_rest && <Badge variant="outline">Always visible</Badge>}

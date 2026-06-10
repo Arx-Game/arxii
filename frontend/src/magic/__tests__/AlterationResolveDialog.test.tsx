@@ -86,7 +86,7 @@ const TIER4_PENDING: PendingAlteration = {
 const LIBRARY_ENTRY = {
   id: 11,
   name: 'Veins of Night',
-  tier: 3,
+  tier: 3 as const,
   player_description: 'Dark veins spider across your forearms when you draw on the abyss.',
   observer_description: 'Faint dark veining is visible along their forearms.',
   origin_affinity_name: 'Abyssal',
@@ -138,24 +138,15 @@ async function openAuthorTab(user: ReturnType<typeof userEvent.setup>) {
 describe('AlterationResolveDialog — library path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(conditionsApi.fetchDamageTypes).mockResolvedValue([{ id: 1, name: 'Spirit' }]);
+    vi.mocked(conditionsApi.fetchDamageTypes).mockResolvedValue([
+      { id: 1, name: 'Spirit', description: '', color_hex: '', icon: '' },
+    ]);
   });
 
   it('submits exactly { library_template_id: 11 } when an entry is selected and accepted', async () => {
     const user = userEvent.setup();
     vi.mocked(api.getAlterationLibrary).mockResolvedValue([LIBRARY_ENTRY]);
-    vi.mocked(api.resolveAlteration).mockResolvedValue({
-      pending_id: 7,
-      character_name: 'Velenosa',
-      alteration_name: 'Veins of Night',
-      player_description: 'Dark veins spider across your forearms when you draw on the abyss.',
-      observer_description: 'Faint dark veining is visible along their forearms.',
-      weakness_damage_type_id: null,
-      weakness_magnitude: 1,
-      resonance_bonus_magnitude: 2,
-      social_reactivity_magnitude: 1,
-      is_visible_at_rest: false,
-    });
+    vi.mocked(api.resolveAlteration).mockResolvedValue({ status: 'resolved', event_id: 42 });
 
     renderDialog();
 
@@ -228,23 +219,14 @@ describe('AlterationResolveDialog — author path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getAlterationLibrary).mockResolvedValue([]);
-    vi.mocked(conditionsApi.fetchDamageTypes).mockResolvedValue([{ id: 1, name: 'Spirit' }]);
+    vi.mocked(conditionsApi.fetchDamageTypes).mockResolvedValue([
+      { id: 1, name: 'Spirit', description: '', color_hex: '', icon: '' },
+    ]);
   });
 
   it('submits the full scratch payload with defaults', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.resolveAlteration).mockResolvedValue({
-      pending_id: 7,
-      character_name: 'Velenosa',
-      alteration_name: 'Voice of Many',
-      player_description: '',
-      observer_description: '',
-      weakness_damage_type_id: null,
-      weakness_magnitude: 0,
-      resonance_bonus_magnitude: 0,
-      social_reactivity_magnitude: 0,
-      is_visible_at_rest: false,
-    });
+    vi.mocked(api.resolveAlteration).mockResolvedValue({ status: 'resolved', event_id: 42 });
 
     renderDialog();
     await openAuthorTab(user);
