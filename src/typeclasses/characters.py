@@ -326,6 +326,15 @@ class Character(ObjectParent, DefaultCharacter):
 
                 maybe_dispatch_on_enter(self, self.location)
 
+            # Fame reactions (#881): a room with authored FameReactionLine
+            # rows may react to a notable arrival — bystanders see the
+            # observer line, the arriver their own register. Optional
+            # flavor; best-effort, never breaks movement.
+            with contextlib.suppress(Exception):
+                from world.societies.fame_reactions import maybe_emit_fame_reaction
+
+                maybe_emit_fame_reaction(self, self.location)
+
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
 
