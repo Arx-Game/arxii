@@ -44,6 +44,14 @@ class RiskLevel(models.TextChoices):
     LETHAL = "lethal", "Lethal"
 
 
+# Risk levels that require a target's explicit acknowledgement before a hostile
+# cast can pull them into an existing encounter (#777). Only EXTREME and LETHAL
+# gate; LOW/MODERATE/HIGH do not (fresh cast-seeded encounters are MODERATE).
+RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT: frozenset[RiskLevel] = frozenset(
+    {RiskLevel.EXTREME, RiskLevel.LETHAL}
+)
+
+
 class StakesLevel(models.TextChoices):
     """Narrative scope of the encounter's consequences."""
 

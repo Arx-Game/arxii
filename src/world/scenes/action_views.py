@@ -63,10 +63,16 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             SceneActionRequest.objects.filter(
                 Q(initiator_persona_id__in=persona_ids) | Q(target_persona_id__in=persona_ids)
             )
+            # perf: technique, technique__effect_type, and
+            # target_persona__character_sheet must stay in select_related —
+            # SceneActionRequestSerializer.get_combat_risk_level walks them per row.
             .select_related(
                 "initiator_persona",
                 "target_persona",
+                "target_persona__character_sheet",
                 "scene",
+                "technique",
+                "technique__effect_type",
             )
             .order_by("-created_at")
         )

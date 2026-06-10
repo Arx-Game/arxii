@@ -1096,7 +1096,11 @@ consent/combat/immediate matrix:
 - **Hostile (damage) technique at another PC** → calls `seed_or_feed_encounter_from_cast`
   (in `world/combat/cast_seed.py`) to seed or feed a `CombatEncounter` in DECLARING status,
   with the caster as an active participant and the technique as their opening
-  `CombatRoundAction.focused_action`.
+  `CombatRoundAction.focused_action`. Since #777, a hostile cast that would pull an
+  unacknowledged target into a feedable EXTREME/LETHAL encounter instead creates a PENDING
+  consent request (risk gate); ACCEPT seeds combat and records an
+  `EncounterRiskAcknowledgement`, DENY leaves the target out. Fresh seeds stay MODERATE
+  and ungated.
 
 What was built (`src/` paths relative to repo root):
 - `world/scenes/cast_services.py` — `request_technique_cast`, `derive_cast_difficulty`,

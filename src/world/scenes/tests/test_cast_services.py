@@ -11,7 +11,21 @@ from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import RoomProfileFactory
-from world.combat.constants import EncounterStatus
+from world.combat.constants import (
+    EncounterStatus,
+    EncounterType,
+    OpponentStatus,
+    ParticipantStatus,
+    RiskLevel,
+)
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponent,
+    CombatParticipant,
+    CombatRoundAction,
+    EncounterRiskAcknowledgement,
+)
+from world.combat.services import acknowledge_encounter_risk
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -48,7 +62,7 @@ from world.scenes.cast_services import (
 )
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
-from world.scenes.models import Interaction
+from world.scenes.models import Interaction, Scene
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
     grant_technique,
@@ -56,7 +70,7 @@ from world.scenes.tests.cast_test_helpers import (
     make_cast_pull_fixture,
     make_hostile_castable_technique,
 )
-from world.scenes.types import EnhancedSceneActionResult
+from world.scenes.types import CastResult, EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
 
 
@@ -747,3 +761,164 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
             )
 
         self.assertFalse(SceneActionRequest.objects.exists())
+
+
+class HostileCastRiskGateTests(CastScenarioMixin):
+    """The #777 risk gate on hostile standalone casts.
+
+    A hostile cast that would pull an unacknowledged target into a high-risk
+    (EXTREME/LETHAL) encounter becomes a PENDING consent request instead of
+    feeding combat immediately. Accepting seeds/feeds the encounter and records
+    the target's risk acknowledgement; denying leaves them out of combat.
+    """
+
+    scene: Scene
+
+    def _make_encounter(self, risk_level: str) -> CombatEncounter:
+        """A feedable (BETWEEN_ROUNDS) encounter in the test scene at *risk_level*."""
+        return CombatEncounter.objects.create(
+            room=self.scene.location,
+            scene=self.scene,
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            risk_level=risk_level,
+            encounter_type=EncounterType.PARTY_COMBAT,
+        )
+
+    def _cast_hostile(self) -> CastResult:
+        """Caster fires a known hostile (damage) technique at the target persona."""
+        self.technique = make_hostile_castable_technique()
+        grant_technique(self.caster, self.technique)
+        return request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=self.technique,
+        )
+
+    def test_hostile_cast_into_lethal_encounter_goes_pending(self) -> None:
+        """LETHAL encounter + uninvolved target → PENDING request, combat untouched."""
+        encounter = self._make_encounter(RiskLevel.LETHAL)
+
+        cast = self._cast_hostile()
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.PENDING)
+        self.assertIsNone(cast.encounter)
+        self.assertFalse(
+            CombatOpponent.objects.filter(
+                encounter=encounter,
+                objectdb=self.target.character_sheet.character,
+            ).exists()
+        )
+        self.assertFalse(
+            CombatParticipant.objects.filter(
+                encounter=encounter,
+                character_sheet=self.caster.character_sheet,
+            ).exists()
+        )
+        self.assertFalse(EncounterRiskAcknowledgement.objects.filter(encounter=encounter).exists())
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, EncounterStatus.BETWEEN_ROUNDS)
+
+    def test_hostile_cast_into_extreme_encounter_goes_pending(self) -> None:
+        """EXTREME gates too — the gate set is {EXTREME, LETHAL}."""
+        self._make_encounter(RiskLevel.EXTREME)
+
+        cast = self._cast_hostile()
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.PENDING)
+        self.assertIsNone(cast.encounter)
+
+    def test_hostile_cast_into_moderate_encounter_resolves_immediately(self) -> None:
+        """MODERATE encounter requires no acknowledgement → immediate feed (#772 behavior)."""
+        encounter = self._make_encounter(RiskLevel.MODERATE)
+
+        cast = self._cast_hostile()
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(cast.encounter)
+        self.assertEqual(cast.encounter.pk, encounter.pk)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+
+    def test_accept_resolves_hostile_request_into_combat(self) -> None:
+        """ACCEPT on the gated request seeds combat and records both acknowledgements."""
+        encounter = self._make_encounter(RiskLevel.LETHAL)
+        cast = self._cast_hostile()
+        req = cast.request
+
+        result = respond_to_action_request(
+            action_request=req,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        self.assertIsNone(result)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(req.resolved_at)
+
+        participant = CombatParticipant.objects.get(
+            encounter=encounter,
+            character_sheet=self.caster.character_sheet,
+        )
+        self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
+
+        opponent = CombatOpponent.objects.get(
+            encounter=encounter,
+            objectdb=self.target.character_sheet.character,
+        )
+        self.assertEqual(opponent.status, OpponentStatus.ACTIVE)
+
+        for sheet in (self.caster.character_sheet, self.target.character_sheet):
+            self.assertTrue(
+                EncounterRiskAcknowledgement.objects.filter(
+                    encounter=encounter,
+                    character_sheet=sheet,
+                ).exists(),
+                f"Missing risk acknowledgement for {sheet}",
+            )
+
+        encounter.refresh_from_db()
+        action = CombatRoundAction.objects.get(
+            participant=participant,
+            round_number=encounter.round_number,
+        )
+        self.assertEqual(action.focused_action, self.technique)
+
+    def test_deny_leaves_target_out_of_combat(self) -> None:
+        """DENY marks the request DENIED; no opponent row, no acknowledgement."""
+        encounter = self._make_encounter(RiskLevel.LETHAL)
+        cast = self._cast_hostile()
+
+        result = respond_to_action_request(
+            action_request=cast.request,
+            decision=ConsentDecision.DENY,
+        )
+
+        self.assertIsNone(result)
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.DENIED)
+        self.assertFalse(
+            CombatOpponent.objects.filter(
+                encounter=encounter,
+                objectdb=self.target.character_sheet.character,
+            ).exists()
+        )
+        self.assertFalse(
+            EncounterRiskAcknowledgement.objects.filter(
+                encounter=encounter,
+                character_sheet=self.target.character_sheet,
+            ).exists()
+        )
+
+    def test_repeat_hostile_cast_at_acknowledged_target_skips_gate(self) -> None:
+        """A target with an acknowledgement on record is not gated again."""
+        encounter = self._make_encounter(RiskLevel.LETHAL)
+        acknowledge_encounter_risk(encounter, self.target.character_sheet)
+
+        cast = self._cast_hostile()
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(cast.encounter)
+        self.assertEqual(cast.encounter.pk, encounter.pk)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, EncounterStatus.DECLARING)

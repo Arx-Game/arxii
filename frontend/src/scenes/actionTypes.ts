@@ -103,6 +103,8 @@ export interface ActionRequest {
   action_name: string;
   technique_name: string | null;
   strain_commitment: number;
+  /** Risk level of the encounter accepting this hostile cast would join (#777). */
+  combat_risk_level?: string | null;
   created_at: string;
 }
 

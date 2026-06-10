@@ -5,7 +5,9 @@ from __future__ import annotations
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.scenes.action_constants import ConsentDecision
+from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
+from world.magic.services.hostility import is_technique_hostile
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 
 
@@ -159,6 +161,18 @@ class CastableTechniqueSerializer(serializers.Serializer):
 class SceneActionRequestSerializer(serializers.ModelSerializer):
     initiator_name = serializers.CharField(source="initiator_persona.name", read_only=True)
     target_name = serializers.CharField(source="target_persona.name", read_only=True)
+    combat_risk_level = serializers.SerializerMethodField()
+
+    def get_combat_risk_level(self, obj: SceneActionRequest) -> str | None:
+        """Risk level of the encounter a PENDING hostile cast would pull the target into (#777)."""
+        if obj.status != ActionRequestStatus.PENDING or not obj.is_standalone_cast:
+            return None
+        if obj.target_persona is None or not is_technique_hostile(obj.technique):
+            return None
+        encounter = encounter_requiring_risk_acknowledgement(
+            obj.scene, obj.target_persona.character_sheet
+        )
+        return encounter.risk_level if encounter is not None else None
 
     class Meta:
         model = SceneActionRequest
@@ -178,12 +192,14 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "result_interaction",
             "action_interaction",
             "strain_commitment",
+            "combat_risk_level",
             "created_at",
             "resolved_at",
         ]
         read_only_fields = [
             "id",
             "status",
+            "combat_risk_level",
             "resolved_difficulty",
             "result_interaction",
             "action_interaction",
