@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, PoseKind
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
@@ -172,6 +172,16 @@ class PoseSubmitSerializer(serializers.Serializer):
             "is skipped and InteractionAction bridges are created for exactly "
             "these ACTION Interaction ids in order. An empty list explicitly "
             "requests no links (caller opted out of auto-link this pose)."
+        ),
+    )
+
+    pose_kind = serializers.ChoiceField(
+        choices=PoseKind.choices,
+        required=False,
+        default=PoseKind.STANDARD,
+        help_text=(
+            "Classifies the pose (Spec C). ENTRY opens a Make-an-Entrance "
+            "reaction window (#904) when the pose belongs to a scene."
         ),
     )
 

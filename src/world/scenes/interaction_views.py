@@ -16,7 +16,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    PoseKind,
+    ReactionWindowKind,
+    ScenePrivacyMode,
+)
 from world.scenes.interaction_filters import (
     InteractionFavoriteFilter,
     InteractionFilter,
@@ -50,6 +56,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.reaction_services import open_reaction_window
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -260,13 +267,19 @@ class InteractionViewSet(
             Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
         )
 
+        pose_kind = data.get("pose_kind", PoseKind.STANDARD)
         with transaction.atomic():
             interaction = create_interaction(
                 persona=persona,
                 content=data["content"],
                 mode=InteractionMode.POSE,
                 scene=scene,
+                pose_kind=pose_kind,
             )
+            if pose_kind == PoseKind.ENTRY and scene is not None:
+                # #904 — an entrance is a reactable moment; the window stays
+                # open (and reactable) until the scene closes.
+                open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
 
             action_link_ids: list[int] | None = data.get("action_link_ids")
             if action_link_ids is not None:

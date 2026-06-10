@@ -904,6 +904,7 @@ class SceneCheckModifier(SharedMemoryModel):
         return f"{self.scene.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
-# Import place_models and action_models for Django model discovery
+# Import place_models, action_models, and reaction_models for Django model discovery
 from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
+from world.scenes.reaction_models import ReactionWindow, WindowReaction  # noqa: E402, F401
