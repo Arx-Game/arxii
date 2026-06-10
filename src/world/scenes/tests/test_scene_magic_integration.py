@@ -9,7 +9,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.factories import ConsequencePoolFactory
 from actions.models import ActionEnhancement
@@ -273,6 +273,7 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
 class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
     """Severity accumulation and mishap evaluation for technique-enhanced actions."""
 
+    @tag("postgres")  # Soulfray accumulation uses DISTINCT ON — PG-only (#855)
     def test_soulfray_accumulates_on_depleted_character(self) -> None:
         """A character with very low anima using a costly technique accumulates Soulfray."""
         from world.magic.models import CharacterAnima
