@@ -521,19 +521,59 @@ class PlayableCombatScenarioFactory:
 
 
 def wire_penetration_check_type():
-    """Seed the 'penetration' CheckType for the ward contest (#639).
+    """Seed the 'penetration' CheckType for the ward contest (#639, #767).
 
     Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
-    category). The check resolves through the shared rank/chart pipeline
-    (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
-    needed; tests that need a concrete success level force it via
-    force_check_outcome or an offense_check_fn override.
-    """
-    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
-    from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
+    category) and get_or_create on (check_type, trait), so re-runs are
+    no-ops and staff weight edits are preserved. The check resolves through
+    the shared rank/chart pipeline (ResultChart.get_chart_for_difference),
+    so no per-CheckType chart row is needed; tests that need a concrete
+    success level force it via force_check_outcome or an offense_check_fn
+    override.
 
-    return CheckTypeFactory(
+    Trait composition (willpower 1.00, intellect 0.50) mirrors the seeded
+    magical_challenge check so a production caster rolls a real pool against
+    the ward instead of trait_points=0.
+    """
+    from decimal import Decimal
+
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+    from world.checks.models import CheckTypeTrait
+    from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
+    from world.traits.factories import StatTraitFactory
+
+    check_type = CheckTypeFactory(
         name=PENETRATION_CHECK_TYPE_NAME,
         category=CheckCategoryFactory(name="Combat"),
         description="Penetrate a warded target's barrier (#639).",
+    )
+    for trait_name, weight in [("willpower", "1.00"), ("intellect", "0.50")]:
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type,
+            trait=StatTraitFactory(name=trait_name),
+            defaults={"weight": Decimal(weight)},
+        )
+    return check_type
+
+
+def wire_penetration_modifier_target():
+    """Seed the check-scoped 'penetration' ModifierTarget (#767).
+
+    Links the mechanics ModifierTarget to the penetration CheckType through
+    the target_check_type OneToOne, so "+penetration vs warded foes" buffs
+    are ordinary CharacterModifier rows picked up by the CHARACTER source in
+    collect_check_modifiers. Idempotent via django_get_or_create on
+    (category, name); the FK link lands on first create and is preserved
+    (never overwritten) on re-runs.
+    """
+    from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
+    from world.mechanics.constants import CHECK_CATEGORY_NAME
+    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+    return ModifierTargetFactory(
+        name=PENETRATION_CHECK_TYPE_NAME,
+        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
+        description="Caster-side bonus to the penetration check vs warded targets.",
+        target_check_type=wire_penetration_check_type(),
+        is_active=True,
     )
