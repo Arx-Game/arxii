@@ -5970,7 +5970,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description Browse tier-matched library entries for a pending alteration. */
-    get: operations['magic_pending_alterations_library_retrieve'];
+    get: operations['magic_pending_alterations_library_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -11716,6 +11716,28 @@ export interface components {
       /** Format: date-time */
       readonly recorded_at: string;
     };
+    /** @description Write serializer for resolving a PendingAlteration. */
+    AlterationResolutionRequest: {
+      library_template_id?: number | null;
+      name?: string;
+      player_description?: string;
+      observer_description?: string;
+      weakness_damage_type_id?: number | null;
+      /** @default 0 */
+      weakness_magnitude: number;
+      /** @default 0 */
+      resonance_bonus_magnitude: number;
+      /** @default 0 */
+      social_reactivity_magnitude: number;
+      /** @default false */
+      is_visible_at_rest: boolean;
+      parent_template_id?: number | null;
+    };
+    /** @description Wire shape returned by the resolve action. */
+    AlterationResolutionResponse: {
+      status: string;
+      event_id: number;
+    };
     /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
@@ -15005,6 +15027,32 @@ export interface components {
       compass_rooms: string[];
       compass_anywhere: boolean;
     };
+    /** @description Read-only serializer for library browse cards. */
+    LibraryEntry: {
+      readonly id: number;
+      readonly name: string;
+      /**
+       * @description Severity tier 1 (cosmetic) through 5 (body partially remade).
+       *
+       *     * `1` - Cosmetic Touch
+       *     * `2` - Marked
+       *     * `3` - Touched
+       *     * `4` - Marked Profoundly
+       *     * `5` - Remade
+       */
+      tier: components['schemas']['Tier3f5Enum'];
+      readonly player_description: string;
+      readonly observer_description: string;
+      readonly origin_affinity_name: string;
+      /** @description Vulnerability magnitude, tier-bounded. */
+      weakness_magnitude?: number;
+      /** @description Bonus when channeling origin_resonance, tier-bounded. */
+      resonance_bonus_magnitude?: number;
+      /** @description Reaction strength from magic-phobic observers. Calibrated as situational world-friction, not character-concept blocker. */
+      social_reactivity_magnitude?: number;
+      /** @description Shows through normal clothing? Required True at tier 4+. */
+      is_visible_at_rest?: boolean;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -16687,6 +16735,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['JournalEntry'][];
+    };
+    PaginatedLibraryEntryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LibraryEntry'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -18645,6 +18708,9 @@ export interface components {
     /** @description Read-only serializer for pending alterations shown on character sheet. */
     PendingAlteration: {
       readonly id: number;
+      readonly character_id: number;
+      /** @description Return the primary persona name for the pending's sheet. */
+      readonly character_name: string;
       status?: components['schemas']['PendingAlterationStatusEnum'];
       /**
        * @description Required tier for resolved alteration. Upgradeable via same-scene escalation only.
@@ -18655,7 +18721,7 @@ export interface components {
        *     * `4` - Marked Profoundly
        *     * `5` - Remade
        */
-      tier: components['schemas']['PendingAlterationTierEnum'];
+      tier: components['schemas']['Tier3f5Enum'];
       readonly tier_display: string;
       readonly tier_caps: {
         [key: string]: unknown;
@@ -18666,21 +18732,6 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
-    /** @description Read-only serializer for pending alterations shown on character sheet. */
-    PendingAlterationRequest: {
-      status?: components['schemas']['PendingAlterationStatusEnum'];
-      /**
-       * @description Required tier for resolved alteration. Upgradeable via same-scene escalation only.
-       *
-       *     * `1` - Cosmetic Touch
-       *     * `2` - Marked
-       *     * `3` - Touched
-       *     * `4` - Marked Profoundly
-       *     * `5` - Remade
-       */
-      tier: components['schemas']['PendingAlterationTierEnum'];
-      triggering_scene?: number | null;
-    };
     /**
      * @description * `open` - Open
      *     * `resolved` - Resolved
@@ -18688,15 +18739,6 @@ export interface components {
      * @enum {string}
      */
     PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
-    /**
-     * @description * `1` - Cosmetic Touch
-     *     * `2` - Marked
-     *     * `3` - Touched
-     *     * `4` - Marked Profoundly
-     *     * `5` - Remade
-     * @enum {integer}
-     */
-    PendingAlterationTierEnum: 1 | 2 | 3 | 4 | 5;
     /**
      * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
      *
@@ -21084,6 +21126,15 @@ export interface components {
       /** @description Gold price the teacher charges (XP cost stays on the unlock). */
       readonly gold_cost: number;
     };
+    /**
+     * @description * `1` - Cosmetic Touch
+     *     * `2` - Marked
+     *     * `3` - Touched
+     *     * `4` - Marked Profoundly
+     *     * `5` - Remade
+     * @enum {integer}
+     */
+    Tier3f5Enum: 1 | 2 | 3 | 4 | 5;
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -29734,9 +29785,14 @@ export interface operations {
       };
     };
   };
-  magic_pending_alterations_library_retrieve: {
+  magic_pending_alterations_library_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -29750,7 +29806,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PendingAlteration'];
+          'application/json': components['schemas']['PaginatedLibraryEntryList'];
         };
       };
     };
@@ -29764,9 +29820,9 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
-        'application/json': components['schemas']['PendingAlterationRequest'];
+        'application/json': components['schemas']['AlterationResolutionRequest'];
       };
     };
     responses: {
@@ -29775,7 +29831,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PendingAlteration'];
+          'application/json': components['schemas']['AlterationResolutionResponse'];
         };
       };
     };
