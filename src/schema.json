@@ -36084,6 +36084,12 @@ components:
           minimum: 0
           description: Extra anima the player commits beyond base cost. Bounded by
             available anima at resolution time.
+        combat_risk_level:
+          type: string
+          nullable: true
+          description: Risk level of the encounter a PENDING hostile cast would pull
+            the target into (#777).
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -36095,6 +36101,7 @@ components:
           nullable: true
           description: When this action was resolved
       required:
+      - combat_risk_level
       - created_at
       - id
       - initiator_name

@@ -19865,6 +19865,8 @@ export interface components {
       readonly result_interaction: number | null;
       /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
       strain_commitment?: number;
+      /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
+      readonly combat_risk_level: string | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
