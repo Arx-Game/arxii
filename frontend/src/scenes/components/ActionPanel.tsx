@@ -289,6 +289,10 @@ export function ActionPanel({ sceneId }: Props) {
       setSelectedPulls(constrained);
       return;
     }
+    // Deselects pass through; a conflict notice is stale once no paid pull remains.
+    if (!Object.values(next).some((tier) => tier > 0)) {
+      setPullNotice(null);
+    }
     setSelectedPulls(next);
   }
 
