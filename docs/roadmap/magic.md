@@ -1085,7 +1085,11 @@ consent/combat/immediate matrix:
 - **Hostile (damage) technique at another PC** → calls `seed_or_feed_encounter_from_cast`
   (in `world/combat/cast_seed.py`) to seed or feed a `CombatEncounter` in DECLARING status,
   with the caster as an active participant and the technique as their opening
-  `CombatRoundAction.focused_action`.
+  `CombatRoundAction.focused_action`. Since #777, a hostile cast that would pull an
+  unacknowledged target into a feedable EXTREME/LETHAL encounter instead creates a PENDING
+  consent request (risk gate); ACCEPT seeds combat and records an
+  `EncounterRiskAcknowledgement`, DENY leaves the target out. Fresh seeds stay MODERATE
+  and ungated.
 
 What was built (`src/` paths relative to repo root):
 - `world/scenes/cast_services.py` — `request_technique_cast`, `derive_cast_difficulty`,
@@ -1372,14 +1376,15 @@ extension to `calculate_effective_anima_cost`. The diminishing-returns conversio
 The sole v1 consumer is Clash: `commit_to_clash` passes the PC's declared anima
 commitment as the strain amount when it calls `use_technique` in clash-commit mode.
 
-**Regular-cast Strain is UNBLOCKED but remains a deferred follow-up.** The
-standalone-technique-cast UI landed in #772 (`request_technique_cast`, `POST /api/action-requests/cast/`,
-`ActionPanel` cast flow) — the "regular-cast action UI" prerequisite that was blocking Strain
-integration is now satisfied. What remains is a non-clash Strain audit record and
-`StrainConfig` tuning for the standalone-cast path. The `strain_commitment` kwarg already
-threads through `_route_immediate_cast` / `resolve_accepted_cast`; the authored decision
-surface (a "commit extra anima" slider in the cast dialog) and the per-cast audit row are
-the follow-up items.
+**Regular-cast Strain is SHIPPED** (#776 closed 2026-06-09 after a verify-against-code
+audit; this paragraph previously claimed it "remains a deferred follow-up" — stale).
+The standalone-technique-cast UI landed in #772 (`request_technique_cast`,
+`POST /api/action-requests/cast/`, `ActionPanel` cast flow); the per-cast strain
+slider with anima-capped validation lives in `ActionPanel.tsx`; non-clash strain
+accrues via `Interaction.strain_committed` with soulfray accrual (tested in
+`magic/tests/test_non_clash_strain.py`, PR #574); and `StrainConfig` is read in the
+non-clash fatigue path (`fatigue/services.py`). Whether clash-tuned `StrainConfig`
+*values* suit regular casts is an open tuning judgment, not missing code.
 
 ---
 
