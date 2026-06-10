@@ -7,4 +7,3 @@ export { CharacterApplicationForm } from './CharacterApplicationForm';
 export { CharacterLink } from './CharacterLink';
 export { CharacterAvatarLink } from './CharacterAvatarLink';
 export { StatBar } from './StatBar';
-

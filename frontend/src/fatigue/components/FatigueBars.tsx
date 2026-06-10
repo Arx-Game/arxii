@@ -36,7 +36,10 @@ function FatigueBar({ label, pool }: { label: string; pool: FatiguePoolStatus })
       percent={remainingPercent}
       fillClass={ZONE_COLORS[pool.zone]}
       badge={
-        <Badge variant="outline" className={cn('text-xs capitalize', ZONE_BADGE_CLASSES[pool.zone])}>
+        <Badge
+          variant="outline"
+          className={cn('text-xs capitalize', ZONE_BADGE_CLASSES[pool.zone])}
+        >
           {pool.zone}
         </Badge>
       }

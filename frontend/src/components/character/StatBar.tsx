@@ -16,7 +16,15 @@ export interface StatBarProps {
   testId?: string;
 }
 
-export function StatBar({ label, valueText, percent, fillClass, badge, note, testId }: StatBarProps) {
+export function StatBar({
+  label,
+  valueText,
+  percent,
+  fillClass,
+  badge,
+  note,
+  testId,
+}: StatBarProps) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
     <div className="space-y-1" data-testid={testId}>
