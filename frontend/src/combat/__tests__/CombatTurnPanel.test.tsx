@@ -94,9 +94,16 @@ vi.mock('@/actions/ActionDeclarationCard', () => ({
   ActionDeclarationCard: () => <div data-testid="action-declaration-card-stub" />,
 }));
 
+// Stub ConditionBadge — the real one dispatches to Redux (no Provider here).
+vi.mock('../components/ConditionBadge', () => ({
+  ConditionBadge: ({ condition }: { condition: { id: number; name: string } }) => (
+    <span data-testid={`condition-badge-stub-${condition.id}`}>{condition.name}</span>
+  ),
+}));
+
 import * as combatQueries from '@/combat/queries';
 import { CombatTurnPanel } from '../CombatTurnPanel';
-import type { EncounterDetail } from '../types';
+import type { EncounterDetail, Participant } from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,6 +139,27 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     isError: false,
   });
   return encounter;
+}
+
+/**
+ * Viewer participant fixture: non-null health marks it as the puppeted row
+ * (same owner-vitals heuristic findViewerParticipant uses).
+ */
+function makeParticipant(overrides: Partial<Participant> = {}): Participant {
+  return {
+    id: 1,
+    character_name: 'Aerande',
+    status: 'active',
+    health: 8,
+    max_health: 10,
+    character_status: 'healthy',
+    available_strain: null,
+    fatigue: null,
+    active_conditions: [],
+    thumbnail_url: '',
+    thumbnail_media_url: null,
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +305,48 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
       'active-state-section',
       'round-flow-section',
     ]);
+  });
+
+  it('shows the Audere active strip when the viewer participant carries the Audere condition', () => {
+    mockEncounter({
+      is_participant: true,
+      participants: [
+        makeParticipant({
+          active_conditions: [
+            { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
+              [key: string]: unknown;
+            },
+          ],
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+  });
+
+  it('hides the Audere active strip when no Audere condition is active', () => {
+    mockEncounter({
+      is_participant: true,
+      participants: [
+        makeParticipant({
+          active_conditions: [
+            { id: 8, name: 'Bleeding Out', display_priority: 5 } as unknown as {
+              [key: string]: unknown;
+            },
+          ],
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('audere-active-strip')).not.toBeInTheDocument();
   });
 
   it('all sections start expanded by default', () => {
