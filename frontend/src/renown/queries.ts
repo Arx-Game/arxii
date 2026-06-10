@@ -75,3 +75,36 @@ export function usePersonaRenownCardQuery(
     enabled: targetPersonaId !== null,
   });
 }
+
+// ---------------------------------------------------------------------------
+// #761 — diegetic ranking boards.
+// ---------------------------------------------------------------------------
+
+export interface RankingBoardRow {
+  persona_name: string;
+  band_label: string;
+}
+
+export interface RankingBoard {
+  display_id: number;
+  ranking_type: string;
+  title: string;
+  cloaked: boolean;
+  rows: RankingBoardRow[];
+}
+
+async function fetchRankingBoard(objectId: number): Promise<RankingBoard | null> {
+  const res = await apiFetch(`/api/societies/rankings/${objectId}/`);
+  if (res.status === 404) return null; // not a ranking display — render nothing
+  if (!res.ok) throw new Error('Failed to load the ranking board.');
+  return res.json();
+}
+
+/** The ranking board carried by an in-world object, or null when it has none. */
+export function useRankingBoard(objectId: number | undefined) {
+  return useQuery({
+    queryKey: ['ranking-board', objectId],
+    queryFn: () => fetchRankingBoard(objectId as number),
+    enabled: objectId !== undefined,
+  });
+}

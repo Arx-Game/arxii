@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
+import { RankingBoardCard } from '@/renown/components/RankingBoardCard';
 import { useVisibleItemDetail } from '../hooks/useVisibleItemDetail';
 import type { ItemInstance } from '../types';
 
@@ -60,7 +61,16 @@ export function ItemFocusView({ item, observerId, className }: ItemFocusViewProp
     );
   }
 
-  return <ItemFocusBody item={data} className={className} />;
+  return (
+    <div className={cn('flex flex-col gap-3', className)}>
+      <ItemFocusBody item={data} />
+      {/* #761: an in-world object may carry a diegetic ranking board
+          (herald, plaque, Academy tablet) — renders only when it does. */}
+      <div className="px-4 pb-4">
+        <RankingBoardCard objectId={item.id} />
+      </div>
+    </div>
+  );
 }
 
 interface ItemFocusBodyProps {
