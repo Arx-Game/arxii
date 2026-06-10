@@ -174,3 +174,76 @@ class CollectCheckModifiersMockCheckTypeTest(TestCase):
         mock_check_type = MagicMock()
         breakdown = collect_check_modifiers(self.sheet, mock_check_type)
         assert breakdown.total == 0
+
+
+class CharacterSourceTests(TestCase):
+    """CHARACTER source: ModifierTarget-scoped CharacterModifier rows (#767)."""
+
+    def setUp(self):
+        # Mutable per-test: fresh ObjectDB + CharacterSheet (matches the module's pattern).
+        from evennia.objects.models import ObjectDB
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.mechanics.factories import (
+            CharacterModifierFactory,
+            DistinctionModifierSourceFactory,
+            ModifierCategoryFactory,
+            ModifierTargetFactory,
+        )
+
+        self.target_obj = ObjectDB.objects.create(db_key="CharacterSourceTarget")
+        self.sheet = CharacterSheetFactory(character=self.target_obj)
+        self.check_type = CheckTypeFactory(name="Warded Strike")
+        self.scoped_target = ModifierTargetFactory(
+            name="warded_strike",
+            category=ModifierCategoryFactory(name="check"),
+            target_check_type=self.check_type,
+        )
+        distinction = DistinctionFactory(name="Wardbreaker")
+        effect = DistinctionEffectFactory(
+            distinction=distinction, target=self.scoped_target, value_per_rank=3
+        )
+        source = DistinctionModifierSourceFactory(
+            distinction_effect=effect,
+            character_distinction=CharacterDistinctionFactory(distinction=distinction),
+        )
+        self.modifier = CharacterModifierFactory(
+            character=self.sheet, value=3, source=source, target=self.scoped_target
+        )
+
+    def test_character_modifier_contributes_with_provenance(self) -> None:
+        from world.checks.services import collect_check_modifiers
+
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+        character_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CHARACTER
+        ]
+        self.assertEqual(len(character_contribs), 1)
+        self.assertEqual(character_contribs[0].value, 3)
+        self.assertEqual(character_contribs[0].source_label, "Wardbreaker")
+        self.assertEqual(breakdown.total, 3)
+
+    def test_check_without_linked_target_is_unchanged(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.checks.services import collect_check_modifiers
+
+        plain_check = CheckTypeFactory(name="Plain Check")
+        breakdown = collect_check_modifiers(self.sheet, plain_check)
+        character_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CHARACTER
+        ]
+        self.assertEqual(character_contribs, [])
+
+    def test_inactive_target_is_skipped(self) -> None:
+        from world.checks.services import collect_check_modifiers
+
+        self.scoped_target.is_active = False
+        self.scoped_target.save()
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+        self.assertEqual(breakdown.total, 0)
