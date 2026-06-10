@@ -568,6 +568,21 @@ invariant is preserved — power is never stored. Research + candidate-direction
 `docs/architecture/power-intensity-research.md`. Architecture reference (as-built):
 `docs/architecture/power-derivation.md`.
 
+**#767 — penetration seed production content (DONE, follow-up to #639):**
+
+`game_content/combat.py` (`seed_penetration_contest()`) seeds the full penetration contest and
+is composed into `seed_magic_dev()` step 9. Three surfaces: (1) trait-weighted `penetration`
+`CheckType` (willpower × 1.00 + intellect × 0.50) seeded via `wire_penetration_check_type()`;
+(2) 4-rung `PenetrationOutcomeFactor` ladder (bounce / partial / clean / overpenetration) via
+`wire_penetration_factors()`; (3) check-scoped `penetration` `ModifierTarget` (linked via
+`target_check_type` OneToOne) via `wire_penetration_modifier_target()`. Generic `CHARACTER`
+source added to `collect_check_modifiers` — any `CheckType` with a linked `ModifierTarget`
+automatically collects `CharacterModifier` rows from that target as `extra_modifiers`,
+enabling check-scoped distinctions (e.g. "Wardbreaker: +3 to penetration checks") with no
+additional wiring per check type. Penetration check in `_apply_penetration` routes through
+`collect_check_modifiers` so caster-side condition, rollmod, equipment, and `CHARACTER`
+modifier sources all apply to the ward contest.
+
 **#768 — aura & thread power-term providers (DONE):**
 
 The two remaining `PowerStage.TERM` providers are now live (joining `level_power_term`):

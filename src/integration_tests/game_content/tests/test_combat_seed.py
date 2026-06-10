@@ -33,3 +33,4 @@ class SeedPenetrationContestTests(TestCase):
         self.assertEqual(first.check_type.pk, second.check_type.pk)
         self.assertEqual(first.modifier_target.pk, second.modifier_target.pk)
         self.assertEqual(PenetrationOutcomeFactor.objects.count(), 4)
+        self.assertEqual([f.pk for f in first.factors], [f.pk for f in second.factors])

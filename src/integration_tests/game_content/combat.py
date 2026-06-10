@@ -41,6 +41,8 @@ def seed_penetration_contest() -> PenetrationContestResult:
     )
     from world.conditions.factories import wire_penetration_factors  # noqa: PLC0415
 
+    # Capture the CheckType for the result; wire_penetration_modifier_target()
+    # calls this again internally (idempotent, same instance returned).
     check_type = wire_penetration_check_type()
     modifier_target = wire_penetration_modifier_target()
     return PenetrationContestResult(
