@@ -169,7 +169,7 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
     )
 
 
-def _corruption_advisory_for_character(character: ObjectDB) -> str:
+def corruption_advisory_for_character(character: ObjectDB) -> str:
     """Return a character-loss advisory string if the character has corruption at stage 3+.
 
     Returns an empty string when no advisory is warranted (no corruption at warning stages).
@@ -207,7 +207,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     from world.magic.models import CharacterAnima
     from world.mechanics.engagement import CharacterEngagement
 
-    advisory = _corruption_advisory_for_character(character)
+    advisory = corruption_advisory_for_character(character)
 
     if not accept:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
@@ -281,3 +281,72 @@ def end_audere(character: ObjectDB) -> None:
             anima.current = min(anima.current, anima.maximum)
             anima.pre_audere_maximum = None
             anima.save(update_fields=["maximum", "current", "pre_audere_maximum"])
+
+
+def maybe_create_audere_offer(
+    character: ObjectDB, runtime_intensity: int
+) -> PendingAudereOffer | None:
+    """Persist a poll-able offer when the Audere gate opens for this cast.
+
+    Returns None (no row) for NPCs without a CharacterSheet or when any
+    eligibility gate fails. Idempotent: repeated qualifying casts update the
+    single row per character (update_or_create).
+    """
+    from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import ConditionInstance
+
+    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        return None
+    if not check_audere_eligibility(character, runtime_intensity):
+        return None
+
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    stage_order = 0
+    if soulfray_instance is not None and soulfray_instance.current_stage is not None:
+        stage_order = soulfray_instance.current_stage.stage_order
+
+    offer, _created = PendingAudereOffer.objects.update_or_create(
+        character_sheet=sheet,
+        defaults={
+            "fired_intensity": runtime_intensity,
+            "soulfray_stage_order": stage_order,
+        },
+    )
+    return offer
+
+
+def resolve_audere_offer(offer_id: int, *, accept: bool) -> AudereOfferResult:
+    """Resolve a pending Audere offer: accept or decline, then delete the row.
+
+    Two-phase (mirrors resolve_sineating_from_db in services/soul_tether.py):
+    a plain lookup + staleness re-validation run OUTSIDE any transaction so a
+    stale row can be deleted without leaving ghosts; the actual resolution
+    re-fetches with select_for_update inside transaction.atomic(). A re-fetch
+    miss (a concurrent respond won the race) raises AudereOfferNotFoundError.
+    """
+    from world.magic.exceptions import AudereOfferNotFoundError, AudereOfferStaleError
+
+    offer = PendingAudereOffer.objects.filter(pk=offer_id).first()
+    if offer is None:
+        raise AudereOfferNotFoundError
+
+    character = offer.character_sheet.character
+    if not check_audere_eligibility(character, offer.fired_intensity):
+        offer.delete()
+        raise AudereOfferStaleError
+
+    with transaction.atomic():
+        locked = PendingAudereOffer.objects.select_for_update().filter(pk=offer_id).first()
+        if locked is None:
+            raise AudereOfferNotFoundError
+        result = offer_audere(character, accept=accept)
+        locked.delete()
+    return result
