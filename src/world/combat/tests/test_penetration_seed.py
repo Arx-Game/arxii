@@ -22,6 +22,11 @@ from world.mechanics.models import ModifierTarget
 class WirePenetrationCheckTypeTraitTests(TestCase):
     """wire_penetration_check_type() authors trait composition (#767)."""
 
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
     def test_authors_willpower_and_intellect_weights(self) -> None:
         check_type = wire_penetration_check_type()
         weights = {
@@ -47,6 +52,11 @@ class WirePenetrationCheckTypeTraitTests(TestCase):
 
 class WirePenetrationModifierTargetTests(TestCase):
     """wire_penetration_modifier_target() seeds the check-scoped target (#767)."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
 
     def test_creates_target_linked_to_penetration_check_type(self) -> None:
         target = wire_penetration_modifier_target()

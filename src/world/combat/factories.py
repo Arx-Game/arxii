@@ -541,16 +541,20 @@ def wire_penetration_check_type():
     from world.checks.models import CheckTypeTrait
     from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
     from world.traits.factories import StatTraitFactory
+    from world.traits.models import TraitCategory
 
     check_type = CheckTypeFactory(
         name=PENETRATION_CHECK_TYPE_NAME,
         category=CheckCategoryFactory(name="Combat"),
         description="Penetrate a warded target's barrier (#639).",
     )
-    for trait_name, weight in [("willpower", "1.00"), ("intellect", "0.50")]:
+    for trait_name, category, weight in [
+        ("willpower", TraitCategory.META, "1.00"),
+        ("intellect", TraitCategory.MENTAL, "0.50"),
+    ]:
         CheckTypeTrait.objects.get_or_create(
             check_type=check_type,
-            trait=StatTraitFactory(name=trait_name),
+            trait=StatTraitFactory(name=trait_name, category=category),
             defaults={"weight": Decimal(weight)},
         )
     return check_type
