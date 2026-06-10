@@ -393,7 +393,7 @@ class CombatTechniqueResolver:
         once downstream in ``apply_damage_to_opponent``; never consumed here).
 
         Caster-side modifiers flow through ``collect_check_modifiers`` (the
-        same seam as the offense check), so condition/equipment/scene and
+        same seam as the offense check), so condition/equipment and
         check-scoped CharacterModifier sources all apply (#767).
 
         Returns ``(ledger, bounced)``:
@@ -423,7 +423,7 @@ class CombatTechniqueResolver:
         caster = self.participant.character_sheet.character
         pen_check_type = get_penetration_check_type()
         # Mirror _roll_check: route through the shared modifier seam so the
-        # penetration contest honors condition / rollmod / scene / equipment
+        # penetration contest honors condition / rollmod / equipment
         # and CHARACTER (#767, e.g. "+penetration vs warded foes") sources.
         # Effort and pull bonuses stay offense-only, exactly as #639 decided.
         pen_breakdown = collect_check_modifiers(

@@ -18,7 +18,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, OpponentTier
+from world.combat.constants import PENETRATION_CHECK_TYPE_NAME, ActionCategory, OpponentTier
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -381,7 +381,7 @@ class PenetrationModifierSeamTests(TestCase):
         pen_collect_calls = [
             c
             for c in mock_collect.call_args_list
-            if getattr(c.args[1], "name", None) == "penetration"
+            if getattr(c.args[1], "name", None) == PENETRATION_CHECK_TYPE_NAME
         ]
         self.assertEqual(len(pen_collect_calls), 1)
         self.assertEqual(pen_collect_calls[0].args[0], resolver.participant.character_sheet)
