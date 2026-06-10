@@ -160,7 +160,7 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **Fatigue integration:** Combat actions drain fatigue pools by category, creating attrition pressure that builds toward collapse/Audere moments
 
 ## What Exists
-- **Combat models:** CombatEncounter (scene + risk/stakes), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant (lightweight join table: encounter + character_sheet + covenant_role), BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning
+- **Combat models:** CombatEncounter (scene + risk/stakes), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant (lightweight join table: encounter + character_sheet + covenant_role), EncounterRiskAcknowledgement (one row per character per encounter — voluntary-entry consent record, #777), BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning
 - **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage writing directly to CharacterVitals, resolution order by covenant role speed_rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
 - **Vitals system (world.vitals):** CharacterVitals is the single source of truth for character health (health, max_health) and the binary mortality marker `life_state` (ALIVE/DEAD). `CharacterStatus` (ALIVE/UNCONSCIOUS/DYING/DEAD) and `dying_final_round` / `unconscious_at` are removed — incapacitation and dying are now conditions (see below). `is_dead` / `is_alive` / `can_act` service functions replace the old field reads. `derive_character_status` recomputes a coarse read-only label at wire time
 - **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order — speed is never denormalized onto participants
@@ -247,7 +247,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **`compute_effective_intensity` aggregates** technique.intensity + active `INTENSITY_BUMP` pull contributions; opens future hooks for item/condition/environmental modifiers without signature changes
 - **Ally / self targeting on `CombatRoundAction`.** `focused_target` renamed to `focused_opponent_target`; new `focused_ally_target` FK to CombatParticipant. XOR-validated in `clean()`. Self-cast = ally target = caster's participant
 - **`bulk_apply_conditions` accepts per-entry severity/duration/stack_count** via `BulkConditionApplication` dataclass. Replaces the predecessor's shared-knobs signature; per-target formula values now expressible in one batched call
-- **`CombatOpponent` → `ObjectDB` linkage with multi-layered safeguards.** OneToOne FK with SET_NULL, `objectdb_is_ephemeral` flag, DB CheckConstraint, model `clean()` with four checks, `add_opponent` chokepoint with `full_clean()`, and `cleanup_completed_encounter` re-check before deletion. Persona-bearing NPCs and pre-existing ObjectDBs (PvP, named NPCs without persona) are never destroyed by combat cleanup
+- **`CombatOpponent` → `ObjectDB` linkage with multi-layered safeguards.** FK with SET_NULL (was OneToOne until #778 — a PC can back opponent rows across many encounters; per-encounter uniqueness enforced by a conditional UniqueConstraint), `objectdb_is_ephemeral` flag, DB CheckConstraint, model `clean()` with four checks, `add_opponent` chokepoint with `full_clean()`, and `cleanup_completed_encounter` re-check before deletion. Persona-bearing NPCs and pre-existing ObjectDBs (PvP, named NPCs without persona) are never destroyed by combat cleanup
 - **`CombatNPC` typeclass** for encounter-scoped ephemeral mooks. Created at `add_opponent` with `existing_objectdb=None, persona=None`; lives at `encounter.room`; cleaned up at `cleanup_completed_encounter`
 - **`CombatEncounter.room` FK** added — ephemeral CombatNPCs are placed here at creation
 - **TECHNIQUE_AFFECTED fires uniformly** on every target including mooks (lifesteal-style on-affected reactive triggers now work against generic NPCs)
@@ -368,6 +368,28 @@ Phase 8 made knockout/dying condition-driven but left `process_damage_consequenc
 - **Seeded checks** — Endurance (shared: knockout + wound) and Death (distinct) `CheckType`s, self-seeded via `_ensure_*` on first use so a fresh DB never crashes. Every pool lookup may return `None` on an unseeded DB → the branch skips cleanly.
 - **Reconciled resolution** — knockout resolves the knockout pool (applies Unconscious); permanent wound resolves `DamageType.wound_pool` (tiered PERMANENT-wound conditions; replaces the `_select_and_apply_wound` stub); death resolves `DamageType.death_pool` (tiered outcomes apply Bleeding-Out / lesser conditions). Bleeding-Out remains one pool outcome; `advance_bleed_out` still drives dying→dead, unchanged. No `SET_LIFE_STATE`.
 - **Call sites wired** — `combat/services.py` `_resolve_npc_action` and `mechanics/effect_handlers.py` `_apply_deal_damage` now pass the threat's real `damage_type`; the vestigial `*_check_type` params are dropped. `DamageConsequenceResult` flags (`knocked_out` / `dying` / `wounds_applied`) preserved for callers.
+
+### Risk-acknowledgement gate + cast-seed hardening (SHIPPED — 2026-06-10, #777/#778)
+
+A hostile standalone cast can no longer drag an unacknowledged PC into an EXTREME/LETHAL
+encounter, and the cast-seed entry path survives repeat targeting:
+
+- **#778 hardening:** `CombatOpponent.objectdb` OneToOne→FK + conditional
+  `UniqueConstraint(encounter, objectdb)`; `seed_or_feed_encounter_from_cast` reuses an
+  existing ACTIVE opponent row (raises ValueError on DEFEATED/FLED targets) instead of
+  crashing on the old one-row-per-PC-ever constraint. Caster re-declaration in the same
+  round updates the `CombatRoundAction` in place (covered by tests).
+- **#777 gate:** `EncounterRiskAcknowledgement` records voluntary entry (self-join via
+  `join_encounter`, hostile-cast initiation, consent-accept; GM `add_participant` records
+  nothing). `encounter_requiring_risk_acknowledgement` (cast_seed.py) gates
+  `_route_hostile_cast`: a hostile cast at an unacknowledged target of a feedable
+  EXTREME/LETHAL encounter becomes a PENDING `SceneActionRequest` (the existing consent
+  pipeline + `ConsentPrompt` UI with a risk warning via `combat_risk_level` serializer
+  field); ACCEPT seeds combat and records the target's ack, DENY leaves them out. Fresh
+  seeds stay MODERATE and ungated (the #772 ambush path is unchanged). Threshold lives in
+  `RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT` (combat/constants.py).
+- No frontend join surface exists yet, so the join-confirm dialog from the spec was
+  dropped; the server-side ack in `join_encounter` covers normal join.
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
