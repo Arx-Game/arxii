@@ -18,11 +18,12 @@ from django.db import transaction
 from world.combat.constants import (
     EncounterStatus,
     EncounterType,
+    OpponentStatus,
     OpponentTier,
     ParticipantStatus,
     RiskLevel,
 )
-from world.combat.models import CombatEncounter, CombatParticipant
+from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
 from world.combat.services import (
     add_opponent,
     add_participant,
@@ -142,7 +143,19 @@ def seed_or_feed_encounter_from_cast(
 
     caster_participant = _caster_participant(encounter, caster_sheet)
 
-    opponent = add_opponent(encounter, **_opponent_kwargs_from_sheet(target_sheet))
+    existing_opponent = CombatOpponent.objects.filter(
+        encounter=encounter,
+        objectdb=target_sheet.character,
+    ).first()
+    if existing_opponent is not None and existing_opponent.status != OpponentStatus.ACTIVE:
+        msg = (
+            f"Cannot target {target_sheet.character.key}: already "
+            f"{existing_opponent.get_status_display().lower()} in this encounter."
+        )
+        raise ValueError(msg)
+    opponent = existing_opponent or add_opponent(
+        encounter, **_opponent_kwargs_from_sheet(target_sheet)
+    )
 
     if encounter.status == EncounterStatus.BETWEEN_ROUNDS:
         begin_declaration_phase(encounter)
