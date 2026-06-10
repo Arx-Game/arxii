@@ -79,6 +79,44 @@ class NarrativeMessage(SharedMemoryModel):
         return f"NarrativeMessage({self.category}) {preview}"
 
 
+class AmbientStirLine(SharedMemoryModel):
+    """One source-ambiguous "something IC happened here" line (#885).
+
+    The audience-side half of the mission play loop — when a character
+    resolves a mission beat (and, by design, when future GM events / room
+    triggers / magic emit ambience), bystanders in the room receive a line
+    drawn from this pool. The pool is deliberately GENERIC and shared
+    across all emitting systems so observers cannot tell what stirred —
+    the ambiguity is the RP bait (design tenet: audience sees ambiguity,
+    actor sees clarity).
+
+    Rows are staff-authored (admin-editable per the flavor-text rule —
+    never hardcoded prose). An empty pool means no ambient emission, never
+    an error.
+    """
+
+    body = models.TextField(
+        help_text=(
+            "The ambient line shown to bystanders. Keep it source-ambiguous "
+            "— it must read the same whether a mission, a GM event, or "
+            "magic stirred the room."
+        ),
+    )
+    weight = models.PositiveIntegerField(
+        default=1,
+        help_text="Relative draw weight within the active pool.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive lines stay authored but are never drawn.",
+    )
+
+    def __str__(self) -> str:
+        truncated = len(self.body) > _STR_PREVIEW_LEN
+        preview = self.body[:_STR_PREVIEW_LEN] + ("..." if truncated else "")
+        return f"AmbientStirLine({preview})"
+
+
 class NarrativeMessageDelivery(SharedMemoryModel):
     """Per-recipient delivery state for a NarrativeMessage.
 

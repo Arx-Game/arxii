@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -293,12 +294,12 @@ class CombatOpponent(SharedMemoryModel):
         related_name="combat_opponents",
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
-    objectdb = models.OneToOneField(
+    objectdb = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="combat_opponent",
+        related_name="combat_opponent_rows",
         help_text="The in-world ObjectDB representation. Set at creation; "
         "nulled if the ObjectDB is destroyed externally.",
     )
@@ -333,6 +334,11 @@ class CombatOpponent(SharedMemoryModel):
             models.CheckConstraint(
                 check=Q(persona__isnull=True) | Q(objectdb_is_ephemeral=False),
                 name="persona_bearing_opponent_not_ephemeral",
+            ),
+            models.UniqueConstraint(
+                fields=["encounter", "objectdb"],
+                condition=Q(objectdb__isnull=False),
+                name="combatopponent_unique_objectdb_per_encounter",
             ),
         ]
 
@@ -1553,4 +1559,46 @@ class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
             f"round={self.round_number} "
             f"participant={self.participant_id} "
             f"clash={self.clash_id})"
+        )
+
+
+class EncounterRiskAcknowledgement(SharedMemoryModel):
+    """A character's on-record acknowledgement of an encounter's risk level.
+
+    Recorded idempotently at voluntary entry points (self-join, hostile-cast
+    initiation, consent-accept) — at most one row per character per encounter.
+    Suppresses the #777 gate for that character in that encounter. GM placement
+    via add_participant does NOT create one.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="risk_acknowledgements",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="combat_risk_acknowledgements",
+    )
+    acknowledged_risk_level = models.CharField(
+        max_length=20,
+        choices=RiskLevel.choices,
+        help_text="The encounter's risk level at acknowledgement time.",
+    )
+    acknowledged_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["acknowledged_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "character_sheet"],
+                name="unique_risk_acknowledgement_per_encounter",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.character_sheet_id} acknowledged {self.acknowledged_risk_level} "
+            f"in encounter {self.encounter_id}"
         )

@@ -21,6 +21,7 @@ import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
+import { JournalPage } from './missions/pages/JournalPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import { CombatScenePage } from './combat/pages/CombatScenePage';
 import MailPage from './mail/pages/MailPage';
@@ -250,6 +251,7 @@ function App() {
         <Route path="/roster" element={<RosterListPage />} />
         <Route path="/characters/create" element={<CharacterCreationPage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
+        <Route path="/journal" element={<JournalPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
         <Route path="/scenes/:id/combat" element={<CombatScenePage />} />

@@ -9,6 +9,8 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  BeatView,
+  JournalEntry,
   MissionCategory,
   MissionGiver,
   MissionGiverRequest,
@@ -22,6 +24,7 @@ import type {
   MissionTemplateDetail,
   MissionTemplateFilters,
   PaginatedResponse,
+  ResolvedBeat,
 } from './types';
 
 const BASE_URL = '/api/missions';
@@ -376,4 +379,38 @@ export async function patchGiver(
 export async function deleteGiver(id: number): Promise<void> {
   const res = await apiFetch(`${BASE_URL}/givers/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete giver ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// #885 player journal/beat surface — the one PLAYER-scoped missions API
+// (everything above is staff-only).
+// ---------------------------------------------------------------------------
+
+export async function listJournal(): Promise<PaginatedResponse<JournalEntry>> {
+  const res = await apiFetch(`${BASE_URL}/journal/`);
+  if (!res.ok) throw new Error('Failed to load your journal');
+  return res.json();
+}
+
+export async function getBeat(instanceId: number): Promise<BeatView | null> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/beat/`);
+  if (res.status === 404) return null; // concluded run — journal shows the epilogue
+  if (!res.ok) throw new Error('Failed to load the current beat');
+  return res.json();
+}
+
+export async function resolveBeat(
+  instanceId: number,
+  body: { option_id: number; approach_id?: number | null }
+): Promise<ResolvedBeat> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/resolve/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 400) {
+    throw new ApiValidationError(await res.json());
+  }
+  if (!res.ok) throw new Error('Failed to resolve the option');
+  return res.json();
 }

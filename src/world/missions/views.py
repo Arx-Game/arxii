@@ -18,9 +18,14 @@ Every viewset in this module uses the project conventions:
   surfaces per project_drf_spectacular_viewset_break.
 """
 
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework import status, viewsets
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -49,6 +54,9 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.missions.serializers import (
+    BeatResolveRequestSerializer,
+    BeatViewSerializer,
+    JournalEntrySerializer,
     MissionCategorySerializer,
     MissionGiverSerializer,
     MissionInstanceSerializer,
@@ -59,6 +67,7 @@ from world.missions.serializers import (
     MissionOptionSerializer,
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
+    ResolvedBeatSerializer,
 )
 from world.predicates.catalog import leaf_params
 from world.predicates.predicates import LEAF_RESOLVERS
@@ -361,3 +370,146 @@ class MissionGiverViewSet(viewsets.ModelViewSet):
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionGiverFilterSet
+
+
+# ---------------------------------------------------------------------------
+# #885 player journal/beat surface — the first PLAYER-scoped missions API
+# (everything above is staff authoring/ops). Wires the previously
+# caller-less ``journal_for`` plus the new ``services.play`` orchestration.
+# ---------------------------------------------------------------------------
+
+
+_MSG_NO_SUCH_MISSION = "No such mission."
+_MSG_RUN_CONCLUDED = "That mission has concluded — see your journal for the epilogue."
+
+
+def _journal_paginated_response() -> serializers.Serializer:
+    """Inline schema for the paginated journal list (items-app pattern)."""
+    return inline_serializer(
+        name="PaginatedJournalEntryList",
+        fields={
+            "count": serializers.IntegerField(),
+            "next": serializers.URLField(allow_null=True),
+            "previous": serializers.URLField(allow_null=True),
+            "results": JournalEntrySerializer(many=True),
+        },
+    )
+
+
+def _puppet_character(request: Request) -> "ObjectDB":
+    """Return the user's currently-puppeted Character ObjectDB.
+
+    Mirrors ``npc_services.views.InteractionViewSet._puppet_character``
+    (DRF's ``request.user`` is the AccountDB; ``puppet`` is the live
+    puppet or None). Surfaced as 400 — the client must assume a character
+    before using the journal.
+    """
+    from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+    try:
+        puppet = request.user.puppet
+    except (AttributeError, Exception):  # noqa: BLE001
+        puppet = None
+    if puppet is None:
+        msg = "No puppeted character — assume a character before using the journal."
+        raise ValidationError(msg)
+    return puppet
+
+
+class MissionJournalViewSet(viewsets.ViewSet):
+    """#885 — the player's mission journal + beat play loop.
+
+    list: every mission the puppeted character participates in (compass +
+    deeds + bookends). beat: the current node as the character sees it —
+    LIVE options only (location ∧ visibility; visibility=eligibility, no
+    greyed-out entries). resolve: take an option; the engine rolls and
+    routes; the actor gets clear STORY prose, the room gets a
+    source-ambiguous ambient stir.
+
+    Participant gating: a non-participant probing instance ids gets 404
+    (never 403 — existence must not leak).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _instance_for(self, request: Request, pk: str | None) -> "tuple[MissionInstance, ObjectDB]":
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            NotParticipantError,
+            participant_for,
+        )
+
+        character = _puppet_character(request)
+        instance = MissionInstance.objects.filter(pk=pk).first()
+        if instance is None:
+            raise NotFound(_MSG_NO_SUCH_MISSION)
+        try:
+            participant_for(instance, character)
+        except NotParticipantError as exc:
+            raise NotFound(exc.user_message) from exc
+        return instance, character
+
+    @extend_schema(responses=_journal_paginated_response())
+    def list(self, request: Request) -> Response:
+        from world.missions.services.journal import journal_for  # noqa: PLC0415
+
+        character = _puppet_character(request)
+        entries = journal_for(character)
+        paginator = MissionStudioPagination()
+        # DRF pagination accepts any sized iterable at runtime; the stub
+        # wants a QuerySet — cast keeps ty happy without a real conversion.
+        page = paginator.paginate_queryset(cast("Any", entries), request)
+        serializer = JournalEntrySerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    @extend_schema(
+        responses={
+            200: BeatViewSerializer,
+            404: OpenApiResponse(description="Not a participant / run concluded."),
+        },
+    )
+    @action(detail=True, methods=("GET",))
+    def beat(self, request: Request, pk: str | None = None) -> Response:
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
+        from world.missions.services.play import beat_for  # noqa: PLC0415
+
+        instance, character = self._instance_for(request, pk)
+        beat = beat_for(instance, character)
+        if beat is None:
+            raise NotFound(_MSG_RUN_CONCLUDED)
+        return Response(BeatViewSerializer(beat).data)
+
+    @extend_schema(
+        request=BeatResolveRequestSerializer,
+        responses={
+            200: ResolvedBeatSerializer,
+            400: OpenApiResponse(description="Option not live here / run not active."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",))
+    def resolve(self, request: Request, pk: str | None = None) -> Response:
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            resolve_beat_option,
+        )
+
+        body = BeatResolveRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        try:
+            result = resolve_beat_option(
+                instance,
+                character,
+                option_id=body.validated_data["option_id"],
+                approach_id=body.validated_data.get("approach_id"),
+            )
+        except BeatActionError as exc:
+            # Typed exception with a user-safe message — never str() of
+            # an internal error (CodeQL exception-exposure rule).
+            raise ValidationError(exc.user_message) from exc
+        return Response(ResolvedBeatSerializer(result).data)

@@ -6,6 +6,7 @@ land in D2; giver-library serializers in D3; predicate-tree in D5.
 """
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.missions.constants import MissionStatus
@@ -481,3 +482,81 @@ def _instance_attrs(instance: MissionGiver) -> dict:
         "org": instance.org,
         "is_active": instance.is_active,
     }
+
+
+# ---------------------------------------------------------------------------
+# #885 player journal/beat surface — read-only serializers over the frozen
+# dataclasses from services.journal / services.play (never model-bound; the
+# service layer owns the shapes).
+# ---------------------------------------------------------------------------
+
+
+class JournalDeedSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.JournalDeed`."""
+
+    node_key = serializers.CharField()
+    option_id = serializers.IntegerField()
+    outcome_name = serializers.CharField(allow_null=True)
+    applied_at = serializers.DateTimeField()
+
+
+class JournalEntrySerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.JournalEntry`."""
+
+    instance_id = serializers.IntegerField()
+    template_name = serializers.CharField()
+    status = serializers.CharField()
+    current_node_key = serializers.CharField(allow_null=True)
+    is_contract_holder = serializers.BooleanField()
+    deeds = JournalDeedSerializer(many=True)
+    summary = serializers.CharField(allow_blank=True)
+    epilogue = serializers.CharField(allow_blank=True)
+    current_node_flavor = serializers.CharField(allow_blank=True)
+    compass_rooms = serializers.ListField(child=serializers.CharField())
+    compass_anywhere = serializers.BooleanField()
+
+
+class BeatOptionSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.BeatOption`."""
+
+    option_id = serializers.IntegerField()
+    approach_id = serializers.IntegerField(allow_null=True)
+    label = serializers.CharField()
+    kind = serializers.CharField()
+    check_type_name = serializers.CharField(allow_null=True)
+    base_risk = serializers.IntegerField()
+
+
+class BeatViewSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.BeatView`."""
+
+    instance_id = serializers.IntegerField()
+    template_name = serializers.CharField()
+    node_key = serializers.CharField()
+    flavor_text = serializers.CharField(allow_blank=True)
+    options = BeatOptionSerializer(many=True)
+
+
+class ResolvedBeatSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.ResolvedBeat`."""
+
+    instance_id = serializers.IntegerField()
+    outcome_name = serializers.CharField(allow_null=True)
+    story_text = serializers.CharField()
+    is_terminal = serializers.BooleanField()
+    # SerializerMethodField rather than a nested allow_null serializer —
+    # DRF nested to_representation does not accept None.
+    next_beat = serializers.SerializerMethodField()
+    epilogue = serializers.CharField(allow_blank=True)
+
+    @extend_schema_field(BeatViewSerializer(allow_null=True))
+    def get_next_beat(self, obj: object) -> dict | None:
+        beat = obj.next_beat  # type: ignore[attr-defined]
+        return BeatViewSerializer(beat).data if beat is not None else None
+
+
+class BeatResolveRequestSerializer(serializers.Serializer):
+    """POST body for the #885 resolve endpoint."""
+
+    option_id = serializers.IntegerField(min_value=1)
+    approach_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)

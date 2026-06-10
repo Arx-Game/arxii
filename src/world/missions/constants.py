@@ -121,6 +121,27 @@ class MissionVisibility(models.TextChoices):
     RESTRICTED = "restricted", "Restricted"
 
 
+class NodeLocationMode(models.TextChoices):
+    """Where a :class:`~world.missions.models.MissionNode`'s options are live (#885).
+
+    The node value is the DEFAULT for its options; an option with its own
+    ``locations`` rows overrides it. Location is a conjunct of the single
+    eligibility rule (visibility predicate ∧ "am I there"), never a second
+    visibility layer.
+
+    ANYWHERE — options live in whatever room the character is in (default;
+    introspective beats, wrap-ups).
+    ANCHOR — options live only in the instance's ``anchor_room`` (recorded
+    at grant time) — keeps reusable trigger-pool templates location-flavored
+    without authored rooms.
+    ROOMS — options live in the node's authored ``locations`` set.
+    """
+
+    ANYWHERE = "anywhere", "Anywhere"
+    ANCHOR = "anchor", "Anchor Room"
+    ROOMS = "rooms", "Authored Rooms"
+
+
 class GiverKind(models.TextChoices):
     """How a :class:`~world.missions.models.MissionGiver` reaches the player.
 

@@ -11916,6 +11916,110 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/missions/journal/:
+    get:
+      operationId: missions_journal_list
+      description: |-
+        #885 — the player's mission journal + beat play loop.
+
+        list: every mission the puppeted character participates in (compass +
+        deeds + bookends). beat: the current node as the character sees it —
+        LIVE options only (location ∧ visibility; visibility=eligibility, no
+        greyed-out entries). resolve: take an option; the engine rolls and
+        routes; the actor gets clear STORY prose, the room gets a
+        source-ambiguous ambient stir.
+
+        Participant gating: a non-participant probing instance ids gets 404
+        (never 403 — existence must not leak).
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaginatedJournalEntryList'
+          description: ''
+  /api/missions/journal/{id}/beat/:
+    get:
+      operationId: missions_journal_beat_retrieve
+      description: |-
+        #885 — the player's mission journal + beat play loop.
+
+        list: every mission the puppeted character participates in (compass +
+        deeds + bookends). beat: the current node as the character sees it —
+        LIVE options only (location ∧ visibility; visibility=eligibility, no
+        greyed-out entries). resolve: take an option; the engine rolls and
+        routes; the actor gets clear STORY prose, the room gets a
+        source-ambiguous ambient stir.
+
+        Participant gating: a non-participant probing instance ids gets 404
+        (never 403 — existence must not leak).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeatView'
+          description: ''
+        '404':
+          description: Not a participant / run concluded.
+  /api/missions/journal/{id}/resolve/:
+    post:
+      operationId: missions_journal_resolve_create
+      description: |-
+        #885 — the player's mission journal + beat play loop.
+
+        list: every mission the puppeted character participates in (compass +
+        deeds + bookends). beat: the current node as the character sees it —
+        LIVE options only (location ∧ visibility; visibility=eligibility, no
+        greyed-out entries). resolve: take an option; the engine rolls and
+        routes; the actor gets clear STORY prose, the room gets a
+        source-ambiguous ambient stir.
+
+        Participant gating: a non-participant probing instance ids gets 404
+        (never 403 — existence must not leak).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeatResolveRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedBeat'
+          description: ''
+        '400':
+          description: Option not live here / run not active.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/nodes/:
     get:
       operationId: missions_nodes_list
@@ -20423,6 +20527,31 @@ components:
         * `encounter` - Encounter
         * `task` - Task
         * `requirement` - Requirement
+    BeatOption:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.BeatOption`.
+      properties:
+        option_id:
+          type: integer
+        approach_id:
+          type: integer
+          nullable: true
+        label:
+          type: string
+        kind:
+          type: string
+        check_type_name:
+          type: string
+          nullable: true
+        base_risk:
+          type: integer
+      required:
+      - approach_id
+      - base_risk
+      - check_type_name
+      - kind
+      - label
+      - option_id
     BeatRequest:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -20543,6 +20672,41 @@ components:
       required:
       - episode
       - internal_description
+    BeatResolveRequestRequest:
+      type: object
+      description: 'POST body for the #885 resolve endpoint.'
+      properties:
+        option_id:
+          type: integer
+          minimum: 1
+        approach_id:
+          type: integer
+          minimum: 1
+          nullable: true
+      required:
+      - option_id
+    BeatView:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.BeatView`.
+      properties:
+        instance_id:
+          type: integer
+        template_name:
+          type: string
+        node_key:
+          type: string
+        flavor_text:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOption'
+      required:
+      - flavor_text
+      - instance_id
+      - node_key
+      - options
+      - template_name
     BeatVisibilityEnum:
       enum:
       - hinted
@@ -27123,6 +27287,68 @@ components:
         * `any` - Any
         * `all` - All
         * `count` - Count
+    JournalDeed:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.JournalDeed`.
+      properties:
+        node_key:
+          type: string
+        option_id:
+          type: integer
+        outcome_name:
+          type: string
+          nullable: true
+        applied_at:
+          type: string
+          format: date-time
+      required:
+      - applied_at
+      - node_key
+      - option_id
+      - outcome_name
+    JournalEntry:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.JournalEntry`.
+      properties:
+        instance_id:
+          type: integer
+        template_name:
+          type: string
+        status:
+          type: string
+        current_node_key:
+          type: string
+          nullable: true
+        is_contract_holder:
+          type: boolean
+        deeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalDeed'
+        summary:
+          type: string
+        epilogue:
+          type: string
+        current_node_flavor:
+          type: string
+        compass_rooms:
+          type: array
+          items:
+            type: string
+        compass_anywhere:
+          type: boolean
+      required:
+      - compass_anywhere
+      - compass_rooms
+      - current_node_flavor
+      - current_node_key
+      - deeds
+      - epilogue
+      - instance_id
+      - is_contract_holder
+      - status
+      - summary
+      - template_name
     MaturityEnum:
       enum:
       - pitch
@@ -30126,6 +30352,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ItemTemplateList'
+    PaginatedJournalEntryList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+      required:
+      - count
+      - next
+      - previous
+      - results
     PaginatedMissionCategoryList:
       type: object
       required:
@@ -34870,6 +35118,33 @@ components:
         * `destroy` - Destroy (removed for everyone)
         * `personal` - Personal (resolved for this character only)
         * `temporary` - Temporary (suppressed for N rounds)
+    ResolvedBeat:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.ResolvedBeat`.
+      properties:
+        instance_id:
+          type: integer
+        outcome_name:
+          type: string
+          nullable: true
+        story_text:
+          type: string
+        is_terminal:
+          type: boolean
+        next_beat:
+          allOf:
+          - $ref: '#/components/schemas/BeatView'
+          nullable: true
+          readOnly: true
+        epilogue:
+          type: string
+      required:
+      - epilogue
+      - instance_id
+      - is_terminal
+      - next_beat
+      - outcome_name
+      - story_text
     ResolvedPullEffect:
       type: object
       description: Wire shape for a single ResolvedPullEffect row.
@@ -35809,6 +36084,12 @@ components:
           minimum: 0
           description: Extra anima the player commits beyond base cost. Bounded by
             available anima at resolution time.
+        combat_risk_level:
+          type: string
+          nullable: true
+          description: Risk level of the encounter a PENDING hostile cast would pull
+            the target into (#777).
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -35820,6 +36101,7 @@ components:
           nullable: true
           description: When this action was resolved
       required:
+      - combat_risk_level
       - created_at
       - id
       - initiator_name

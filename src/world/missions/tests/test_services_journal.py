@@ -143,12 +143,14 @@ class JournalForTests(TestCase):
             entries = journal_for(self.holder)
 
         self.assertEqual(len(entries), 3)
-        # One query for participations, one for deeds — small constant
-        # ceiling tolerates one extra lookup but rules out the N+1 shape
-        # (which produced 1 + 3 = 4 queries for 3 missions, scaling linearly).
+        # Constant query budget: participations + deeds + the three #885
+        # compass prefetches (current-node locations M2M, current-node
+        # options, option-locations M2M). The ceiling tolerates one extra
+        # lookup but rules out the N+1 shape — with N=3 a per-participation
+        # regression would blow past it (e.g. 5 + 3 per-row lookups).
         self.assertLessEqual(
             len(ctx.captured_queries),
-            3,
+            6,
             f"journal_for issued {len(ctx.captured_queries)} queries for 3 "
             "participations — expected O(1), got O(N).",
         )

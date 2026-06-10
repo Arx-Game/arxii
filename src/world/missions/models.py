@@ -34,6 +34,7 @@ from world.missions.constants import (
     JointCombine,
     MissionStatus,
     MissionVisibility,
+    NodeLocationMode,
     OptionKind,
     OptionSource,
     RewardGroupRule,
@@ -310,6 +311,28 @@ class MissionNode(SharedMemoryModel):
             "automatically at the model layer — service responsibility."
         ),
     )
+    location_mode = models.CharField(
+        max_length=10,
+        choices=NodeLocationMode.choices,
+        default=NodeLocationMode.ANYWHERE,
+        help_text=(
+            "Default location gate for this node's options (#885): "
+            "ANYWHERE = live wherever the character is; ANCHOR = live only "
+            "in the instance's grant-time anchor room; ROOMS = live in this "
+            "node's authored ``locations`` set. An option with its own "
+            "``locations`` rows overrides this default."
+        ),
+    )
+    locations = models.ManyToManyField(
+        "evennia_extensions.RoomProfile",
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Authored rooms where this node's options are live (consulted "
+            "only when ``location_mode=ROOMS``). Options may override "
+            "per-option via ``MissionOption.locations``."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -461,6 +484,18 @@ class MissionOption(SharedMemoryModel):
             "this option's challenge-contributed options at runtime. "
             "on_delete=PROTECT — detach all referencing options before "
             "deleting the challenge."
+        ),
+    )
+    locations = models.ManyToManyField(
+        "evennia_extensions.RoomProfile",
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Per-option location override (#885): rooms where THIS option "
+            "is live, regardless of the node's location_mode/locations "
+            "default. Empty = inherit the node. This is what expresses "
+            "location-split beats (one node, options live in different "
+            "rooms — choosing either resolves the node down that route)."
         ),
     )
 
@@ -925,6 +960,20 @@ class MissionInstance(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="Where the run currently sits; null = complete.",
+    )
+    anchor_room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The room where this run was granted (#885): the trigger room, "
+            "the offering NPC's room, or the character's location at staff "
+            "assignment. ANCHOR-mode nodes gate their options to it — what "
+            "keeps reusable templates location-flavored without authored "
+            "rooms. Null = placeless grant; ANCHOR options never fire."
+        ),
     )
     status = models.CharField(
         max_length=10,
