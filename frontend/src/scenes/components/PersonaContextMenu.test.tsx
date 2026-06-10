@@ -195,25 +195,28 @@ describe('PersonaContextMenu', () => {
     );
   });
 
-  it('fires the action with whisper delivery from the submenu (#903)', async () => {
+  // Radix submenu interaction is keyboard-driven in jsdom (hover grace-area
+  // math needs real pointer coordinates). ArrowDown focuses the first action,
+  // ArrowRight opens its submenu with the first entry (Default) focused.
+  async function openIntimidateSubmenu() {
     const user = userEvent.setup();
-    vi.mocked(createActionRequest).mockResolvedValue({});
-
+    vi.mocked(createActionRequest).mockResolvedValue({ status: 'resolved' });
     render(
       <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
         <span>Alice</span>
       </PersonaContextMenu>,
       { wrapper: createWrapper() }
     );
-
     await user.click(screen.getByRole('button'));
     await screen.findByText('Intimidate');
-    // Radix submenu interaction is keyboard-driven in jsdom (hover grace-area
-    // math needs real pointer coordinates). ArrowDown focuses the first action,
-    // ArrowRight opens its submenu on the first entry (Default), two more
-    // ArrowDowns reach "Subtly (target only)" (Default → Openly → Subtly).
     await user.keyboard('{ArrowDown}{ArrowRight}');
-    await screen.findByText('Subtly (target only)');
+    await screen.findByText(/^Default/);
+    return user;
+  }
+
+  it('fires the action with whisper delivery from the submenu (#903)', async () => {
+    const user = await openIntimidateSubmenu();
+    // Default → Openly → Subtly (target only)
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
 
     await waitFor(() => {
@@ -229,21 +232,7 @@ describe('PersonaContextMenu', () => {
   });
 
   it('fires the default entry with no delivery so the backend resolves it (#903)', async () => {
-    const user = userEvent.setup();
-    vi.mocked(createActionRequest).mockResolvedValue({});
-
-    render(
-      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
-        <span>Alice</span>
-      </PersonaContextMenu>,
-      { wrapper: createWrapper() }
-    );
-
-    await user.click(screen.getByRole('button'));
-    await screen.findByText('Intimidate');
-    // ArrowRight opens the submenu with the first entry (Default) focused.
-    await user.keyboard('{ArrowDown}{ArrowRight}');
-    await screen.findByText(/^Default/);
+    const user = await openIntimidateSubmenu();
     await user.keyboard('{Enter}');
 
     await waitFor(() => {
