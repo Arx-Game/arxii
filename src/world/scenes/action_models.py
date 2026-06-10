@@ -229,8 +229,5 @@ class SceneCastPullDeclaration(SharedMemoryModel):
         help_text="Threads pulled; owned by the caster, sharing ``resonance``.",
     )
 
-    class Meta:
-        ordering = ["pk"]
-
     def __str__(self) -> str:
         return f"Cast pull (tier {self.tier}) for request {self.request_id}"

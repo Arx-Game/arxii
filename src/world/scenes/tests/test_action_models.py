@@ -12,7 +12,7 @@ from world.magic.factories import (
     TechniqueFactory,
     ThreadFactory,
 )
-from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_constants import ActionRequestStatus, CastPullTier, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
 from world.scenes.factories import (
     PersonaFactory,
@@ -211,6 +211,8 @@ class StandalonecastTests(TestCase):
 
 
 class SceneCastPullDeclarationTests(TestCase):
+    """Persistence and related-name access for SceneCastPullDeclaration."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
@@ -234,10 +236,10 @@ class SceneCastPullDeclarationTests(TestCase):
         decl = SceneCastPullDeclaration.objects.create(
             request=self.request,
             resonance=self.resonance,
-            tier=2,
+            tier=CastPullTier.TIER_2,
         )
         decl.threads.set([self.thread])
-        self.assertEqual(self.request.pull_declaration.tier, 2)
+        self.assertEqual(self.request.pull_declaration.tier, CastPullTier.TIER_2)
         self.assertEqual(
             list(self.request.pull_declaration.threads.values_list("pk", flat=True)),
             [self.thread.pk],
