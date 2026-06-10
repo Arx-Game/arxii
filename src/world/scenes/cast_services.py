@@ -10,7 +10,9 @@ matrix:
 - Benign technique at another PC → create a PENDING ``SceneActionRequest`` for
   consent; resolution happens later on accept.
 - Hostile technique at another PC → seed (or feed) a combat encounter and return
-  it.
+  it — unless the target has not acknowledged a high-risk encounter (#777), in
+  which case a PENDING ``SceneActionRequest`` is created and the encounter feed
+  is deferred to acceptance.
 """
 
 from __future__ import annotations
@@ -23,8 +25,12 @@ from django.utils import timezone
 
 from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
-from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+from world.combat.cast_seed import (
+    encounter_requiring_risk_acknowledgement,
+    seed_or_feed_encounter_from_cast,
+)
 from world.combat.narrator import get_or_create_narrator_persona
+from world.combat.services import acknowledge_encounter_risk
 from world.magic.models.techniques import CharacterTechnique
 from world.magic.narration import render_cast_outcome_narration
 from world.magic.services.hostility import is_technique_hostile
@@ -216,18 +222,45 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     return result, power_ledger, pose
 
 
-def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneActionResult:
+def resolve_accepted_cast(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult | None:
     """Resolve a PENDING standalone cast on consent acceptance.
 
-    Resolves via the cast pipeline, marks the request RESOLVED, and authors a
-    Narrator OUTCOME pose (with the cast-level power ledger). Returns the result.
+    Benign casts resolve via the cast pipeline (check result + OUTCOME pose).
+    Hostile casts — PENDING only when the #777 risk gate fired — resolve by
+    seeding/feeding the combat encounter and recording the target's risk
+    acknowledgement; they return None (combat state carries the outcome; the
+    only caller's view guards ``result is not None``).
 
     Args:
         action_request: A PENDING SceneActionRequest with ``is_standalone_cast`` True.
 
     Returns:
-        The resolved EnhancedSceneActionResult from the cast pipeline.
+        The resolved EnhancedSceneActionResult for benign casts; None for hostile
+        casts resolved into combat.
     """
+    initiator = action_request.initiator_persona
+    target = action_request.target_persona
+    technique = action_request.technique
+    if (
+        target is not None
+        and target.character_sheet_id != initiator.character_sheet_id
+        and is_technique_hostile(technique)
+    ):
+        with transaction.atomic():
+            encounter = seed_or_feed_encounter_from_cast(
+                caster_sheet=initiator.character_sheet,
+                target_sheet=target.character_sheet,
+                technique=technique,
+                scene=action_request.scene,
+                room=action_request.scene.location,
+            )
+            acknowledge_encounter_risk(encounter, target.character_sheet)
+            action_request.status = ActionRequestStatus.RESOLVED
+            action_request.resolved_at = timezone.now()
+            action_request.save(update_fields=["status", "resolved_at"])
+        return None
     with transaction.atomic():
         result, _power_ledger, _pose = _resolve_and_pose_cast(
             request=action_request,
@@ -341,7 +374,24 @@ def _route_hostile_cast(
     target_persona: Persona,
     technique: Technique,
 ) -> CastResult:
-    """Hostile cast at another PC → audit request + seed/feed a combat encounter."""
+    """Hostile cast at another PC → audit request + seed/feed a combat encounter.
+
+    When the cast would pull an unacknowledged target into a high-risk encounter
+    (#777), it becomes a PENDING consent request instead; acceptance resolves it
+    via the hostile branch of resolve_accepted_cast.
+    """
+    gating_encounter = encounter_requiring_risk_acknowledgement(
+        scene, target_persona.character_sheet
+    )
+    if gating_encounter is not None:
+        request = _create_cast_request(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+            status=ActionRequestStatus.PENDING,
+        )
+        return CastResult(request=request)
     with transaction.atomic():
         request = _create_cast_request(
             scene=scene,
