@@ -310,7 +310,7 @@ class PenetrationModifierSeamTests(TestCase):
         pen_collect_calls = [
             c
             for c in mock_collect.call_args_list
-            if getattr(c.args[1], "name", None) == PENETRATION_CHECK_TYPE_NAME
+            if c.args[1].name == PENETRATION_CHECK_TYPE_NAME
         ]
         self.assertEqual(len(pen_collect_calls), 1)
         self.assertEqual(pen_collect_calls[0].args[0], resolver.participant.character_sheet)

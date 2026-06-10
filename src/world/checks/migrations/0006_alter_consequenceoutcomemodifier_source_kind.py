@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("checks", "0005_alter_consequenceoutcome_combat_interaction_timestamp"),
     ]
