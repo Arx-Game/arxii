@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from world.magic.types.pull import CastPullDeclaration
     from world.scenes.models import Interaction, Persona, Scene
 
-_PULL_FIZZLE_NOTE = "The declared thread pull fizzles — the committed resonance is no longer there."
+_PULL_FIZZLE_NOTE = "The declared thread pull fizzles — its committed resonance is spent."
 
 
 def derive_cast_difficulty(technique: Technique) -> int:
@@ -137,7 +137,12 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
 ) -> Interaction:
-    """Author the Narrator OUTCOME pose describing a resolved standalone cast."""
+    """Author the Narrator OUTCOME pose describing a resolved standalone cast.
+
+    Args:
+        fizzle_note: Optional explanatory note appended to the narration when a
+            declared pull could not be charged (e.g. resonance drained mid-consent).
+    """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
     outcome_label = check_result.outcome_name if check_result is not None else "Unknown"
@@ -177,6 +182,10 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
 
     Shared by the immediate path (request just created) and the consent-accept path
     (an existing PENDING request). The caller MUST wrap this in ``transaction.atomic()``.
+
+    Args:
+        fizzle_note: Optional note forwarded to ``create_cast_outcome_pose`` when a
+            declared pull could not be charged and fizzled instead.
     """
     character = caster_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
@@ -239,6 +248,12 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
     A persisted ``SceneCastPullDeclaration`` is re-checked here: if the
     committed pull is still payable it is charged with the cast; otherwise the
     cast resolves pull-less and the OUTCOME pose carries a fizzle note.
+
+    Note:
+        If the caster's resonance balance passes the unlocked affordability preview
+        but is drained by a concurrent spend before the locked charge fires, the
+        resulting ``ResonanceInsufficient`` is caught and the cast degrades to the
+        fizzle path rather than surfacing as an error.
     """
     from world.magic.services.resonance import preview_resonance_pull  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
@@ -267,17 +282,34 @@ def resolve_accepted_cast(action_request: SceneActionRequest) -> EnhancedSceneAc
         else:
             fizzle_note = _PULL_FIZZLE_NOTE
 
-    with transaction.atomic():
-        result, _power_ledger, _pose = _resolve_and_pose_cast(
-            request=action_request,
-            scene=action_request.scene,
-            caster_persona=action_request.initiator_persona,
-            target_persona=action_request.target_persona,
-            technique=action_request.technique,
-            strain_commitment=action_request.strain_commitment,
-            cast_pull=cast_pull,
-            fizzle_note=fizzle_note,
-        )
+    from world.magic.exceptions import ResonanceInsufficient  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            result, _power_ledger, _pose = _resolve_and_pose_cast(
+                request=action_request,
+                scene=action_request.scene,
+                caster_persona=action_request.initiator_persona,
+                target_persona=action_request.target_persona,
+                technique=action_request.technique,
+                strain_commitment=action_request.strain_commitment,
+                cast_pull=cast_pull,
+                fizzle_note=fizzle_note,
+            )
+    except ResonanceInsufficient:
+        # Balance drained between the unlocked preview and the locked charge —
+        # degrade to the fizzle path instead of failing the consent accept.
+        with transaction.atomic():
+            result, _power_ledger, _pose = _resolve_and_pose_cast(
+                request=action_request,
+                scene=action_request.scene,
+                caster_persona=action_request.initiator_persona,
+                target_persona=action_request.target_persona,
+                technique=action_request.technique,
+                strain_commitment=action_request.strain_commitment,
+                cast_pull=None,
+                fizzle_note=_PULL_FIZZLE_NOTE,
+            )
     return result  # result.power_ledger is already set from _resolve_cast
 
 

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
 
 
-def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature; all params required
+def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature
     *,
     actor_label: str,
     technique_name: str,

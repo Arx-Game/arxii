@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
@@ -688,6 +689,30 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
         self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
         character_resonance.refresh_from_db()
         self.assertEqual(character_resonance.balance, 0)
+        self.assertIn("fizzles", cast.request.result_interaction.content)
+
+    def test_consent_accept_fizzles_when_all_threads_retired(self) -> None:
+        """If the pulled thread is retired before accept, the cast resolves pull-less."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        # Retire the thread so it is excluded from re-check at accept time.
+        thread = pull.threads[0]
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+
+        resolve_accepted_cast(cast.request)
+
+        cast.request.refresh_from_db()
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
         self.assertIn("fizzles", cast.request.result_interaction.content)
 
     def test_hostile_cast_with_pull_raises(self) -> None:
