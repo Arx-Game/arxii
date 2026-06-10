@@ -179,8 +179,9 @@ Run the fast SQLite tier for the apps you changed, then push and **monitor the P
 fixing what CI catches. **CI is the full-regression gate** — run a local
 `just regression` only to reproduce a CI failure the fast tier doesn't surface. For
 the per-app tier table, recipes, `@tag("postgres")` decisions, the `--keepdb`
-pitfall, and the "never rely on Evennia defaults in service functions" rule: see the
-`running-tests` skill.
+pitfall, invocation gotchas (`world.`-prefixed test paths, no `-v`, `uv run` for
+ruff/pre-commit), and the "never rely on Evennia defaults in service functions"
+rule: see the `running-tests` skill.
 
 ## Proactive Quality Checks
 

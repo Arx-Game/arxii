@@ -52,6 +52,29 @@ arx test --parallel <app>                      # PG, parallel — use for large 
 arx test --exclude-tag postgres --sqlite ...   # skip @tag("postgres") explicitly on SQLite
 ```
 
+## Invocation & tooling gotchas (#756)
+
+Recurring stumbles, all avoidable:
+
+- **Non-interactive runs go through `just`, never raw `arx test`.** The
+  Postgres tier prompts "database test_arxiidev already exists — recreate?"
+  which `EOFError`s in a non-interactive shell; the `just` recipes wrap it
+  with `echo "yes" |`. (Raw runs also leave a stale `test_arxiidev` behind
+  when killed — the next run's prompt is exactly that leftover.)
+- **Dotted test paths need the `world.` prefix:**
+  `just test-fast world.covenants.tests.test_rites`, not
+  `covenants.tests.test_rites` (the latter →
+  `ModuleNotFoundError: No module named 'covenants'`).
+- **`arx test` rejects `-v`** (it's a typer CLI, not Django's manage.py) —
+  grep the output instead.
+- **`ruff` and `pre-commit` are not on PATH** — use `uv run ruff` /
+  `uv run pre-commit` (same as `uv run arx`).
+- **Don't store Evennia objects (ObjectDB / RoomProfile / typeclassed rows)
+  in `setUpTestData`.** Django deepcopies class-level test data per test,
+  and these objects acquire un-deepcopyable typeclass internals once the
+  full suite has loaded — tests then pass standalone but error under
+  `arx test` with `un(deep)copyable object`. Create them in `setUp`.
+
 ## When tests fail on SQLite but pass on PG
 
 The two-tier model exposes a small set of patterns:
