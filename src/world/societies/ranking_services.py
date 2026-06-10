@@ -17,20 +17,71 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from world.societies.constants import FAME_TIER_MULTIPLIERS, FAME_TIER_ORDER
 from world.societies.models import (
     OrganizationMembership,
     PersonaLegendSummary,
+    RankingBandLabel,
     RankingDisplay,
 )
 
 
 @dataclass(frozen=True)
 class RankingRow:
-    """One row in a rendered ranking. ``rank`` is 1-based dense rank."""
+    """One row in a rendered ranking. ``rank`` is 1-based dense rank.
+
+    ``value`` is the ordering quantity and is INTERNAL ONLY — it must
+    never render (#761; hidden-mechanics rule). ``band_label`` is the
+    qualitative phrase the world speaks ("" when no band is authored).
+    """
 
     rank: int
     persona_name: str
-    value: int
+    value: float
+    band_label: str = ""
+
+
+def band_labels_for(society) -> list[RankingBandLabel]:
+    """Active band labels for ``society``, falling back to the global set.
+
+    Per-society rows win when ANY exist; otherwise the ``society=null``
+    global/default rows apply (also the Academy's set). No authored rows
+    → empty list → boards render plain ordered names.
+    """
+    if society is not None:
+        scoped = list(
+            RankingBandLabel.objects.filter(society=society, is_active=True).order_by(
+                "rank_min", "pk"
+            )
+        )
+        if scoped:
+            return scoped
+    return list(
+        RankingBandLabel.objects.filter(society__isnull=True, is_active=True).order_by(
+            "rank_min", "pk"
+        )
+    )
+
+
+def _label_for_rank(rank: int, bands: list[RankingBandLabel]) -> str:
+    for band in bands:
+        if band.rank_min <= rank <= band.rank_max:
+            return band.label
+    return ""
+
+
+def _perceived_multiplier(fame_tier: str, society) -> float:
+    """The fame-tier prestige multiplier as ``society`` perceives it (#761).
+
+    Applies the society's ``fame_perception_offset`` to the tier before
+    looking up the multiplier — the same lens the renown tab applies
+    (``renown_serializers._apply_perception_offset``), so the diegetic
+    board and the tab can no longer disagree.
+    """
+    offset = (society.fame_perception_offset or 0) if society is not None else 0
+    tier_index = FAME_TIER_ORDER.index(fame_tier)
+    adjusted = FAME_TIER_ORDER[max(0, tier_index + offset)]
+    return FAME_TIER_MULTIPLIERS[adjusted]
 
 
 # ---------------------------------------------------------------------------
@@ -39,25 +90,36 @@ class RankingRow:
 
 
 def get_society_prestige_top_n(society, *, n: int = 10) -> list[RankingRow]:
-    """Top-N personas by ``total_prestige`` among members of ``society``.
+    """Top-N members of ``society`` by PERCEIVED prestige (#761).
 
-    Runtime aggregate over members. We don't apply the fame-tier
-    multiplier here at MVP — the MV had it baked in but at our scale a
-    raw-total ordering is fine and lets us drop the MV + nightly cron.
-    A future scale-driven re-introduction can multiply at query time.
+    Ordering quantity = ``total_prestige × fame-tier multiplier``, where
+    the tier is read through the society's ``fame_perception_offset`` —
+    the same lens the renown tab uses, fixing the board/tab disagreement
+    (#761 gap 2). Computed in Python over the member set (the boards are
+    top-N reads at human frequency; revisit with a query-time expression
+    if member counts ever make this hot). The numeric value stays
+    internal — only the qualitative band label ever renders.
     """
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    personas = list(
-        Persona.objects.filter(
-            pk__in=OrganizationMembership.objects.filter(organization__society=society).values_list(
-                "persona_id", flat=True
-            )
-        ).order_by("-total_prestige", "name")[:n]
+    members = Persona.objects.filter(
+        pk__in=OrganizationMembership.objects.filter(organization__society=society).values_list(
+            "persona_id", flat=True
+        )
     )
+    scored = sorted(
+        ((p.total_prestige * _perceived_multiplier(p.fame_tier, society), p.name) for p in members),
+        key=lambda pair: (-pair[0], pair[1]),
+    )[:n]
+    bands = band_labels_for(society)
     return [
-        RankingRow(rank=index, persona_name=p.name, value=p.total_prestige)
-        for index, p in enumerate(personas, start=1)
+        RankingRow(
+            rank=index,
+            persona_name=name,
+            value=score,
+            band_label=_label_for_rank(index, bands),
+        )
+        for index, (score, name) in enumerate(scored, start=1)
     ]
 
 
@@ -72,11 +134,13 @@ def get_academy_legend_top_n(*, n: int = 10) -> list[RankingRow]:
             "-persona_legend", "persona__name"
         )[:n]
     )
+    bands = band_labels_for(None)
     return [
         RankingRow(
             rank=position,
             persona_name=row.persona.name,
             value=row.persona_legend,
+            band_label=_label_for_rank(position, bands),
         )
         for position, row in enumerate(rows, start=1)
     ]
@@ -155,6 +219,14 @@ def _render_academy_legend(display: RankingDisplay) -> str:
 
 
 def _format_rows(*, header: str, rows: list[RankingRow]) -> str:
-    """Format a ranking as IC narration. Newline-separated; rank prefix."""
-    lines = [header, *[f"  {row.rank}. {row.persona_name} ({row.value:,})" for row in rows]]
+    """Format a ranking as IC narration — names + qualitative bands ONLY.
+
+    The world never speaks raw numbers (#761; exact figures live in the
+    player's own ledger, never in an IC mouth). With no authored band
+    labels the board reads as a plain ordered list of names.
+    """
+    lines = [header]
+    for row in rows:
+        suffix = f" — {row.band_label}" if row.band_label else ""
+        lines.append(f"  {row.persona_name}{suffix}")
     return "\n".join(lines)

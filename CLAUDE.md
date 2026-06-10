@@ -13,14 +13,14 @@ self-direction (e.g. "Checking whether the skill expects a reviewer dispatch
 step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt, no
 `?` in user-facing text outside `AskUserQuestion`.
 
-<!-- TEMP HARNESS-BUNDLING-WORKAROUND — remove when GH #647 is resolved -->
+<!-- TEMP HARNESS-BUNDLING-WORKAROUND — removal tracked in GH #883 (#647 closed without a successor) -->
 **[TEMP] Load the `grounding-before-action` skill at session start.** It works
 around a Claude Code 2.1.158 regression (a tool result co-emitted with the call it
 depends on is invisible at compose time → confabulation; caused real erroneous
 GitHub edits). The skill carries the full rule set; the essentials: emit
 `AskUserQuestion` solo, echo the chosen answer back before any irreversible action,
-and verify issue number↔title before any mutation. Temporary — tracked in **#647**
-(grep `HARNESS-BUNDLING-WORKAROUND`); delete when the harness is fixed.
+and verify issue number↔title before any mutation. Temporary — removal tracked in
+**#883** (grep `HARNESS-BUNDLING-WORKAROUND`); delete when the harness is fixed.
 
 ## Git Workflow
 
@@ -179,8 +179,9 @@ Run the fast SQLite tier for the apps you changed, then push and **monitor the P
 fixing what CI catches. **CI is the full-regression gate** — run a local
 `just regression` only to reproduce a CI failure the fast tier doesn't surface. For
 the per-app tier table, recipes, `@tag("postgres")` decisions, the `--keepdb`
-pitfall, and the "never rely on Evennia defaults in service functions" rule: see the
-`running-tests` skill.
+pitfall, invocation gotchas (`world.`-prefixed test paths, no `-v`, `uv run` for
+ruff/pre-commit), and the "never rely on Evennia defaults in service functions"
+rule: see the `running-tests` skill.
 
 ## Proactive Quality Checks
 

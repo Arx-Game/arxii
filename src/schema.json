@@ -17615,6 +17615,34 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/societies/rankings/{id}/:
+    get:
+      operationId: societies_rankings_retrieve
+      description: |-
+        Retrieve-only player surface for one diegetic ranking display.
+
+        Keyed by the display OBJECT's id (RankingDisplay is OneToOne with the
+        in-world object the player is looking at). No list endpoint — boards
+        are discovered in the world, not browsed (diegetic-discovery, #676).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingBoard'
+          description: ''
+        '404':
+          description: No ranking display on that object.
   /api/staff-inbox/:
     get:
       operationId: staff_inbox_retrieve
@@ -34870,6 +34898,41 @@ components:
       required:
       - slot_number
       - target_persona
+    RankingBoard:
+      type: object
+      description: A rendered board. ``cloaked`` = the viewer may know it exists,
+        not its names.
+      properties:
+        display_id:
+          type: integer
+        ranking_type:
+          type: string
+        title:
+          type: string
+        cloaked:
+          type: boolean
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingRow'
+      required:
+      - cloaked
+      - display_id
+      - ranking_type
+      - rows
+      - title
+    RankingRow:
+      type: object
+      description: 'One row: a name and the qualitative phrase the world speaks. No
+        numbers.'
+      properties:
+        persona_name:
+          type: string
+        band_label:
+          type: string
+      required:
+      - band_label
+      - persona_name
     RatingEnum:
       enum:
       - -2
@@ -36156,6 +36219,11 @@ components:
           readOnly: true
           nullable: true
           description: The interaction recording the result of this action
+        action_interaction:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: ACTION-mode Interaction for this cast (carries the power ledger).
         strain_commitment:
           type: integer
           maximum: 2147483647
@@ -36179,6 +36247,7 @@ components:
           nullable: true
           description: When this action was resolved
       required:
+      - action_interaction
       - combat_risk_level
       - created_at
       - id

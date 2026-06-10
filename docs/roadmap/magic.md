@@ -590,8 +590,19 @@ in-scope passive threads (via `_anchor_in_action`) plus an optional `CastPullDec
 `use_technique` threads them into `_derive_power` and charges a declared pull (after the
 soulfray/pre-cast gates, before anima deduction). The two non-combat scene callers
 (`scenes/cast_services.py`, `scenes/action_services.py`) opt in; combat is unchanged.
-A player-facing control to declare a paid pull *with* a cast, and per-level
-softcaps/hardcaps on the resonance-standing axis, are deferred follow-ups.
+Per-level softcaps/hardcaps on the resonance-standing axis remain a deferred follow-up.
+
+**#854 — player-facing cast pull declaration (DONE):** the public cast API threads a
+`cast_pull` end-to-end: `TechniqueCastCreateSerializer` takes a nested
+`pull {resonance_id, tier, thread_ids}` (validated for ownership/resonance/retired/
+duplicates; hostile casts reject it — combat owns `CombatPull`), the view builds the
+`CastPullDeclaration`, and the immediate route charges it in-line via `use_technique`
+step 3c. Benign-PENDING casts persist the declaration on `SceneCastPullDeclaration`
+(OneToOne to `SceneActionRequest` + threads M2M) and re-check payability at consent —
+no longer payable (drained balance / retired threads / preview-to-charge race) degrades
+to a visible fizzle note in the OUTCOME pose, never an error. The cast dialog reuses
+`ThreadPullPicker` with the `applicable-pulls` cast context, constrained to one
+`(resonance, tier)` group per cast.
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — mage scars without reactive side effects are
@@ -1155,7 +1166,13 @@ Cross-references:
   resolution pipeline is now threaded into scene-cast OUTCOME poses. See "Scope #5.5" and
   "#639" entries above for ledger internals.
 - **#766 ledger panel data seam** — the cast-result API payload carries `power_ledger` so
-  the full ledger panel (still to do) has its data source; the panel itself is a follow-up.
+  the full ledger panel has its data source.
+- **#859 immediate ledger surface (DONE)** — the cast dialog renders `PowerLedgerPanel`
+  straight from the immediate-cast response (`CastResponse.result.power_ledger`), and
+  standalone ACTION cards (`PoseUnit` State 3, scene *and* combat) carry a chip-expand
+  affordance that lazily fetches the caster-gated `action-outcome-details` for that one
+  interaction — no follow-up pose needed. The cast response also exposes
+  `action_interaction` (the id whose persisted ledger backs the gated endpoint).
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
@@ -1415,14 +1432,15 @@ extension to `calculate_effective_anima_cost`. The diminishing-returns conversio
 The sole v1 consumer is Clash: `commit_to_clash` passes the PC's declared anima
 commitment as the strain amount when it calls `use_technique` in clash-commit mode.
 
-**Regular-cast Strain is UNBLOCKED but remains a deferred follow-up.** The
-standalone-technique-cast UI landed in #772 (`request_technique_cast`, `POST /api/action-requests/cast/`,
-`ActionPanel` cast flow) — the "regular-cast action UI" prerequisite that was blocking Strain
-integration is now satisfied. What remains is a non-clash Strain audit record and
-`StrainConfig` tuning for the standalone-cast path. The `strain_commitment` kwarg already
-threads through `_route_immediate_cast` / `resolve_accepted_cast`; the authored decision
-surface (a "commit extra anima" slider in the cast dialog) and the per-cast audit row are
-the follow-up items.
+**Regular-cast Strain is SHIPPED** (#776 closed 2026-06-09 after a verify-against-code
+audit; this paragraph previously claimed it "remains a deferred follow-up" — stale).
+The standalone-technique-cast UI landed in #772 (`request_technique_cast`,
+`POST /api/action-requests/cast/`, `ActionPanel` cast flow); the per-cast strain
+slider with anima-capped validation lives in `ActionPanel.tsx`; non-clash strain
+accrues via `Interaction.strain_committed` with soulfray accrual (tested in
+`magic/tests/test_non_clash_strain.py`, PR #574); and `StrainConfig` is read in the
+non-clash fatigue path (`fatigue/services.py`). Whether clash-tuned `StrainConfig`
+*values* suit regular casts is an open tuning judgment, not missing code.
 
 ---
 

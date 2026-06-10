@@ -389,7 +389,9 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 
     Visibility cascade:
     1. very_private -> writer + InteractionReceiver check (not staff)
-    2. Place-scoped -> writer + InteractionReceiver check
+    2. Whisper or place-scoped -> writer + InteractionReceiver check (+ staff),
+       regardless of scene privacy — mirrors the real-time push rule so the
+       persisted log never shows more than the room heard
     3. Private scene -> all scene participants (Account-based via SceneParticipation)
     4. Public -> everyone
     """
@@ -407,8 +409,9 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     if is_staff:
         return True
 
-    # Place-scoped: only writer + receivers
-    if interaction.place_id is not None:
+    # Whisper or place-scoped (table talk): only writer + receivers, even
+    # inside a public or private scene.
+    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
         return is_receiver or is_writer
 
     # Private scene: all scene participants
@@ -430,10 +433,6 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     # Public scene or no scene with room-wide mode = public
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.PUBLIC:
         return True
-
-    # Only WHISPER is receiver-scoped without a scene
-    if interaction.mode in (InteractionMode.WHISPER,):
-        return is_receiver or is_writer
 
     # Default: public (pose/emit/say/shout/action without a scene)
     return True
