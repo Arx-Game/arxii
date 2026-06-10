@@ -251,9 +251,9 @@ describe('useResolveAlteration', () => {
     vi.mocked(api.resolveAlteration).mockResolvedValue({ status: 'resolved', event_id: 42 });
 
     const { wrapper, client } = createWrapperWithClient();
-
-    // Seed the pending-alterations cache so its query state is trackable.
-    client.setQueryData(['magic', 'pending-alterations'], PENDING_FIXTURE);
+    // gcTime: 0 evicts an unobserved cache entry on a timer tick, so asserting
+    // isInvalidated on a seeded entry races the GC — assert the call instead.
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
 
     const { result } = renderHook(() => useResolveAlteration(), { wrapper });
 
@@ -261,10 +261,10 @@ describe('useResolveAlteration', () => {
       await result.current.mutateAsync({ pendingId: 7, payload: { library_template_id: 11 } });
     });
 
-    // The query has no active observer so it stays invalidated rather than
-    // auto-refetching — assert the cache entry is marked stale/invalid.
     await waitFor(() => {
-      expect(client.getQueryState(['magic', 'pending-alterations'])?.isInvalidated).toBe(true);
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['magic', 'pending-alterations'],
+      });
     });
   });
 });
