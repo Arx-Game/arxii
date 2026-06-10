@@ -13,6 +13,7 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
 )
 from world.fatigue.models import FatiguePool
+from world.fatigue.services import get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat
 from world.roster.factories import RosterTenureFactory
 from world.traits.models import TraitCategory
@@ -115,10 +116,21 @@ class CharacterVitalsViewTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.data["status"], DERIVED_STATUS_DYING)
 
+    def test_missing_vitals_row_still_derives_status_from_conditions(self) -> None:
+        bare_sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=bare_sheet.character,
+            player_data=self.tenure.player_data,
+        )
+        template = BleedingOutConditionFactory()
+        ConditionInstanceFactory(target=bare_sheet.character, condition=template)
+        response = self.client.get(f"/api/vitals/{bare_sheet.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["health"], 0)
+        self.assertEqual(response.data["status"], DERIVED_STATUS_DYING)
+
     def test_repeat_request_rides_identity_map(self) -> None:
         """Second call must not re-query sheet/vitals/fatigue rows."""
-        from world.fatigue.services import get_or_create_fatigue_pool
-
         get_or_create_fatigue_pool(self.sheet)  # provision so the accessor is a hit, not a miss
         CharacterSheet.flush_instance_cache()
         CharacterVitals.flush_instance_cache()

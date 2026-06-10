@@ -2,6 +2,13 @@
 
 from rest_framework import serializers
 
+from world.vitals.constants import (
+    DERIVED_STATUS_ALIVE,
+    DERIVED_STATUS_DEAD,
+    DERIVED_STATUS_DYING,
+    DERIVED_STATUS_INCAPACITATED,
+)
+
 
 class FatiguePoolStatusSerializer(serializers.Serializer):
     """One fatigue pool's status (shape produced by fatigue.services.get_full_status)."""
@@ -29,5 +36,12 @@ class CharacterVitalsSerializer(serializers.Serializer):
     max_health = serializers.IntegerField()
     health_percentage = serializers.FloatField()
     wound_description = serializers.CharField(allow_blank=True)
-    status = serializers.CharField()
+    status = serializers.ChoiceField(
+        choices=[
+            DERIVED_STATUS_ALIVE,
+            DERIVED_STATUS_DYING,
+            DERIVED_STATUS_INCAPACITATED,
+            DERIVED_STATUS_DEAD,
+        ]
+    )
     fatigue = VitalsFatigueSerializer()
