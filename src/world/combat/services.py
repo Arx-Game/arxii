@@ -392,6 +392,10 @@ class CombatTechniqueResolver:
         ``barrier_strength`` (the ward ONLY — damage-type resistance is soaked
         once downstream in ``apply_damage_to_opponent``; never consumed here).
 
+        Caster-side modifiers flow through ``collect_check_modifiers`` (the
+        same seam as the offense check), so condition/equipment/scene and
+        check-scoped CharacterModifier sources all apply (#767).
+
         Returns ``(ledger, bounced)``:
 
         - No focused opponent / no barrier (None or 0) → UNOPPOSED: returns
@@ -417,10 +421,20 @@ class CombatTechniqueResolver:
             return combat_ledger, False
 
         caster = self.participant.character_sheet.character
+        pen_check_type = get_penetration_check_type()
+        # Mirror _roll_check: route through the shared modifier seam so the
+        # penetration contest honors condition / rollmod / scene / equipment
+        # and CHARACTER (#767, e.g. "+penetration vs warded foes") sources.
+        # Effort and pull bonuses stay offense-only, exactly as #639 decided.
+        pen_breakdown = collect_check_modifiers(
+            self.participant.character_sheet,
+            pen_check_type,
+        )
         pen_result = perform_check(
             caster,
-            get_penetration_check_type(),
+            pen_check_type,
             target_difficulty=ward,
+            extra_modifiers=pen_breakdown.total,
         )
         factor = get_penetration_factor(pen_result.success_level)
         builder = PowerLedgerBuilder.from_ledger(combat_ledger)

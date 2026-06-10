@@ -350,3 +350,40 @@ class PenetrationEndToEndTests(TestCase):
         )
         # Damage is applied normally (cast was not bounced).
         self.assertGreater(result.scaled_damage, 0)
+
+
+class PenetrationModifierSeamTests(TestCase):
+    """Penetration check honors the shared modifier seam (#767)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Seam Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Seam Partial"
+        )
+        wire_penetration_factors()
+        wire_penetration_check_type()
+
+    # --- Penetration honors the shared modifier seam (#767) -----------------
+
+    def test_penetration_check_receives_collected_modifiers(self) -> None:
+        resolver = _build_resolver(barrier_strength=10)
+        with (
+            patch("world.combat.services.perform_check") as mock_pen,
+            patch("world.combat.services.collect_check_modifiers") as mock_collect,
+        ):
+            mock_collect.return_value = MagicMock(total=4)
+            mock_pen.return_value = MagicMock(success_level=1)
+            resolver(power=20, ledger=_ledger(20))
+        # collect_check_modifiers called for the penetration check type...
+        pen_collect_calls = [
+            c
+            for c in mock_collect.call_args_list
+            if getattr(c.args[1], "name", None) == "penetration"
+        ]
+        self.assertEqual(len(pen_collect_calls), 1)
+        self.assertEqual(pen_collect_calls[0].args[0], resolver.participant.character_sheet)
+        # ...and its total feeds the check as extra_modifiers.
+        self.assertEqual(mock_pen.call_args.kwargs["extra_modifiers"], 4)
