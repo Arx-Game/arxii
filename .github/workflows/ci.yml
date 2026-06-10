@@ -178,15 +178,15 @@ jobs:
   # frontend/src/generated/api.d.ts exactly the way `just gen-api-types`
   # does (spectacular → openapi-typescript → prettier) and fails when the
   # committed files differ — so the generated types can't silently rot
-  # against the backend schema. Needs the full backend env: Evennia
-  # queries the DB during app init, so spectacular requires a migrated
-  # Postgres just like the test shards.
+  # against the backend schema. No database needed: spectacular against a
+  # fresh, unmigrated SQLite produces a byte-identical schema (verified),
+  # so the job skips Postgres/migrate entirely.
   api-types-drift:
     runs-on: ubuntu-latest
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
+      DATABASE_URL: sqlite:////tmp/drift.db
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
       CLOUDINARY_API_SECRET: test-secret
@@ -196,33 +196,10 @@ jobs:
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v6
-      - name: Start Postgres
-        run: |
-          docker run -d \
-            --name postgres-ci \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=arxii_test \
-            -e POSTGRES_INITDB_ARGS=--no-sync \
-            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
-            -p 5432:5432 \
-            postgres:15
-      - name: Wait for Postgres ready
-        run: |
-          for i in $(seq 1 30); do
-            if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Postgres did not become ready" >&2
-          docker logs postgres-ci
-          exit 1
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
       - run: uv sync
-      - name: Run migrations
-        run: uv run arx manage migrate
       - uses: pnpm/action-setup@v6
         with:
           version: 9
