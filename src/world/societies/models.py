@@ -26,6 +26,7 @@ from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.societies.constants import FameTier
 from world.societies.types import ReputationTier
 
 # Validators for principle fields (-5 to +5 range)
@@ -1138,6 +1139,151 @@ class RankingDisplay(SharedMemoryModel):
     def __str__(self) -> str:
         scope = self.scope_society.name if self.scope_society else "global"
         return f"{self.get_ranking_type_display()} @ {scope}"
+
+
+class RankingBandLabel(SharedMemoryModel):
+    """#761 — qualitative label for a band of ranking positions.
+
+    The diegetic boards never show raw numbers (hidden-mechanics rule);
+    instead each rank position falls into an authored band ("among the
+    most renowned", "a rising name"). Per-society rows let cultures speak
+    rank differently; ``society=null`` rows are the global/default set,
+    used by ACADEMY_LEGEND boards and as the fallback when a society has
+    authored none. Admin-editable per the flavor-text rule; with no
+    authored bands a board renders ordered names with no label at all.
+    """
+
+    society = models.ForeignKey(
+        Society,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="ranking_band_labels",
+        help_text="Null = the global/default label set (Academy boards + fallback).",
+    )
+    rank_min = models.PositiveSmallIntegerField(
+        help_text="First rank position (1-based, inclusive) this label covers.",
+    )
+    rank_max = models.PositiveSmallIntegerField(
+        help_text="Last rank position (inclusive) this label covers.",
+    )
+    label = models.CharField(
+        max_length=200,
+        help_text="The qualitative phrase rendered beside names in this band.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rank_min__lte=models.F("rank_max")),
+                name="societies_band_label_min_lte_max",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        scope = self.society.name if self.society_id else "global"
+        return f"[{scope}] ranks {self.rank_min}-{self.rank_max}: {self.label[:40]}"
+
+
+class FameReactionLine(SharedMemoryModel):
+    """#881 — an authored room-entry reaction to a notable arrival.
+
+    Per-room, per-society, entirely optional: the noble meeting hall
+    reacts differently from the salon, and unauthored rooms say nothing.
+    Fires when a character whose perceived fame tier meets
+    ``min_fame_tier`` enters ``room`` — bystanders receive
+    ``bystander_body``; the arriver receives ``arriver_body`` (the
+    actor/audience split). A society-voiced line perceives the arriver's
+    tier through that society's ``fame_perception_offset``; ``society``
+    null reads the raw tier. Admin-editable per the flavor-text rule.
+    """
+
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="fame_reaction_lines",
+    )
+    society = models.ForeignKey(
+        Society,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="fame_reaction_lines",
+        help_text=(
+            "The society whose voice this room speaks with — its "
+            "fame_perception_offset filters how famous the arriver reads. "
+            "Null = raw fame tier."
+        ),
+    )
+    min_fame_tier = models.CharField(
+        max_length=20,
+        choices=FameTier.choices,
+        default=FameTier.TALKED_ABOUT,
+        help_text="Minimum perceived fame tier of the arriver for this line to fire.",
+    )
+    bystander_body = models.TextField(
+        blank=True,
+        help_text="What the room's other occupants see when the line fires.",
+    )
+    arriver_body = models.TextField(
+        blank=True,
+        help_text="What the arriving character themselves sees.",
+    )
+    weight = models.PositiveIntegerField(
+        default=1,
+        help_text="Relative draw weight among this room's eligible lines.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.bystander_body and not self.arriver_body:
+            raise ValidationError(
+                {"bystander_body": "Author at least one of bystander_body / arriver_body."}
+            )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        voice = self.society.name if self.society_id else "no-society"
+        return f"FameReactionLine(room={self.room_id}, {voice}, >={self.min_fame_tier})"
+
+
+class FameReactionCooldown(SharedMemoryModel):
+    """#881 — per-(persona, room) re-fire throttle for fame reactions.
+
+    Mirrors ``missions.MissionGiverCooldown``: without it, pacing in and
+    out of an authored room spams every occupant. One row per pair,
+    upserted on fire.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="fame_reaction_cooldowns",
+    )
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="fame_reaction_cooldowns",
+    )
+    available_at = models.DateTimeField(
+        help_text="Reactions to this persona in this room re-fire after this time.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "room"],
+                name="unique_fame_reaction_cooldown_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"FameReactionCooldown(persona={self.persona_id}, room={self.room_id})"
 
 
 class CovenantLegendCredit(SharedMemoryModel):

@@ -38,6 +38,15 @@ DIFFICULTY_VALUES: dict[str, int] = {
     DifficultyChoice.DAUNTING: 75,
 }
 
+
+class CastPullTier(models.IntegerChoices):
+    """Paid pull tiers declarable alongside a standalone cast (#854)."""
+
+    TIER_1 = 1, "Tier 1"
+    TIER_2 = 2, "Tier 2"
+    TIER_3 = 3, "Tier 3"
+
+
 CAST_ACTION_KEY = "cast"  # sentinel marking a standalone cast request
 
 # Authored difficulty bands keyed by technique intensity ceiling. Single source

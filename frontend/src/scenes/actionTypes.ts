@@ -2,6 +2,8 @@
 // Legacy scene action types (now slimmed — fetchSceneActions has been removed)
 // ---------------------------------------------------------------------------
 
+import type { PowerLedger } from '@/magic/types';
+
 export interface TechniqueOption {
   id: number;
   name: string;
@@ -202,16 +204,43 @@ export interface CastableTechnique {
   hostile: boolean;
 }
 
+export interface CastPullRequestBody {
+  resonance_id: number;
+  tier: 1 | 2 | 3;
+  thread_ids: number[];
+}
+
 export interface CastRequestBody {
   scene: number;
   initiator_persona: number;
   technique_id: number;
   target_persona?: number | null;
   strain_commitment?: number;
+  pull?: CastPullRequestBody;
+}
+
+/** Immediate-path cast result (EnhancedSceneActionResultSerializer). */
+export interface CastResultPayload {
+  action_key: string;
+  power_ledger: PowerLedger | null;
+  action_resolution: ActionResolutionData;
+  technique_result: TechniqueResultData | null;
+  /** Present when an anima ritual resolves; absent for all other action types. */
+  anima_recovery?: AnimaRecoveryData;
 }
 
 export interface CastResponse {
   /** The created SceneActionRequest id. */
   id: number;
   status: string;
+  /** Present only on the immediate path. */
+  result?: CastResultPayload;
+  /** Narrator OUTCOME pose id (immediate path). */
+  outcome_interaction?: number;
+  /**
+   * ACTION interaction id whose persisted ledger backs the gated
+   * action-outcome-details endpoint. For the in-response ledger data,
+   * read `result.power_ledger` instead.
+   */
+  action_interaction?: number | null;
 }

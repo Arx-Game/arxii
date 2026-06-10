@@ -438,7 +438,7 @@ the React frontend.
 
 Shipped since the original list:
 
-- `CombatRoundAction → Interaction` join FK + `interaction_timestamp` — **DONE**: `GET /api/combat/action-outcome-details/` enumerates real effects (`views_outcome_details.py`). Surfacing the ledger on standalone cast cards (no linking pose yet) is #859.
+- `CombatRoundAction → Interaction` join FK + `interaction_timestamp` — **DONE**: `GET /api/combat/action-outcome-details/` enumerates real effects (`views_outcome_details.py`). Surfacing the ledger on standalone cast cards (no linking pose yet) — **#859 DONE**: `PoseUnit` State 3 (shared by scene + combat) gained the chip-expand affordance that lazily fetches outcome details for the standalone ACTION's own interaction id.
 - Deep-link routing for outcome-detail effects — **#551 DONE**: outcome-effect deep links open a Redux-driven `DeepLinkModalHost` routing 5 kinds (combo/opponent/participant/condition/clash); added read-only `GET /api/conditions/instances/<pk>/`.
 - Fatigue pools — **#552 DONE**: `ParticipantSerializer` exposes physical/social/mental fatigue (current + capacity); `VitalPools` renders real values. Fatigue costs are charged on resolution (`apply_fatigue`).
 - Conditions on combatant rows — **#553 DONE**: visibility-filtered `active_conditions` on both serializers; `CombatantsList` badges deep-link to the condition modal.

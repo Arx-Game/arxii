@@ -4,17 +4,24 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { store } from '@/store/store';
 import { PoseUnit } from './PoseUnit';
 import type { Interaction } from '../types';
 
-// Stub PoseUnitDetailPanel so this test doesn't need the combat query mocks.
+// Mock @/combat/queries — used by PoseUnitDetailPanel; prevents real fetches.
+vi.mock('@/combat/queries', () => ({
+  useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+}));
+
+// Stub PoseUnitDetailPanel with the canonical data-testid. Renders
+// actionInteractionIds as text content so tests can assert the correct IDs
+// are forwarded; the real panel's fetching is covered by its own test file.
 vi.mock('./PoseUnitDetailPanel', () => ({
   PoseUnitDetailPanel: ({ actionInteractionIds }: { actionInteractionIds: number[] }) => (
-    <div data-testid="mock-detail-panel">{actionInteractionIds.join(',')}</div>
+    <div data-testid="pose-unit-detail-panel">{actionInteractionIds.join(',')}</div>
   ),
 }));
 
@@ -50,6 +57,10 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('PoseUnit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders a POSE with two linked actions — header + 2 chips + body + reactions', () => {
     const interaction = makeInteraction({
       mode: 'pose',
@@ -160,19 +171,19 @@ describe('PoseUnit', () => {
     );
 
     // Panel not visible initially
-    expect(screen.queryByTestId('mock-detail-panel')).toBeNull();
+    expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
 
     // Click chip to expand
     const chip = screen.getByTitle('Click to expand action details');
     fireEvent.click(chip);
 
     // Panel now visible with the action interaction ID
-    expect(screen.getByTestId('mock-detail-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-detail-panel')).toHaveTextContent('201');
+    expect(screen.getByTestId('pose-unit-detail-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('pose-unit-detail-panel')).toHaveTextContent('201');
 
     // Click again to collapse
     fireEvent.click(chip);
-    expect(screen.queryByTestId('mock-detail-panel')).toBeNull();
+    expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
   });
 
   it('calls onAddTarget on double-click of persona name', () => {
@@ -188,6 +199,90 @@ describe('PoseUnit', () => {
     const span = screen.getByTitle('Double-click to add as target');
     fireEvent.doubleClick(span);
     expect(onAddTarget).toHaveBeenCalledWith('Alice');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Standalone ACTION expand affordance (#859)
+  // ---------------------------------------------------------------------------
+
+  it('standalone ACTION renders the expand control', () => {
+    const interaction = makeInteraction({
+      id: 42,
+      mode: 'action',
+      content: '[Frost Bolt] -- Success',
+      action_links: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('standalone-action-expand')).toBeInTheDocument();
+  });
+
+  it('standalone ACTION expand reveals the detail panel with the interaction id', () => {
+    const interaction = makeInteraction({
+      id: 42,
+      mode: 'action',
+      content: '[Frost Bolt] -- Success',
+      action_links: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    // Panel not visible before expand
+    expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
+
+    // Click the expand button
+    fireEvent.click(screen.getByTestId('standalone-action-expand'));
+
+    // Panel is now visible with the interaction's own id as content
+    expect(screen.getByTestId('pose-unit-detail-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('pose-unit-detail-panel')).toHaveTextContent('42');
+  });
+
+  it('clicking expand again collapses the detail panel', () => {
+    const interaction = makeInteraction({
+      id: 42,
+      mode: 'action',
+      content: '[Frost Bolt] -- Success',
+      action_links: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const btn = screen.getByTestId('standalone-action-expand');
+    fireEvent.click(btn);
+    expect(screen.getByTestId('pose-unit-detail-panel')).toBeInTheDocument();
+
+    fireEvent.click(btn);
+    expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
+  });
+
+  it('POSE-mode interactions do NOT render the standalone-action-expand control', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      content: 'A narrative pose.',
+      action_links: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('standalone-action-expand')).toBeNull();
   });
 });
 

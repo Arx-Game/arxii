@@ -10,6 +10,8 @@ from django.contrib import admin
 
 from world.societies.models import (
     CovenantLegendCredit,
+    FameReactionCooldown,
+    FameReactionLine,
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
@@ -19,6 +21,7 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationReputation,
     OrganizationType,
+    RankingBandLabel,
     Society,
     SocietyReputation,
     SpreadingConfig,
@@ -485,3 +488,28 @@ class CovenantLegendCreditAdmin(admin.ModelAdmin):
 
     list_display = ("entry", "covenant", "created_at")
     list_select_related = ("entry", "covenant")
+
+
+@admin.register(RankingBandLabel)
+class RankingBandLabelAdmin(admin.ModelAdmin):
+    """#761 — qualitative band labels (per-society; null = global default set)."""
+
+    list_display = ("__str__", "society", "rank_min", "rank_max", "is_active")
+    list_filter = ("is_active", "society")
+    search_fields = ("label",)
+
+
+@admin.register(FameReactionLine)
+class FameReactionLineAdmin(admin.ModelAdmin):
+    """#881 — per-room, per-society fame reactions to notable arrivals."""
+
+    list_display = ("__str__", "room", "society", "min_fame_tier", "weight", "is_active")
+    list_filter = ("is_active", "min_fame_tier", "society")
+    search_fields = ("bystander_body", "arriver_body")
+
+
+@admin.register(FameReactionCooldown)
+class FameReactionCooldownAdmin(admin.ModelAdmin):
+    """#881 — re-fire throttle rows (operational visibility only)."""
+
+    list_display = ("persona", "room", "available_at")

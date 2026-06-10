@@ -16,13 +16,19 @@ from django.test import TestCase
 from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
+from world.character_sheets.models import CharacterSheet
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
+    ResonanceFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadPullCostFactory,
 )
-from world.magic.models import Technique
+from world.magic.models import CharacterResonance, Resonance, Technique, Thread
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.models import Persona
 from world.traits.factories import CheckSystemSetupFactory
@@ -71,6 +77,45 @@ def make_castable_technique(*, hostile: bool = False) -> Technique:
 def grant_technique(persona: Persona, technique: Technique) -> None:
     """Grant *technique* to *persona*'s CharacterSheet so the knows-check passes."""
     CharacterTechniqueFactory(character=persona.character_sheet, technique=technique)
+
+
+def make_cast_pull_fixture(
+    owner_sheet: CharacterSheet,
+    *,
+    hostile: bool = False,
+    tier: int = 2,
+    resonance_cost: int = 3,
+    starting_balance: int = 10,
+) -> tuple[Technique, CharacterResonance, Resonance, Thread]:
+    """Technique + TECHNIQUE-anchored thread + resonance balance + pull tier cost.
+
+    Returns (technique, character_resonance, resonance, thread). Rows are
+    fresh per call so balance mutations cannot leak via the identity map.
+    The caller binds the technique to its caster (CharacterTechnique row).
+    """
+    technique = make_hostile_castable_technique() if hostile else make_benign_castable_technique()
+    resonance = ResonanceFactory()
+    thread = ThreadFactory(
+        owner=owner_sheet,
+        resonance=resonance,
+        target_kind=TargetKind.TECHNIQUE,
+        target_trait=None,
+        target_technique=technique,
+        level=0,
+    )
+    character_resonance = CharacterResonanceFactory(
+        character_sheet=owner_sheet,
+        resonance=resonance,
+        balance=starting_balance,
+        lifetime_earned=starting_balance,
+    )
+    ThreadPullCostFactory(
+        tier=tier,
+        resonance_cost=resonance_cost,
+        anima_per_thread=1,
+        label="firm",
+    )
+    return technique, character_resonance, resonance, thread
 
 
 # ---------------------------------------------------------------------------

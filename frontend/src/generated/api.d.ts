@@ -10373,6 +10373,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/rankings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Retrieve-only player surface for one diegetic ranking display.
+     *
+     *     Keyed by the display OBJECT's id (RankingDisplay is OneToOne with the
+     *     in-world object the player is looking at). No list endpoint — boards
+     *     are discovered in the world, not browsed (diegetic-discovery, #676).
+     */
+    get: operations['societies_rankings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff-inbox/': {
     parameters: {
       query?: never;
@@ -19270,6 +19293,19 @@ export interface components {
       first_time?: boolean;
       rerolled?: boolean;
     };
+    /** @description A rendered board. ``cloaked`` = the viewer may know it exists, not its names. */
+    RankingBoard: {
+      display_id: number;
+      ranking_type: string;
+      title: string;
+      cloaked: boolean;
+      rows: components['schemas']['RankingRow'][];
+    };
+    /** @description One row: a name and the qualitative phrase the world speaks. No numbers. */
+    RankingRow: {
+      persona_name: string;
+      band_label: string;
+    };
     /**
      * @description * `-2` - Very Poor
      *     * `-1` - Poor
@@ -19863,6 +19899,8 @@ export interface components {
       readonly resolved_difficulty: number | null;
       /** @description The interaction recording the result of this action */
       readonly result_interaction: number | null;
+      /** @description ACTION-mode Interaction for this cast (carries the power ledger). */
+      readonly action_interaction: number | null;
       /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
@@ -36743,6 +36781,34 @@ export interface operations {
     responses: {
       /** @description No response body */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  societies_rankings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RankingBoard'];
+        };
+      };
+      /** @description No ranking display on that object. */
+      404: {
         headers: {
           [name: string]: unknown;
         };
