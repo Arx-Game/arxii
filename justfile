@@ -112,6 +112,15 @@ fmt *args:
 precommit:
     uv run pre-commit run --all-files
 
+# Format-then-commit (#756): pre-applies ruff format to the named files so
+# the pre-commit format hook can't abort the first pass ("files were
+# modified by this hook") and leave HEAD silently unmoved. Hooks still run.
+#   just commit "fix(#N): message" src/world/foo/bar.py src/world/foo/baz.py
+commit msg +files:
+    uv run ruff format {{files}}
+    git add {{files}}
+    git commit -m "{{msg}}"
+
 # --- Django management -------------------------------------------------------
 
 # Pass-through to `arx manage`. Example:

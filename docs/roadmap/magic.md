@@ -1393,14 +1393,15 @@ extension to `calculate_effective_anima_cost`. The diminishing-returns conversio
 The sole v1 consumer is Clash: `commit_to_clash` passes the PC's declared anima
 commitment as the strain amount when it calls `use_technique` in clash-commit mode.
 
-**Regular-cast Strain is UNBLOCKED but remains a deferred follow-up.** The
-standalone-technique-cast UI landed in #772 (`request_technique_cast`, `POST /api/action-requests/cast/`,
-`ActionPanel` cast flow) — the "regular-cast action UI" prerequisite that was blocking Strain
-integration is now satisfied. What remains is a non-clash Strain audit record and
-`StrainConfig` tuning for the standalone-cast path. The `strain_commitment` kwarg already
-threads through `_route_immediate_cast` / `resolve_accepted_cast`; the authored decision
-surface (a "commit extra anima" slider in the cast dialog) and the per-cast audit row are
-the follow-up items.
+**Regular-cast Strain is SHIPPED** (#776 closed 2026-06-09 after a verify-against-code
+audit; this paragraph previously claimed it "remains a deferred follow-up" — stale).
+The standalone-technique-cast UI landed in #772 (`request_technique_cast`,
+`POST /api/action-requests/cast/`, `ActionPanel` cast flow); the per-cast strain
+slider with anima-capped validation lives in `ActionPanel.tsx`; non-clash strain
+accrues via `Interaction.strain_committed` with soulfray accrual (tested in
+`magic/tests/test_non_clash_strain.py`, PR #574); and `StrainConfig` is read in the
+non-clash fatigue path (`fatigue/services.py`). Whether clash-tuned `StrainConfig`
+*values* suit regular casts is an open tuning judgment, not missing code.
 
 ---
 
