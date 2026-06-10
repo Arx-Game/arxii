@@ -308,9 +308,7 @@ class PenetrationModifierSeamTests(TestCase):
             resolver(power=20, ledger=_ledger(20))
         # collect_check_modifiers called for the penetration check type...
         pen_collect_calls = [
-            c
-            for c in mock_collect.call_args_list
-            if c.args[1].name == PENETRATION_CHECK_TYPE_NAME
+            c for c in mock_collect.call_args_list if c.args[1].name == PENETRATION_CHECK_TYPE_NAME
         ]
         self.assertEqual(len(pen_collect_calls), 1)
         self.assertEqual(pen_collect_calls[0].args[0], resolver.participant.character_sheet)
