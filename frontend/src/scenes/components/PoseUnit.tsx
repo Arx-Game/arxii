@@ -133,6 +133,19 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
         <div className="mt-1">
           <ActionResult content={interaction.content} />
         </div>
+        <button
+          type="button"
+          className="mt-1 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid="standalone-action-expand"
+          title="Click to expand action details"
+        >
+          <ChevronDown
+            className={cn('h-3 w-3 shrink-0 transition-transform', expanded && 'rotate-180')}
+          />
+          details
+        </button>
+        {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
         <ReactionsFooter interaction={interaction} sceneId={sceneId} />
       </div>
     );

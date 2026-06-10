@@ -6,6 +6,7 @@ import type {
   ActionRequestResponse,
   Place,
   CastableTechnique,
+  CastPullRequestBody,
   CastRequestBody,
   CastResponse,
 } from './actionTypes';
@@ -118,6 +119,7 @@ export async function castTechnique(
     technique_id: number;
     target_persona?: number | null;
     strain_commitment?: number;
+    pull?: CastPullRequestBody;
   }
 ): Promise<CastResponse> {
   const body: CastRequestBody = {
@@ -130,6 +132,9 @@ export async function castTechnique(
   }
   if (params.strain_commitment !== undefined) {
     body.strain_commitment = params.strain_commitment;
+  }
+  if (params.pull !== undefined) {
+    body.pull = params.pull;
   }
   const res = await apiFetch('/api/action-requests/cast/', {
     method: 'POST',
