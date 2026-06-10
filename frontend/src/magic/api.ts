@@ -21,6 +21,8 @@ import type {
   AlterationResolvePayload,
   AlterationResolveResponse,
   ApplicablePullsRequest,
+  AudereOfferResult,
+  AudereRespondRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -28,6 +30,7 @@ import type {
   ImbueRequest,
   ImbueResponse,
   PaginatedPendingAlterationList,
+  PaginatedPendingAudereOfferList,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
   PaginatedTeachingOfferList,
@@ -96,6 +99,7 @@ const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
 const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
+const AUDERE_URL = '/api/magic/audere';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -748,6 +752,41 @@ export async function resolveAlteration(
     throw new AlterationResolveError(message, fieldErrors);
   }
   return res.json() as Promise<AlterationResolveResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Audere offers, #873
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/audere/pending/
+ *
+ * Account-scoped inbox: pending Audere offers for the caller's characters.
+ */
+export async function getPendingAudereOffers(): Promise<PaginatedPendingAudereOfferList> {
+  const res = await apiFetch(`${AUDERE_URL}/pending/`);
+  if (!res.ok) throw new Error('Failed to load pending Audere offers');
+  return res.json() as Promise<PaginatedPendingAudereOfferList>;
+}
+
+/**
+ * POST /api/magic/audere/respond/
+ *
+ * Accept or decline a pending Audere offer (accept=false declines).
+ * Returns AudereOfferResult with the outcome.
+ */
+export async function respondToAudere(body: AudereRespondRequest): Promise<AudereOfferResult> {
+  const res = await apiFetch(`${AUDERE_URL}/respond/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to respond to Audere offer');
+  }
+
+  return res.json() as Promise<AudereOfferResult>;
 }
 
 // ---------------------------------------------------------------------------
