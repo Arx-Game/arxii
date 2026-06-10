@@ -9427,7 +9427,7 @@ paths:
           description: ''
   /api/magic/pending-alterations/{id}/library/:
     get:
-      operationId: magic_pending_alterations_library_retrieve
+      operationId: magic_pending_alterations_library_list
       description: Browse tier-matched library entries for a pending alteration.
       parameters:
       - in: path
@@ -9444,7 +9444,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PendingAlteration'
+                type: array
+                items:
+                  $ref: '#/components/schemas/LibraryEntry'
           description: ''
   /api/magic/pending-alterations/{id}/resolve/:
     post:
@@ -9463,8 +9465,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PendingAlterationRequest'
-        required: true
+              $ref: '#/components/schemas/AlterationResolutionRequest'
       security:
       - cookieAuth: []
       responses:
@@ -9472,7 +9473,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PendingAlteration'
+                $ref: '#/components/schemas/AlterationResolutionResponse'
           description: ''
   /api/magic/pose-endorsements/:
     post:
@@ -20170,6 +20171,55 @@ components:
       - recorded_at
       - roster_entry
       - source_note
+    AlterationResolutionRequest:
+      type: object
+      description: Write serializer for resolving a PendingAlteration.
+      properties:
+        library_template_id:
+          type: integer
+          nullable: true
+        name:
+          type: string
+          minLength: 3
+          maxLength: 60
+        player_description:
+          type: string
+          minLength: 1
+        observer_description:
+          type: string
+          minLength: 1
+        weakness_damage_type_id:
+          type: integer
+          nullable: true
+        weakness_magnitude:
+          type: integer
+          minimum: 0
+          default: 0
+        resonance_bonus_magnitude:
+          type: integer
+          minimum: 0
+          default: 0
+        social_reactivity_magnitude:
+          type: integer
+          minimum: 0
+          default: 0
+        is_visible_at_rest:
+          type: boolean
+          default: false
+        parent_template_id:
+          type: integer
+          nullable: true
+    AlterationResolutionResponse:
+      type: object
+      description: Wire shape returned by the resolve action.
+      properties:
+        status:
+          type: string
+        event_id:
+          type: integer
+      required:
+      - event_id
+      - status
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -27377,6 +27427,64 @@ components:
       - status
       - summary
       - template_name
+    LibraryEntry:
+      type: object
+      description: Read-only serializer for library browse cards.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        tier:
+          allOf:
+          - $ref: '#/components/schemas/Tier3f5Enum'
+          description: |-
+            Severity tier 1 (cosmetic) through 5 (body partially remade).
+
+            * `1` - Cosmetic Touch
+            * `2` - Marked
+            * `3` - Touched
+            * `4` - Marked Profoundly
+            * `5` - Remade
+          minimum: 0
+          maximum: 32767
+        player_description:
+          type: string
+          readOnly: true
+        observer_description:
+          type: string
+          readOnly: true
+        origin_affinity_name:
+          type: string
+          readOnly: true
+        weakness_magnitude:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Vulnerability magnitude, tier-bounded.
+        resonance_bonus_magnitude:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Bonus when channeling origin_resonance, tier-bounded.
+        social_reactivity_magnitude:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Reaction strength from magic-phobic observers. Calibrated as
+            situational world-friction, not character-concept blocker.
+        is_visible_at_rest:
+          type: boolean
+          description: Shows through normal clothing? Required True at tier 4+.
+      required:
+      - id
+      - name
+      - observer_description
+      - origin_affinity_name
+      - player_description
+      - tier
     MaturityEnum:
       enum:
       - pitch
@@ -33581,11 +33689,18 @@ components:
         id:
           type: integer
           readOnly: true
+        character_id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          description: Return the primary persona name for the pending's sheet.
+          readOnly: true
         status:
           $ref: '#/components/schemas/PendingAlterationStatusEnum'
         tier:
           allOf:
-          - $ref: '#/components/schemas/PendingAlterationTierEnum'
+          - $ref: '#/components/schemas/Tier3f5Enum'
           description: |-
             Required tier for resolved alteration. Upgradeable via same-scene escalation only.
 
@@ -33617,6 +33732,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - character_id
+      - character_name
       - created_at
       - id
       - origin_affinity_name
@@ -33624,31 +33741,6 @@ components:
       - tier
       - tier_caps
       - tier_display
-    PendingAlterationRequest:
-      type: object
-      description: Read-only serializer for pending alterations shown on character
-        sheet.
-      properties:
-        status:
-          $ref: '#/components/schemas/PendingAlterationStatusEnum'
-        tier:
-          allOf:
-          - $ref: '#/components/schemas/PendingAlterationTierEnum'
-          description: |-
-            Required tier for resolved alteration. Upgradeable via same-scene escalation only.
-
-            * `1` - Cosmetic Touch
-            * `2` - Marked
-            * `3` - Touched
-            * `4` - Marked Profoundly
-            * `5` - Remade
-          minimum: 0
-          maximum: 32767
-        triggering_scene:
-          type: integer
-          nullable: true
-      required:
-      - tier
     PendingAlterationStatusEnum:
       enum:
       - open
@@ -33659,20 +33751,6 @@ components:
         * `open` - Open
         * `resolved` - Resolved
         * `staff_cleared` - Staff Cleared
-    PendingAlterationTierEnum:
-      enum:
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      type: integer
-      description: |-
-        * `1` - Cosmetic Touch
-        * `2` - Marked
-        * `3` - Touched
-        * `4` - Marked Profoundly
-        * `5` - Remade
     PendingStageAdvanceOffer:
       type: object
       description: |-
@@ -38675,6 +38753,20 @@ components:
       - unlock_display_name
       - unlock_target_kind
       - unlock_xp_cost
+    Tier3f5Enum:
+      enum:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      type: integer
+      description: |-
+        * `1` - Cosmetic Touch
+        * `2` - Marked
+        * `3` - Touched
+        * `4` - Marked Profoundly
+        * `5` - Remade
     TimePhaseEnum:
       enum:
       - dawn

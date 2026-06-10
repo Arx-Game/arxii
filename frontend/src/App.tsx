@@ -202,6 +202,8 @@ const TechniqueBuilderPage = lazy(() =>
   }))
 );
 
+const AlterationResolutionPage = lazy(() => import('@/magic/pages/AlterationResolutionPage'));
+
 // ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
@@ -762,6 +764,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <TechniqueBuilderPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Mage Scars — pending alteration resolution (#877)                   */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/magic/alterations"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <AlterationResolutionPage />
               </ProtectedRoute>
             </Suspense>
           }

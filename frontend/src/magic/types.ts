@@ -349,6 +349,66 @@ export interface TechniqueCostBreakdown {
 export type PowerLedger = components['schemas']['PowerLedger'];
 export type PowerLedgerEntry = components['schemas']['PowerLedgerEntry'];
 
+// ---------------------------------------------------------------------------
+// Pending alterations (Mage Scars), #877
+// ---------------------------------------------------------------------------
+
+export type PendingAlteration = components['schemas']['PendingAlteration'];
+export type PaginatedPendingAlterationList =
+  components['schemas']['PaginatedPendingAlterationList'];
+export type AlterationLibraryEntry = components['schemas']['LibraryEntry'];
+export type AlterationResolveResponse = components['schemas']['AlterationResolutionResponse'];
+
+/**
+ * The resolve endpoint accepts two mutually exclusive payload shapes. The
+ * generated AlterationResolutionRequest can't express this — its
+ * default-valued magnitude fields are non-optional, which would force the
+ * library pick to carry scratch-path fields. Local union instead; wire
+ * contract: AlterationResolutionSerializer (src/world/magic/serializers.py).
+ */
+export interface AlterationLibraryPickPayload {
+  library_template_id: number;
+}
+
+/**
+ * Scratch-path payload for POST /api/magic/pending-alterations/{id}/resolve/.
+ *
+ * `parent_template_id` (lineage) is deliberately omitted — staff-only concept
+ * with no player-facing flow; the wire schema accepts it but this surface never
+ * sends it.
+ */
+export interface AlterationScratchPayload {
+  name: string;
+  player_description: string;
+  observer_description: string;
+  weakness_damage_type_id: number | null;
+  weakness_magnitude: number;
+  resonance_bonus_magnitude: number;
+  social_reactivity_magnitude: number;
+  is_visible_at_rest: boolean;
+}
+
+export type AlterationResolvePayload = AlterationLibraryPickPayload | AlterationScratchPayload;
+
+/**
+ * tier_caps is a SerializerMethodField, so the generated schema leaves it as
+ * `{ [key: string]: unknown }`. Shape source of truth:
+ * ALTERATION_TIER_CAPS in src/world/magic/constants.py.
+ */
+export interface AlterationTierCaps {
+  social_cap: number;
+  weakness_cap: number;
+  resonance_cap: number;
+  visibility_required: boolean;
+}
+
+export function getTierCaps(pending: PendingAlteration): AlterationTierCaps {
+  return pending.tier_caps as unknown as AlterationTierCaps;
+}
+
+/** Mirrors MIN_ALTERATION_DESCRIPTION_LENGTH in src/world/magic/constants.py. */
+export const MIN_ALTERATION_DESCRIPTION_LENGTH = 40;
+
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {
   name: string;

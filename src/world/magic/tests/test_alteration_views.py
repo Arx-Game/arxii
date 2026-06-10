@@ -128,3 +128,17 @@ class PendingAlterationViewSetTests(APITestCase):
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1  # only tier-matched entry
+
+    def test_list_includes_character_attribution(self):
+        """List rows carry character_id + character_name for multi-character accounts."""
+        PendingAlterationFactory(
+            character=self.sheet,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+        )
+        url = reverse("magic:pending-alteration-list")
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        row = response.data["results"][0]
+        assert row["character_id"] == self.sheet.pk
+        assert row["character_name"] == self.sheet.primary_persona.name

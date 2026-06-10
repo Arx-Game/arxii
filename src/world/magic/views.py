@@ -80,6 +80,7 @@ from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
+    AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     ApplicablePullsRequestSerializer,
     CantripSerializer,
@@ -582,6 +583,7 @@ class PendingAlterationViewSet(
                 character__character__db_account=self.request.user,
             )
             .select_related(
+                "character",
                 "origin_affinity",
                 "origin_resonance",
                 "triggering_scene",
@@ -593,6 +595,10 @@ class PendingAlterationViewSet(
             qs = qs.filter(status=PendingAlterationStatus.OPEN)
         return qs
 
+    @extend_schema(
+        request=AlterationResolutionSerializer,
+        responses={200: AlterationResolutionResponseSerializer},
+    )
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
         """Resolve a pending alteration via author-from-scratch or library path."""
@@ -651,7 +657,8 @@ class PendingAlterationViewSet(
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=True, methods=["get"])
+    @extend_schema(responses={200: LibraryEntrySerializer(many=True)})
+    @action(detail=True, methods=["get"], pagination_class=None)
     def library(self, request, pk=None):
         """Browse tier-matched library entries for a pending alteration."""
         pending = self.get_object()

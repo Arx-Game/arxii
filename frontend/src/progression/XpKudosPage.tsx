@@ -3,7 +3,9 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAccountProgressionQuery, useClaimKudosMutation } from './queries';
+import { usePendingAlterations } from '@/magic/queries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -251,6 +253,41 @@ function ClaimKudosDialog({
   );
 }
 
+/**
+ * Per-character XP gate alert for unresolved Mage Scars.
+ *
+ * The gate is per-character: spend_xp_on_unlock (spends.py) checks the SPENDING
+ * character's CharacterSheet for an OPEN PendingAlteration before allowing any XP
+ * spend. We name the character(s) explicitly so multi-character players aren't
+ * misled that all XP spending is blocked when only one alt is gated.
+ */
+function AlterationGateAlert() {
+  const { data } = usePendingAlterations();
+  const pendings = data?.results ?? [];
+  if (pendings.length === 0) return null;
+  const uniqueNames = [...new Set(pendings.map((p) => p.character_name))];
+  const names = uniqueNames.join(', ');
+  // Singular/plural keyed on distinct characters (one alt can carry several scars).
+  const message =
+    uniqueNames.length === 1
+      ? `${names} carries an unresolved Mage Scar — that character's XP spending is blocked until it is resolved.`
+      : `${names} carry unresolved Mage Scars — their XP spending is blocked until those scars are resolved.`;
+  return (
+    <div
+      data-testid="alteration-gate-alert"
+      role="alert"
+      className="mb-6 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+    >
+      <p>
+        {message}{' '}
+        <Link to="/magic/alterations" className="font-semibold underline underline-offset-2">
+          {uniqueNames.length === 1 ? 'Resolve it' : 'Resolve them'}
+        </Link>
+      </p>
+    </div>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
@@ -301,6 +338,8 @@ export function XpKudosPage() {
   return (
     <div className="container mx-auto py-6">
       <h1 className="mb-6 text-2xl font-bold">XP / Kudos</h1>
+
+      <AlterationGateAlert />
 
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <BalanceCard

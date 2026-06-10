@@ -249,6 +249,45 @@ What was built:
 Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
 the `magical-scars` branch.
 
+**Scope #5 — Player resolution frontend (DONE — branch `feature-877-mage-scar-resolution-frontend-players-ca`):**
+
+What was built:
+
+- **`PendingAlterationBanner`** — site-wide alert bar mounted in `Layout`, polling every 30 s
+  via `usePendingAlterations` (auth-guarded). Names the scarred character and tier when one
+  pending exists, count form for several; links to `/magic/alterations`. `character_id` /
+  `character_name` fields added to `PendingAlterationSerializer` so the frontend can
+  attribute each pending to the owning character.
+- **`AlterationGateAlert`** in `XpKudosPage` — secondary gate notice naming the specific
+  gated character(s) alongside the XP-spend form. Uses the same `usePendingAlterations`
+  hook; rendered only when at least one OPEN pending exists.
+- **`AlterationResolutionPage`** at `/magic/alterations` — lazy `ProtectedRoute` listing
+  every OPEN `PendingAlteration` for the account. Distinguishes empty-state from error.
+  Each card opens `AlterationResolveDialog`.
+- **`AlterationResolveDialog`** — two-tab dialog (Library / Author). Library tab: affinity-
+  ordered cards for every tier-matched `MagicalAlterationTemplate`; pick one to resolve.
+  Author tab: `AlterationAuthorForm` with tier-cap-constrained fields (magnitude selects
+  0..cap, damage type required iff weakness > 0, forced visibility at tiers 4–5, 40-char
+  description counters). Both tabs use `forceMount` for persistence across tab switches.
+  Error banner renders the `non_field_errors` message plus any orphaned-field server errors.
+  `AlterationResolutionResponseSerializer` documents the resolve action's `{status, event_id}`
+  wire shape for the generated schema.
+- **`useAlterationLibrary`** — per-pending library query keyed by `alterationLibrary(id)`;
+  consumes the `GET {id}/library/` endpoint. Returns a bare array (`pagination_class=None`
+  on that action; the schema correctly reflects this via `@extend_schema`).
+- **`useResolveAlteration`** — mutation hook for `POST {id}/resolve/`; accepts
+  `AlterationResolvePayload` union (library pick | scratch author), invalidates
+  `pendingAlterations`.
+- **`useDamageTypes`** — consolidated from an inline query in `TechniqueBuilderPage` into
+  `frontend/src/conditions/queries.ts`; consumed here and by the technique builder.
+- **Test coverage** — `alterationQueries.test.tsx` (8 cases), `AlterationResolveDialog.test.tsx`
+  (10 E2E-ish cases, payload-exact on both resolution paths), `PendingAlterationBanner.test.tsx`
+  (4 cases), `XpKudosPage.alterationGate.test.tsx` (3 cases).
+
+Known gap: `accept_thread_weaving_unlock` spends XP without checking the scar gate
+(`AlterationGateError` is only raised in `spend_xp_on_unlock`). A follow-up issue is being
+filed at PR time.
+
 **Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
 
 **Spec:** `docs/architecture/resonance-threads.md`

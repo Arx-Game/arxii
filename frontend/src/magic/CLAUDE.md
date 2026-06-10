@@ -40,6 +40,24 @@ TypeScript types for the magic module.
 - `PullCommitRequest` — `components['schemas']['ThreadPullCommitRequestRequest']` (generated)
 - `PullCommitResponse` — `components['schemas']['ThreadPullCommitResponse']` (generated)
 
+**Alteration resolution re-exports** (generated schema):
+
+- `PendingAlteration` — `components['schemas']['PendingAlteration']` — open scar waiting for player resolution; carries `character_id` / `character_name` fields for per-character attribution
+- `PaginatedPendingAlterationList` — paginated list wrapper returned by the list endpoint
+- `AlterationResolveResponse` — `components['schemas']['AlterationResolutionResponse']` — `{ status, event_id }`
+- `AlterationLibraryEntry` — `components['schemas']['LibraryEntry']` — staff-curated library entry returned by the `{id}/library/` action (bare array, not paginated)
+
+**Alteration resolution local types** (not inferrable from generated schema):
+
+- `AlterationResolvePayload` — union of `AlterationLibraryPickPayload` (`{ library_template_id: number }`) and `AlterationScratchPayload`. The generated `AlterationResolutionRequest` marks default-valued magnitude fields as required, so it is unusable for library picks; always use this union type.
+- `AlterationScratchPayload` — scratch authoring body: `name`, `player_description`, `observer_description`, `weakness_damage_type_id` (number|null), `weakness_magnitude`, `resonance_bonus_magnitude`, `social_reactivity_magnitude`, `is_visible_at_rest`. `parent_template_id` is deliberately omitted (staff-only lineage concept).
+- `AlterationTierCaps` — `{ social_cap, weakness_cap, resonance_cap, visibility_required }` (source of truth: `ALTERATION_TIER_CAPS` in `src/world/magic/constants.py`)
+- `MIN_ALTERATION_DESCRIPTION_LENGTH` — module-level constant (40)
+
+**Helper:**
+
+- `getTierCaps(pending)` — returns the typed `AlterationTierCaps` for a `PendingAlteration`. `tier_caps` is a `SerializerMethodField` → generated as an untyped dict; always use this helper instead of casting the raw field.
+
 **Local types** (the generated schema leaves these as `content?: never`):
 
 - `SoulTetherDetail` — response shape for `GET /api/magic/soul-tether/{relationship_id}/`
@@ -63,7 +81,20 @@ TypeScript types for the magic module.
 
 ### `api.ts`
 
-REST API client for all soul-tether, thread, character-resonance, and thread-spending endpoints.
+REST API client for all soul-tether, thread, character-resonance, thread-spending, and alteration-resolution endpoints.
+
+**Alteration resolution reads:**
+
+- `getPendingAlterations()` — GET `/api/magic/pending-alterations/` → `PaginatedPendingAlterationList` (server defaults to status=OPEN rows)
+- `getAlterationLibrary(pendingId)` — GET `/api/magic/pending-alterations/{id}/library/` → `AlterationLibraryEntry[]` (bare array — `pagination_class=None` on this action)
+
+**Alteration resolution mutations:**
+
+- `resolveAlteration(pendingId, payload)` — POST `/api/magic/pending-alterations/{id}/resolve/` → `AlterationResolveResponse` (`{ status: 'resolved', event_id }`). `payload` is `AlterationResolvePayload` (not the generated `AlterationResolutionRequest`).
+
+**Error class:**
+
+- `AlterationResolveError` — typed error thrown when the resolve endpoint returns 400. Carries `.fieldErrors` (`Record<string, string[]>`, `detail` excluded) and `.message` (first `non_field_errors` entry, or the `detail` string, or a generic fallback). The backend validator raises everything as `non_field_errors`, so the dialog banner is the dominant error path; per-field keys (e.g. `name`) render under their inputs.
 
 **Reads:**
 
@@ -114,6 +145,8 @@ React Query hooks with a `magicKeys` query key factory.
 **Key factory:**
 
 - `magicKeys.all` → `['magic']`
+- `magicKeys.pendingAlterations()` → `['magic', 'pending-alterations']`
+- `magicKeys.alterationLibrary(id)` → `['magic', 'pending-alterations', 'library', id]`
 - `magicKeys.soulTether()` → `[..., 'soul-tether']`
 - `magicKeys.soulTetherDetail(id)` → `[..., 'detail', id]`
 - `magicKeys.sineatingPending()` → `[..., 'sineating', 'pending']`
@@ -123,6 +156,15 @@ React Query hooks with a `magicKeys` query key factory.
 - `magicKeys.threadHubSummary()` → `['magic', 'thread-hub-summary']`
 - `magicKeys.characterResonanceList()` → `['magic', 'character-resonances', 'list']`
 - `magicKeys.teachingOffers()` → `['magic', 'teaching-offers', 'list']`
+
+**Alteration read hooks:**
+
+- `usePendingAlterations()` — auth-guarded (`enabled: !!account`; no fetch while logged out); polls every 30 s via `refetchInterval`. `throwOnError` is deliberately NOT set — the hook backs the site-wide banner, which must degrade to rendering nothing on fetch errors instead of crashing every page through the error boundary.
+- `useAlterationLibrary(pendingId)` — takes `number | null` (null = dialog closed → disabled); fetches tier-matched `AlterationLibraryEntry[]` for the dialog's Library tab.
+
+**Alteration mutation hooks:**
+
+- `useResolveAlteration()` — calls `POST {id}/resolve/`; invalidates `pendingAlterations()` on success.
 
 **Read hooks:**
 
@@ -167,6 +209,34 @@ Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdva
 `useCommitPull`, `useAcceptTeachingOffer`, and `magicKeys` shape assertions.
 
 The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
+
+### `__tests__/alterationQueries.test.tsx`
+
+8 unit tests covering `usePendingAlterations` (fetch happy path; no fetch while logged out via the auth guard), `useAlterationLibrary` (enabled/disabled by pendingId), `useResolveAlteration` (payload pass-through, cache invalidation), and `magicKeys` shape assertions.
+
+### `components/alterations/AlterationResolveDialog.tsx`
+
+Two-tab dialog (Library / Author) for resolving a single `PendingAlteration`. Library tab renders affinity-ordered `AlterationLibraryEntry` cards from `useAlterationLibrary`; selecting a card and confirming ("Accept this mark") submits `{ library_template_id }` via `useResolveAlteration`. Author tab renders `AlterationAuthorForm`. Both `TabsContent`s use `forceMount` (inactive panel hidden via CSS) so authored prose survives tab switches. On server error, a `role="alert"` banner renders the `AlterationResolveError` message plus any orphaned field errors (keys the author form doesn't render).
+
+### `components/alterations/AlterationAuthorForm.tsx`
+
+Controlled form for the scratch-authoring resolution path (caps arrive via the `caps` prop, derived by the dialog from `getTierCaps(pending)`). Magnitude fields are native `<select>`s offering only `0..cap`. The damage-type `<select>` is always visible but disabled at `weakness_magnitude === 0` and submit-required when > 0. At tiers 4–5 the visibility switch renders checked and disabled (`is_visible_at_rest` forced `true` in the payload). Both description textareas show “n / 40 minimum” counters; `MIN_ALTERATION_DESCRIPTION_LENGTH` gates submit client-side.
+
+### `__tests__/AlterationResolveDialog.test.tsx`
+
+10 E2E-ish tests (real hooks + dialog, mocked `../api` transport). Covers: exact library payload (`{ library_template_id }`), server `non_field_errors` in the banner, empty-library pointer, accept-disabled-until-selection, exact 8-key scratch payload, 40-char description gating, weakness>0-requires-damage-type, magnitude options capped at tier cap, tier-4 forced visibility, and tab-switch prose persistence.
+
+### `components/alterations/PendingAlterationBanner.tsx`
+
+Site-wide alert bar rendered in `Layout` directly below `Header` (all viewport modes, including `/game`). Consumes `usePendingAlterations()` (30 s poll, auth-guarded). Not dismissable — the scar gates XP spending, so it stays until resolved. Singular copy names the character + tier ("Velenosa carries an unresolved Touched Mage Scar. That character's XP spending is blocked…"); 2+ uses a count form. Links to `/magic/alterations`. Renders nothing when clean, loading, errored, or logged out.
+
+### `__tests__/PendingAlterationBanner.test.tsx`
+
+4 tests covering: hidden when the list is empty, visible with character-naming copy + `/magic/alterations` link for one pending, count form for 2+, and no fetch at all when logged out.
+
+### `pages/AlterationResolutionPage.tsx`
+
+Lazy `ProtectedRoute` at `/magic/alterations`. Lists every OPEN `PendingAlteration` for the account. Renders an explicit error state (distinct from the empty-list state) when the query fails. Each row opens `AlterationResolveDialog`. After all alterations are resolved the page shows an empty-state message rather than redirecting.
 
 ### `pages/ThreadHubPage.tsx`
 
@@ -237,6 +307,10 @@ details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respec
 
 Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
 
+### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
+
+3 tests for the `AlterationGateAlert` rendered within `XpKudosPage`: alert is shown when `usePendingAlterations` returns open alterations, names the affected character(s), and is absent when the list is empty.
+
 ### `components/ThreadList.tsx` (legacy)
 
 Early thread list component — renders a flat list of threads filtered by optional `targetKind`.
@@ -270,7 +344,31 @@ for removal once the hub/detail pages are confirmed stable.
 - **Consumers (Phase 3 Tasks 3.2–3.7):** SoulTetherPanel, SineatingInbox,
   SineatingRespondDialog, StageAdvanceInbox, RescueDialog, DissolveDialog
 
+## Shared Hooks Outside This Module
+
+**`useDamageTypes` lives in `frontend/src/conditions/queries.ts`.**
+Consolidated there from an inline query that previously lived in `TechniqueBuilderPage`. Both
+the alteration author form and the technique builder import it from that path. Do not inline
+a new damage-type query here.
+
 ## Common Gotchas
+
+**`tier_caps` is a `SerializerMethodField` — use `getTierCaps()`, not the raw field.**
+The generated schema types `tier_caps` as an untyped dict (`Record<string, unknown>`). Always
+call `getTierCaps(pending)` from `frontend/src/magic/types.ts` to get a properly typed
+`AlterationTierCaps` object.
+
+**The resolve endpoint accepts two mutually-exclusive payload shapes.**
+`AlterationResolvePayload` is a union: `{ library_template_id: number }` for a library pick,
+or `AlterationScratchPayload` for scratch authoring. The generated
+`AlterationResolutionRequest` marks default-valued magnitude fields as required, so it cannot
+express the library-pick shape; do not use it for this endpoint.
+
+**The library endpoint returns a bare array, not a paginated object.**
+`GET /api/magic/pending-alterations/{id}/library/` has `pagination_class=None` on that
+action. `useAlterationLibrary(id).data` is `AlterationLibraryEntry[]`, not a paginated
+wrapper. The `@extend_schema` decorator on the backend makes the generated schema reflect
+this accurately.
 
 **`SoulTetherDetail` is a local type, NOT in the generated schema.**
 The generated `magic_soul_tether_retrieve` operation has `content?: never` because
