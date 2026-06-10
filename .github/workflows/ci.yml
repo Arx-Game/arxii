@@ -217,8 +217,12 @@ jobs:
           pnpm --prefix frontend exec prettier --write src/generated/api.d.ts
       - name: Fail on drift
         run: |
-          if ! git diff --exit-code -- src/schema.json frontend/src/generated/api.d.ts; then
-            echo "::error::Generated API types are stale. Run 'just gen-api-types' and commit src/schema.json + frontend/src/generated/api.d.ts."
+          if ! git diff --quiet -- src/schema.json frontend/src/generated/api.d.ts; then
+            STAT=$(git diff --stat -- src/schema.json frontend/src/generated/api.d.ts | tr '\n' ' ')
+            HEAD_DIFF=$(git diff -U0 -- src/schema.json frontend/src/generated/api.d.ts | head -c 600 | tr '\n' ' ')
+            echo "::error::Generated API types are stale (run 'just gen-api-types' and commit). Drift: ${STAT} | First hunks: ${HEAD_DIFF}"
+            git diff --stat -- src/schema.json frontend/src/generated/api.d.ts
+            git diff -- src/schema.json frontend/src/generated/api.d.ts | head -100
             exit 1
           fi
           echo "Generated API types are current."
