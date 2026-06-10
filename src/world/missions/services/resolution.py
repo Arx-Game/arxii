@@ -26,11 +26,11 @@ wire each of these or this list must explain why it stayed unconsumed):
     :func:`world.missions.services.rewards.emit_terminal_rewards` walks
     only ``route.reward_templates`` today; Phase D also walks the chosen
     candidate's reward_templates when a random candidate fires terminal.
-  * ``MissionNode.flavor_text`` (B6) — :func:`enter_node` writes the
-    snapshot but doesn't surface the text; Phase D emits it on node
-    entry.
-  * ``MissionOptionRoute.outcome_text`` (B6) — Phase D emits it on tier
-    roll (the non-random path).
+  * ``MissionNode.flavor_text`` (B6) — WIRED by #885: surfaced as the
+    beat card's framing via ``services.play.beat_for``.
+  * ``MissionOptionRoute.outcome_text`` (B6) — WIRED by #885: the actor's
+    STORY prose on tier roll via ``services.play._story_text_for``
+    (PLACEHOLDER template fallback when unauthored).
 
 Each of these is silently invisible to players until Phase D wires it.
 Studio authors may write content into these fields and see no effect
@@ -61,12 +61,13 @@ from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
+from evennia_extensions.models import RoomProfile
 from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
 from world.checks.services import perform_check
 from world.checks.types import CheckResult, PendingResolution, ResolutionContext
-from world.missions.constants import MissionStatus, OptionKind, OptionSource
+from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
     MissionDeedRecord,
     MissionNodeSnapshot,
@@ -110,7 +111,7 @@ _ERR_NO_OUTCOME_TIERS = "Cannot synthesize an auto-success result: no CheckOutco
 
 
 def build_option_list(
-    instance: MissionInstance,  # noqa: ARG001
+    instance: MissionInstance,
     node: MissionNode,
     viewer: MissionParticipant,
 ) -> list[PresentedOption]:
@@ -118,6 +119,11 @@ def build_option_list(
 
     For each :class:`MissionOption` on ``node``:
 
+      * Location conjunct first (#885) — the option must be live where the
+        viewer's character currently stands (per-option ``locations``
+        override → node ``location_mode`` default → ANCHOR/ANYWHERE). One
+        eligibility rule: location ∧ visibility predicate; an option that
+        fails either simply isn't surfaced (never greyed out).
       * CHALLENGE source — fans out via
         :func:`~world.missions.services.challenge_options.challenge_options_for_character`
         over the option's attached challenge's qualifying approaches.
@@ -128,13 +134,63 @@ def build_option_list(
     deterministic: option ``order``, then approach pk for fanned-out
     CHALLENGE entries.
 
-    Phase 3 is single-participant; ``instance`` is accepted for signature
-    stability (Phase 4 unions across ``instance.participants``).
+    Phase 3 is single-participant; Phase 4's group path
+    (``build_group_option_list``) does not yet apply the location conjunct
+    — group/invite play is the #885 follow-up.
     """
     # select_related("challenge") so the CHALLENGE-branch FK walk in
     # present_options_for_character doesn't fire one query per option.
-    options = node.options.select_related("challenge").order_by("order", "pk")
-    return present_options_for_character(viewer.character, options)
+    # prefetch_related("locations") so the location conjunct doesn't fire
+    # one M2M query per option.
+    options = (
+        node.options.select_related("challenge")
+        .prefetch_related(
+            "locations"  # noqa: PREFETCH_STRING
+        )
+        .order_by("order", "pk")
+    )
+    here = _current_room_profile_id(viewer.character)
+    local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
+    return present_options_for_character(viewer.character, local)
+
+
+def _current_room_profile_id(character: ObjectDB) -> int | None:
+    """The pk of the RoomProfile where ``character`` stands, or None."""
+    location = character.location
+    if location is None:
+        return None
+    try:
+        return location.room_profile.pk
+    except RoomProfile.DoesNotExist:
+        return None
+
+
+def option_is_locally_live(
+    option: MissionOption,
+    node: MissionNode,
+    instance: MissionInstance,
+    current_room_profile_id: int | None,
+) -> bool:
+    """The location conjunct of option eligibility (#885).
+
+    Resolution order: the option's own ``locations`` set (non-empty =
+    override — live only in those rooms), else the node's
+    ``location_mode``: ANYWHERE → always live; ANCHOR → live only in the
+    instance's grant-time ``anchor_room`` (a placeless grant never fires
+    ANCHOR options); ROOMS → live in the node's authored ``locations``.
+    """
+    override_ids = [room.pk for room in option.locations.all()]
+    if override_ids:
+        return current_room_profile_id in override_ids
+    if node.location_mode == NodeLocationMode.ANYWHERE:
+        return True
+    if node.location_mode == NodeLocationMode.ANCHOR:
+        return (
+            instance.anchor_room_id is not None
+            and current_room_profile_id == instance.anchor_room_id
+        )
+    # NodeLocationMode.ROOMS
+    return any(room.pk == current_room_profile_id for room in node.locations.all())
 
 
 def present_options_for_character(

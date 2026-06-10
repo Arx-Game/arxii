@@ -21,10 +21,18 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
+from world.narrative.constants import NarrativeCategory
+from world.narrative.models import (
+    AmbientStirLine,
+    Gemit,
+    NarrativeMessage,
+    NarrativeMessageDelivery,
+    UserStoryMute,
+)
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.stories.models import BeatCompletion, EpisodeResolution, Era, Story
@@ -235,3 +243,40 @@ def _format_message_for_display(message: NarrativeMessage) -> str:
     only through the staff/GM admin and API surfaces.
     """
     return f"|R[NARRATIVE]|n {message.body}"
+
+
+def emit_ambient_room_stir(room: ObjectDB, *, exclude: ObjectDB | None = None) -> None:
+    """Send a source-ambiguous ambient line to a room's bystanders (#885).
+
+    The audience half of the actor/audience split: the actor gets a clear
+    STORY result; everyone else in the room gets a generic "something IC
+    stirred here" line drawn from the staff-authored ``AmbientStirLine``
+    pool. The pool is shared by design across emitting systems (missions
+    today; GM events / room triggers / magic tomorrow) so observers cannot
+    tell what stirred.
+
+    Deliberately best-effort and quiet: an empty pool, an empty room, or a
+    room of sheet-less objects emits nothing. ``exclude`` is the acting
+    character (they already got the clear version).
+    """
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+
+    lines = list(AmbientStirLine.objects.filter(is_active=True))
+    if not lines:
+        return
+    recipients = []
+    for obj in room.contents:
+        if exclude is not None and obj.pk == exclude.pk:
+            continue
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is not None:
+            recipients.append(sheet)
+    if not recipients:
+        return
+    line = select_weighted(lines)
+    send_narrative_message(
+        recipients=recipients,
+        body=line.body,
+        category=NarrativeCategory.HAPPENSTANCE,
+        ooc_note="Ambient room stir (source withheld by design).",
+    )

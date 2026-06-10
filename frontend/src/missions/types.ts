@@ -26,6 +26,12 @@ export type MissionGiver = components['schemas']['MissionGiver'];
 export type MissionGiverRequest = components['schemas']['MissionGiverRequest'];
 
 export type MissionVisibility = components['schemas']['MissionVisibilityEnum'];
+
+// #885 player journal/beat surface.
+export type JournalEntry = components['schemas']['JournalEntry'];
+export type BeatView = components['schemas']['BeatView'];
+export type BeatOption = components['schemas']['BeatOption'];
+export type ResolvedBeat = components['schemas']['ResolvedBeat'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
 
 /** Filter knobs for the browser page. Subset of D1's MissionTemplateFilterSet. */

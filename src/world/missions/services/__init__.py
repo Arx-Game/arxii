@@ -41,6 +41,7 @@ from world.missions.services.multiplayer import (
     group_resolve_node,
     select_group_choice,
 )
+from world.missions.services.play import beat_for, resolve_beat_option
 from world.missions.services.resolution import (
     build_option_list,
     enter_node,
@@ -57,6 +58,7 @@ __all__ = [
     "MissionRewardRoutingError",
     "apply_deed_rewards",
     "apply_mission_reward_batch",
+    "beat_for",
     "build_group_option_list",
     "build_option_list",
     "contract_holder",
@@ -65,6 +67,7 @@ __all__ = [
     "group_resolve_node",
     "journal_for",
     "on_mission_complete_for_beat",
+    "resolve_beat_option",
     "resolve_option",
     "select_group_choice",
     "share_mission",

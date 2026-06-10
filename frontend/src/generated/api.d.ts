@@ -7682,6 +7682,93 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #885 — the player's mission journal + beat play loop.
+     *
+     *     list: every mission the puppeted character participates in (compass +
+     *     deeds + bookends). beat: the current node as the character sees it —
+     *     LIVE options only (location ∧ visibility; visibility=eligibility, no
+     *     greyed-out entries). resolve: take an option; the engine rolls and
+     *     routes; the actor gets clear STORY prose, the room gets a
+     *     source-ambiguous ambient stir.
+     *
+     *     Participant gating: a non-participant probing instance ids gets 404
+     *     (never 403 — existence must not leak).
+     */
+    get: operations['missions_journal_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/{id}/beat/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #885 — the player's mission journal + beat play loop.
+     *
+     *     list: every mission the puppeted character participates in (compass +
+     *     deeds + bookends). beat: the current node as the character sees it —
+     *     LIVE options only (location ∧ visibility; visibility=eligibility, no
+     *     greyed-out entries). resolve: take an option; the engine rolls and
+     *     routes; the actor gets clear STORY prose, the room gets a
+     *     source-ambiguous ambient stir.
+     *
+     *     Participant gating: a non-participant probing instance ids gets 404
+     *     (never 403 — existence must not leak).
+     */
+    get: operations['missions_journal_beat_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #885 — the player's mission journal + beat play loop.
+     *
+     *     list: every mission the puppeted character participates in (compass +
+     *     deeds + bookends). beat: the current node as the character sees it —
+     *     LIVE options only (location ∧ visibility; visibility=eligibility, no
+     *     greyed-out entries). resolve: take an option; the engine rolls and
+     *     routes; the actor gets clear STORY prose, the room gets a
+     *     source-ambiguous ambient stir.
+     *
+     *     Participant gating: a non-participant probing instance ids gets 404
+     *     (never 403 — existence must not leak).
+     */
+    post: operations['missions_journal_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/nodes/': {
     parameters: {
       query?: never;
@@ -11821,6 +11908,15 @@ export interface components {
      * @enum {string}
      */
     BeatKindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
+    /** @description Read-only mirror of :class:`world.missions.types.BeatOption`. */
+    BeatOption: {
+      option_id: number;
+      approach_id: number | null;
+      label: string;
+      kind: string;
+      check_type_name: string | null;
+      base_risk: number;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
       episode: number;
@@ -11888,6 +11984,19 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
+    };
+    /** @description POST body for the #885 resolve endpoint. */
+    BeatResolveRequestRequest: {
+      option_id: number;
+      approach_id?: number | null;
+    };
+    /** @description Read-only mirror of :class:`world.missions.types.BeatView`. */
+    BeatView: {
+      instance_id: number;
+      template_name: string;
+      node_key: string;
+      flavor_text: string;
+      options: components['schemas']['BeatOption'][];
     };
     /**
      * @description * `hinted` - Hinted
@@ -14874,6 +14983,28 @@ export interface components {
      * @enum {string}
      */
     JointCombineEnum: 'any' | 'all' | 'count';
+    /** @description Read-only mirror of :class:`world.missions.types.JournalDeed`. */
+    JournalDeed: {
+      node_key: string;
+      option_id: number;
+      outcome_name: string | null;
+      /** Format: date-time */
+      applied_at: string;
+    };
+    /** @description Read-only mirror of :class:`world.missions.types.JournalEntry`. */
+    JournalEntry: {
+      instance_id: number;
+      template_name: string;
+      status: string;
+      current_node_key: string | null;
+      is_contract_holder: boolean;
+      deeds: components['schemas']['JournalDeed'][];
+      summary: string;
+      epilogue: string;
+      current_node_flavor: string;
+      compass_rooms: string[];
+      compass_anywhere: boolean;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -16548,6 +16679,14 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ItemTemplateList'][];
+    };
+    PaginatedJournalEntryList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['JournalEntry'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -19281,6 +19420,15 @@ export interface components {
      * @enum {string}
      */
     ResolutionTypeEnum: 'destroy' | 'personal' | 'temporary';
+    /** @description Read-only mirror of :class:`world.missions.types.ResolvedBeat`. */
+    ResolvedBeat: {
+      instance_id: number;
+      outcome_name: string | null;
+      story_text: string;
+      is_terminal: boolean;
+      readonly next_beat: components['schemas']['BeatView'] | null;
+      epilogue: string;
+    };
     /** @description Wire shape for a single ResolvedPullEffect row. */
     ResolvedPullEffect: {
       kind: string;
@@ -31618,6 +31766,92 @@ export interface operations {
     responses: {
       /** @description No response body */
       204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedJournalEntryList'][];
+        };
+      };
+    };
+  };
+  missions_journal_beat_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BeatView'];
+        };
+      };
+      /** @description Not a participant / run concluded. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatResolveRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ResolvedBeat'];
+        };
+      };
+      /** @description Option not live here / run not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
         headers: {
           [name: string]: unknown;
         };

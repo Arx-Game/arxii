@@ -5,6 +5,7 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
+import { StoryTray } from '@/missions/components/StoryTray';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Toaster } from '@/components/ui/sonner';
@@ -78,6 +79,7 @@ export function GamePage() {
                 sceneData={sceneData}
               />
             }
+            storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
             eventsPanel={<EventsSidebarPanel />}
           />
         }

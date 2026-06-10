@@ -29,6 +29,7 @@ from django.utils import timezone
 from world.missions.constants import MissionStatus
 from world.missions.models import MissionInstance, MissionParticipant
 from world.missions.services.resolution import enter_node
+from world.missions.services.run import anchor_room_for
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import EffectResult
 
@@ -73,6 +74,9 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         template=template,
         source_offer=offer,
         accepted_as_persona=persona,
+        # #885: the NPC interaction happens where the character stands —
+        # that room is the run's anchor for ANCHOR-mode nodes.
+        anchor_room=anchor_room_for(character),
     )
     MissionParticipant.objects.create(
         instance=instance,

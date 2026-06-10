@@ -1,10 +1,12 @@
 import { type ReactNode, useCallback, useState } from 'react';
-import { BookOpen, Calendar, MapPin } from 'lucide-react';
+import { BookOpen, Calendar, MapPin, Scroll } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface SidebarTabPanelProps {
   roomPanel: ReactNode;
   eventsPanel: ReactNode;
+  /** #885 story tray — the player's active missions, live where they stand. */
+  storiesPanel?: ReactNode;
   codexPanel?: ReactNode;
   /**
    * Label for the room tab. Defaults to ``"Room"`` but the parent can
@@ -19,6 +21,7 @@ interface SidebarTabPanelProps {
 export function SidebarTabPanel({
   roomPanel,
   eventsPanel,
+  storiesPanel,
   codexPanel,
   roomTabLabel,
 }: SidebarTabPanelProps) {
@@ -39,10 +42,14 @@ export function SidebarTabPanel({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-3">
+      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-4">
         <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="inline-block max-w-[8rem] truncate">{label}</span>
+        </TabsTrigger>
+        <TabsTrigger value="stories" className="gap-1 text-xs">
+          <Scroll className="h-3 w-3" />
+          Stories
         </TabsTrigger>
         <TabsTrigger value="events" className="gap-1 text-xs">
           <Calendar className="h-3 w-3" />
@@ -55,6 +62,13 @@ export function SidebarTabPanel({
       </TabsList>
       <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
         {roomPanel}
+      </TabsContent>
+      <TabsContent value="stories" className="mt-0 flex-1 overflow-y-auto">
+        {activatedTabs.has('stories')
+          ? (storiesPanel ?? (
+              <p className="p-3 text-sm text-muted-foreground">No stories to show.</p>
+            ))
+          : null}
       </TabsContent>
       <TabsContent value="events" className="mt-0 flex-1 overflow-hidden">
         {activatedTabs.has('events') ? eventsPanel : null}

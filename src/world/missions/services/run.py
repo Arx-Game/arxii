@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from evennia_extensions.models import RoomProfile
 from world.missions.models import (
     MissionInstance,
     MissionNode,
@@ -39,6 +40,24 @@ def _entry_node(template: MissionTemplate) -> MissionNode:
     return MissionNode.objects.get(template=template, is_entry=True)
 
 
+def anchor_room_for(character: ObjectDB) -> RoomProfile | None:
+    """The grant-time anchor: the RoomProfile of the character's location (#885).
+
+    Uniform across all three grant paths — the trigger grant happens while
+    standing in the trigger room, the NPC offer in the NPC's room, the
+    staff assign wherever the character is. ``None`` (no location, or a
+    location with no profile — non-room containers) means a placeless
+    grant: ANCHOR-mode options simply never fire for that run.
+    """
+    location = character.location
+    if location is None:
+        return None
+    try:
+        return location.room_profile
+    except RoomProfile.DoesNotExist:
+        return None
+
+
 @transaction.atomic
 def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
     """Staff-power: drop a mission on a character without a giver context.
@@ -50,7 +69,10 @@ def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> Miss
     Wrapped in ``@transaction.atomic`` so a failure in ``enter_node`` rolls
     back the half-created MissionInstance + MissionParticipant.
     """
-    instance = MissionInstance.objects.create(template=template)
+    instance = MissionInstance.objects.create(
+        template=template,
+        anchor_room=anchor_room_for(character),
+    )
     MissionParticipant.objects.create(
         instance=instance,
         character=character,
