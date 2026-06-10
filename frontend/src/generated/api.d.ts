@@ -9339,6 +9339,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/reaction-windows/{id}/react/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Action-only viewset: POST /reaction-windows/{pk}/react/.
+     *
+     *     Reads ride the interaction feed (windows serialize inline on their
+     *     event); all eligibility/validation lives in ``react_to_window``.
+     */
+    post: operations['reaction_windows_react_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/register/availability/': {
     parameters: {
       query?: never;
@@ -14792,6 +14814,15 @@ export interface components {
         count: number;
         reacted: boolean;
       }[];
+      /**
+       * @description Reaction windows on this event (#904): choices, reactions, my_reaction.
+       *
+       *     ``my_reaction`` is per-viewer and flows through serializer context
+       *     (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+       */
+      readonly reaction_windows: {
+        [key: string]: unknown;
+      }[];
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
@@ -14850,6 +14881,15 @@ export interface components {
         emoji: string;
         count: number;
         reacted: boolean;
+      }[];
+      /**
+       * @description Reaction windows on this event (#904): choices, reactions, my_reaction.
+       *
+       *     ``my_reaction`` is per-viewer and flows through serializer context
+       *     (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+       */
+      readonly reaction_windows: {
+        [key: string]: unknown;
       }[];
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
@@ -21556,6 +21596,18 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    WindowReactInput: {
+      /** @description PK of the Persona reacting (must belong to the requester). */
+      persona_id: number;
+      /** @description Slug from the window's choices payload. */
+      choice: string;
+    };
+    WindowReactInputRequest: {
+      /** @description PK of the Persona reacting (must belong to the requester). */
+      persona_id: number;
+      /** @description Slug from the window's choices payload. */
+      choice: string;
+    };
     /** @description One polish category's value + derived tier label for a building. */
     _CategoryPolish: {
       category_id: number;
@@ -35299,6 +35351,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WeeklyVote'];
+        };
+      };
+    };
+  };
+  reaction_windows_react_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this reaction window. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WindowReactInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WindowReactInput'];
         };
       };
     };
