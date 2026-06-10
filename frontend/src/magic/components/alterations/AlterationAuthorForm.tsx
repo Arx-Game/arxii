@@ -17,10 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useDamageTypes } from '@/conditions/queries';
 import { MIN_ALTERATION_DESCRIPTION_LENGTH } from '../../types';
-import type { AlterationScratchPayload, AlterationTierCaps, PendingAlteration } from '../../types';
+import type { AlterationScratchPayload, AlterationTierCaps } from '../../types';
 
 export interface AlterationAuthorFormProps {
-  pending: PendingAlteration;
   caps: AlterationTierCaps;
   fieldErrors: Record<string, string[]>;
   isPending: boolean;
@@ -32,8 +31,51 @@ function capRange(cap: number): number[] {
   return Array.from({ length: cap + 1 }, (_, i) => i);
 }
 
+const SELECT_CLASS =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring';
+
+const SELECT_CLASS_DISABLED =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+
+interface MagnitudeSelectProps {
+  id: string;
+  label: string;
+  cap: number;
+  value: number;
+  onChange: (val: number) => void;
+  disabled?: boolean;
+}
+
+function MagnitudeSelect({
+  id,
+  label,
+  cap,
+  value,
+  onChange,
+  disabled = false,
+}: MagnitudeSelectProps) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={disabled ? SELECT_CLASS_DISABLED : SELECT_CLASS}
+      >
+        {capRange(cap).map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-muted-foreground">max {cap} for this tier</p>
+    </div>
+  );
+}
+
 export function AlterationAuthorForm({
-  pending: _pending,
   caps,
   fieldErrors,
   isPending,
@@ -49,6 +91,9 @@ export function AlterationAuthorForm({
   const [visibleAtRest, setVisibleAtRest] = useState(caps.visibility_required);
 
   const { data: damageTypes = [] } = useDamageTypes();
+
+  // Derive effective visibility once — caps.visibility_required forces it on
+  const effectiveVisibleAtRest = caps.visibility_required || visibleAtRest;
 
   // Validation
   const trimmedName = name.trim();
@@ -70,7 +115,7 @@ export function AlterationAuthorForm({
       weakness_magnitude: weaknessMagnitude,
       resonance_bonus_magnitude: resonanceBonus,
       social_reactivity_magnitude: socialReactivity,
-      is_visible_at_rest: caps.visibility_required ? true : visibleAtRest,
+      is_visible_at_rest: effectiveVisibleAtRest,
     });
   }
 
@@ -87,7 +132,7 @@ export function AlterationAuthorForm({
           maxLength={60}
         />
         {fieldErrors.name?.map((err) => (
-          <p key={err} className="text-xs text-destructive">
+          <p key={err} role="alert" className="text-xs text-destructive">
             {err}
           </p>
         ))}
@@ -107,7 +152,7 @@ export function AlterationAuthorForm({
           {playerDescription.length} / {MIN_ALTERATION_DESCRIPTION_LENGTH} minimum
         </p>
         {fieldErrors.player_description?.map((err) => (
-          <p key={err} className="text-xs text-destructive">
+          <p key={err} role="alert" className="text-xs text-destructive">
             {err}
           </p>
         ))}
@@ -127,33 +172,23 @@ export function AlterationAuthorForm({
           {observerDescription.length} / {MIN_ALTERATION_DESCRIPTION_LENGTH} minimum
         </p>
         {fieldErrors.observer_description?.map((err) => (
-          <p key={err} className="text-xs text-destructive">
+          <p key={err} role="alert" className="text-xs text-destructive">
             {err}
           </p>
         ))}
       </div>
 
       {/* Weakness magnitude */}
-      <div className="space-y-1">
-        <Label htmlFor="alteration-weakness-mag">Weakness magnitude</Label>
-        <select
-          id="alteration-weakness-mag"
-          value={weaknessMagnitude}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            setWeaknessMagnitude(val);
-            if (val === 0) setWeaknessDamageTypeId(null);
-          }}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {capRange(caps.weakness_cap).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">max {caps.weakness_cap} for this tier</p>
-      </div>
+      <MagnitudeSelect
+        id="alteration-weakness-mag"
+        label="Weakness magnitude"
+        cap={caps.weakness_cap}
+        value={weaknessMagnitude}
+        onChange={(val) => {
+          setWeaknessMagnitude(val);
+          if (val === 0) setWeaknessDamageTypeId(null);
+        }}
+      />
 
       {/* Weakness damage type — only enabled when weakness > 0 */}
       <div className="space-y-1">
@@ -166,7 +201,7 @@ export function AlterationAuthorForm({
             const val = e.target.value;
             setWeaknessDamageTypeId(val === '' ? null : Number(val));
           }}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className={SELECT_CLASS_DISABLED}
         >
           <option value="">— select a type —</option>
           {damageTypes.map((dt) => (
@@ -178,47 +213,29 @@ export function AlterationAuthorForm({
       </div>
 
       {/* Resonance bonus */}
-      <div className="space-y-1">
-        <Label htmlFor="alteration-resonance-mag">Resonance bonus</Label>
-        <select
-          id="alteration-resonance-mag"
-          value={resonanceBonus}
-          onChange={(e) => setResonanceBonus(Number(e.target.value))}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {capRange(caps.resonance_cap).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">max {caps.resonance_cap} for this tier</p>
-      </div>
+      <MagnitudeSelect
+        id="alteration-resonance-mag"
+        label="Resonance bonus"
+        cap={caps.resonance_cap}
+        value={resonanceBonus}
+        onChange={setResonanceBonus}
+      />
 
       {/* Social reactivity */}
-      <div className="space-y-1">
-        <Label htmlFor="alteration-social-mag">Social reactivity</Label>
-        <select
-          id="alteration-social-mag"
-          value={socialReactivity}
-          onChange={(e) => setSocialReactivity(Number(e.target.value))}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {capRange(caps.social_cap).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">max {caps.social_cap} for this tier</p>
-      </div>
+      <MagnitudeSelect
+        id="alteration-social-mag"
+        label="Social reactivity"
+        cap={caps.social_cap}
+        value={socialReactivity}
+        onChange={setSocialReactivity}
+      />
 
       {/* Visible at rest */}
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <Switch
             id="alteration-visible-at-rest"
-            checked={caps.visibility_required ? true : visibleAtRest}
+            checked={effectiveVisibleAtRest}
             disabled={caps.visibility_required}
             onCheckedChange={caps.visibility_required ? undefined : setVisibleAtRest}
           />

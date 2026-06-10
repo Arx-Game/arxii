@@ -34,6 +34,22 @@ export interface AlterationResolveDialogProps {
 
 const RESOLVED_TOAST = 'The mark settles into your flesh. It is part of you now.';
 
+/** Field keys that have dedicated per-field rendering in the form. */
+const FORM_FIELD_KEYS = new Set(['name', 'player_description', 'observer_description']);
+
+/**
+ * Returns messages for fieldErrors keys that are NOT rendered per-field
+ * and NOT the generic non_field_errors key (those already appear in error.message).
+ */
+function orphanedErrorLines(fieldErrors: Record<string, string[]>): string[] {
+  const lines: string[] = [];
+  for (const [key, msgs] of Object.entries(fieldErrors)) {
+    if (key === 'non_field_errors' || FORM_FIELD_KEYS.has(key)) continue;
+    lines.push(...msgs);
+  }
+  return lines;
+}
+
 export function AlterationResolveDialog({
   pending,
   open,
@@ -68,8 +84,10 @@ export function AlterationResolveDialog({
   }
 
   const error = resolveMutation.error;
-  const bannerMessage = resolveMutation.isError && error instanceof Error ? error.message : null;
   const fieldErrors = error instanceof AlterationResolveError ? error.fieldErrors : {};
+  const orphaned = orphanedErrorLines(fieldErrors);
+  const bannerMessage = resolveMutation.isError && error instanceof Error ? error.message : null;
+  const showBanner = bannerMessage !== null || orphaned.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -83,9 +101,15 @@ export function AlterationResolveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {bannerMessage && (
-          <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            <p>{bannerMessage}</p>
+        {showBanner && (
+          <div
+            role="alert"
+            className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {bannerMessage && <p>{bannerMessage}</p>}
+            {orphaned.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
           </div>
         )}
 
@@ -95,7 +119,13 @@ export function AlterationResolveDialog({
             <TabsTrigger value="author">Author your own</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="library" className="space-y-3">
+          {/* forceMount keeps both panels in the DOM so prose typed in "Author your own"
+              survives a tab switch. The inactive panel is visually hidden via CSS. */}
+          <TabsContent
+            value="library"
+            forceMount
+            className="space-y-3 data-[state=inactive]:hidden"
+          >
             {libraryLoading && <p className="text-sm text-muted-foreground">Searching…</p>}
             {!libraryLoading && (library ?? []).length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -121,9 +151,8 @@ export function AlterationResolveDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="author">
+          <TabsContent value="author" forceMount className="data-[state=inactive]:hidden">
             <AlterationAuthorForm
-              pending={pending}
               caps={caps}
               fieldErrors={fieldErrors}
               isPending={resolveMutation.isPending}

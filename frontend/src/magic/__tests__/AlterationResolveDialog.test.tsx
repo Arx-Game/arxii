@@ -3,7 +3,7 @@
  * mocked api transport. Asserts the exact payload shapes for both paths.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
@@ -162,11 +162,15 @@ describe('AlterationResolveDialog — library path', () => {
     // Library entry appears after the query resolves
     await screen.findByText('Veins of Night');
 
+    // The library tab is active; scope queries to its panel to avoid collision
+    // with the forceMount'd author tab (both panels are in the DOM).
+    const libraryPanel = screen.getByRole('tabpanel', { name: /choose from the library/i });
+
     // Click the entry card to select it
-    await user.click(screen.getByText('Veins of Night'));
+    await user.click(within(libraryPanel).getByText('Veins of Night'));
 
     // Accept button should now be enabled; click it
-    const acceptBtn = screen.getByRole('button', { name: /accept this mark/i });
+    const acceptBtn = within(libraryPanel).getByRole('button', { name: /accept this mark/i });
     await user.click(acceptBtn);
 
     await waitFor(() => {
@@ -188,8 +192,9 @@ describe('AlterationResolveDialog — library path', () => {
     renderDialog();
 
     await screen.findByText('Veins of Night');
-    await user.click(screen.getByText('Veins of Night'));
-    await user.click(screen.getByRole('button', { name: /accept this mark/i }));
+    const libraryPanel = screen.getByRole('tabpanel', { name: /choose from the library/i });
+    await user.click(within(libraryPanel).getByText('Veins of Night'));
+    await user.click(within(libraryPanel).getByRole('button', { name: /accept this mark/i }));
 
     await screen.findByText('Character already has this condition active.');
   });
@@ -209,7 +214,8 @@ describe('AlterationResolveDialog — library path', () => {
 
     await screen.findByText('Veins of Night');
 
-    const acceptBtn = screen.getByRole('button', { name: /accept this mark/i });
+    const libraryPanel = screen.getByRole('tabpanel', { name: /choose from the library/i });
+    const acceptBtn = within(libraryPanel).getByRole('button', { name: /accept this mark/i });
     expect(acceptBtn).toBeDisabled();
   });
 });
@@ -243,30 +249,32 @@ describe('AlterationResolveDialog — author path', () => {
     renderDialog();
     await openAuthorTab(user);
 
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
+
     // Wait for damage types to load
-    await screen.findByLabelText(/weakness damage type/i);
+    await within(authorPanel).findByLabelText(/weakness damage type/i);
 
     // Fill in name
-    const nameInput = screen.getByLabelText(/^name$/i);
+    const nameInput = within(authorPanel).getByLabelText(/^name$/i);
     await user.clear(nameInput);
     await user.type(nameInput, 'Voice of Many');
 
     // Fill in player description (must be ≥40 chars)
-    const playerDesc = screen.getByLabelText(/how it feels to you/i);
+    const playerDesc = within(authorPanel).getByLabelText(/how it feels to you/i);
     const playerText =
       'The voices of the abyss whisper through your mind constantly, shaping your thoughts.';
     await user.clear(playerDesc);
     await user.type(playerDesc, playerText);
 
     // Fill in observer description (must be ≥40 chars)
-    const observerDesc = screen.getByLabelText(/what others see/i);
+    const observerDesc = within(authorPanel).getByLabelText(/what others see/i);
     const observerText =
       'Their eyes occasionally flicker with dark light when they speak with authority.';
     await user.clear(observerDesc);
     await user.type(observerDesc, observerText);
 
     // Submit
-    const submitBtn = screen.getByRole('button', { name: /bind this mark/i });
+    const submitBtn = within(authorPanel).getByRole('button', { name: /bind this mark/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -289,18 +297,20 @@ describe('AlterationResolveDialog — author path', () => {
     renderDialog();
     await openAuthorTab(user);
 
-    // Wait for form to render
-    await screen.findByLabelText(/^name$/i);
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
 
-    const nameInput = screen.getByLabelText(/^name$/i);
+    // Wait for form to render
+    await within(authorPanel).findByLabelText(/^name$/i);
+
+    const nameInput = within(authorPanel).getByLabelText(/^name$/i);
     await user.type(nameInput, 'Voice of Many');
 
     // Short player description — too short
-    const playerDesc = screen.getByLabelText(/how it feels to you/i);
+    const playerDesc = within(authorPanel).getByLabelText(/how it feels to you/i);
     await user.type(playerDesc, 'Too short.');
 
     // Submit should be disabled
-    const submitBtn = screen.getByRole('button', { name: /bind this mark/i });
+    const submitBtn = within(authorPanel).getByRole('button', { name: /bind this mark/i });
     expect(submitBtn).toBeDisabled();
   });
 
@@ -310,35 +320,37 @@ describe('AlterationResolveDialog — author path', () => {
     renderDialog();
     await openAuthorTab(user);
 
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
+
     // Wait for damage types to load
-    await screen.findByLabelText(/weakness damage type/i);
+    await within(authorPanel).findByLabelText(/weakness damage type/i);
 
     // Fill fields with valid content
-    const nameInput = screen.getByLabelText(/^name$/i);
+    const nameInput = within(authorPanel).getByLabelText(/^name$/i);
     await user.type(nameInput, 'Voice of Many');
 
-    const playerDesc = screen.getByLabelText(/how it feels to you/i);
+    const playerDesc = within(authorPanel).getByLabelText(/how it feels to you/i);
     await user.type(
       playerDesc,
       'The voices of the abyss whisper through your mind constantly, shaping your thoughts.'
     );
 
-    const observerDesc = screen.getByLabelText(/what others see/i);
+    const observerDesc = within(authorPanel).getByLabelText(/what others see/i);
     await user.type(
       observerDesc,
       'Their eyes occasionally flicker with dark light when they speak with authority.'
     );
 
     // Set weakness magnitude to 1 — now damage type is required
-    const weaknessMag = screen.getByLabelText(/weakness magnitude/i);
+    const weaknessMag = within(authorPanel).getByLabelText(/weakness magnitude/i);
     await user.selectOptions(weaknessMag, '1');
 
     // Submit should be disabled (no damage type selected)
-    const submitBtn = screen.getByRole('button', { name: /bind this mark/i });
+    const submitBtn = within(authorPanel).getByRole('button', { name: /bind this mark/i });
     expect(submitBtn).toBeDisabled();
 
     // Pick damage type 'Spirit'
-    const damageTypeSelect = screen.getByLabelText(/weakness damage type/i);
+    const damageTypeSelect = within(authorPanel).getByLabelText(/weakness damage type/i);
     await user.selectOptions(damageTypeSelect, '1');
 
     // Submit should now be enabled
@@ -353,10 +365,12 @@ describe('AlterationResolveDialog — author path', () => {
     renderDialog();
     await openAuthorTab(user);
 
-    // Wait for form fields
-    await screen.findByLabelText(/social reactivity/i);
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
 
-    const socialSelect = screen.getByLabelText(/social reactivity/i);
+    // Wait for form fields
+    await within(authorPanel).findByLabelText(/social reactivity/i);
+
+    const socialSelect = within(authorPanel).getByLabelText(/social reactivity/i);
 
     // Options 0, 1, 2, 3 should be present (cap is 3)
     await user.selectOptions(socialSelect, '0');
@@ -377,10 +391,12 @@ describe('AlterationResolveDialog — author path', () => {
     renderDialog(TIER4_PENDING);
     await openAuthorTab(user);
 
-    // Wait for form
-    await screen.findByLabelText(/visible at rest/i);
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
 
-    const visibilitySwitch = screen.getByLabelText(/visible at rest/i);
+    // Wait for form
+    await within(authorPanel).findByLabelText(/visible at rest/i);
+
+    const visibilitySwitch = within(authorPanel).getByLabelText(/visible at rest/i);
 
     // Should be checked
     expect(visibilitySwitch).toBeChecked();
@@ -389,6 +405,47 @@ describe('AlterationResolveDialog — author path', () => {
     expect(visibilitySwitch).toBeDisabled();
 
     // Helper copy should be visible
-    expect(screen.getByText(/an alteration this profound cannot be hidden/i)).toBeInTheDocument();
+    expect(
+      within(authorPanel).getByText(/an alteration this profound cannot be hidden/i)
+    ).toBeInTheDocument();
+  });
+
+  it('preserves authored prose when switching to the library tab and back', async () => {
+    const user = userEvent.setup();
+
+    renderDialog();
+    await openAuthorTab(user);
+
+    const authorPanel = screen.getByRole('tabpanel', { name: /author your own/i });
+
+    // Wait for form
+    await within(authorPanel).findByLabelText(/^name$/i);
+
+    // Type values into all three text fields
+    const nameInput = within(authorPanel).getByLabelText(/^name$/i);
+    await user.type(nameInput, 'Scar of the Deep');
+
+    const playerDesc = within(authorPanel).getByLabelText(/how it feels to you/i);
+    const playerText =
+      'Cold tendrils of void consciousness brush the edges of your perception at all hours.';
+    await user.type(playerDesc, playerText);
+
+    const observerDesc = within(authorPanel).getByLabelText(/what others see/i);
+    const observerText =
+      'A faint aura of wrongness clings to their silhouette, noticed but hard to name.';
+    await user.type(observerDesc, observerText);
+
+    // Switch away to the library tab
+    const libraryTab = screen.getByRole('tab', { name: /choose from the library/i });
+    await user.click(libraryTab);
+
+    // Switch back to the author tab
+    const authorTab = screen.getByRole('tab', { name: /author your own/i });
+    await user.click(authorTab);
+
+    // All three values must still be present
+    expect(within(authorPanel).getByLabelText(/^name$/i)).toHaveValue('Scar of the Deep');
+    expect(within(authorPanel).getByLabelText(/how it feels to you/i)).toHaveValue(playerText);
+    expect(within(authorPanel).getByLabelText(/what others see/i)).toHaveValue(observerText);
   });
 });
