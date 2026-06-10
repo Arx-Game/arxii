@@ -79,6 +79,9 @@ vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
       <button type="button" onClick={() => props.onPullsChange({ 7: 2 })}>
         stub-pull-7-tier2
       </button>
+      <button type="button" onClick={() => props.onPullsChange({ 7: 2, 9: 3 })}>
+        stub-pull-conflict
+      </button>
     </div>
   ),
 }));
@@ -890,6 +893,47 @@ describe('ActionPanel', () => {
         expect.objectContaining({
           initiator_persona: 77,
           technique_id: 10,
+          pull: { resonance_id: 4, tier: 2, thread_ids: [7] },
+        })
+      );
+    });
+  });
+
+  it('reverts conflicting paid pulls to a single (resonance, tier) group', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchCastables();
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    await mockRosterWithPersona();
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Ember Touch'));
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
+    });
+
+    // Threads 7 (tier 2) and 9 (tier 3) disagree on tier — thread 7 is the
+    // newly-changed entry, so thread 9 reverts and a notice is shown.
+    await user.click(screen.getByRole('button', { name: 'stub-pull-conflict' }));
+    expect(
+      screen.getByText('Pulls in one cast share a single resonance and tier.')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
           pull: { resonance_id: 4, tier: 2, thread_ids: [7] },
         })
       );

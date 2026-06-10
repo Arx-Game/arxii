@@ -275,6 +275,12 @@ export function ActionPanel({ sceneId }: Props) {
       const changedId = Number(changed[0]);
       const changedTier = changed[1];
       const changedResonance = threadById.get(changedId)?.resonance;
+      if (changedResonance === undefined) {
+        // Threads cache not resolved yet — can't group by resonance; pass
+        // through unconstrained rather than reverting on undefined matches.
+        setSelectedPulls(next);
+        return;
+      }
       let reverted = 0;
       const constrained = { ...next };
       for (const [idStr, tier] of Object.entries(next)) {
@@ -302,13 +308,17 @@ export function ActionPanel({ sceneId }: Props) {
     let pull: CastPullRequestBody | undefined;
     if (paid.length > 0) {
       const firstThread = threadById.get(Number(paid[0][0]));
-      if (firstThread) {
-        pull = {
-          resonance_id: firstThread.resonance,
-          tier: paid[0][1] as 1 | 2 | 3,
-          thread_ids: paid.map(([id]) => Number(id)),
-        };
+      if (!firstThread) {
+        // Don't cast without the declared pull — surface it and let the user
+        // retry once the threads cache resolves.
+        setPullNotice('Thread data is still loading — try again in a moment.');
+        return;
       }
+      pull = {
+        resonance_id: firstThread.resonance,
+        tier: paid[0][1] as 1 | 2 | 3,
+        thread_ids: paid.map(([id]) => Number(id)),
+      };
     }
     performCast.mutate({
       technique_id: selectedTechnique.id,
