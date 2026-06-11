@@ -5,6 +5,7 @@ Serializers for progression API endpoints.
 from rest_framework import serializers
 
 from world.classes.models import Path
+from world.classes.serializers import PathListSerializer
 from world.journals.models import JournalEntry
 from world.progression.constants import VoteTargetType
 from world.progression.models import (
@@ -226,20 +227,10 @@ class RandomSceneTargetSerializer(serializers.ModelSerializer):
 # --- PathIntent serializers ---
 
 
-class PathIntentPathSerializer(serializers.ModelSerializer):
-    """Nested serializer for Path data within a PathIntent response."""
-
-    stage_display = serializers.CharField(source="get_stage_display", read_only=True)
-
-    class Meta:
-        model = Path
-        fields = ["id", "name", "stage", "stage_display", "description"]
-
-
 class PathIntentSerializer(serializers.ModelSerializer):
     """Read serializer for PathIntent."""
 
-    intended_path = PathIntentPathSerializer(read_only=True)
+    intended_path = PathListSerializer(read_only=True)
 
     class Meta:
         model = PathIntent
@@ -263,4 +254,7 @@ class PathIntentDeclareSerializer(serializers.Serializer):
     @property
     def validated_path(self) -> Path:
         """Return the resolved Path instance after validation."""
+        if not hasattr(self, "_path"):
+            msg = "Call is_valid() before accessing validated_path."
+            raise AssertionError(msg)
         return self._path

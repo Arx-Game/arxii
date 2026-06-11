@@ -402,10 +402,7 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if character is None:
             return None
-        try:
-            return CharacterSheet.objects.get(pk=character.id)
-        except CharacterSheet.DoesNotExist:
-            return None
+        return getattr(character, "sheet_data", None)
 
     def list(self, request: Request) -> Response:
         """GET — return current intent or {"intent": null}."""
@@ -435,7 +432,6 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
             defaults={"intended_path": path},
         )
         PathIntent.flush_instance_cache()
-        intent.refresh_from_db()
         intent_data = PathIntentSerializer(
             PathIntent.objects.select_related("intended_path").get(pk=intent.pk)
         ).data

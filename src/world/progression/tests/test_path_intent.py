@@ -89,10 +89,6 @@ class PathIntentAPIBaseTests(TestCase):
         self.client.force_authenticate(user=self.account)  # type: ignore[arg-type]
         PathIntent.flush_instance_cache()
 
-    def _authenticate_with_character(self) -> None:
-        """Patch _get_character to return self.character (bypassing roster wiring)."""
-        # Applied per-test via patch context or decorator.
-
 
 class PathIntentGetTests(PathIntentAPIBaseTests):
     """Tests for GET /api/progression/path-intent/."""
