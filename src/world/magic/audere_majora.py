@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.classes.models import PathStage
-from world.magic.audere import AbstractPendingOffer
+from world.magic.audere import (
+    AUDERE_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
+    AbstractPendingOffer,
+    _check_intensity_gate,
+    _check_soulfray_gate,
+)
 
 
 class AudereMajoraThreshold(SharedMemoryModel):
@@ -151,3 +158,183 @@ class AudereMajoraCrossing(SharedMemoryModel):
             f"threshold={self.threshold_id}, "
             f"level {self.level_before}→{self.level_after})"
         )
+
+
+# =============================================================================
+# Services
+# =============================================================================
+
+
+def _has_crossed(sheet, threshold: AudereMajoraThreshold) -> bool:
+    """Return True if the character already has a completed crossing for this threshold."""
+    return AudereMajoraCrossing.objects.filter(character_sheet=sheet, threshold=threshold).exists()
+
+
+def _has_active_condition(character: ObjectDB, condition_name: str) -> bool:
+    """Return True if the character has an active ConditionInstance for the named condition."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character,
+        condition__name=condition_name,
+    ).exists()
+
+
+def current_path_for_character(character: ObjectDB):
+    """Return the Path from the latest CharacterPathHistory row, or None."""
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+
+    history = (
+        CharacterPathHistory.objects.filter(character=character)
+        .select_related("path")
+        .order_by("-selected_at")
+        .first()
+    )
+    if history is None:
+        return None
+    return history.path
+
+
+def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThreshold) -> list:
+    """Return active child paths at the threshold's target stage reachable from the current path.
+
+    Returns an empty list when the character has no path history or no valid child paths.
+    """
+    path = current_path_for_character(character)
+    if path is None:
+        return []
+    return list(path.child_paths.filter(stage=threshold.target_stage, is_active=True))
+
+
+def check_audere_majora_eligibility(  # noqa: PLR0911
+    character: ObjectDB, runtime_intensity: int
+) -> AudereMajoraThreshold | None:
+    """Check all gates for the Audere Majora offer.
+
+    Gates in order:
+    1. Character has a CharacterSheet.
+    2. A threshold exists at boundary_level == sheet.current_level.
+    3. Character has NOT already crossed this threshold.
+    4. Runtime intensity resolves to a tier at or above threshold.minimum_intensity_tier.
+    5. Character has Soulfray at or above threshold.minimum_warp_stage.
+    6. Character has an active CharacterEngagement.
+    7. If threshold.requires_active_audere, character has the Audere condition.
+    8. At least one eligible child path exists.
+
+    Returns the threshold on success, None if any gate fails.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        return None
+
+    threshold = AudereMajoraThreshold.objects.filter(boundary_level=sheet.current_level).first()
+    if threshold is None:
+        return None
+
+    if _has_crossed(sheet, threshold):
+        return None
+
+    if not _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold):
+        return None
+
+    if not _check_soulfray_gate(character, threshold.minimum_warp_stage.stage_order):
+        return None
+
+    if not CharacterEngagement.objects.filter(character=character).exists():
+        return None
+
+    if threshold.requires_active_audere and not _has_active_condition(
+        character, AUDERE_CONDITION_NAME
+    ):
+        return None
+
+    if not eligible_paths_for_threshold(character, threshold):
+        return None
+
+    return threshold
+
+
+def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
+    """Broadcast the threshold manifestation text as an EMIT to the active scene.
+
+    No-ops silently when: no active scene at location, or character has no primary persona.
+    """
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        create_interaction,
+        push_interaction,
+    )
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    scene = Scene.objects.filter(location=character.location, is_active=True).first()
+    if scene is None:
+        return
+
+    try:
+        persona = character.sheet_data.primary_persona
+    except AttributeError:
+        return
+
+    interaction = create_interaction(
+        persona=persona,
+        content=text,
+        mode=InteractionMode.EMIT,
+        scene=scene,
+    )
+    push_interaction(
+        interaction,
+        receiver_persona_ids=[],
+        target_persona_ids=[],
+        receiver_characters=[],
+    )
+
+
+def maybe_create_audere_majora_offer(
+    character: ObjectDB, runtime_intensity: int
+) -> PendingAudereMajoraOffer | None:
+    """Persist a poll-able Audere Majora offer when the crossing gate opens for this cast.
+
+    Returns None for NPCs without a CharacterSheet or when any eligibility gate fails.
+    Idempotent: repeated qualifying casts update the single row (update_or_create).
+    Broadcast fires only on first creation; re-fires after decline broadcast again;
+    refreshes from a still-open gate stay silent.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    threshold = check_audere_majora_eligibility(character, runtime_intensity)
+    if threshold is None:
+        return None
+
+    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        return None
+
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    stage_order = 0
+    if soulfray_instance is not None and soulfray_instance.current_stage is not None:
+        stage_order = soulfray_instance.current_stage.stage_order
+
+    offer, created = PendingAudereMajoraOffer.objects.update_or_create(
+        character_sheet=sheet,
+        defaults={
+            "threshold": threshold,
+            "fired_intensity": runtime_intensity,
+            "soulfray_stage_order": stage_order,
+        },
+    )
+
+    if created:
+        _broadcast_manifestation(character, threshold.manifestation_text)
+
+    return offer
