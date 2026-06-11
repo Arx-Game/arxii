@@ -265,13 +265,14 @@ class PoseSubmitViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # Flush the idmapper BEFORE any factory call: shard-ordered CI runs leave
+        # cached ObjectDB instances whose __dict__ carries a DbHolder (.db/.ndb),
+        # which breaks the TestData descriptor's deepcopy on first access.
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
-        cls.room = ObjectDBFactory(
-            db_key="Hall",
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
-        cls.character.location = cls.room
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -300,6 +301,14 @@ class PoseSubmitViewTests(APITestCase):
         from evennia.utils.idmapper import models as idmapper_models
 
         idmapper_models.flush_cache()
+        # Room + location wiring stays instance-level (after the TestData deepcopy)
+        # so the un-deepcopyable DbHolder a Room can acquire (.ndb via active_scene)
+        # never enters the class-attribute graph that setUpTestData deepcopies.
+        self.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character.location = self.room
         self.client.force_authenticate(user=self.account)
         self.url = reverse("interaction-submit-pose")
         self.base_ts = timezone.now() - timedelta(hours=1)
