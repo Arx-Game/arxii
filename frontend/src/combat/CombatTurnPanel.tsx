@@ -126,9 +126,9 @@ export function CombatTurnPanel({
   // active_conditions entries are ConditionInstances typed loosely on the
   // generated schema (SerializerMethodField); cast at the boundary.
   const viewerParticipant = findViewerParticipant(encounter.participants);
-  const isAudereActive = (
-    (viewerParticipant?.active_conditions ?? []) as ConditionInstance[]
-  ).some((c) => c.name === 'Audere');
+  const isAudereActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
+    (c) => c.name === 'Audere'
+  );
 
   return (
     <div
