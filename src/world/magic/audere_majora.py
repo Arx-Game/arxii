@@ -429,10 +429,13 @@ def cross_threshold(
 
     scene, interaction = _post_declaration(character, declaration_text)
 
-    class_level = _primary_class_level(character)
-    level_before = class_level.level if class_level is not None else 0
+    # Eligibility re-validation guarantees sheet.current_level == boundary_level
+    # at this point, so the receipt records the character-level crossing even if
+    # the primary class row lags behind a higher multiclass row.
+    level_before = threshold.boundary_level
     level_after = threshold.boundary_level + 1
 
+    class_level = _primary_class_level(character)
     if class_level is not None:
         class_level.level = level_after
         class_level.save(update_fields=["level"])
@@ -452,6 +455,9 @@ def cross_threshold(
     )
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
+    # Result deliberately unchecked, mirroring offer_audere: no authored trigger
+    # cancels this today. A future PRE_APPLY cancel would advance the level but
+    # skip the power spike — revisit if such content is ever authored.
     apply_condition(target=character, condition=majora_template)
 
     if interaction is not None:

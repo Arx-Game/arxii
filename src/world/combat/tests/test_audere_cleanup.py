@@ -82,10 +82,6 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
     the condition) and delete any unanswered PendingAudereMajoraOffer rows for participants
     (#543)."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
-
     def setUp(self) -> None:
         _audere, self.majora_template = wire_audere_power_multipliers()
         self.character = ObjectDB.objects.create(db_key="majora_cleanup_char")

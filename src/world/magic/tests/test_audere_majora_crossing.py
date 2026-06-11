@@ -176,6 +176,22 @@ class CrossingAcceptHappyPathTests(TestCase):
         ccl = CharacterClassLevel.objects.get(character=self.character)
         assert ccl.level == 6
 
+    def test_second_accept_of_same_offer_raises_not_found(self) -> None:
+        """Sequential double-accept proxy for the concurrent race: row is gone."""
+        resolve_audere_majora_offer(
+            self.offer.pk,
+            accept=True,
+            path_id=self.puissant_path.pk,
+            declaration_text="I am the one who stands here.",
+        )
+        with self.assertRaises(AudereMajoraOfferNotFoundError):
+            resolve_audere_majora_offer(
+                self.offer.pk,
+                accept=True,
+                path_id=self.puissant_path.pk,
+                declaration_text="I am the one who stands here.",
+            )
+
     def test_sheet_current_level_updated(self) -> None:
         resolve_audere_majora_offer(
             self.offer.pk,
