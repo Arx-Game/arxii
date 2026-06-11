@@ -75,6 +75,8 @@ export function CommandInput({
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
+  const [isEntrance, setIsEntrance] = useState(false);
   const submittingRef = useRef(false);
   const { send } = useGameSocket();
 
@@ -111,7 +113,10 @@ export function CommandInput({
     const isPose = !composerMode || composerMode.command === 'pose';
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
-    const usesRestSubmit = isPose && sceneId !== undefined && personaId != null && hasDetachments;
+    // Entrance poses must take the REST path — pose_kind doesn't travel over
+    // the WebSocket command protocol.
+    const usesRestSubmit =
+      isPose && sceneId !== undefined && personaId != null && (hasDetachments || isEntrance);
 
     if (usesRestSubmit) {
       // REST path: explicit action_link_ids override when the user has detached
@@ -121,12 +126,18 @@ export function CommandInput({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
-        action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
+        pose_kind: isEntrance ? 'entry' : undefined,
+        ...(hasDetachments
+          ? {
+              action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
+            }
+          : {}),
       })
         .then(() => {
           onPoseSubmitted?.();
         })
         .catch(() => {});
+      setIsEntrance(false);
     } else {
       // WebSocket path: existing behavior. Server-side auto-link will attach
       // any pending ACTION interactions when the POSE is created.
@@ -151,6 +162,7 @@ export function CommandInput({
     pendingActionIds,
     detachedActionIds,
     onPoseSubmitted,
+    isEntrance,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -196,8 +208,11 @@ export function CommandInput({
       text += ` | \u2694 ${actionAttachment.name}`;
       if (actionAttachment.target) text += ` \u2192 ${actionAttachment.target}`;
     }
+    if (isEntrance) {
+      text += ' | \u2728 Entrance';
+    }
     return text;
-  }, [composerMode, actionAttachment]);
+  }, [composerMode, actionAttachment, isEntrance]);
 
   // Append @name when a pending target arrives
   useEffect(() => {
@@ -228,13 +243,29 @@ export function CommandInput({
         }
         rightSlot={
           sceneId ? (
-            <ActionAttachment
-              sceneId={sceneId}
-              attachment={actionAttachment ?? null}
-              onAttach={(action) => onActionAttach?.(action)}
-              onDetach={() => onActionDetach?.()}
-              targetName={composerMode?.targets[0]}
-            />
+            <div className="flex items-center gap-1">
+              {personaId != null && (
+                <button
+                  type="button"
+                  aria-label="Make an entrance"
+                  title="Make an entrance — your next pose announces your arrival and others can acclaim it"
+                  aria-pressed={isEntrance}
+                  onClick={() => setIsEntrance((v) => !v)}
+                  className={`rounded px-1 text-sm transition-colors ${
+                    isEntrance ? 'bg-amber-500/20 text-amber-500' : 'text-muted-foreground'
+                  }`}
+                >
+                  ✨
+                </button>
+              )}
+              <ActionAttachment
+                sceneId={sceneId}
+                attachment={actionAttachment ?? null}
+                onAttach={(action) => onActionAttach?.(action)}
+                onDetach={() => onActionDetach?.()}
+                targetName={composerMode?.targets[0]}
+              />
+            </div>
           ) : undefined
         }
         ghostText={ghostText}

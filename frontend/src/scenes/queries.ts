@@ -119,6 +119,8 @@ export interface SubmitPoseBody {
   content: string;
   /** When provided (including empty array), overrides auto-link. Omit to auto-link. */
   action_link_ids?: number[];
+  /** PoseKind: 'entry' opens a Make-an-Entrance reaction window (#904). */
+  pose_kind?: string;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<void> {
@@ -127,4 +129,19 @@ export async function submitPose(body: SubmitPoseBody): Promise<void> {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to submit pose');
+}
+
+export async function reactToWindow(
+  windowId: number,
+  body: { persona_id: number; choice: string }
+): Promise<void> {
+  const res = await apiFetch(`/api/reaction-windows/${windowId}/react/`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string[] | string } | null;
+    const detail = Array.isArray(data?.detail) ? data.detail[0] : data?.detail;
+    throw new Error(detail || 'Failed to react');
+  }
 }

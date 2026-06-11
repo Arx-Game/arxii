@@ -15908,6 +15908,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/WeeklyVote'
           description: ''
+  /api/reaction-windows/{id}/react/:
+    post:
+      operationId: reaction_windows_react_create
+      description: |-
+        Action-only viewset: POST /reaction-windows/{pk}/react/.
+
+        Reads ride the interaction feed (windows serialize inline on their
+        event); all eligibility/validation lives in ``react_to_window``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reaction window.
+        required: true
+      tags:
+      - reaction-windows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WindowReactInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WindowReactInput'
+          description: ''
   /api/register/availability/:
     get:
       operationId: register_availability_retrieve
@@ -26842,6 +26874,17 @@ components:
             - reacted
           description: Aggregate emoji counts with reacted-by-current-user flag.
           readOnly: true
+        reaction_windows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Reaction windows on this event (#904): choices, reactions, my_reaction.
+
+            ``my_reaction`` is per-viewer and flows through serializer context
+            (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+          readOnly: true
         receiver_persona_ids:
           type: array
           items:
@@ -26873,6 +26916,7 @@ components:
       - is_favorited
       - persona
       - place_name
+      - reaction_windows
       - reactions
       - receiver_persona_ids
       - receivers
@@ -26981,6 +27025,17 @@ components:
             - reacted
           description: Aggregate emoji counts with reacted-by-current-user flag.
           readOnly: true
+        reaction_windows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Reaction windows on this event (#904): choices, reactions, my_reaction.
+
+            ``my_reaction`` is per-viewer and flows through serializer context
+            (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+          readOnly: true
         receiver_persona_ids:
           type: array
           items:
@@ -27007,6 +27062,7 @@ components:
       - is_favorited
       - persona
       - place_name
+      - reaction_windows
       - reactions
       - receiver_persona_ids
       - target_persona_ids
@@ -39506,6 +39562,33 @@ components:
         * `interaction` - Interaction
         * `scene_participation` - Scene Participation
         * `journal` - Journal Entry
+    WindowReactInput:
+      type: object
+      properties:
+        persona_id:
+          type: integer
+          description: PK of the Persona reacting (must belong to the requester).
+        choice:
+          type: string
+          description: Slug from the window's choices payload.
+          maxLength: 64
+      required:
+      - choice
+      - persona_id
+    WindowReactInputRequest:
+      type: object
+      properties:
+        persona_id:
+          type: integer
+          description: PK of the Persona reacting (must belong to the requester).
+        choice:
+          type: string
+          minLength: 1
+          description: Slug from the window's choices payload.
+          maxLength: 64
+      required:
+      - choice
+      - persona_id
     _CategoryPolish:
       type: object
       description: One polish category's value + derived tier label for a building.
