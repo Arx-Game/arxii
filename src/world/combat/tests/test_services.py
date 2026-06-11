@@ -4,8 +4,10 @@ from django.test import TestCase
 import pytest
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ActionCategory,
+    CombatManeuver,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -20,13 +22,15 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatOpponentAction
+from world.combat.models import CombatOpponentAction, CombatParticipant, FleeConfig
 from world.combat.services import (
     add_opponent,
     add_participant,
     begin_declaration_phase,
     declare_action,
+    declare_cover,
     declare_flee,
+    get_flee_config,
     join_encounter,
     select_npc_actions,
 )
@@ -353,47 +357,157 @@ class JoinEncounterTest(TestCase):
 class DeclareFleeTest(TestCase):
     """Tests for declare_flee service function."""
 
-    def test_declares_flee_action(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
-            round_number=1,
-        )
+    def _make_participant(
+        self, status: str = EncounterStatus.DECLARING, health: int = 50
+    ) -> CombatParticipant:
+        encounter = CombatEncounterFactory(status=status, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter)
         CharacterVitals.objects.create(
             character_sheet=participant.character_sheet,
-            health=50,
+            health=health,
             max_health=100,
         )
+        return participant
+
+    def test_declares_flee_action(self) -> None:
+        participant = self._make_participant()
         action = declare_flee(participant)
         assert action.focused_action is None
         assert action.focused_category is None
         assert action.is_ready is True
 
-    def test_flee_marks_participant_fled(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
-            round_number=1,
-        )
-        participant = CombatParticipantFactory(encounter=encounter)
-        CharacterVitals.objects.create(
-            character_sheet=participant.character_sheet,
-            health=50,
-            max_health=100,
-        )
-        declare_flee(participant)
+    def test_declare_flee_sets_maneuver_not_fled_status(self) -> None:
+        """declare_flee sets maneuver=FLEE and leaves participant ACTIVE (no immediate FLED)."""
+        participant = self._make_participant()
+        action = declare_flee(participant)
+        assert action.maneuver == CombatManeuver.FLEE
         participant.refresh_from_db()
-        assert participant.status == ParticipantStatus.FLED
+        assert participant.status == ParticipantStatus.ACTIVE
 
     def test_cannot_flee_outside_declaring(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
-            round_number=1,
-        )
+        participant = self._make_participant(status=EncounterStatus.BETWEEN_ROUNDS)
+        with pytest.raises(ValueError, match="expected 'Declaring'"):
+            declare_flee(participant)
+
+    def test_cannot_flee_when_dead(self) -> None:
+        """Dead characters (life_state=DEAD) cannot declare flee."""
+        from world.vitals.constants import CharacterLifeState
+
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter)
         CharacterVitals.objects.create(
             character_sheet=participant.character_sheet,
-            health=50,
+            health=0,
             max_health=100,
+            life_state=CharacterLifeState.DEAD,
         )
-        with pytest.raises(ValueError, match="expected 'Declaring'"):
+        with pytest.raises(ValueError, match="dead"):
             declare_flee(participant)
+
+    def test_redeclare_action_after_flee_clears_maneuver(self) -> None:
+        """Calling declare_action after declare_flee resets maneuver to None."""
+        effect_type = EffectTypeFactory(name="FleeReDeclare", base_power=20)
+        gift = GiftFactory()
+        participant = self._make_participant()
+        opponent = CombatOpponentFactory(encounter=participant.encounter)
+        technique = TechniqueFactory(gift=gift, effect_type=effect_type)
+
+        declare_flee(participant)
+        action = declare_action(
+            participant,
+            focused_action=technique,
+            focused_category=ActionCategory.PHYSICAL,
+            effort_level=EffortLevel.MEDIUM,
+            focused_opponent_target=opponent,
+        )
+        assert action.maneuver is None
+
+    def test_redeclare_flee_after_cover_clears_ally_target(self) -> None:
+        """Re-declaring flee after cover sets maneuver=FLEE and focused_ally_target=None."""
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter)
+        ally = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet, health=50, max_health=100
+        )
+        CharacterVitals.objects.create(
+            character_sheet=ally.character_sheet, health=50, max_health=100
+        )
+
+        declare_cover(participant, ally)
+        action = declare_flee(participant)
+        assert action.focused_ally_target is None
+        assert action.maneuver == CombatManeuver.FLEE
+
+
+class DeclareCoverTest(TestCase):
+    """Tests for declare_cover service function."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.ally = CombatParticipantFactory(encounter=self.encounter)
+        CharacterVitals.objects.create(
+            character_sheet=self.participant.character_sheet, health=50, max_health=100
+        )
+        CharacterVitals.objects.create(
+            character_sheet=self.ally.character_sheet, health=50, max_health=100
+        )
+
+    def test_declare_cover_sets_maneuver_and_ally(self) -> None:
+        """declare_cover creates an action with maneuver=COVER, the ally target, is_ready=True."""
+        action = declare_cover(self.participant, self.ally)
+        assert action.maneuver == CombatManeuver.COVER
+        assert action.focused_ally_target == self.ally
+        assert action.is_ready is True
+        self.participant.refresh_from_db()
+        assert self.participant.status == ParticipantStatus.ACTIVE
+
+    def test_declare_cover_rejects_self(self) -> None:
+        """Cannot cover yourself."""
+        with pytest.raises(ValueError, match="Cannot cover yourself"):
+            declare_cover(self.participant, self.participant)
+
+    def test_declare_cover_rejects_inactive_or_foreign_ally(self) -> None:
+        """Ally must be active and in the same encounter."""
+        # Inactive ally (FLED) in the same encounter
+        self.ally.status = ParticipantStatus.FLED
+        self.ally.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="active participant in this encounter"):
+            declare_cover(self.participant, self.ally)
+
+        # Foreign encounter ally
+        other_encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        foreign_ally = CombatParticipantFactory(encounter=other_encounter)
+        CharacterVitals.objects.create(
+            character_sheet=foreign_ally.character_sheet, health=50, max_health=100
+        )
+        with pytest.raises(ValueError, match="active participant in this encounter"):
+            declare_cover(self.participant, foreign_ally)
+
+    def test_declare_cover_rejects_outside_declaring(self) -> None:
+        """Cannot cover outside DECLARING status."""
+        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="expected 'Declaring'"):
+            declare_cover(self.participant, self.ally)
+
+
+class GetFleeConfigTest(TestCase):
+    """Tests for get_flee_config service function."""
+
+    def test_raises_does_not_exist_when_unseeded(self) -> None:
+        """get_flee_config raises FleeConfig.DoesNotExist when no row exists."""
+        FleeConfig.objects.filter(pk=1).delete()
+        with pytest.raises(FleeConfig.DoesNotExist):
+            get_flee_config()
+
+    def test_returns_row_when_present(self) -> None:
+        """get_flee_config returns the singleton when seeded."""
+        check_type = CheckTypeFactory(name="flee-test")
+        FleeConfig.objects.filter(pk=1).delete()
+        config = FleeConfig.objects.create(pk=1, check_type=check_type)
+        result = get_flee_config()
+        assert result.pk == config.pk
+        assert result.check_type == check_type

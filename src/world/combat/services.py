@@ -56,6 +56,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
+    CombatManeuver,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -77,6 +78,7 @@ from world.combat.models import (
     ComboLearning,
     ComboSlot,
     EncounterRiskAcknowledgement,
+    FleeConfig,
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
@@ -189,6 +191,17 @@ def get_penetration_check_type() -> CheckType:
     from world.checks.models import CheckType  # noqa: PLC0415
 
     return CheckType.objects.get(name=PENETRATION_CHECK_TYPE_NAME)
+
+
+def get_flee_config() -> FleeConfig:
+    """Return the seeded FleeConfig singleton (#878).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    fabricated row would have no check_type and silently break flee
+    resolution. DoesNotExist propagates loudly. Mirrors
+    get_penetration_check_type.
+    """
+    return FleeConfig.objects.get(pk=1)
 
 
 # ---------------------------------------------------------------------------
@@ -773,13 +786,12 @@ def join_encounter(
 
 
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
-    """Declare intent to flee -- passives-only action, auto-ready.
+    """Declare intent to flee -- passives-only maneuver, auto-ready.
 
-    Creates a CombatRoundAction with no focused action. Marks the
-    participant as FLED. Flee auto-succeeds in Phase 3 -- the participant
-    is removed from active combat at round resolution.
-
-    Phase 4 will add flee checks and covering actions.
+    Creates or replaces the current round's CombatRoundAction with no
+    focused action and maneuver=FLEE. Flee resolves as a real check at
+    round resolution (_resolve_flee); the participant remains ACTIVE until
+    the check succeeds.
     """
     from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -806,6 +818,8 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
             "focused_opponent_target": None,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.FLEE,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -813,8 +827,54 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "is_ready": True,
         },
     )
-    participant.status = ParticipantStatus.FLED
-    participant.save(update_fields=["status"])
+    return action
+
+
+def declare_cover(
+    participant: CombatParticipant,
+    ally: CombatParticipant,
+) -> CombatRoundAction:
+    """Declare a covering maneuver for an ally -- passives-only, auto-ready.
+
+    Cover resolves as a no-op on its own; its effect is the FleeConfig
+    cover_bonus it contributes to the ally's flee check in _resolve_flee.
+    Covering an ally who never declares flee simply wastes the action.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot cover: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+    if is_dead(participant.character_sheet):
+        msg = "Cannot cover: character is dead."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        msg = "Cannot cover yourself."
+        raise ValueError(msg)
+    if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+        msg = "Cover target must be an active participant in this encounter."
+        raise ValueError(msg)
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.COVER,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
     return action
 
 
@@ -1145,6 +1205,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "physical_passive": physical_passive,
             "social_passive": social_passive,
             "mental_passive": mental_passive,
+            "maneuver": None,  # Reset maneuver on re-declaration
             "combo_upgrade": None,  # Reset combo on re-declaration
             "is_ready": False,  # Reset ready on re-declaration
         },

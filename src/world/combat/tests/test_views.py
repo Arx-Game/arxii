@@ -325,8 +325,11 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
 
-    def test_flee_marks_participant_fled(self) -> None:
-        """Flee endpoint marks the participant as FLED."""
+    def test_flee_declares_maneuver_participant_stays_active(self) -> None:
+        """Flee endpoint declares the FLEE maneuver; participant stays ACTIVE until resolution."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.models import CombatRoundAction
+
         # Use a separate encounter in DECLARING status for the flee test
         flee_encounter = CombatEncounterFactory(
             scene=self.scene,
@@ -349,10 +352,12 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         flee_participant.refresh_from_db()
-        self.assertEqual(
-            flee_participant.status,
-            ParticipantStatus.FLED,
+        # Participant stays ACTIVE — flee resolves at round resolution (#878)
+        self.assertEqual(flee_participant.status, ParticipantStatus.ACTIVE)
+        action = CombatRoundAction.objects.get(
+            participant=flee_participant, round_number=flee_encounter.round_number
         )
+        self.assertEqual(action.maneuver, CombatManeuver.FLEE)
 
     def test_declare_ally_target_persisted_via_endpoint(self) -> None:
         """Declaring a self/ally-cast technique via the DRF endpoint persists focused_ally_target.
