@@ -179,7 +179,7 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **DEAL_DAMAGE effect handler:** Connected — `ConsequenceEffect` with `EffectType.DEAL_DAMAGE` applies damage to CharacterVitals and triggers the survivability pipeline. Works for combat, missions, traps, and challenges
 - **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready, combo upgrade/revert, my_action, available_combos), and participation (join, flee). Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff, IsEncounterParticipant, IsInEncounterRoom
 - **Round pacing:** Timed mode (default, configurable minutes with auto-resolve), Ready mode (all players mark ready), Manual mode (GM triggers). Timer task runs every 30 seconds via game clock scheduler
-- **Participation:** PCs in the room can self-join active encounters. Flee mechanic (stub — auto-succeeds, Phase 4 will add checks and covering actions)
+- **Participation:** PCs in the room can self-join active encounters. Flee resolves as a graded check at round resolution with authored tier difficulty, ally cover bonuses, and pool-routed failure consequences (#878)
 - **Tests:** 599 tests across combat, vitals, conditions, mechanics, checks, and covenants
 - **Admin:** Full Django admin with inlines for all combat, vitals, and covenant models
 
@@ -204,7 +204,15 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   handling and Hero Killer has no narrative escape state — #875
 - **Encounter aftermath** — completion only flips a status flag; no outcome record,
   pool-routed aftermath, or pose-log narration — #876
-- **Flee is an auto-succeed stub** (the deferred "Phase 4" checks) — #878
+- ~~**Flee is an auto-succeed stub**~~ **DONE (#878):** flee resolves as a graded
+  check at round resolution (`_resolve_flee`): authored difficulty via the
+  `FleeConfig` singleton + per-`OpponentTier` `FleeTierModifier` rows (Hero Killer
+  +20 — the #875 lever), ally COVER declarations add an authored `cover_bonus`
+  through the shared modifier seam, and PARTIAL/FAILURE/BOTCH route through a
+  seeded consequence pool (PARTIAL = escape at a cost; a successful escape skips
+  later same-round NPC hits). New `cover` endpoint + web declaration UI
+  (Flee/Cover controls in YourTurn). Starter pool is label-only until authored
+  condition content lands.
 
 **Phase 1 (complete):** Foundation models and core services
 - CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models

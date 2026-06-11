@@ -67,6 +67,7 @@ INSTALLED_APPS += [
     "world.distinctions.apps.DistinctionsConfig",
     "world.goals.apps.GoalsConfig",
     "world.societies.apps.SocietiesConfig",
+    "world.currency.apps.CurrencyConfig",
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
     "world.codex.apps.CodexConfig",

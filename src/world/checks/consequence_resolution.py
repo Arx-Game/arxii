@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from world.checks.models import Consequence
 from world.checks.outcome_utils import filter_character_loss, select_weighted
 from world.checks.services import perform_check
+from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import PendingResolution
 from world.mechanics.types import AppliedEffect
 
@@ -47,6 +48,19 @@ def select_consequence(
     if tier_consequences:
         selected = select_weighted(tier_consequences)
         selected = filter_character_loss(character, selected, tier_consequences)
+        # #924 — dramatic pools fire the roulette reveal on the roller's client.
+        # Title is data-driven (check type, else the tier's authored name) —
+        # check_type may be None in mocked/test resolution contexts.
+        if check_type is not None:
+            title = check_type.name
+        else:
+            title = tier_consequences[0].outcome_tier.name
+        maybe_emit_resolution_theater(
+            character=character,
+            title=title,
+            consequences=tier_consequences,
+            selected=selected,
+        )
     else:
         selected = Consequence(
             outcome_tier=outcome,
@@ -84,6 +98,9 @@ def select_consequence_from_result(
     if tier_consequences:
         selected = select_weighted(tier_consequences)
         selected = filter_character_loss(character, selected, tier_consequences)
+        # #924 deliberately NOT wired here: these are duck-typed
+        # WeightedConsequence rows (no .label/.theater contract) sharing the
+        # main action's roll — the main roll's pool carries the theater.
     else:
         selected = ConsequenceModel(
             outcome_tier=outcome,

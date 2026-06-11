@@ -52,10 +52,12 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
+    FLEE_PARTIAL_SUCCESS_LEVEL,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
+    CombatManeuver,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -77,6 +79,8 @@ from world.combat.models import (
     ComboLearning,
     ComboSlot,
     EncounterRiskAcknowledgement,
+    FleeConfig,
+    FleeTierModifier,
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
@@ -189,6 +193,17 @@ def get_penetration_check_type() -> CheckType:
     from world.checks.models import CheckType  # noqa: PLC0415
 
     return CheckType.objects.get(name=PENETRATION_CHECK_TYPE_NAME)
+
+
+def get_flee_config() -> FleeConfig:
+    """Return the seeded FleeConfig singleton (#878).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    fabricated row would have no check_type and silently break flee
+    resolution. DoesNotExist propagates loudly. Mirrors
+    get_penetration_check_type.
+    """
+    return FleeConfig.objects.get(pk=1)
 
 
 # ---------------------------------------------------------------------------
@@ -773,13 +788,12 @@ def join_encounter(
 
 
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
-    """Declare intent to flee -- passives-only action, auto-ready.
+    """Declare intent to flee -- passives-only maneuver, auto-ready.
 
-    Creates a CombatRoundAction with no focused action. Marks the
-    participant as FLED. Flee auto-succeeds in Phase 3 -- the participant
-    is removed from active combat at round resolution.
-
-    Phase 4 will add flee checks and covering actions.
+    Creates or replaces the current round's CombatRoundAction with no
+    focused action and maneuver=FLEE. Flee resolves as a real check at
+    round resolution (_resolve_flee); the participant remains ACTIVE until
+    the check succeeds.
     """
     from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -791,6 +805,10 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             f"Cannot flee: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
         )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot flee: participant is no longer active in this encounter."
         raise ValueError(msg)
 
     # Vitality check — dead characters cannot flee. Unconscious / dying
@@ -806,6 +824,8 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
             "focused_opponent_target": None,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.FLEE,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -813,8 +833,59 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "is_ready": True,
         },
     )
-    participant.status = ParticipantStatus.FLED
-    participant.save(update_fields=["status"])
+    return action
+
+
+def declare_cover(
+    participant: CombatParticipant,
+    ally: CombatParticipant,
+) -> CombatRoundAction:
+    """Declare a covering maneuver for an ally -- passives-only, auto-ready.
+
+    Cover resolves as a no-op on its own; its effect is the FleeConfig
+    cover_bonus it contributes to the ally's flee check in _resolve_flee.
+    Covering an ally who never declares flee simply wastes the action.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot cover: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot cover: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot cover: character is dead."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        msg = "Cannot cover yourself."
+        raise ValueError(msg)
+    if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+        msg = "Cover target must be an active participant in this encounter."
+        raise ValueError(msg)
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.COVER,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
     return action
 
 
@@ -1145,6 +1216,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "physical_passive": physical_passive,
             "social_passive": social_passive,
             "mental_passive": mental_passive,
+            "maneuver": None,  # Reset maneuver on re-declaration
             "combo_upgrade": None,  # Reset combo on re-declaration
             "is_ready": False,  # Reset ready on re-declaration
         },
@@ -2110,6 +2182,150 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_flee(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared flee as a graded check (#878).
+
+    Difficulty = FleeConfig.base_difficulty + max(FleeTierModifier over active
+    opponents' tiers); zero active opponents → tier term 0 (no auto-success).
+    Each same-round COVER declaration by an ACTIVE participant whose
+    focused_ally_target is this participant adds FleeConfig.cover_bonus.
+
+    Graded outcome by success_level: PARTIAL (-1) or better escapes
+    (status → FLED); PARTIAL and below applies the selected pool consequence
+    (PARTIAL = escape at a cost; FAILURE/BOTCH = stays ACTIVE). Botch severity
+    is authored in the pool's BOTCH-tier entries, not special-cased here.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+    config = get_flee_config()
+    encounter = participant.encounter
+
+    # Difficulty: base + the single worst (max) modifier among active
+    # opponents' tiers. One values_list + one filter — no queries in loops.
+    active_tiers = set(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        ).values_list("tier", flat=True)
+    )
+    tier_modifiers = dict(
+        FleeTierModifier.objects.filter(tier__in=active_tiers).values_list(
+            "tier", "difficulty_modifier"
+        )
+    )
+    tier_term = max((tier_modifiers.get(tier, 0) for tier in active_tiers), default=0)
+    difficulty = config.base_difficulty + tier_term
+
+    # Cover: one COUNT over this round's COVER declarations targeting the fleer.
+    cover_count = CombatRoundAction.objects.filter(
+        participant__encounter=encounter,
+        participant__status=ParticipantStatus.ACTIVE,
+        round_number=action.round_number,
+        maneuver=CombatManeuver.COVER,
+        focused_ally_target=participant,
+    ).count()
+
+    # Route the cover bonus through the shared modifier seam (the same idiom
+    # as effort in CombatTechniqueResolver._roll_check) so the recorded
+    # provenance carries a labeled "covering allies" contribution.
+    extra_contributions: list[ModifierContribution] = []
+    if cover_count:
+        extra_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CHARACTER,
+                source_label=f"Covering allies x{cover_count}",
+                value=config.cover_bonus * cover_count,
+            )
+        )
+    breakdown = collect_check_modifiers(
+        participant.character_sheet,
+        config.check_type,
+        extra_contributions=extra_contributions,
+    )
+
+    consequences = (
+        resolve_pool_consequences(config.consequence_pool)
+        if config.consequence_pool_id is not None
+        else []
+    )
+    character = participant.character_sheet.character
+    pending = select_consequence(
+        character,
+        config.check_type,
+        difficulty,
+        consequences,
+        extra_modifiers=breakdown.total,
+    )
+
+    success_level = pending.check_result.success_level
+    escaped = success_level >= FLEE_PARTIAL_SUCCESS_LEVEL
+    consequence_applies = success_level <= FLEE_PARTIAL_SUCCESS_LEVEL
+
+    if escaped:
+        participant.status = ParticipantStatus.FLED
+        participant.save(update_fields=["status"])
+
+    # ACTION-mode Interaction anchor + live broadcast (mirrors the tail of
+    # _resolve_pc_action).
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        create_action_interaction,
+        render_flee_outcome_narration,
+    )
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
+
+    interaction = create_action_interaction(
+        participant=participant,
+        round_number=action.round_number,
+        summary_label="Flee",
+    )
+    if interaction is not None:
+        action.interaction = interaction
+        action.interaction_timestamp = interaction.timestamp
+        action.save(update_fields=["interaction", "interaction_timestamp"])
+        push_interaction(interaction)
+
+    if consequence_applies and config.consequence_pool_id is not None:
+        apply_resolution(pending, ResolutionContext(character=character))
+        # Record provenance. Mirrors vitals' _record_combat_outcome guard: a
+        # sourceless ConsequenceOutcome is forbidden, so skip when no
+        # interaction anchor exists (sheet without a PRIMARY persona).
+        if interaction is not None:
+            from actions.types import WeightedConsequence  # noqa: PLC0415
+            from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+            selected = pending.selected_consequence
+            if isinstance(selected, WeightedConsequence):
+                selected = selected.consequence
+            record_consequence_outcome(
+                participant.character_sheet,
+                config.check_type,
+                config.consequence_pool,
+                selected if selected.pk is not None else None,
+                breakdown,
+                combat_interaction=interaction,
+                summary="flee attempt",
+            )
+
+    narration = render_flee_outcome_narration(
+        actor_label=str(participant),
+        escaped=escaped,
+        at_cost=escaped and consequence_applies,
+    )
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+    return outcome
+
+
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -2128,6 +2344,12 @@ def _resolve_pc_action(
 
     Fatigue is applied after the action resolves (both combo and non-combo).
     """
+    # Flee resolves as its own graded check (#878). COVER deliberately falls
+    # through to the passives-only early return below — its effect is the
+    # cover_bonus it contributes to the ally's flee check.
+    if action.maneuver == CombatManeuver.FLEE:
+        return _resolve_flee(participant, action)
+
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     technique = action.focused_action
@@ -2261,6 +2483,12 @@ def _resolve_npc_action(
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
     for target_participant in targets:
+        # A successful escape protects for the rest of the round (#878). The
+        # idmapper guarantees this is the same instance _resolve_flee just
+        # mutated, so the status write is visible without a re-fetch.
+        if target_participant.status != ParticipantStatus.ACTIVE:
+            continue
+
         # Damage recipients: any not-dead target is valid. Unconscious / dying
         # PCs still take damage (incapacitation/dying are conditions, not a gate
         # on damage application). Only the dead are excluded.

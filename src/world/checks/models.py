@@ -148,6 +148,14 @@ class Consequence(SharedMemoryModel):
     mechanical_description = models.TextField(blank=True)
     weight = models.PositiveIntegerField(default=1)
     character_loss = models.BooleanField(default=False)
+    theater = models.BooleanField(
+        default=False,
+        help_text=(
+            "Authored drama flag (#924): a tier pool containing this "
+            "consequence fires the roulette reveal even without a "
+            "character_loss candidate (character_loss always fires it)."
+        ),
+    )
 
     def __str__(self) -> str:
         return self.label

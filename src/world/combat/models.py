@@ -15,11 +15,14 @@ if TYPE_CHECKING:
 
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
+    FLEE_BASE_DIFFICULTY,
+    FLEE_COVER_BONUS,
     ActionCategory,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
     ClashStatus,
+    CombatManeuver,
     ComboLearningMethod,
     EncounterStatus,
     EncounterType,
@@ -640,6 +643,13 @@ class CombatRoundAction(SharedMemoryModel):
         blank=True,
         related_name="+",
     )
+    maneuver = models.CharField(
+        max_length=20,
+        choices=CombatManeuver.choices,
+        null=True,
+        blank=True,
+        help_text="Special maneuver this declaration is (flee/cover); null = normal action.",
+    )
 
     physical_passive = models.ForeignKey(
         "magic.Technique",
@@ -1167,6 +1177,65 @@ class ClashConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ClashConfig(pk={self.pk})"
+
+
+class FleeConfig(SharedMemoryModel):
+    """Singleton (pk=1): authored flee-check wiring (#878).
+
+    Seeded authored content — services use get(pk=1) and let DoesNotExist
+    propagate loudly (mirrors get_penetration_check_type's no-fabrication rule).
+    """
+
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="CheckType rolled for flee attempts.",
+    )
+    base_difficulty = models.PositiveIntegerField(
+        default=FLEE_BASE_DIFFICULTY,
+        help_text="Flee difficulty before opponent-tier modifiers.",
+    )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Pool for PARTIAL/FAILURE/BOTCH flee outcomes; null degrades to outcome-only.",
+    )
+    cover_bonus = models.PositiveIntegerField(
+        default=FLEE_COVER_BONUS,
+        help_text="Flat check bonus per ally covering the fleeing PC this round.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="flee_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"FleeConfig(pk={self.pk})"
+
+
+class FleeTierModifier(SharedMemoryModel):
+    """Authored flee-difficulty modifier per opponent tier (#878).
+
+    Encounter flee difficulty = FleeConfig.base_difficulty + max(modifier over
+    active opponents' tiers); zero active opponents → base difficulty alone.
+    """
+
+    tier = models.CharField(max_length=20, choices=OpponentTier.choices, unique=True)
+    difficulty_modifier = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["tier"]
+
+    def __str__(self) -> str:
+        return f"FleeTierModifier({self.tier}: {self.difficulty_modifier:+d})"
 
 
 # =============================================================================

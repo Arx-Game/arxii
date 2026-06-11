@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from actions.models import ActionEnhancement
     from actions.models.consequence_pools import ConsequencePool
-    from integration_tests.game_content.combat import PenetrationContestResult
+    from integration_tests.game_content.combat import FleeSeedResult, PenetrationContestResult
     from world.classes.models import Path
     from world.conditions.models import CapabilityType, ConditionStage
     from world.magic.audere import AudereThreshold
@@ -2232,6 +2232,8 @@ class MagicDevSeedResult:
     represented here; callers can query Wild Hunt / Web of Spiders rows directly.
     ``penetration`` holds the penetration CheckType, factor ladder, and
     check-scoped ModifierTarget seeded by seed_penetration_contest() (#767).
+    ``flee`` holds the flee CheckType, ModifierTarget, and FleeConfig singleton
+    seeded by seed_flee_check() (#878).
     """
 
     config: MagicConfigResult
@@ -2241,6 +2243,7 @@ class MagicDevSeedResult:
     magic_content: MagicContentResult
     facet_thread_unlock: FacetThreadUnlockResult
     penetration: PenetrationContestResult
+    flee: FleeSeedResult
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2315,6 +2318,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
        Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
     9. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
+    10. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
+        singleton + tier modifiers + starter consequence pool (#878)
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved.
@@ -2322,7 +2327,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
     Returns:
         MagicDevSeedResult composing all sub-results.
     """
-    from integration_tests.game_content.combat import seed_penetration_contest  # noqa: PLC0415
+    from integration_tests.game_content.combat import (  # noqa: PLC0415
+        seed_flee_check,
+        seed_penetration_contest,
+    )
     from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
 
     config = seed_magic_config()
@@ -2334,6 +2342,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     facet_thread_unlock = seed_facet_thread_unlock()
     seed_starter_magic_story()
     penetration = seed_penetration_contest()
+    flee = seed_flee_check()
 
     return MagicDevSeedResult(
         config=config,
@@ -2343,4 +2352,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         magic_content=magic_content,
         facet_thread_unlock=facet_thread_unlock,
         penetration=penetration,
+        flee=flee,
     )

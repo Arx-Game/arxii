@@ -22,6 +22,8 @@ vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
+  useFleeMutation: vi.fn(),
+  useCoverMutation: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -115,7 +117,7 @@ vi.mock('@/magic/queries', async (importOriginal) => {
 import * as combatQueries from '@/combat/queries';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
-import type { AvailableCombo } from '../types';
+import type { AvailableCombo, EncounterDetail, Participant } from '../types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -136,8 +138,12 @@ const mockedUseUpgradeCombo = combatQueries.useUpgradeCombo as ReturnType<typeof
 const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as ReturnType<
   typeof vi.fn
 >;
+const mockedUseFleeMutation = combatQueries.useFleeMutation as ReturnType<typeof vi.fn>;
+const mockedUseCoverMutation = combatQueries.useCoverMutation as ReturnType<typeof vi.fn>;
 
 const mockMutate = vi.fn();
+const mockFleeMutate = vi.fn();
+const mockCoverMutate = vi.fn();
 const mockMutateAsync = vi.fn();
 
 function setupMocks(
@@ -159,6 +165,63 @@ function setupMocks(
     mutateAsync: mockMutateAsync,
     isPending: false,
   });
+  mockedUseFleeMutation.mockReturnValue({
+    mutate: mockFleeMutate,
+    isPending: false,
+  });
+  mockedUseCoverMutation.mockReturnValue({
+    mutate: mockCoverMutate,
+    isPending: false,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Encounter fixture factory for flee / cover tests
+// ---------------------------------------------------------------------------
+
+function makeParticipant(
+  id: number,
+  name: string,
+  status = 'active',
+  /** CharacterSheet PK. Defaults to id+1000 so ally fixtures don't collide with
+   *  defaultProps.characterSheetId (100) unless explicitly set. */
+  characterSheetId = id + 1000
+): Participant {
+  return {
+    id,
+    character_sheet_id: characterSheetId,
+    character_name: name,
+    status: status as Participant['status'],
+    health: null,
+    max_health: null,
+    character_status: null,
+    available_strain: null,
+    fatigue: null,
+    active_conditions: [],
+    thumbnail_url: null,
+    thumbnail_media_url: null,
+  };
+}
+
+/** The viewer's own participant fixture — character_sheet_id matches defaultProps.characterSheetId. */
+function makeSelfParticipant(id: number): Participant {
+  return makeParticipant(id, 'Hero', 'active', 100);
+}
+
+function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetail {
+  return {
+    id: 1,
+    status: 'declaring',
+    round_number: 1,
+    is_participant: true,
+    is_gm: false,
+    participants: [],
+    opponents: [],
+    current_round_actions: [],
+    clashes: [],
+    created_at: '2026-06-11T00:00:00Z',
+    ...overrides,
+  } as unknown as EncounterDetail;
 }
 
 function defaultProps(overrides?: Partial<YourTurnProps>): YourTurnProps {
@@ -205,6 +268,12 @@ function makePlayerAction(clashId: number | null, displayName: string): PlayerAc
 beforeEach(() => {
   vi.clearAllMocks();
   mockMutateAsync.mockResolvedValue({ backend: 'COMBAT', deferred: true });
+  mockFleeMutate.mockImplementation((_arg: unknown, opts?: { onError?: (e: Error) => void }) => {
+    void opts;
+  });
+  mockCoverMutate.mockImplementation((_arg: unknown, opts?: { onError?: (e: Error) => void }) => {
+    void opts;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -605,5 +674,212 @@ describe('YourTurn — readOnly prop', () => {
 
     expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
     expect(screen.getByTestId('submit-declarations-btn')).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7 — Flee declaration controls
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — flee declaration', () => {
+  it('does not render maneuver section when encounter prop is absent', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('maneuver-declaration-section')).not.toBeInTheDocument();
+  });
+
+  it('renders flee button during declaring phase', () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('flee-btn')).toBeInTheDocument();
+  });
+
+  it('flee button is disabled outside the declaring phase', () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'resolving' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('flee-btn')).toBeDisabled();
+  });
+
+  it('flee button calls useFleeMutation.mutate on click', async () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('flee-btn'));
+
+    expect(mockFleeMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows flee-declared badge when maneuver is flee', () => {
+    setupMocks();
+    // participants list includes the viewer's own participant (character_sheet_id=100
+    // matches defaultProps.characterSheetId=100) so myParticipantId resolves to 5.
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('flee-declared-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('flee-declared-badge')).toHaveTextContent(
+      'Fleeing — resolves at end of round'
+    );
+    // Flee button should be hidden when already declared.
+    expect(screen.queryByTestId('flee-btn')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7 — Cover declaration controls
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — cover declaration', () => {
+  it('renders cover control during declaring phase', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(1, 'Ally One'), makeParticipant(2, 'Ally Two')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('cover-control')).toBeInTheDocument();
+    expect(screen.getByTestId('cover-ally-select')).toBeInTheDocument();
+    expect(screen.getByTestId('cover-confirm-btn')).toBeInTheDocument();
+  });
+
+  it('cover confirm button is disabled when no ally is selected', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(1, 'Ally One')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('cover-confirm-btn')).toBeDisabled();
+  });
+
+  it('cover confirm button disabled outside declaring phase', () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'resolving' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('cover-confirm-btn')).toBeDisabled();
+  });
+
+  it('shows cover-declared badge when maneuver is cover', () => {
+    setupMocks();
+    // Self participant (id=5, character_sheet_id=100) + ally (id=7).
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5), makeParticipant(7, 'Shield Bearer')],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'cover',
+          is_ready: false,
+          focused_ally_target: 7,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('cover-declared-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('cover-declared-badge')).toHaveTextContent('Covering Shield Bearer');
+    // Cover control hidden when already declared.
+    expect(screen.queryByTestId('cover-control')).not.toBeInTheDocument();
+  });
+
+  it('cover confirm posts ally participant id via useCoverMutation', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(3, 'Ally Three')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    // Open the Select and pick the ally.
+    // Radix UI Select uses a trigger button + portal content.
+    // Click the trigger to open, then click the item.
+    const trigger = screen.getByTestId('cover-ally-select');
+    await userEvent.click(trigger);
+
+    const option = await screen.findByText('Ally Three');
+    await userEvent.click(option);
+
+    // Confirm cover.
+    const confirmBtn = screen.getByTestId('cover-confirm-btn');
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    await userEvent.click(confirmBtn);
+
+    expect(mockCoverMutate).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Robustness — own-action resolution is position-independent
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — own-action resolved by participant PK, not position', () => {
+  it('shows flee badge even when another participant action appears first in the list (GM view)', () => {
+    // Simulates the GM/staff scenario where current_round_actions contains
+    // ALL participants' actions, unordered — another participant comes first.
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      // Viewer's own participant: id=5, character_sheet_id=100.
+      participants: [makeSelfParticipant(5), makeParticipant(9, 'Other Combatant')],
+      current_round_actions: [
+        // Another participant's action comes FIRST — must not be treated as self.
+        {
+          participant: 9,
+          participant_name: 'Other Combatant',
+          maneuver: null,
+          is_ready: false,
+          focused_ally_target: null,
+        },
+        // Viewer's own action — flee declared.
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    // Own flee maneuver is recognised despite not being actions[0].
+    expect(screen.getByTestId('flee-declared-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('flee-btn')).not.toBeInTheDocument();
   });
 });
