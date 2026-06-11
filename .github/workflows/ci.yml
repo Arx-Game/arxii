@@ -65,7 +65,7 @@ jobs:
           #                   behaviors, evennia_extensions (25), realms (0), species (0)
           - name: shard-4
             apps: >-
-              world.roster world.societies world.game_clock world.fatigue world.events
+              world.roster world.societies world.currency world.game_clock world.fatigue world.events
               world.skills world.relationships world.distinctions world.codex world.goals
               world.checks world.action_points world.narrative world.journals world.achievements
               world.forms world.covenants world.tarot world.vitals world.player_submissions
