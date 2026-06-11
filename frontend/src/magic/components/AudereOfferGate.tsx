@@ -74,7 +74,10 @@ export function AudereOfferGate({
         }}
         isPending={respond.isPending}
         errorMessage={
-          respond.isError ? 'The gate did not answer — your response failed to land. Try again.' : null
+          respond.isError
+            ? respond.error?.message ||
+              'The gate did not answer — your response failed to land. Try again.'
+            : null
         }
       />
     </>

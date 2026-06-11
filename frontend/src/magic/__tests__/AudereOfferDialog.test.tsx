@@ -157,9 +157,10 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     });
   });
 
-  it('a rejecting respond keeps the dialog open and shows the failure alert', async () => {
+  it('a rejecting respond keeps the dialog open and surfaces the server message', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.respondToAudere).mockRejectedValue(new Error('500'));
+    const SERVER_MESSAGE = 'The Audere gate has closed; this offer is no longer valid.';
+    vi.mocked(api.respondToAudere).mockRejectedValue(new Error(SERVER_MESSAGE));
 
     renderGate([OFFER]);
 
@@ -169,9 +170,11 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     await waitFor(() => {
       expect(api.respondToAudere).toHaveBeenCalledWith({ offer_id: 5, accept: true });
     });
-    // Failure surfaces inside the still-open dialog.
+    // Failure surfaces inside the still-open dialog, carrying the backend's
+    // typed message verbatim (not the hardcoded fallback copy).
     const error = await screen.findByTestId('audere-respond-error');
     expect(error).toHaveAttribute('role', 'alert');
+    expect(error).toHaveTextContent(SERVER_MESSAGE);
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 });
