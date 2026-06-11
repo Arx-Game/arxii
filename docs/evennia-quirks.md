@@ -26,3 +26,25 @@ arx manage makemigrations traits
 ### Migration Management for New Apps
 **IMPORTANT: When working on a new app, avoid multiple migrations during development**
 django_notes.md gives a more in-depth explanation of this strategy.
+
+### loaddata Cannot UPDATE SharedMemoryModel Rows (#946)
+
+**Natural-key `loaddata` INSERTS fine but silently no-ops UPDATES on every
+SharedMemoryModel** (= every concrete model in this repo). Django's
+deserializer resolves the existing pk via `get_by_natural_key` — which loads
+the row into the idmapper identity map — then constructs `Model(**data)` with
+that pk, and the identity map intercepts construction-by-pk and returns the
+**cached old instance**, discarding the fixture's new field values. No error
+is raised. Verified cross-process during #944; flushing the cache around
+`loaddata` doesn't help because `get_by_natural_key` itself re-primes the
+cache mid-deserialization.
+
+**Rules:**
+
+- Fixture JSON is valid for **fresh-database seeding only** (pure inserts).
+- Never rely on re-loading an edited fixture to update existing rows — use an
+  explicit upsert: `core_management.content_fixtures.load_entries` (the #944
+  content pipeline, `just load-content`) or `update_or_create` keyed on the
+  natural fields.
+- Don't build cache-flush workarounds; upsert is the standing answer (the
+  identity map is load-bearing — see the `sharedmemory-model` skill).
