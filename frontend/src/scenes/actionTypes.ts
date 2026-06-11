@@ -99,10 +99,14 @@ export interface PlayerActionsResponse {
   results: PlayerAction[];
 }
 
+/** Mirrors SceneActionRequestSerializer's FLAT payload (#892 — keep in sync). */
 export interface ActionRequest {
   id: number;
-  initiator_persona: { id: number; name: string };
-  action_name: string;
+  /** Persona pk — the serializer emits the FK id, not a nested object. */
+  initiator_persona: number;
+  initiator_name: string;
+  action_key: string;
+  technique: number | null;
   technique_name: string | null;
   strain_commitment: number;
   /** Risk level of the encounter accepting this hostile cast would join (#777). */

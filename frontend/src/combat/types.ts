@@ -21,6 +21,20 @@ export type Opponent = components['schemas']['Opponent'];
 // For Phase 7 we surface them as opaque blobs; a typed shape is a follow-up.
 export type RoundAction = Record<string, unknown>;
 
+/**
+ * Typed overlay for RoundAction entries from RoundActionSerializer.
+ * Extends the opaque blob with the fields we actually consume in the UI.
+ * maneuver: null = no special maneuver; "flee" / "cover" = declared maneuver.
+ * focused_ally_target: CombatParticipant PK of the covered ally (cover only).
+ */
+export interface RoundActionTyped extends RoundAction {
+  participant: number;
+  participant_name: string;
+  is_ready: boolean;
+  maneuver: 'flee' | 'cover' | null;
+  focused_ally_target: number | null;
+}
+
 // ---------------------------------------------------------------------------
 // Local type for ClashState (from ClashStateSerializer, Phase 8)
 //

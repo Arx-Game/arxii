@@ -581,3 +581,164 @@ def wire_penetration_modifier_target():
         target_check_type=wire_penetration_check_type(),
         is_active=True,
     )
+
+
+def wire_flee_check_type():
+    """Seed the 'flee' CheckType for the flee-attempt check (#878).
+
+    Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
+    category) and get_or_create on (check_type, trait), so re-runs are
+    no-ops and staff weight edits are preserved. The check resolves through
+    the shared rank/chart pipeline (ResultChart.get_chart_for_difference),
+    so no per-CheckType chart row is needed.
+
+    Trait composition (agility 1.00, wits 0.50): agility drives the raw
+    physical escape burst; wits reflects situational reading and route
+    choice under pressure. Both are seeded by the character seed helpers
+    (_CHALLENGE_STAT_NAMES) so a production character rolls a real pool.
+    """
+    from decimal import Decimal
+
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+    from world.checks.models import CheckTypeTrait
+    from world.combat.constants import FLEE_CHECK_TYPE_NAME
+    from world.traits.factories import StatTraitFactory
+    from world.traits.models import TraitCategory
+
+    check_type = CheckTypeFactory(
+        name=FLEE_CHECK_TYPE_NAME,
+        category=CheckCategoryFactory(name="Combat"),
+        description="Flee-attempt check rolled when a PC declares flee (#878).",
+    )
+    for trait_name, category, weight in [
+        ("agility", TraitCategory.PHYSICAL, "1.00"),
+        ("wits", TraitCategory.MENTAL, "0.50"),
+    ]:
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type,
+            trait=StatTraitFactory(name=trait_name, category=category),
+            defaults={"weight": Decimal(weight)},
+        )
+    return check_type
+
+
+def wire_flee_modifier_target():
+    """Seed the check-scoped 'flee' ModifierTarget (#878).
+
+    Links the mechanics ModifierTarget to the flee CheckType through
+    the target_check_type OneToOne, so "+flee" buffs are ordinary
+    CharacterModifier rows picked up by the CHARACTER source in
+    collect_check_modifiers. Idempotent via django_get_or_create on
+    (category, name); the FK link lands on first create and is preserved
+    (never overwritten) on re-runs.
+    """
+    from world.combat.constants import FLEE_CHECK_TYPE_NAME
+    from world.mechanics.constants import CHECK_CATEGORY_NAME
+    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+    return ModifierTargetFactory(
+        name=FLEE_CHECK_TYPE_NAME,
+        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
+        description="Character-side bonus to the flee check (cover, boons, conditions).",
+        target_check_type=wire_flee_check_type(),
+        is_active=True,
+    )
+
+
+def wire_flee_config():
+    """Seed the FleeConfig singleton (pk=1) + tier modifier rows + starter pool (#878).
+
+    Idempotent — get_or_create at every layer; staff edits to base_difficulty,
+    cover_bonus, or individual tier modifiers are preserved on re-runs.
+
+    Starter pool has three label-only consequences (no APPLY_CONDITION effects)
+    covering PARTIAL/FAILURE/BOTCH tiers.  APPLY_CONDITION effects are deferred
+    until authored ConditionTemplate content lands (#878).
+
+    Tier modifiers seeded:
+        SWARM:      -5   (easy to flee a horde)
+        MOOK:        0   (baseline)
+        ELITE:      +5
+        BOSS:       +10
+        HERO_KILLER: +20 (nearly impossible solo)
+    """
+    from actions.models import ConsequencePool, ConsequencePoolEntry
+    from world.checks.models import Consequence
+    from world.combat.constants import (
+        FLEE_BASE_DIFFICULTY,
+        FLEE_CHECK_TYPE_NAME,
+        FLEE_PARTIAL_SUCCESS_LEVEL,
+    )
+    from world.combat.models import FleeConfig, FleeTierModifier, OpponentTier
+    from world.traits.models import CheckOutcome
+
+    # --- Outcome tiers for the starter pool ---
+    # PARTIAL = the escape-at-cost threshold (FLEE_PARTIAL_SUCCESS_LEVEL = -1).
+    # FAILURE (-2) and BOTCH (-3) mean the fleer stays in the fight.
+    partial_outcome, _ = CheckOutcome.objects.get_or_create(
+        name=f"{FLEE_CHECK_TYPE_NAME}_partial",
+        defaults={"success_level": FLEE_PARTIAL_SUCCESS_LEVEL},  # -1
+    )
+    failure_outcome, _ = CheckOutcome.objects.get_or_create(
+        name=f"{FLEE_CHECK_TYPE_NAME}_failure",
+        defaults={"success_level": -2},
+    )
+    botch_outcome, _ = CheckOutcome.objects.get_or_create(
+        name=f"{FLEE_CHECK_TYPE_NAME}_botch",
+        defaults={"success_level": -3},
+    )
+
+    # --- Starter consequence pool ---
+    pool, _ = ConsequencePool.objects.get_or_create(
+        name="Flee Starter Pool",
+        defaults={"description": "Starter consequence pool for flee-check outcomes (#878)."},
+    )
+
+    # Pool entries — (outcome_tier, label) is the stable natural key.
+    # Note: if an outcome row is deleted and recreated, its new pk will cause
+    # stale consequence rows to accumulate; avoid deleting seeded outcome rows.
+    # label-only consequences: no APPLY_CONDITION effects until authored
+    # ConditionTemplate content lands (#878).
+    for outcome, label in [
+        (partial_outcome, "Winded escape"),
+        (failure_outcome, "Cornered"),
+        (botch_outcome, "Stumbled badly"),
+    ]:
+        consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=outcome,
+            label=label,
+            defaults={
+                "weight": 1,
+                "character_loss": False,
+            },
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=pool,
+            consequence=consequence,
+        )
+
+    # --- FleeConfig singleton ---
+    check_type = wire_flee_check_type()
+    config, _ = FleeConfig.objects.get_or_create(
+        pk=1,
+        defaults={
+            "check_type": check_type,
+            "base_difficulty": FLEE_BASE_DIFFICULTY,
+            "consequence_pool": pool,
+        },
+    )
+
+    # --- Tier modifier rows ---
+    for tier, modifier in [
+        (OpponentTier.SWARM, -5),
+        (OpponentTier.MOOK, 0),
+        (OpponentTier.ELITE, 5),
+        (OpponentTier.BOSS, 10),
+        (OpponentTier.HERO_KILLER, 20),
+    ]:
+        FleeTierModifier.objects.get_or_create(
+            tier=tier,
+            defaults={"difficulty_modifier": modifier},
+        )
+
+    return config

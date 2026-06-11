@@ -3227,6 +3227,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/cover/:
+    post:
+      operationId: combat_cover_create
+      description: |-
+        Declare a covering maneuver for an ally.
+
+        Creates a passives-only action with maneuver=COVER and
+        focused_ally_target set to the named ally. The participant remains
+        ACTIVE; cover resolves at round resolution as a bonus to the ally's
+        flee check.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/declare/:
     post:
       operationId: combat_declare_create
@@ -3257,7 +3290,11 @@ paths:
   /api/combat/{id}/flee/:
     post:
       operationId: combat_flee_create
-      description: Declare intent to flee. Creates a passives-only action.
+      description: |-
+        Declare intent to flee.
+
+        Creates a passives-only action with maneuver=FLEE. Flee resolves as
+        a check at round resolution; the participant remains ACTIVE until then.
       parameters:
       - in: path
         name: id
@@ -32025,6 +32062,10 @@ components:
         id:
           type: integer
           readOnly: true
+        character_sheet_id:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
         character_name:
           type: string
           readOnly: true
@@ -32113,6 +32154,7 @@ components:
       - active_conditions
       - available_strain
       - character_name
+      - character_sheet_id
       - character_status
       - fatigue
       - health
@@ -36488,6 +36530,12 @@ components:
           type: integer
           nullable: true
           description: Technique used for this action, if any
+        technique_name:
+          type: string
+          nullable: true
+          description: Human label for the enhancing technique (#892 — ConsentPrompt
+            display).
+          readOnly: true
         delivery:
           description: |-
             Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
@@ -36563,6 +36611,7 @@ components:
       - scene
       - status
       - target_name
+      - technique_name
     SceneActionRequestRequest:
       type: object
       properties:
