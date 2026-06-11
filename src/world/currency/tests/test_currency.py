@@ -130,3 +130,161 @@ class InstrumentTests(TestCase):
                 from_purse=purse,
             )
         assert CurrencyInstrumentDetails.objects.count() == 0
+
+
+class OrgEconomicsTests(TestCase):
+    """Income streams, Graft, declarations, obligations, contributions (#926)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.societies.factories import OrganizationFactory
+
+        cls.org = OrganizationFactory()
+        cls.liege = OrganizationFactory()
+
+    def test_income_leaks_graft_and_mints_net(self) -> None:
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import (
+            get_or_create_economics,
+            get_or_create_treasury,
+            process_income_stream,
+        )
+
+        economics = get_or_create_economics(self.org)
+        economics.graft_pct = 10
+        economics.save()
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+
+        declaration = process_income_stream(stream)
+
+        treasury = get_or_create_treasury(self.org)
+        treasury.refresh_from_db()
+        assert treasury.balance == 900  # 10% leaked
+        assert declaration.actual_amount == 900
+        assert declaration.declared_amount == 900
+        assert declaration.underdeclared is False
+
+    def test_underdeclared_income_recorded(self) -> None:
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import process_income_stream
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Turf kick-up", kind="crime_kickup", gross_amount=1000
+        )
+        declaration = process_income_stream(stream, declared_amount=300)
+        assert declaration.underdeclared is True
+        assert declaration.actual_amount == 900  # default graft 10%
+
+    def test_obligations_compute_on_declared(self) -> None:
+        from world.currency.models import OrgIncomeStream, OrgObligation
+        from world.currency.services import (
+            get_or_create_treasury,
+            process_income_stream,
+            settle_obligations,
+        )
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        OrgObligation.objects.create(
+            from_organization=self.org,
+            to_organization=self.liege,
+            name="Crown taxes",
+            percent=20,
+        )
+        process_income_stream(stream, declared_amount=500)
+
+        transfers = settle_obligations(self.org)
+
+        assert len(transfers) == 1
+        assert transfers[0].amount == 100  # 20% of DECLARED 500, not actual 900
+        liege_treasury = get_or_create_treasury(self.liege)
+        liege_treasury.refresh_from_db()
+        assert liege_treasury.balance == 100
+
+    def test_settlement_marks_declarations_and_is_idempotent(self) -> None:
+        from world.currency.models import OrgIncomeStream, OrgObligation
+        from world.currency.services import process_income_stream, settle_obligations
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        OrgObligation.objects.create(
+            from_organization=self.org,
+            to_organization=self.liege,
+            name="Crown taxes",
+            percent=20,
+        )
+        process_income_stream(stream)
+        first = settle_obligations(self.org)
+        second = settle_obligations(self.org)
+        assert len(first) == 1
+        assert second == []
+
+    def test_contribution_moves_money_and_records(self) -> None:
+        from world.currency.models import ContributionRecord
+        from world.currency.services import (
+            get_or_create_purse,
+            get_or_create_treasury,
+            record_contribution,
+            transfer,
+        )
+
+        persona = PersonaFactory()
+        purse = get_or_create_purse(persona.character_sheet)
+        transfer(amount=500, reason="seed", to_purse=purse)
+
+        record = record_contribution(
+            persona=persona, organization=self.org, amount=200, reason="war chest"
+        )
+
+        purse.refresh_from_db()
+        treasury = get_or_create_treasury(self.org)
+        treasury.refresh_from_db()
+        assert purse.balance == 300
+        assert treasury.balance == 200
+        assert record.transfer is not None
+        assert ContributionRecord.objects.filter(organization=self.org).count() == 1
+
+    def test_treat_servants_sinks_money_and_floors_graft(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.services import (
+            get_or_create_economics,
+            get_or_create_treasury,
+            transfer,
+            treat_servants,
+        )
+
+        treasury = get_or_create_treasury(self.org)
+        transfer(amount=1000, reason="seed", to_treasury=treasury)
+        economics = get_or_create_economics(self.org)
+        economics.graft_pct = 5
+        economics.save()
+
+        result = treat_servants(self.org, payment=400, graft_reduction=10)
+
+        treasury.refresh_from_db()
+        assert treasury.balance == 600
+        assert result.graft_pct == 1  # floored, never zero
+
+        with self.assertRaises(DjangoValidationError):
+            treat_servants(self.org, payment=100, graft_reduction=0)
+
+    def test_inactive_stream_rejected(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import process_income_stream
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org,
+            name="Dead stream",
+            kind="domain_tax",
+            gross_amount=100,
+            active=False,
+        )
+        with self.assertRaises(DjangoValidationError):
+            process_income_stream(stream)
