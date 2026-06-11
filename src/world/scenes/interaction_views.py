@@ -46,6 +46,7 @@ from world.scenes.interaction_services import (
     create_interaction,
     delete_interaction,
     mark_very_private,
+    push_interaction,
 )
 from world.scenes.models import (
     Interaction,
@@ -312,6 +313,16 @@ class InteractionViewSet(
                 )
             else:
                 auto_link_pose_to_actions(interaction)
+
+        # Broadcast after commit so clients that refetch on receipt see committed state.
+        # A fresh REST pose has no receiver/target rows; passing empty lists here
+        # explicitly skips push_interaction's fallback DB queries (per its docstring).
+        push_interaction(
+            interaction,
+            receiver_persona_ids=[],
+            target_persona_ids=[],
+            receiver_characters=[],
+        )
 
         # The freshly-created interaction has not been through get_queryset()'s
         # Prefetch pipeline, so the cached_* to_attr attributes used by

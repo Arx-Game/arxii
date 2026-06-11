@@ -438,3 +438,79 @@ class ThreatPoolEntryDamageTypeTests(EvenniaTestCase):
 
         entry = ThreatPoolEntryFactory(damage_type=None)
         self.assertIsNone(entry.damage_type)
+
+
+class CombatManeuverFieldTests(TestCase):
+    """Tests for CombatRoundAction.maneuver field (#878)."""
+
+    def test_maneuver_defaults_null(self) -> None:
+        """maneuver is null for a normal (non-maneuver) declaration."""
+        from world.combat.factories import CombatRoundActionFactory
+
+        action = CombatRoundActionFactory()
+        self.assertIsNone(action.maneuver)
+
+    def test_maneuver_accepts_flee(self) -> None:
+        """maneuver field accepts CombatManeuver.FLEE."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.factories import CombatParticipantFactory, CombatRoundActionFactory
+
+        participant = CombatParticipantFactory()
+        action = CombatRoundActionFactory(
+            participant=participant,
+            round_number=99,
+            maneuver=CombatManeuver.FLEE,
+        )
+        action.refresh_from_db()
+        self.assertEqual(action.maneuver, CombatManeuver.FLEE)
+
+    def test_maneuver_accepts_cover(self) -> None:
+        """maneuver field accepts CombatManeuver.COVER."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.factories import CombatParticipantFactory, CombatRoundActionFactory
+
+        participant = CombatParticipantFactory()
+        action = CombatRoundActionFactory(
+            participant=participant,
+            round_number=98,
+            maneuver=CombatManeuver.COVER,
+        )
+        action.refresh_from_db()
+        self.assertEqual(action.maneuver, CombatManeuver.COVER)
+
+
+class FleeTierModifierTests(TestCase):
+    """Tests for FleeTierModifier model (#878)."""
+
+    def test_tier_uniqueness_enforced(self) -> None:
+        """Two FleeTierModifier rows with the same tier raise IntegrityError."""
+        from world.combat.models import FleeTierModifier
+
+        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=5)
+        with self.assertRaises(IntegrityError):
+            FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=10)
+
+    def test_str(self) -> None:
+        """__str__ includes tier and sign-formatted modifier."""
+        from world.combat.models import FleeTierModifier
+
+        modifier = FleeTierModifier(tier=OpponentTier.BOSS, difficulty_modifier=8)
+        self.assertEqual(str(modifier), "FleeTierModifier(boss: +8)")
+
+    def test_negative_modifier_str(self) -> None:
+        """__str__ correctly formats negative modifiers."""
+        from world.combat.models import FleeTierModifier
+
+        modifier = FleeTierModifier(tier=OpponentTier.SWARM, difficulty_modifier=-3)
+        self.assertEqual(str(modifier), "FleeTierModifier(swarm: -3)")
+
+
+class FleeConfigTests(TestCase):
+    """Tests for FleeConfig model (#878)."""
+
+    def test_str(self) -> None:
+        """__str__ includes pk."""
+        from world.combat.models import FleeConfig
+
+        config = FleeConfig(pk=1)
+        self.assertEqual(str(config), "FleeConfig(pk=1)")

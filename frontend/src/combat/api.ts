@@ -105,6 +105,69 @@ export async function postUpgradeCombo(
 }
 
 // ---------------------------------------------------------------------------
+// Flee declaration
+// ---------------------------------------------------------------------------
+
+/**
+ * Declare intent to flee this round.
+ * POST /api/combat/{encounterId}/flee/
+ * No body required. 400 outside declaring phase; 403 non-participant.
+ */
+export async function postFlee(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/flee/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    let detail = 'Failed to declare flee';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
+// Cover declaration
+// ---------------------------------------------------------------------------
+
+/**
+ * Declare cover for an ally participant.
+ * POST /api/combat/{encounterId}/cover/
+ * Body: { ally_participant_id: number }
+ * 400 invalid (self/inactive); 404 foreign ally; 403 non-participant.
+ */
+export async function postCover(
+  encounterId: number,
+  allyParticipantId: number
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/cover/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ally_participant_id: allyParticipantId }),
+  });
+  if (!res.ok) {
+    let detail = 'Failed to declare cover';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch player action
 // ---------------------------------------------------------------------------
 

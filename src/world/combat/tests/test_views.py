@@ -325,8 +325,11 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
 
-    def test_flee_marks_participant_fled(self) -> None:
-        """Flee endpoint marks the participant as FLED."""
+    def test_flee_declares_maneuver_participant_stays_active(self) -> None:
+        """Flee endpoint declares the FLEE maneuver; participant stays ACTIVE until resolution."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.models import CombatRoundAction
+
         # Use a separate encounter in DECLARING status for the flee test
         flee_encounter = CombatEncounterFactory(
             scene=self.scene,
@@ -349,10 +352,183 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         flee_participant.refresh_from_db()
-        self.assertEqual(
-            flee_participant.status,
-            ParticipantStatus.FLED,
+        # Participant stays ACTIVE — flee resolves at round resolution (#878)
+        self.assertEqual(flee_participant.status, ParticipantStatus.ACTIVE)
+        action = CombatRoundAction.objects.get(
+            participant=flee_participant, round_number=flee_encounter.round_number
         )
+        self.assertEqual(action.maneuver, CombatManeuver.FLEE)
+
+    def test_flee_rejects_non_participant(self) -> None:
+        """POST /flee from a non-participant returns 403."""
+        other_account = AccountFactory(username="flee_outsider")
+        other_char = CharacterFactory(db_key="flee_outsider_char")
+        CharacterSheetFactory(character=other_char)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=other_char,
+            player_data__account=other_account,
+        )
+        flee_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        client = APIClient()
+        client.force_authenticate(user=other_account)
+        response = client.post(f"/api/combat/{flee_encounter.pk}/flee/")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_flee_rejects_when_not_declaring(self) -> None:
+        """POST /flee returns 400 with _ERR_DECLARE_FAILED when not in DECLARING status."""
+        from world.combat.views import _ERR_DECLARE_FAILED
+
+        # Encounter is BETWEEN_ROUNDS — declare_flee raises ValueError
+        non_declaring_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            round_number=0,
+        )
+        CombatParticipantFactory(
+            encounter=non_declaring_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(f"/api/combat/{non_declaring_encounter.pk}/flee/")
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], _ERR_DECLARE_FAILED)
+
+    def test_cover_declares_for_ally(self) -> None:
+        """POST /cover creates a COVER action with focused_ally_target; participant stays ACTIVE."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.models import CombatRoundAction
+
+        cover_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cover_participant = CombatParticipantFactory(
+            encounter=cover_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        ally_sheet = CharacterSheetFactory()
+        ally_participant = CombatParticipantFactory(
+            encounter=cover_encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{cover_encounter.pk}/cover/",
+            {"ally_participant_id": ally_participant.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        cover_participant.refresh_from_db()
+        self.assertEqual(cover_participant.status, ParticipantStatus.ACTIVE)
+        action = CombatRoundAction.objects.get(
+            participant=cover_participant, round_number=cover_encounter.round_number
+        )
+        self.assertEqual(action.maneuver, CombatManeuver.COVER)
+        self.assertEqual(action.focused_ally_target, ally_participant)
+        # Response payload includes the round action with maneuver == "cover"
+        round_actions = response.data["current_round_actions"]
+        cover_entry = next(
+            (a for a in round_actions if a["participant"] == cover_participant.pk),
+            None,
+        )
+        self.assertIsNotNone(cover_entry)
+        self.assertEqual(cover_entry["maneuver"], "cover")
+
+    def test_cover_rejects_non_participant_viewer(self) -> None:
+        """POST /cover from an account with no participant in the encounter returns 403."""
+        other_account = AccountFactory(username="cover_outsider")
+        other_char = CharacterFactory(db_key="cover_outsider_char")
+        CharacterSheetFactory(character=other_char)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=other_char,
+            player_data__account=other_account,
+        )
+        cover_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        client = APIClient()
+        client.force_authenticate(user=other_account)
+        response = client.post(
+            f"/api/combat/{cover_encounter.pk}/cover/",
+            {"ally_participant_id": 9999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_cover_rejects_foreign_ally(self) -> None:
+        """POST /cover with an ally from a different encounter returns 404."""
+        cover_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        CombatParticipantFactory(
+            encounter=cover_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        # Create a participant in a different encounter
+        other_encounter = CombatEncounterFactory(scene=self.scene)
+        foreign_ally = CombatParticipantFactory(
+            encounter=other_encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{cover_encounter.pk}/cover/",
+            {"ally_participant_id": foreign_ally.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_404_NOT_FOUND)
+
+    def test_cover_rejects_self(self) -> None:
+        """POST /cover where ally_participant_id is the actor's own participant returns 400."""
+        from world.combat.views import _ERR_DECLARE_FAILED
+
+        cover_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        self_participant = CombatParticipantFactory(
+            encounter=cover_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{cover_encounter.pk}/cover/",
+            {"ally_participant_id": self_participant.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], _ERR_DECLARE_FAILED)
 
     def test_declare_ally_target_persisted_via_endpoint(self) -> None:
         """Declaring a self/ally-cast technique via the DRF endpoint persists focused_ally_target.
