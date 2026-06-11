@@ -4,6 +4,7 @@ Serializers for progression API endpoints.
 
 from rest_framework import serializers
 
+from world.classes.models import Path
 from world.journals.models import JournalEntry
 from world.progression.constants import VoteTargetType
 from world.progression.models import (
@@ -12,6 +13,7 @@ from world.progression.models import (
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    PathIntent,
     RandomSceneTarget,
     WeeklyVote,
     XPTransaction,
@@ -219,3 +221,52 @@ class RandomSceneTargetSerializer(serializers.ModelSerializer):
             "first_time",
             "rerolled",
         ]
+
+
+# --- PathIntent serializers ---
+
+
+class PathIntentPathSerializer(serializers.ModelSerializer):
+    """Nested serializer for Path data within a PathIntent response."""
+
+    stage_display = serializers.CharField(source="get_stage_display", read_only=True)
+
+    class Meta:
+        model = Path
+        fields = ["id", "name", "stage", "stage_display", "description"]
+
+
+class PathIntentSerializer(serializers.ModelSerializer):
+    """Read serializer for PathIntent."""
+
+    intended_path = PathIntentPathSerializer(read_only=True)
+
+    class Meta:
+        model = PathIntent
+        fields = ["id", "intended_path", "declared_at"]
+
+
+class PathIntentResponseSerializer(serializers.Serializer):
+    """Wrapper serializer: {"intent": <PathIntentSerializer> | null}."""
+
+    intent = PathIntentSerializer(allow_null=True)
+
+
+class PathIntentDeclareSerializer(serializers.Serializer):
+    """Input serializer for PUT /path-intent/."""
+
+    path_id = serializers.IntegerField()
+
+    def validate_path_id(self, value: int) -> int:
+        try:
+            path = Path.objects.get(pk=value, is_active=True)
+        except Path.DoesNotExist as exc:
+            msg = "Path does not exist or is not active."
+            raise serializers.ValidationError(msg) from exc
+        self._path = path
+        return value
+
+    @property
+    def validated_path(self) -> Path:
+        """Return the resolved Path instance after validation."""
+        return self._path
