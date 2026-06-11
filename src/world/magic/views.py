@@ -1476,6 +1476,70 @@ class AudereRespondView(APIView):
 
 
 # =============================================================================
+# Audere Majora REST surface (#543)
+# =============================================================================
+
+
+class PendingAudereMajoraOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+
+    GET /api/magic/audere-majora/pending/
+    GET /api/magic/audere-majora/pending/{id}/
+
+    Scoped to the authenticated user's character sheets (active tenures).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import PendingAudereMajoraOfferSerializer  # noqa: PLC0415
+
+        return PendingAudereMajoraOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
+
+        user = self.request.user
+        return (
+            PendingAudereMajoraOffer.objects.filter(
+                character_sheet__roster_entry__tenures__player_data__account=user,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            .select_related("threshold", "character_sheet")
+            .order_by("-created_at")
+            .distinct()
+        )
+
+
+class AudereMajoraRespondView(APIView):
+    """Accept or decline a pending Audere Majora (Crossing) offer (#543).
+
+    POST /api/magic/audere-majora/respond/  {offer_id, accept, path_id, declaration_text}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate ownership + dispatch resolve_audere_majora_offer; return the result."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            AudereMajoraCrossingResultSerializer,
+            AudereMajoraRespondSerializer,
+        )
+
+        serializer = AudereMajoraRespondSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            AudereMajoraCrossingResultSerializer(result).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+# =============================================================================
 # Thread Hub Summary (GET /api/magic/thread-hub-summary/)
 # =============================================================================
 
