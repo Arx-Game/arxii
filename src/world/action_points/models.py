@@ -9,7 +9,6 @@ via cron (daily per game day, weekly).
 from __future__ import annotations
 
 from django.db import models, transaction
-from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -284,53 +283,6 @@ class ActionPointPool(SharedMemoryModel):
                 self.current = pool.current
 
         return actually_added
-
-    def apply_daily_regen(self) -> int:
-        """
-        Apply daily regeneration and update timestamp.
-
-        Called by cron job for daily AP regeneration.
-        Uses select_for_update to prevent race conditions.
-        Applies character modifiers (e.g., Indolent reduces regen, Efficient increases cap).
-
-        Returns:
-            Amount actually added (may be less if near maximum or 0 if modifiers reduce to 0).
-        """
-        base_regen = ActionPointConfig.get_daily_regen()
-        regen_modifier = self._get_ap_modifier("ap_daily_regen")
-        regen_amount = max(0, base_regen + regen_modifier)  # Floor at 0
-        effective_max = self.get_effective_maximum()
-
-        with transaction.atomic():
-            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
-
-            space_available = effective_max - pool.current
-            actually_added = min(regen_amount, max(0, space_available))
-
-            pool.current += actually_added
-            pool.last_daily_regen = timezone.now()
-            pool.save(update_fields=["current", "last_daily_regen"])
-
-            self.current = pool.current
-            self.last_daily_regen = pool.last_daily_regen
-
-        return actually_added
-
-    def apply_weekly_regen(self) -> int:
-        """
-        Apply weekly regeneration.
-
-        Called by cron job for weekly AP regeneration.
-        Uses select_for_update to prevent race conditions.
-        Applies character modifiers (e.g., Indolent reduces regen, Efficient increases cap).
-
-        Returns:
-            Amount actually added (may be less if near maximum or 0 if modifiers reduce to 0).
-        """
-        base_regen = ActionPointConfig.get_weekly_regen()
-        regen_modifier = self._get_ap_modifier("ap_weekly_regen")
-        regen_amount = max(0, base_regen + regen_modifier)  # Floor at 0
-        return self.regenerate(regen_amount)
 
     def can_afford(self, amount: int) -> bool:
         """Check if character has enough current AP to spend."""
