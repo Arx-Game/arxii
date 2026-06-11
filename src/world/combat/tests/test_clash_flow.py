@@ -17,7 +17,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.game_content.clash import ClashContent
@@ -1076,6 +1076,7 @@ class AudereDuringClashTests(TestCase):
     # Test: heroic-tragic arc
     # -------------------------------------------------------------------------
 
+    @tag("postgres")  # Mage Scar queueing walks conditions' DISTINCT ON — PG-only (#893)
     def test_audere_during_clash_queues_mage_scar(self) -> None:
         """Heroic-tragic arc: PC enters clash with Soulfray + Audere active → overburns each
         round → was_audere=True on contributions → MAGICAL_SCARS fires from use_technique →
