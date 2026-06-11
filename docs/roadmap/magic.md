@@ -143,6 +143,12 @@ What was built:
 - **Soulfray acceleration** — overburn Soulfray severity multiplied by warp_multiplier during
   Audere, reported in TechniqueUseResult.
 - **7 integration tests** in RuntimeModifierTests covering the full pipeline.
+- **Audere offer/accept player surface (#873)** — qualifying `use_technique` casts
+  persist a `PendingAudereOffer` (one per character sheet, updated on repeat casts);
+  players answer it via REST inbox/respond endpoints (`/api/magic/audere/`) and the
+  combat-panel ceremony dialog (auto-opens on a pending offer, with the corruption
+  advisory and an active-Audere strip). Encounter cleanup ends Audere with full
+  reversion and deletes unanswered offers.
 
 Documented for future (hook points built, logic not implemented):
 - Resonance/affinity bonuses (needs fashion, environment, Gift-resonance filter)

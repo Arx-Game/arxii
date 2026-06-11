@@ -5388,6 +5388,71 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/audere/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending Audere offers (#873).
+     *
+     *     GET /api/magic/audere/pending/
+     *     GET /api/magic/audere/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_audere_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending Audere offers (#873).
+     *
+     *     GET /api/magic/audere/pending/
+     *     GET /api/magic/audere/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_audere_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate ownership + dispatch resolve_audere_offer; return the result. */
+    post: operations['magic_audere_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/character-anima/': {
     parameters: {
       query?: never;
@@ -17115,6 +17180,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingAlteration'][];
     };
+    PaginatedPendingAudereOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PendingAudereOffer'][];
+    };
     PaginatedPendingStageAdvanceOfferList: {
       /** @example 123 */
       count: number;
@@ -18832,6 +18912,30 @@ export interface components {
      * @enum {string}
      */
     PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
+    /**
+     * @description Player-facing view of a pending Audere offer (#873). Read-only.
+     *
+     *     advisory_text is computed live (never stored) so the corruption
+     *     "character loss" warning is always current.
+     */
+    PendingAudereOffer: {
+      readonly id: number;
+      readonly character_sheet_id: number;
+      /** @description IC display name via the primary persona. */
+      readonly character_name: string;
+      /** @description Runtime intensity of the cast that opened the gate. */
+      readonly fired_intensity: number;
+      /** @description Soulfray stage order at fire time (display snapshot). */
+      readonly soulfray_stage_order: number;
+      /** @description Intensity bonus the offer would grant (from the global threshold config). */
+      readonly intensity_bonus: number;
+      /** @description Anima pool expansion the offer would grant (from the global threshold config). */
+      readonly anima_pool_bonus: number;
+      /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
+      readonly advisory_text: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /**
      * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
      *
@@ -29083,6 +29187,69 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ThreadApplicability'][];
         };
+      };
+    };
+  };
+  magic_audere_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingAudereOfferList'];
+        };
+      };
+    };
+  };
+  magic_audere_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingAudereOffer'];
+        };
+      };
+    };
+  };
+  magic_audere_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

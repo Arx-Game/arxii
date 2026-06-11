@@ -853,6 +853,13 @@ def use_technique(  # noqa: PLR0913
         resonance_involvements=resonance_involvements,
     )
 
+    # Step 8c (#873): surface the Audere gate the moment it opens. Runs after
+    # Step 7 so a Soulfray stage advance caused by THIS cast counts toward the
+    # gate. NPCs without sheets and ineligible characters are no-ops inside.
+    from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
+
+    maybe_create_audere_offer(character, stats.intensity)
+
     # Step 9: Per-cast corruption accrual (Magic Scope #7)
     _accrue_cast_corruption(sheet=sheet, technique_result=technique_result)
 

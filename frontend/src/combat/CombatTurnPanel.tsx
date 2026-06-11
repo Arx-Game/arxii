@@ -13,15 +13,19 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
 import { useAvailableActions, useCombatEncounter, useConsequenceOutcomes } from './queries';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
-import { VitalPools } from './sections/VitalPools';
+import { VitalPools, findViewerParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { OutcomeDisplayRow } from './api';
+import type { components } from '@/generated/api';
+
+type ConditionInstance = components['schemas']['ConditionInstance'];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -116,6 +120,16 @@ export function CombatTurnPanel({
   const isParticipant = encounter.is_participant;
   const roundNumber = encounter.round_number ?? 0;
 
+  // Audere active strip — the puppeted participant's row (Participant exposes
+  // no character/sheet id, so reuse VitalPools' owner-vitals heuristic) carries
+  // the Audere condition in active_conditions while the breakthrough is live.
+  // active_conditions entries are ConditionInstances typed loosely on the
+  // generated schema (SerializerMethodField); cast at the boundary.
+  const viewerParticipant = findViewerParticipant(encounter.participants);
+  const isAudereActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
+    (c) => c.name === 'Audere'
+  );
+
   return (
     <div
       className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
@@ -130,6 +144,24 @@ export function CombatTurnPanel({
           </span>
         )}
       </div>
+
+      {/* 0. Audere offer gate — the most dramatic prompt in combat (#873).
+          Renders null unless a pending offer exists for this character. */}
+      <AudereOfferGate
+        characterSheetId={characterSheetId}
+        characterId={characterId}
+        encounterId={encounterId}
+      />
+
+      {/* Active-Audere strip — visible while the breakthrough condition runs. */}
+      {isAudereActive ? (
+        <div
+          className="rounded-md border border-fuchsia-500/60 bg-fuchsia-950/40 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-300"
+          data-testid="audere-active-strip"
+        >
+          Audere
+        </div>
+      ) : null}
 
       {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
           CombatantsList → ActiveState → RoundFlow */}

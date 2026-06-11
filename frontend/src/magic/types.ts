@@ -390,6 +390,31 @@ export interface AlterationScratchPayload {
 
 export type AlterationResolvePayload = AlterationLibraryPickPayload | AlterationScratchPayload;
 
+// ---------------------------------------------------------------------------
+// Audere offers, #873
+// ---------------------------------------------------------------------------
+
+export type PendingAudereOffer = components['schemas']['PendingAudereOffer'];
+export type PaginatedPendingAudereOfferList =
+  components['schemas']['PaginatedPendingAudereOfferList'];
+
+/** Body for POST /api/magic/audere/respond/. accept=false declines. */
+export interface AudereRespondRequest {
+  offer_id: number;
+  accept: boolean;
+}
+
+/**
+ * Response from audere/respond/ (AudereOfferResultSerializer — plain
+ * Serializer, not in generated schema).
+ */
+export interface AudereOfferResult {
+  accepted: boolean;
+  intensity_bonus_applied: number;
+  anima_pool_expanded_by: number;
+  advisory_text: string;
+}
+
 /**
  * tier_caps is a SerializerMethodField, so the generated schema leaves it as
  * `{ [key: string]: unknown }`. Shape source of truth:

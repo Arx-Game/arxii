@@ -21,6 +21,7 @@
   - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
   - context_attachments <- mechanics.ContextConsequencePool
+  - consequence_outcomes <- checks.ConsequenceOutcome
 
 ### ConsequencePoolEntry
 **Foreign Keys:**
@@ -76,7 +77,7 @@
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' — Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' — Select a consequence using an existing check result.`
-- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext') -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
+- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0) -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
 
 
 ## behaviors
@@ -256,6 +257,8 @@
 
 ### DamageSuccessLevelMultiplier
 
+### PenetrationOutcomeFactor
+
 
 ## evennia_extensions
 
@@ -313,14 +316,19 @@
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne] (nullable)
   - objectdb -> objects.ObjectDB [OneToOne]
   - area -> areas.Area [FK] (nullable)
+  - tenant_persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
   - resonance_grants <- magic.ResonanceGrant
+  - fame_reaction_lines <- societies.FameReactionLine
+  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
+  - placed_items <- items.RoomItem
   - events <- events.Event
+  - polish_by_category <- buildings.RoomPolish
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
 
 
@@ -430,11 +438,14 @@
 ### Building
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
+  - owner_persona -> scenes.Persona [FK] (nullable)
   - kind -> buildings.BuildingKind [FK]
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
   - materials_used <- buildings.BuildingMaterial
+  - polish_by_category <- buildings.BuildingPolish
+  - project_instances <- buildings.BuildingProjectInstance
 
 ### BuildingMaterial
 **Foreign Keys:**
@@ -458,6 +469,54 @@
   - permit_details -> buildings.BuildingPermitDetails [FK]
   - ward -> areas.Area [FK]
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
+
+### PolishCategory
+**Pointed to by:**
+  - item_templates <- items.ItemTemplate
+  - tier_thresholds <- buildings.TierThreshold
+  - building_polish_rows <- buildings.BuildingPolish
+  - room_polish_rows <- buildings.RoomPolish
+  - polish_increment_rows <- buildings.ProjectTemplatePolishIncrement
+  - instance_polish_rows <- buildings.BuildingProjectInstancePolish
+
+### TierThreshold
+**Foreign Keys:**
+  - category -> buildings.PolishCategory [FK]
+**Pointed to by:**
+  - gated_project_templates <- buildings.ProjectTemplate
+
+### BuildingPolish
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - category -> buildings.PolishCategory [FK]
+
+### RoomPolish
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - category -> buildings.PolishCategory [FK]
+
+### ProjectTemplate
+**Pointed to by:**
+  - polish_increment_rows <- buildings.ProjectTemplatePolishIncrement
+  - instances <- buildings.BuildingProjectInstance
+
+### ProjectTemplatePolishIncrement
+**Foreign Keys:**
+  - template -> buildings.ProjectTemplate [FK]
+  - category -> buildings.PolishCategory [FK]
+
+### BuildingProjectInstance
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - template -> buildings.ProjectTemplate [FK]
+  - source_project -> projects.Project [OneToOne] (nullable)
+**Pointed to by:**
+  - polish_by_category <- buildings.BuildingProjectInstancePolish
+
+### BuildingProjectInstancePolish
+**Foreign Keys:**
+  - instance -> buildings.BuildingProjectInstance [FK]
+  - category -> buildings.PolishCategory [FK]
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
@@ -577,6 +636,7 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - audere_offers <- magic.PendingAudereOffer
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
@@ -615,6 +675,7 @@
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
   - modifiers <- mechanics.CharacterModifier
+  - consequence_outcomes <- checks.ConsequenceOutcome
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
   - relationshipupdate_set <- relationships.RelationshipUpdate
@@ -631,8 +692,10 @@
   - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
   - covenant_role_assignments <- covenants.CharacterCovenantRole
+  - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
+  - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
 
 ### Characteristic
@@ -669,6 +732,21 @@
 
 ## world.checks
 
+### ConsequenceOutcome
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - check_type -> checks.CheckType [FK]
+  - pool -> actions.ConsequencePool [FK]
+  - selected_consequence -> checks.Consequence [FK] (nullable)
+  - combat_interaction -> scenes.Interaction [FK] (nullable)
+  - challenge_record -> mechanics.CharacterChallengeRecord [FK] (nullable)
+**Pointed to by:**
+  - modifiers <- checks.ConsequenceOutcomeModifier
+
+### ConsequenceOutcomeModifier
+**Foreign Keys:**
+  - outcome -> checks.ConsequenceOutcome [FK]
+
 ### CheckCategory
 **Pointed to by:**
   - check_types <- checks.CheckType
@@ -681,14 +759,17 @@
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
   - soulfrayconfig_set <- magic.SoulfrayConfig
+  - scene_check_modifiers <- scenes.SceneCheckModifier
   - cures_conditions <- conditions.ConditionTemplate
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
   - challenge_approaches <- mechanics.ChallengeApproach
   - context_consequence_pools <- mechanics.ContextConsequencePool
+  - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
   - aspects <- checks.CheckTypeAspect
+  - item_check_modifiers <- items.ItemCheckModifier
 
 ### CheckTypeTrait
 **Foreign Keys:**
@@ -709,6 +790,7 @@
   - challenge_template_consequences <- mechanics.ChallengeTemplateConsequence
   - approach_consequences <- mechanics.ApproachConsequence
   - challenge_records <- mechanics.CharacterChallengeRecord
+  - consequence_outcomes <- checks.ConsequenceOutcome
   - effects <- checks.ConsequenceEffect
 
 ### ConsequenceEffect
@@ -724,9 +806,11 @@
 ### Service Functions
 - `cast(typ, val) — Cast a value to a type.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
+- `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
+- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome — Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 
 
 ## world.classes
@@ -1015,6 +1099,8 @@
 
 ### DamageSuccessLevelMultiplier
 
+### PenetrationOutcomeFactor
+
 ### Service Functions
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
@@ -1022,11 +1108,13 @@
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int — Remove all conditions from a target.`
+- `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] — Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, default_factory=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x763ba6969550>) — Return an object to identify dataclass fields.`
+- `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1036,11 +1124,13 @@
 - `get_condition_control_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to control loss rate for a condition.`
 - `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None — Get a specific condition instance on a target.`
 - `get_condition_intensity_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
+- `get_condition_modifier_breakdown(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list[tuple[str, int]] — Per-source sibling of get_condition_modifier_total (#639 power ledger).`
 - `get_condition_modifier_total(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> int — Sum active-condition contributions to a mechanics ModifierTarget (#636).`
 - `get_condition_penalty_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
 - `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
 - `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
+- `get_penetration_factor(success_level: int) -> decimal.Decimal — Look up the penetration power factor for a given success level (#639).`
 - `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
@@ -1050,7 +1140,7 @@
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process start-of-round effects for all conditions on a target.`
-- `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True) -> bool — Remove a condition from a target.`
+- `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] — Remove all conditions in a category from a target.`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool — Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool — Remove suppression from a condition.`
@@ -1067,6 +1157,7 @@
   - storylines <- stories.Story
   - legend_credits <- societies.CovenantLegendCredit
   - memberships <- covenants.CharacterCovenantRole
+  - rite_instances <- covenants.CovenantRiteInstance
 
 ### CovenantRole
 **Foreign Keys:**
@@ -1092,22 +1183,58 @@
 
 ### CovenantLevelThreshold
 
+### CovenantRite
+**Foreign Keys:**
+  - ritual -> magic.Ritual [OneToOne]
+  - granted_condition -> conditions.ConditionTemplate [FK]
+**Pointed to by:**
+  - role_packages <- covenants.CovenantRiteRolePackage
+  - instances <- covenants.CovenantRiteInstance
+
+### CovenantRiteRolePackage
+**Foreign Keys:**
+  - rite -> covenants.CovenantRite [FK]
+  - covenant_role -> covenants.CovenantRole [FK]
+  - condition_template -> conditions.ConditionTemplate [FK]
+
+### CovenantRiteInstance
+**Foreign Keys:**
+  - rite -> covenants.CovenantRite [FK]
+  - covenant -> covenants.Covenant [FK]
+  - scene -> scenes.Scene [FK]
+  - combat_encounter -> combat.CombatEncounter [FK] (nullable)
+**Pointed to by:**
+  - participant_records <- covenants.CovenantRiteParticipant
+
+### CovenantRiteParticipant
+**Foreign Keys:**
+  - instance -> covenants.CovenantRiteInstance [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - granted_condition -> conditions.ConditionTemplate [FK]
+
 ### Service Functions
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
 - `change_role(*, membership: 'CharacterCovenantRole', new_role: 'CovenantRole') -> 'CharacterCovenantRole' — Close the existing membership row; create a new active row in the same covenant.`
 - `clear_engaged_for_type(*, character_sheet: 'CharacterSheet', covenant_type: 'str') -> 'None' — Un-engage every engaged active membership of the given type for the character.`
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
-- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]') -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
+- `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
+- `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
+- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '') -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
-- `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met.`
+- `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
+- `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
 - `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' — Return True if a row exists in GearArchetypeCompatibility for this pair.`
+- `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' — Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`
+- `precedence_role_for_combat(character_sheet: 'CharacterSheet') -> 'CovenantRole | None' — Pick the single covenant role that governs combat for a character.`
 - `promote_to_subrole(*, membership: 'CharacterCovenantRole', target_subrole: 'CovenantRole') -> 'CharacterCovenantRole' — Promote a character from their current parent role to a sub-role.`
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
+- `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
+- `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
 
 
 ## world.goals
@@ -1194,6 +1321,10 @@
 **Foreign Keys:**
   - minimum_intensity_tier -> magic.IntensityTier [FK]
   - minimum_warp_stage -> conditions.ConditionStage [FK]
+
+### PendingAudereOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
 
 ### Affinity
 **Foreign Keys:**
@@ -1490,6 +1621,7 @@
   - motif_usages <- magic.MotifResonanceAssociation
   - anchored_threads <- magic.Thread
   - item_attachments <- items.ItemFacet
+  - fashion_styles <- items.FashionStyle
 
 ### Motif
 **Foreign Keys:**
@@ -1510,6 +1642,8 @@
   - facet -> magic.Facet [FK]
 
 ### LevelPowerConfig
+
+### AuraPowerConfig
 
 ### Reincarnation
 **Foreign Keys:**
@@ -1549,6 +1683,7 @@
 ### Ritual
 **Foreign Keys:**
   - scene_action_config -> magic.RitualSceneActionConfig [OneToOne] (nullable)
+  - covenant_rite -> covenants.CovenantRite [OneToOne] (nullable)
   - flow -> flows.FlowDefinition [FK] (nullable)
   - author_account -> accounts.AccountDB [FK] (nullable)
   - site_property -> mechanics.Property [FK] (nullable)
@@ -1644,6 +1779,10 @@
 **Foreign Keys:**
   - consequence_pool -> actions.ConsequencePool [FK]
 
+### TechniqueBudgetConfig
+
+### TechniqueTierBudget
+
 ### ThreadPullCost
 
 ### ThreadXPLockedLevel
@@ -1667,6 +1806,7 @@
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
+  - cast_pull_declarations <- scenes.SceneCastPullDeclaration
   - treatment_attempts <- conditions.TreatmentAttempt
   - related_journal_entries <- journals.JournalEntry
   - combat_pulls <- combat.CombatPull
@@ -1730,7 +1870,7 @@
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -1758,6 +1898,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
+  - fashion_style_bonuses <- items.FashionStyleBonus
 
 ### ModifierSource
 **Foreign Keys:**
@@ -1911,6 +2052,8 @@
   - approach -> mechanics.ChallengeApproach [FK]
   - outcome -> traits.CheckOutcome [FK] (nullable)
   - consequence -> checks.Consequence [FK] (nullable)
+**Pointed to by:**
+  - consequence_outcomes <- checks.ConsequenceOutcome
 
 ### ContextConsequencePool
 **Foreign Keys:**
@@ -1928,11 +2071,12 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
+- `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' — Perception-relative outfit bonus vs. a society's current fashion (#513).`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
-- `get_modifier_total(character, modifier_target: 'ModifierTarget') -> 'int' — Get total modifier value for a target.`
+- `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None) -> 'int' — Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
@@ -1952,6 +2096,7 @@
 **Pointed to by:**
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
+  - givers <- missions.MissionGiver
   - offer_details <- npc_services.MissionOfferDetails
 
 ### MissionNode
@@ -1978,6 +2123,7 @@
 **Pointed to by:**
   - candidates <- missions.MissionOptionRouteCandidate
   - reward_templates <- missions.MissionOptionRouteReward
+  - renown_awards <- missions.MissionRenownAward
 
 ### MissionOptionRouteCandidate
 **Foreign Keys:**
@@ -1992,10 +2138,15 @@
   - route -> missions.MissionOptionRoute [FK] (nullable)
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
 
+### MissionRenownAward
+**Foreign Keys:**
+  - route -> missions.MissionOptionRoute [FK]
+
 ### MissionInstance
 **Foreign Keys:**
   - template -> missions.MissionTemplate [FK]
   - current_node -> missions.MissionNode [FK] (nullable)
+  - anchor_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - source_beat -> stories.Beat [FK] (nullable)
   - source_offer -> npc_services.NPCServiceOffer [FK] (nullable)
   - accepted_as_persona -> scenes.Persona [FK] (nullable)
@@ -2030,6 +2181,13 @@
 **Foreign Keys:**
   - target -> objects.ObjectDB [FK] (nullable)
   - org -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - cooldowns <- missions.MissionGiverCooldown
+
+### MissionGiverCooldown
+**Foreign Keys:**
+  - giver -> missions.MissionGiver [FK]
+  - character -> objects.ObjectDB [FK]
 
 ### MissionDeedRewardLine
 **Foreign Keys:**
@@ -2044,6 +2202,7 @@
 ### Service Functions
 - `apply_deed_rewards(deed: 'MissionDeedRecord') -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
+- `beat_for(instance: 'MissionInstance', character: 'ObjectDB') -> 'BeatView | None' — The current beat as ``character`` sees it; None when the run is done.`
 - `build_group_option_list(instance: 'MissionInstance', node: 'MissionNode') -> 'list[PresentedOption]' — Union of every participant's Phase-3 option list at ``node``.`
 - `build_option_list(instance: 'MissionInstance', node: 'MissionNode', viewer: 'MissionParticipant') -> 'list[PresentedOption]' — Surface the options the acting ``viewer`` can take at ``node``.`
 - `contract_holder(instance: 'MissionInstance') -> 'MissionParticipant' — Return the instance's single contract-holding participant.`
@@ -2052,6 +2211,7 @@
 - `group_resolve_node(instance: 'MissionInstance', node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'list[MissionDeedRecord]' — Resolve a multi-participant ``node`` from each participant's pick.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
 - `on_mission_complete_for_beat(instance: 'MissionInstance') -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger (5b.3 stub-record).`
+- `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' — Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
 - `select_group_choice(node: 'MissionNode', picks: 'Mapping[MissionParticipant, MissionOption]') -> 'GroupChoice' — Resolve contested picks per ``node.conflict_mode``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
@@ -2069,6 +2229,8 @@
   - related_episode_resolution -> stories.EpisodeResolution [FK] (nullable)
 **Pointed to by:**
   - deliveries <- narrative.NarrativeMessageDelivery
+
+### AmbientStirLine
 
 ### NarrativeMessageDelivery
 **Foreign Keys:**
@@ -2089,6 +2251,7 @@
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push to all currently-connected sessions in green.`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
+- `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' — Send a source-ambiguous ambient line to a room's bystanders (#885).`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
 
@@ -2144,11 +2307,11 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, default_factory=<dataclasses._MISSING_TYPE object at 0x763ba6969550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x763ba6969550>) — Return an object to identify dataclass fields.`
-- `is_staff_observer(observer: 'object') -> 'bool' — Whether ``observer`` represents a staff user.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7081c10c1550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
+- `template_visible_to(template: 'MissionTemplate', character: 'ObjectDB', *, persona: 'Persona | None' = None) -> 'bool' — True if ``character`` may see / be offered ``template``.`
 
 
 ## world.progression
@@ -2357,6 +2520,7 @@
 **Foreign Keys:**
   - resulting_building -> buildings.Building [OneToOne] (nullable)
   - building_construction_details -> buildings.BuildingConstructionDetails [OneToOne] (nullable)
+  - resulting_building_project_instance -> buildings.BuildingProjectInstance [OneToOne] (nullable)
   - room_feature_progression_details -> room_features.RoomFeatureProgressionDetails [OneToOne] (nullable)
   - owner_persona -> scenes.Persona [FK]
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
@@ -2610,6 +2774,7 @@
   - participations <- scenes.SceneParticipation
   - interactions <- scenes.Interaction
   - summary_revisions <- scenes.SceneSummaryRevision
+  - check_modifiers <- scenes.SceneCheckModifier
   - action_requests <- scenes.SceneActionRequest
   - story_episodes <- stories.EpisodeScene
   - legend_events <- societies.LegendEvent
@@ -2620,6 +2785,7 @@
   - relationshipupdate_set <- relationships.RelationshipUpdate
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
   - relationshipcapstone_set <- relationships.RelationshipCapstone
+  - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combat_encounters <- combat.CombatEncounter
 
 ### SceneParticipation
@@ -2659,6 +2825,7 @@
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
+  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - hosted_events <- events.EventHost
@@ -2672,10 +2839,12 @@
   - standings_held_by <- npc_services.NPCStanding
   - offer_cooldowns <- npc_services.OfferCooldown
   - role_cooldowns <- npc_services.NPCRoleCooldown
+  - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
+  - tenanted_rooms <- evennia_extensions.RoomProfile
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -2686,6 +2855,7 @@
 ### Interaction
 **Foreign Keys:**
   - action_request_result -> scenes.SceneActionRequest [OneToOne] (nullable)
+  - action_request_action -> scenes.SceneActionRequest [OneToOne] (nullable)
   - persona -> scenes.Persona [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - place -> scenes.Place [FK] (nullable)
@@ -2697,7 +2867,9 @@
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
+  - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - receivers <- scenes.InteractionReceiver
+  - consequence_outcomes <- checks.ConsequenceOutcome
   - referencing_updates <- relationships.RelationshipUpdate
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
@@ -2722,16 +2894,27 @@
   - pose -> scenes.Interaction [FK]
   - action_interaction -> scenes.Interaction [FK]
 
+### InteractionPowerLedgerEntry
+**Foreign Keys:**
+  - interaction -> scenes.Interaction [FK]
+
 ### SceneSummaryRevision
 **Foreign Keys:**
   - scene -> scenes.Scene [FK]
   - persona -> scenes.Persona [FK]
 
-### SceneActionRequest
+### SceneCheckModifier
 **Foreign Keys:**
   - scene -> scenes.Scene [FK]
+  - check_type -> checks.CheckType [FK]
+
+### SceneActionRequest
+**Foreign Keys:**
+  - pull_declaration -> scenes.SceneCastPullDeclaration [OneToOne] (nullable)
+  - scene -> scenes.Scene [FK]
   - initiator_persona -> scenes.Persona [FK]
-  - target_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK] (nullable)
+  - spread_deed_target -> societies.LegendEntry [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
   - snapshot_ritual -> magic.Ritual [FK] (nullable)
@@ -2741,6 +2924,12 @@
   - snapshot_resonance -> magic.Resonance [FK] (nullable)
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
+  - action_interaction -> scenes.Interaction [OneToOne] (nullable)
+
+### SceneCastPullDeclaration
+**Foreign Keys:**
+  - request -> scenes.SceneActionRequest [OneToOne]
+  - resonance -> magic.Resonance [FK]
 
 ### Place
 **Foreign Keys:**
@@ -2813,13 +3002,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x763ba29d8a50>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7081bd015a60>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x763ba29d8a50>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7081bd015a60>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2827,6 +3016,7 @@
 ### Society
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
+  - current_fashion_style -> items.FashionStyle [FK] (nullable)
 **Pointed to by:**
   - connected_beginnings <- character_creation.Beginnings
   - traditions <- magic.Tradition
@@ -2834,6 +3024,9 @@
   - reputations <- societies.SocietyReputation
   - known_legend_entries <- societies.LegendEntry
   - heard_legend_spreads <- societies.LegendSpread
+  - ranking_displays <- societies.RankingDisplay
+  - ranking_band_labels <- societies.RankingBandLabel
+  - fame_reaction_lines <- societies.FameReactionLine
   - event_invitations <- events.EventInvitation
 
 ### OrganizationType
@@ -2893,6 +3086,7 @@
   - scene -> scenes.Scene [FK] (nullable)
   - story -> stories.Story [FK] (nullable)
 **Pointed to by:**
+  - spread_action_requests <- scenes.SceneActionRequest
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
   - covenant_credits <- societies.CovenantLegendCredit
@@ -2917,6 +3111,25 @@
 **Foreign Keys:**
   - persona -> scenes.Persona [OneToOne]
 
+### RankingDisplay
+**Foreign Keys:**
+  - display_object -> objects.ObjectDB [OneToOne]
+  - scope_society -> societies.Society [FK] (nullable)
+
+### RankingBandLabel
+**Foreign Keys:**
+  - society -> societies.Society [FK] (nullable)
+
+### FameReactionLine
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - society -> societies.Society [FK] (nullable)
+
+### FameReactionCooldown
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
+
 ### CovenantLegendCredit
 **Foreign Keys:**
   - entry -> societies.LegendEntry [FK]
@@ -2925,6 +3138,11 @@
 ### CovenantLegendSummary
 **Foreign Keys:**
   - covenant -> covenants.Covenant [OneToOne]
+
+### PhilosophicalArchetype
+**Pointed to by:**
+  - legend_entries <- societies.LegendEntry
+  - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions
 - `create_legend_event(title: str, source_type: world.societies.models.LegendSourceType, base_value: int, personas: list[world.scenes.models.Persona], *, description: str = '', scene: world.scenes.models.Scene | None = None, story: world.stories.models.Story | None = None, created_by: evennia.accounts.models.AccountDB | None = None) -> tuple[world.societies.models.LegendEvent, list[world.societies.models.LegendEntry]] — Create a shared event and individual deeds for each participant.`

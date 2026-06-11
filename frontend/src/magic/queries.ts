@@ -11,10 +11,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import { useAppSelector } from '@/store/hooks';
+import { combatKeys } from '@/combat/queries';
 import type {
   AcceptTeachingOfferRequest,
   AlterationResolvePayload,
   ApplicablePullsRequest,
+  AudereRespondRequest,
   CrossXPLockRequest,
   DissolveRequest,
   PatchThreadRequest,
@@ -68,6 +70,8 @@ export const magicKeys = {
   pendingAlterations: () => [...magicKeys.all, 'pending-alterations'] as const,
   alterationLibrary: (pendingId: number) =>
     [...magicKeys.pendingAlterations(), 'library', pendingId] as const,
+
+  auderePending: () => [...magicKeys.all, 'audere', 'pending'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -562,6 +566,43 @@ export function useAlterationLibrary(pendingId: number | null) {
     queryKey: magicKeys.alterationLibrary(pendingId ?? 0),
     queryFn: () => api.getAlterationLibrary(pendingId as number),
     enabled: pendingId != null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Audere offers, #873
+// ---------------------------------------------------------------------------
+
+/**
+ * Pending Audere offers for the account. Mounted only inside the combat page
+ * (offers exist only mid-encounter), so the 5 s poll runs only where it matters.
+ * throwOnError deliberately NOT set: this backs an overlay/banner that must
+ * degrade to rendering nothing on fetch errors (same rationale as
+ * usePendingAlterations).
+ */
+export function usePendingAudereOffers(enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.auderePending(),
+    queryFn: () => api.getPendingAudereOffers(),
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+/**
+ * Accept or decline a pending Audere offer. Accepting changes the anima
+ * maximum and applies the Audere condition, so invalidate the encounter and
+ * anima queries alongside the inbox.
+ */
+export function useRespondToAudere(characterId: number, encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AudereRespondRequest) => api.respondToAudere(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.auderePending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
   });
 }
 

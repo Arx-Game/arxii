@@ -2409,6 +2409,29 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         opp.objectdb
         for opp in CombatOpponent.objects.filter(encounter=encounter).select_related("objectdb")
     ]
+
+    # End Audere BEFORE the generic condition sweep (#873): the sweep would
+    # strip the condition without reverting the engagement intensity modifier
+    # or anima-pool expansion — only end_audere reverts those. Also delete any
+    # unanswered pending offers; the gate dies with the encounter.
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import (  # noqa: PLC0415
+        AUDERE_CONDITION_NAME,
+        PendingAudereOffer,
+        end_audere,
+    )
+
+    audere_target_ids = set(
+        ConditionInstance.objects.filter(
+            target__in=participant_targets,
+            condition__name=AUDERE_CONDITION_NAME,
+        ).values_list("target_id", flat=True)
+    )
+    audere_targets = [t for t in participant_targets if t.pk in audere_target_ids]
+    for target in audere_targets:
+        end_audere(target)
+    PendingAudereOffer.objects.filter(character_sheet__character__in=participant_targets).delete()
+
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 
     qs = CombatOpponent.objects.filter(

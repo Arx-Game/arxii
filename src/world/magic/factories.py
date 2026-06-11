@@ -13,6 +13,7 @@ from world.magic.audere import (
     AUDERE_MAJORA_CONDITION_NAME,
     SOULFRAY_CONDITION_NAME,
     AudereThreshold,
+    PendingAudereOffer,
 )
 from world.magic.constants import (
     AffinityInteractionAggressor,
@@ -498,6 +499,17 @@ class AudereThresholdFactory(factory.django.DjangoModelFactory):
     intensity_bonus = 20
     anima_pool_bonus = 30
     warp_multiplier = 2
+
+
+class PendingAudereOfferFactory(factory.django.DjangoModelFactory):
+    """Factory for a pending Audere offer awaiting player response."""
+
+    class Meta:
+        model = PendingAudereOffer
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    fired_intensity = 20
+    soulfray_stage_order = 2
 
 
 def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int = 200):

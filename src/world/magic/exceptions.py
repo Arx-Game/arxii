@@ -269,6 +269,34 @@ class ParticipantCountError(RitualSessionError):
 
 
 # =============================================================================
+# Audere offer exceptions (#873)
+# =============================================================================
+
+
+class AudereOfferError(Exception):
+    """Base for Audere offer-surface errors. Carries user_message per
+    the no-str(exc)-in-API rule (CLAUDE.md)."""
+
+    user_message: str = "Audere offer operation failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class AudereOfferNotFoundError(AudereOfferError):
+    user_message = "No pending Audere offer found."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class AudereOfferStaleError(AudereOfferError):
+    user_message = "The Audere gate has closed; this offer is no longer valid."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+# =============================================================================
 # Technique Builder exceptions (#537)
 # =============================================================================
 
