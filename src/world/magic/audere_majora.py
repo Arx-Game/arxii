@@ -1,5 +1,7 @@
 """Audere Majora — Crossing the Threshold (#543). Models + services."""
 
+from __future__ import annotations
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -20,6 +22,7 @@ class AudereMajoraThreshold(SharedMemoryModel):
     )
     target_stage = models.PositiveSmallIntegerField(
         choices=PathStage.choices,
+        help_text="PathStage the character crosses into.",
     )
     minimum_intensity_tier = models.ForeignKey(
         "magic.IntensityTier",
@@ -31,7 +34,10 @@ class AudereMajoraThreshold(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
     )
-    requires_active_audere = models.BooleanField(default=True)
+    requires_active_audere = models.BooleanField(
+        default=True,
+        help_text="When False, an active Audere condition is not required for the gate to open.",
+    )
     vision_text = models.TextField(
         help_text="Shown ONLY to the crossing player. Authored in DB; spoiler-private.",
     )
@@ -68,6 +74,8 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = "Pending Audere Majora Offer"
+        verbose_name_plural = "Pending Audere Majora Offers"
         constraints = [
             models.UniqueConstraint(
                 fields=["character_sheet"],
@@ -118,8 +126,12 @@ class AudereMajoraCrossing(SharedMemoryModel):
         # db_constraint=False: scenes_interaction is partitioned by timestamp.
         help_text="The declaration pose. Soft FK — partitioned table.",
     )
-    level_before = models.PositiveSmallIntegerField()
-    level_after = models.PositiveSmallIntegerField()
+    level_before = models.PositiveSmallIntegerField(
+        help_text="Character level immediately before the crossing.",
+    )
+    level_after = models.PositiveSmallIntegerField(
+        help_text="Character level granted by the crossing.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

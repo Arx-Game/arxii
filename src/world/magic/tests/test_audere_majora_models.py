@@ -106,6 +106,29 @@ class PendingAudereMajoraOfferModelTests(TestCase):
         )
         assert offer2.pk is not None
 
+    def test_one_offer_per_character_is_global_not_per_threshold(self) -> None:
+        """The unique constraint is per character_sheet, not per (character_sheet, threshold).
+
+        Creating an offer for threshold-5 and then a second offer for the SAME sheet
+        at threshold-10 must raise IntegrityError — the constraint is global.
+        """
+        threshold_5 = ensure_audere_majora_threshold(boundary_level=5)
+        threshold_10 = ensure_audere_majora_threshold(boundary_level=10)
+        PendingAudereMajoraOffer.objects.create(
+            character_sheet=self.sheet,
+            threshold=threshold_5,
+            fired_intensity=20,
+            soulfray_stage_order=3,
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PendingAudereMajoraOffer.objects.create(
+                    character_sheet=self.sheet,
+                    threshold=threshold_10,
+                    fired_intensity=25,
+                    soulfray_stage_order=4,
+                )
+
 
 class AudereMajoraCrossingModelTests(TestCase):
     """AudereMajoraCrossing: uniqueness + chosen_path FK acceptance."""

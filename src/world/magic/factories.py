@@ -2358,20 +2358,25 @@ def ensure_audere_majora_threshold(
     target_stage: int = PathStage.PUISSANT,
     requires_active_audere: bool = True,
 ) -> AudereMajoraThreshold:
-    """Threshold row with PLACEHOLDER ceremony text (real text is DB-authored only)."""
+    """Threshold row with PLACEHOLDER ceremony text (real text is DB-authored only).
+
+    Idempotent: if a threshold at boundary_level already exists, returns it without
+    creating new IntensityTier / ConditionStage rows as side-effects.
+    """
+    existing = AudereMajoraThreshold.objects.filter(boundary_level=boundary_level).first()
+    if existing is not None:
+        return existing
+
     from world.conditions.factories import ConditionStageFactory
 
     minimum_intensity_tier = IntensityTierFactory()
     minimum_warp_stage = ConditionStageFactory()
-    threshold, _ = AudereMajoraThreshold.objects.update_or_create(
+    return AudereMajoraThreshold.objects.create(
         boundary_level=boundary_level,
-        defaults={
-            "target_stage": target_stage,
-            "minimum_intensity_tier": minimum_intensity_tier,
-            "minimum_warp_stage": minimum_warp_stage,
-            "requires_active_audere": requires_active_audere,
-            "vision_text": "[PLACEHOLDER VISION — real text is authored in the DB]",
-            "manifestation_text": "[PLACEHOLDER MANIFESTATION — real text is authored in the DB]",
-        },
+        target_stage=target_stage,
+        minimum_intensity_tier=minimum_intensity_tier,
+        minimum_warp_stage=minimum_warp_stage,
+        requires_active_audere=requires_active_audere,
+        vision_text="[PLACEHOLDER VISION — real text is authored in the DB]",
+        manifestation_text="[PLACEHOLDER MANIFESTATION — real text is authored in the DB]",
     )
-    return threshold
