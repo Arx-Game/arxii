@@ -21,11 +21,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-import re
 
 import yaml
 
 PLACEHOLDER_MARK = "PLACEHOLDER"
+FRONTMATTER_DELIMITER = "---"
 
 # Mirrors world.traits.models.TraitType / TraitCategory values without
 # importing Django models (import-safety). Validated against the real
@@ -44,8 +44,6 @@ TRAIT_CATEGORIES = {
     "war",
     "other",
 }
-
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 
 
 class ContentError(Exception):
@@ -78,21 +76,29 @@ class BuildResult:
 
 
 def parse_content_file(path: Path, domain: str) -> ContentEntry:
-    """Parse one frontmatter+markdown file; raise ContentError on shape errors."""
-    text = path.read_text(encoding="utf-8")
-    match = _FRONTMATTER_RE.match(text)
-    if not match:
+    """Parse one frontmatter+markdown file; raise ContentError on shape errors.
+
+    Line-based (no regex): the opening line must be ``---``; frontmatter runs
+    to the next ``---`` line; everything after is the body.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != FRONTMATTER_DELIMITER:
         msg = f"{path}: missing YAML frontmatter block (--- ... ---)."
         raise ContentError(msg)
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == FRONTMATTER_DELIMITER), None)
+    if end is None:
+        msg = f"{path}: unterminated YAML frontmatter block (--- ... ---)."
+        raise ContentError(msg)
     try:
-        meta = yaml.safe_load(match.group(1)) or {}
+        meta = yaml.safe_load("\n".join(lines[1:end])) or {}
     except yaml.YAMLError as exc:
         msg = f"{path}: invalid YAML frontmatter: {exc}"
         raise ContentError(msg) from exc
     if not isinstance(meta, dict):
         msg = f"{path}: frontmatter must be a mapping."
         raise ContentError(msg)
-    return ContentEntry(path=path, domain=domain, meta=meta, body=match.group(2).strip())
+    body = "\n".join(lines[end + 1 :]).strip()
+    return ContentEntry(path=path, domain=domain, meta=meta, body=body)
 
 
 def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
