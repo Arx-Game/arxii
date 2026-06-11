@@ -16026,6 +16026,8 @@ paths:
 
         Reads ride the interaction feed (windows serialize inline on their
         event); all eligibility/validation lives in ``react_to_window``.
+        ``react-to-interaction`` (#911) opens a lazy kind's window on first
+        reaction — kudos-style kinds need no pre-existing window row.
       parameters:
       - in: path
         name: id
@@ -16033,6 +16035,33 @@ paths:
           type: integer
         description: A unique integer value identifying this reaction window.
         required: true
+      tags:
+      - reaction-windows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WindowReactInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WindowReactInput'
+          description: ''
+  /api/reaction-windows/react-to-interaction/:
+    post:
+      operationId: reaction_windows_react_to_interaction_create
+      description: |-
+        Action-only viewset: POST /reaction-windows/{pk}/react/.
+
+        Reads ride the interaction feed (windows serialize inline on their
+        event); all eligibility/validation lives in ``react_to_window``.
+        ``react-to-interaction`` (#911) opens a lazy kind's window on first
+        reaction — kudos-style kinds need no pre-existing window row.
       tags:
       - reaction-windows
       requestBody:
