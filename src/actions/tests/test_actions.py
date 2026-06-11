@@ -147,6 +147,104 @@ class WhisperActionTests(TestCase):
         assert result.success is False
 
 
+class PemitActionTests(TestCase):
+    """Staff-only private narrative emit (#906)."""
+
+    def _staff_actor(self, room):
+        account = AccountFactory(username="pemit_staff", is_staff=True)
+        actor = ObjectDBFactory(
+            db_key="GM",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        actor.db_account = account
+        actor.save()
+        return actor
+
+    def test_pemit_delivers_to_receivers_only(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        actor = self._staff_actor(room)
+        receiver = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        bystander = ObjectDBFactory(
+            db_key="Eve",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        action = PemitAction()
+        with (
+            patch.object(receiver, "msg") as recv_msg,
+            patch.object(bystander, "msg") as bystander_msg,
+        ):
+            result = action.run(actor, receivers=[receiver], text="A chill wind finds you.")
+        assert result.success is True
+        recv_msg.assert_called_once()
+        bystander_msg.assert_not_called()
+
+    def test_pemit_rejects_non_staff(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        account = AccountFactory(username="pemit_player", is_staff=False)
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        actor.db_account = account
+        actor.save()
+        receiver = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        action = PemitAction()
+        result = action.run(actor, receivers=[receiver], text="sneaky")
+        assert result.success is False
+        assert "Staff only" in result.message
+
+    def test_pemit_availability_requires_staff(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        account = AccountFactory(username="pemit_player2", is_staff=False)
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        actor.db_account = account
+        actor.save()
+        availability = PemitAction().check_availability(actor)
+        assert availability.available is False
+
+    def test_pemit_without_receivers_fails(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        actor = self._staff_actor(room)
+        result = PemitAction().run(actor, receivers=[], text="to no one")
+        assert result.success is False
+
+    def test_pemit_without_text_fails(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        actor = self._staff_actor(room)
+        receiver = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        result = PemitAction().run(actor, receivers=[receiver], text="")
+        assert result.success is False
+
+
 class GetActionTests(TestCase):
     def test_get_moves_item_to_actor(self):
         room = ObjectDBFactory(
