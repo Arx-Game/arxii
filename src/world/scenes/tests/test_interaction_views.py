@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone
@@ -6,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
@@ -266,6 +267,11 @@ class PoseSubmitViewTests(APITestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
+        cls.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.character.location = cls.room
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -493,6 +499,30 @@ class PoseSubmitViewTests(APITestCase):
         # action_links — newly-created pose has no links yet (empty list injected)
         assert "action_links" in data
         assert data["action_links"] == []
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_broadcasts_to_scene_clients(self, mock_broadcast) -> None:
+        """REST-submitted poses push the same InteractionPayload the WS path sends."""
+        scene = SceneFactory()
+        resp = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "A pose."},
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert mock_broadcast.call_count == 1
+        _location, payload = mock_broadcast.call_args.args
+        assert payload["id"] == resp.data["id"]
+        assert payload["content"] == "A pose."
+        assert payload["receiver_persona_ids"] == []
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_no_broadcast_on_validation_error(self, mock_broadcast) -> None:
+        resp = self.client.post(
+            self.url, {"persona_id": self.persona.pk, "content": ""}, format="json"
+        )
+        assert resp.status_code == 400
+        mock_broadcast.assert_not_called()
 
 
 class ActionLinksSerializerTests(APITestCase):
