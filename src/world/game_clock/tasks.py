@@ -104,7 +104,7 @@ def _fetch_ap_modifier_map(
     return mod_lookup, target_pk_map
 
 
-def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
+def _apply_ap_regen(regen_target_name: str, base_regen: int, *, stamp_daily: bool = False) -> int:
     """Shared batch regen logic for daily and weekly AP regeneration.
 
     Fetches all pools, computes per-character effective regen/max with modifiers,
@@ -112,7 +112,13 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
 
     Protagonism-locked characters (terminal corruption stage 5) are skipped
     silently — their AP does not regenerate while subsumed.
+
+    With ``stamp_daily``, regenerated pools also get ``last_daily_regen``
+    set to now (admin-display field; the scheduler's ScheduledTaskRecord
+    remains the authoritative timing record).
     """
+    from django.utils import timezone
+
     from world.action_points.models import ActionPointPool
     from world.conditions.models import ConditionInstance
 
@@ -149,22 +155,27 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
         to_update.append(pool)
 
     if to_update:
-        ActionPointPool.objects.bulk_update(to_update, ["current"], batch_size=500)
+        fields = ["current"]
+        if stamp_daily:
+            now = timezone.now()
+            for pool in to_update:
+                pool.last_daily_regen = now
+            fields.append("last_daily_regen")
+        ActionPointPool.objects.bulk_update(to_update, fields, batch_size=500)
     return len(to_update)
 
 
 def batch_ap_daily_regen() -> None:
     """Apply daily AP regen to all character pools.
 
-    Note: per-pool ``last_daily_regen`` is updated separately from the batch
-    bulk_update. The scheduler's ``ScheduledTaskRecord.last_run_at`` is the
-    authoritative timing record; the pool-level timestamp is for admin display
-    only and is set by the model-level ``apply_daily_regen()`` method.
+    The scheduler's ``ScheduledTaskRecord.last_run_at`` is the authoritative
+    timing record; the pool-level ``last_daily_regen`` stamped here is for
+    admin display only.
     """
     from world.action_points.models import ActionPointConfig
 
     base_regen = ActionPointConfig.get_daily_regen()
-    count = _apply_ap_regen("ap_daily_regen", base_regen)
+    count = _apply_ap_regen("ap_daily_regen", base_regen, stamp_daily=True)
     logger.info("AP daily regen: %d pools regenerated", count)
 
 
