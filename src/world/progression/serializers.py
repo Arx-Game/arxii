@@ -246,12 +246,6 @@ class PathIntentSerializer(serializers.ModelSerializer):
         fields = ["id", "intended_path", "declared_at"]
 
 
-class PathIntentResponseSerializer(serializers.Serializer):
-    """Wrapper serializer: {"intent": <PathIntentSerializer> | null}."""
-
-    intent = PathIntentSerializer(allow_null=True)
-
-
 class PathIntentDeclareSerializer(serializers.Serializer):
     """Input serializer for PUT /path-intent/."""
 
