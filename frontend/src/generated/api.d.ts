@@ -20100,6 +20100,8 @@ export interface components {
       action_template?: number | null;
       /** @description Technique used for this action, if any */
       technique?: number | null;
+      /** @description Human label for the enhancing technique (#892 — ConsentPrompt display). */
+      readonly technique_name: string | null;
       /**
        * @description Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
        *

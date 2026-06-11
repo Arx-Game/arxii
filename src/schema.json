@@ -36488,6 +36488,12 @@ components:
           type: integer
           nullable: true
           description: Technique used for this action, if any
+        technique_name:
+          type: string
+          nullable: true
+          description: Human label for the enhancing technique (#892 — ConsentPrompt
+            display).
+          readOnly: true
         delivery:
           description: |-
             Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
@@ -36563,6 +36569,7 @@ components:
       - scene
       - status
       - target_name
+      - technique_name
     SceneActionRequestRequest:
       type: object
       properties:
