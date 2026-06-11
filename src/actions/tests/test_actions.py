@@ -171,6 +171,7 @@ class PemitActionTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             location=room,
         )
+        CharacterSheetFactory(character=receiver)
         bystander = ObjectDBFactory(
             db_key="Eve",
             db_typeclass_path="typeclasses.characters.Character",
