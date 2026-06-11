@@ -18,8 +18,21 @@ import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type { ActionContext, ActionSlot } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
-import { useAvailableCombos, useDispatchPlayerAction, useUpgradeCombo } from '../queries';
-import type { AvailableCombo } from '../types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  useAvailableCombos,
+  useCoverMutation,
+  useDispatchPlayerAction,
+  useFleeMutation,
+  useUpgradeCombo,
+} from '../queries';
+import type { AvailableCombo, EncounterDetail, Participant, RoundActionTyped } from '../types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +50,12 @@ export interface YourTurnProps {
   /** Strain slider max — typically ParticipantSerializer.available_strain.
    *  Falls back to 10 if not provided. */
   availableStrain?: number | null;
+  /**
+   * Full encounter detail — used to gate flee/cover controls on declaring phase
+   * and to resolve ally names for the cover picker. Optional so callers that
+   * don't have encounter data yet can still render the slot composition.
+   */
+  encounter?: EncounterDetail | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +213,7 @@ export function YourTurn({
   availableActions,
   readOnly = false,
   availableStrain,
+  encounter = null,
 }: YourTurnProps) {
   const strainMax = availableStrain ?? 10;
   // ---------------------------------------------------------------------------
@@ -228,10 +248,16 @@ export function YourTurn({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pullDialogOpen, setPullDialogOpen] = useState(false);
 
+  // Cover picker state — selected ally participant PK (string for Select compatibility).
+  const [coverAllyId, setCoverAllyId] = useState<string>('');
+  const [maneuverError, setManeuverError] = useState<string | null>(null);
+
   // Reset submitted and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
     setPullDialogOpen(false);
+    setCoverAllyId('');
+    setManeuverError(null);
   }, [roundNumber]);
 
   // ---------------------------------------------------------------------------
@@ -255,6 +281,58 @@ export function YourTurn({
 
   const { data: availableCombos, isLoading: combosLoading } = useAvailableCombos(encounterId);
   const { mutate: upgradeCombo, isPending: upgradePending } = useUpgradeCombo(encounterId);
+
+  // ---------------------------------------------------------------------------
+  // Flee / Cover mutations
+  // ---------------------------------------------------------------------------
+
+  const { mutate: declareFlee, isPending: fleePending } = useFleeMutation(encounterId);
+  const { mutate: declareCover, isPending: coverPending } = useCoverMutation(encounterId);
+
+  // ---------------------------------------------------------------------------
+  // Flee / Cover — derived state
+  // ---------------------------------------------------------------------------
+
+  // Gates flee/cover on the declaring phase.
+  const isDeclaringPhase = encounter?.status === 'declaring';
+
+  // Derive the viewer's participant PK from the participants list — stable
+  // regardless of whether current_round_actions is ordered or GM-visible (all
+  // actions). characterSheetId matches character_sheet_id on the Participant row.
+  const myParticipantId: number | null = (() => {
+    const ps = encounter?.participants ?? [];
+    const self = ps.find((p) => p.character_sheet_id === characterSheetId);
+    return self?.id ?? null;
+  })();
+
+  // Own round action — find by participant PK, not positional [0].
+  const ownRoundAction: RoundActionTyped | null = (() => {
+    if (myParticipantId === null) return null;
+    const actions = encounter?.current_round_actions ?? [];
+    const match = actions.find(
+      (a) =>
+        typeof (a as RoundActionTyped).participant === 'number' &&
+        (a as RoundActionTyped).participant === myParticipantId
+    );
+    return (match as RoundActionTyped) ?? null;
+  })();
+
+  const participants: Participant[] = encounter?.participants ?? [];
+
+  // All active participants except self count as allies until covenant sides land (mirrors backend serializers.py note).
+  const coverableAllies = participants.filter(
+    (p) => p.status === 'active' && p.id !== myParticipantId
+  );
+
+  // Current declared maneuver (from own round action).
+  const declaredManeuver = ownRoundAction?.maneuver ?? null;
+
+  // Resolve covered ally's name from participants list.
+  const coveredAllyName = (() => {
+    if (declaredManeuver !== 'cover' || ownRoundAction?.focused_ally_target == null) return null;
+    const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
+    return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
+  })();
 
   // ---------------------------------------------------------------------------
   // Dispatch
@@ -336,6 +414,33 @@ export function YourTurn({
       const message = err instanceof Error ? err.message : 'Submit failed. Try again.';
       setSubmitError(message);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Flee / Cover handlers
+  // ---------------------------------------------------------------------------
+
+  function handleFlee() {
+    setManeuverError(null);
+    declareFlee(undefined, {
+      onError: (err) => {
+        setManeuverError(err instanceof Error ? err.message : 'Failed to declare flee');
+      },
+    });
+  }
+
+  function handleCover() {
+    const allyId = parseInt(coverAllyId, 10);
+    if (!allyId) {
+      setManeuverError('Select an ally to cover');
+      return;
+    }
+    setManeuverError(null);
+    declareCover(allyId, {
+      onError: (err) => {
+        setManeuverError(err instanceof Error ? err.message : 'Failed to declare cover');
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -469,6 +574,101 @@ export function YourTurn({
         open={pullDialogOpen}
         onClose={() => setPullDialogOpen(false)}
       />
+
+      {/* Flee / Cover declaration cluster — always rendered when encounter is non-null; controls disabled outside the declaring phase */}
+      {encounter != null && (
+        <div className="space-y-2" data-testid="maneuver-declaration-section">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Maneuvers
+          </p>
+
+          {/* Declared-state display */}
+          {declaredManeuver === 'flee' && (
+            <div
+              className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+              data-testid="flee-declared-badge"
+            >
+              Fleeing — resolves at end of round
+            </div>
+          )}
+          {declaredManeuver === 'cover' && (
+            <div
+              className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-300"
+              data-testid="cover-declared-badge"
+            >
+              Covering {coveredAllyName ?? 'ally'}
+            </div>
+          )}
+
+          {/* Flee button — only when not already declared a flee maneuver */}
+          {declaredManeuver !== 'flee' && (
+            <button
+              type="button"
+              disabled={isLocked || !isDeclaringPhase || fleePending}
+              onClick={handleFlee}
+              data-testid="flee-btn"
+              className={cn(
+                'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                isLocked || !isDeclaringPhase
+                  ? 'border-border bg-muted text-muted-foreground'
+                  : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20'
+              )}
+            >
+              {fleePending ? 'Declaring flee…' : 'Flee'}
+            </button>
+          )}
+
+          {/* Cover control — ally picker + confirm button */}
+          {declaredManeuver !== 'cover' && (
+            <div className="space-y-1.5" data-testid="cover-control">
+              <Select
+                value={coverAllyId}
+                onValueChange={setCoverAllyId}
+                disabled={isLocked || !isDeclaringPhase || coverPending}
+              >
+                <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
+                  <SelectValue placeholder="Cover an ally…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {coverableAllies.map((ally) => (
+                    <SelectItem key={ally.id} value={String(ally.id)}>
+                      {ally.character_name}
+                    </SelectItem>
+                  ))}
+                  {coverableAllies.length === 0 && (
+                    <SelectItem value="__none__" disabled>
+                      No allies available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                disabled={isLocked || !isDeclaringPhase || coverPending || coverAllyId === ''}
+                onClick={handleCover}
+                data-testid="cover-confirm-btn"
+                className={cn(
+                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  isLocked || !isDeclaringPhase || coverAllyId === ''
+                    ? 'border-border bg-muted text-muted-foreground'
+                    : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
+                )}
+              >
+                {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
+              </button>
+            </div>
+          )}
+
+          {/* Maneuver error display */}
+          {maneuverError !== null && (
+            <p role="alert" className="text-sm text-destructive" data-testid="maneuver-error">
+              {maneuverError}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Submit declarations button */}
       <button
