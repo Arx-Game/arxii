@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone
@@ -6,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
@@ -264,6 +265,12 @@ class PoseSubmitViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # Flush the idmapper BEFORE any factory call: shard-ordered CI runs leave
+        # cached ObjectDB instances whose __dict__ carries a DbHolder (.db/.ndb),
+        # which breaks the TestData descriptor's deepcopy on first access.
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
@@ -294,6 +301,14 @@ class PoseSubmitViewTests(APITestCase):
         from evennia.utils.idmapper import models as idmapper_models
 
         idmapper_models.flush_cache()
+        # Room + location wiring stays instance-level (after the TestData deepcopy)
+        # so the un-deepcopyable DbHolder a Room can acquire (.ndb via active_scene)
+        # never enters the class-attribute graph that setUpTestData deepcopies.
+        self.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character.location = self.room
         self.client.force_authenticate(user=self.account)
         self.url = reverse("interaction-submit-pose")
         self.base_ts = timezone.now() - timedelta(hours=1)
@@ -493,6 +508,30 @@ class PoseSubmitViewTests(APITestCase):
         # action_links — newly-created pose has no links yet (empty list injected)
         assert "action_links" in data
         assert data["action_links"] == []
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_broadcasts_to_scene_clients(self, mock_broadcast) -> None:
+        """REST-submitted poses push the same InteractionPayload the WS path sends."""
+        scene = SceneFactory()
+        resp = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "A pose."},
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert mock_broadcast.call_count == 1
+        _location, payload = mock_broadcast.call_args.args
+        assert payload["id"] == resp.data["id"]
+        assert payload["content"] == "A pose."
+        assert payload["receiver_persona_ids"] == []
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_no_broadcast_on_validation_error(self, mock_broadcast) -> None:
+        resp = self.client.post(
+            self.url, {"persona_id": self.persona.pk, "content": ""}, format="json"
+        )
+        assert resp.status_code == 400
+        mock_broadcast.assert_not_called()
 
 
 class ActionLinksSerializerTests(APITestCase):
