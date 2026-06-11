@@ -407,6 +407,7 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "mental_passive",
             "combo_upgrade",
             "is_ready",
+            "maneuver",
         ]
 
 
@@ -804,6 +805,18 @@ class JoinEncounterSerializer(serializers.Serializer):
     """
 
     character_sheet_id = serializers.IntegerField(min_value=1)
+
+
+class CoverSerializer(serializers.Serializer):
+    """Write serializer for declaring a covering maneuver.
+
+    Requires ``ally_participant_id`` — the PK of the ``CombatParticipant``
+    this character intends to cover. Ownership and encounter-membership
+    validation happens in the view (``get_object_or_404``) and service
+    (``declare_cover``).
+    """
+
+    ally_participant_id = serializers.IntegerField(min_value=1)
 
 
 class AddOpponentSerializer(serializers.Serializer):
