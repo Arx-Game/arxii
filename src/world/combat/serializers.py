@@ -193,6 +193,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         model = CombatParticipant
         fields = [
             "id",
+            "character_sheet_id",
             "character_name",
             "status",
             "health",

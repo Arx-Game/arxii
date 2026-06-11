@@ -2244,6 +2244,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/cover/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare a covering maneuver for an ally.
+     *
+     *     Creates a passives-only action with maneuver=COVER and
+     *     focused_ally_target set to the named ally. The participant remains
+     *     ACTIVE; cover resolves at round resolution as a bonus to the ally's
+     *     flee check.
+     */
+    post: operations['combat_cover_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/declare/': {
     parameters: {
       query?: never;
@@ -2270,7 +2294,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Declare intent to flee. Creates a passives-only action. */
+    /**
+     * @description Declare intent to flee.
+     *
+     *     Creates a passives-only action with maneuver=FLEE. Flee resolves as
+     *     a check at round resolution; the participant remains ACTIVE until then.
+     */
     post: operations['combat_flee_create'];
     delete?: never;
     options?: never;
@@ -17744,6 +17773,8 @@ export interface components {
      */
     Participant: {
       readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet_id: number;
       readonly character_name: string;
       status?: components['schemas']['ParticipantStatusEnum'];
       /** @description Return current health — only if viewer has permission. */
@@ -24712,6 +24743,32 @@ export interface operations {
     };
   };
   combat_begin_round_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_cover_create: {
     parameters: {
       query?: never;
       header?: never;

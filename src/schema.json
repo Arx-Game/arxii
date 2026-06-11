@@ -32062,6 +32062,10 @@ components:
         id:
           type: integer
           readOnly: true
+        character_sheet_id:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
         character_name:
           type: string
           readOnly: true
@@ -32150,6 +32154,7 @@ components:
       - active_conditions
       - available_strain
       - character_name
+      - character_sheet_id
       - character_status
       - fatigue
       - health

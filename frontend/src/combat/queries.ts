@@ -216,6 +216,44 @@ export function useDispatchPlayerAction(characterId: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Flee mutation hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Declare flee for the current round.
+ * POST /api/combat/{encounterId}/flee/
+ * Invalidates encounter key on success.
+ */
+export function useFleeMutation(encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.postFlee(encounterId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cover mutation hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Declare cover for an ally participant.
+ * POST /api/combat/{encounterId}/cover/
+ * Invalidates encounter key on success.
+ */
+export function useCoverMutation(encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (allyParticipantId: number) => api.postCover(encounterId, allyParticipantId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Consequence outcomes hook
 // ---------------------------------------------------------------------------
 

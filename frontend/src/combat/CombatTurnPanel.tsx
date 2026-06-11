@@ -175,6 +175,7 @@ export function CombatTurnPanel({
           roundNumber={roundNumber}
           availableActions={combatActions}
           readOnly={false}
+          encounter={encounter}
         />
       ) : (
         <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
