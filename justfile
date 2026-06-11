@@ -183,6 +183,15 @@ clean-pyc:
 # Note: `arx manage` chdirs to src/ before invoking evennia, so the --file
 # path is relative to src/ (i.e. schema.json lands at src/schema.json).
 #   just gen-api-types
+# Build fixtures from the private content checkout, then load them.
+# Requires CONTENT_REPO_PATH in src/.env (the content repo is never named here).
+load-content:
+    uv run python tools/build_content_fixtures.py --load
+
+# Validate content files + report remaining PLACEHOLDER slots; writes nothing.
+check-content:
+    uv run python tools/build_content_fixtures.py --check
+
 gen-api-types:
     uv run arx manage spectacular --file schema.json --validate
     pnpm --prefix frontend generate:types
