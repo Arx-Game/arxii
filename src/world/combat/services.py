@@ -2421,13 +2421,13 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         end_audere,
     )
 
-    audere_targets = [
-        t
-        for t in participant_targets
-        if ConditionInstance.objects.filter(
-            target=t, condition__name=AUDERE_CONDITION_NAME
-        ).exists()
-    ]
+    audere_target_ids = set(
+        ConditionInstance.objects.filter(
+            target__in=participant_targets,
+            condition__name=AUDERE_CONDITION_NAME,
+        ).values_list("target_id", flat=True)
+    )
+    audere_targets = [t for t in participant_targets if t.pk in audere_target_ids]
     for target in audere_targets:
         end_audere(target)
     PendingAudereOffer.objects.filter(character_sheet__character__in=participant_targets).delete()

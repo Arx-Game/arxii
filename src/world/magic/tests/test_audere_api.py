@@ -29,7 +29,7 @@ from world.magic.audere import (
 )
 from world.magic.exceptions import AudereOfferStaleError
 from world.magic.factories import CharacterAnimaFactory, ResonanceFactory
-from world.magic.tests.test_audere_offer_surface import (
+from world.magic.tests.audere_test_helpers import (
     AudereGateFixture,
     build_audere_gate_fixture,
 )

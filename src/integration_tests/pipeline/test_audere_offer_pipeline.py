@@ -44,7 +44,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.services import use_technique
-from world.magic.tests.test_audere_offer_surface import build_audere_gate_fixture
+from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.roster.factories import RosterTenureFactory

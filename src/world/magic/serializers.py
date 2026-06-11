@@ -7,9 +7,14 @@ and character-specific magic data.
 Affinities and Resonances are proper domain models in the magic app.
 """
 
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
+
+if TYPE_CHECKING:
+    from world.magic.audere import AudereThreshold
 from world.conditions.models import CapabilityType, ConditionTemplate, DamageType
 from world.items.models import ItemInstance
 from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
@@ -2095,18 +2100,26 @@ class PendingAudereOfferSerializer(serializers.ModelSerializer):
 
         return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
 
-    def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
-        """Intensity bonus the offer would grant (from the global threshold config)."""
+    def _threshold(self) -> "AudereThreshold | None":
+        """Memoize the global threshold config once per serializer instance.
+
+        SharedMemoryModel's identity map does not cache ``.first()`` queries,
+        so without this each SerializerMethodField would hit the DB per row.
+        """
         from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
-        threshold = AudereThreshold.objects.first()
+        if not hasattr(self, "_threshold_cache"):
+            self._threshold_cache = AudereThreshold.objects.first()
+        return self._threshold_cache
+
+    def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
+        """Intensity bonus the offer would grant (from the global threshold config)."""
+        threshold = self._threshold()
         return threshold.intensity_bonus if threshold else 0
 
     def get_anima_pool_bonus(self, obj: object) -> int:  # noqa: ARG002
         """Anima pool expansion the offer would grant (from the global threshold config)."""
-        from world.magic.audere import AudereThreshold  # noqa: PLC0415
-
-        threshold = AudereThreshold.objects.first()
+        threshold = self._threshold()
         return threshold.anima_pool_bonus if threshold else 0
 
 
