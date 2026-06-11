@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from django.db import models
+from dataclasses import dataclass
+
+from django.db import models, transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.classes.models import PathStage
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
+    AUDERE_MAJORA_CONDITION_NAME,
     SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
@@ -344,3 +347,220 @@ def maybe_create_audere_majora_offer(
         _broadcast_manifestation(character, threshold.manifestation_text)
 
     return offer
+
+
+# =============================================================================
+# Crossing services (Task 4)
+# =============================================================================
+
+
+@dataclass
+class AudereMajoraCrossingResult:
+    """Result of a Crossing decision."""
+
+    accepted: bool
+    level_before: int = 0
+    level_after: int = 0
+    chosen_path_name: str = ""
+    advisory_text: str = ""
+    declaration_interaction_id: int | None = None
+
+
+def _primary_class_level(character: ObjectDB):
+    """Return the primary CharacterClassLevel, or the highest-level one if none is primary."""
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+    primary = CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
+    if primary is not None:
+        return primary
+    return CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+
+
+def _post_declaration(character: ObjectDB, text: str):
+    """Create a POSE interaction for the crossing declaration.
+
+    Returns (scene, interaction) on success.
+    Returns (None, None) when there is no active scene at the character's location.
+    Returns (scene, None) when the character has no primary persona.
+    """
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import create_interaction  # noqa: PLC0415
+    from world.scenes.models import Persona, Scene  # noqa: PLC0415
+
+    scene = Scene.objects.filter(location=character.location, is_active=True).first()
+    if scene is None:
+        return None, None
+
+    try:
+        persona = character.sheet_data.primary_persona
+    except (AttributeError, Persona.DoesNotExist):
+        return scene, None
+
+    interaction = create_interaction(
+        persona=persona,
+        content=text,
+        mode=InteractionMode.POSE,
+        scene=scene,
+    )
+    return scene, interaction
+
+
+def cross_threshold(
+    sheet,
+    threshold: AudereMajoraThreshold,
+    chosen_path,
+    *,
+    declaration_text: str,
+) -> AudereMajoraCrossingResult:
+    """Execute the crossing inside the caller's transaction.
+
+    Assumes the caller has validated eligibility and holds the offer lock.
+    Does not delete the offer row — caller is responsible for that.
+    """
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
+
+    character = sheet.character
+
+    advisory = corruption_advisory_for_character(character)
+
+    scene, interaction = _post_declaration(character, declaration_text)
+
+    class_level = _primary_class_level(character)
+    level_before = class_level.level if class_level is not None else 0
+    level_after = threshold.boundary_level + 1
+
+    if class_level is not None:
+        class_level.level = level_after
+        class_level.save(update_fields=["level"])
+
+    sheet.invalidate_class_level_cache()
+
+    CharacterPathHistory.objects.create(character=character, path=chosen_path)
+
+    AudereMajoraCrossing.objects.create(
+        character_sheet=sheet,
+        threshold=threshold,
+        chosen_path=chosen_path,
+        scene=scene,
+        declaration_interaction=interaction,
+        level_before=level_before,
+        level_after=level_after,
+    )
+
+    majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
+    apply_condition(target=character, condition=majora_template)
+
+    if interaction is not None:
+        declaration_id = interaction.pk
+
+        def _push():
+            push_interaction(
+                interaction,
+                receiver_persona_ids=[],
+                target_persona_ids=[],
+                receiver_characters=[],
+            )
+
+        transaction.on_commit(_push)
+    else:
+        declaration_id = None
+
+    return AudereMajoraCrossingResult(
+        accepted=True,
+        level_before=level_before,
+        level_after=level_after,
+        chosen_path_name=chosen_path.name,
+        advisory_text=advisory,
+        declaration_interaction_id=declaration_id,
+    )
+
+
+def resolve_audere_majora_offer(
+    offer_id: int,
+    *,
+    accept: bool,
+    path_id: int | None = None,
+    declaration_text: str = "",
+) -> AudereMajoraCrossingResult:
+    """Resolve a pending Audere Majora offer: accept (cross) or decline.
+
+    Two-phase pattern mirroring resolve_audere_offer:
+    - Plain lookup + staleness check OUTSIDE any transaction.
+    - Actual work re-fetches with select_for_update inside transaction.atomic().
+    """
+    from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        AudereMajoraOfferNotFoundError,
+        AudereMajoraOfferStaleError,
+        AudereMajoraPathError,
+        ProtagonismLockedError,
+    )
+    from world.magic.services import has_pending_alterations  # noqa: PLC0415
+    from world.magic.types import AlterationGateError  # noqa: PLC0415
+
+    offer = PendingAudereMajoraOffer.objects.filter(pk=offer_id).first()
+    if offer is None:
+        raise AudereMajoraOfferNotFoundError
+
+    character = offer.character_sheet.character
+    sheet = offer.character_sheet
+
+    if not accept:
+        advisory = corruption_advisory_for_character(character)
+        offer.delete()
+        return AudereMajoraCrossingResult(accepted=False, advisory_text=advisory)
+
+    # Staleness check OUTSIDE transaction
+    threshold = check_audere_majora_eligibility(character, offer.fired_intensity)
+    if threshold is None or threshold.pk != offer.threshold_id:
+        offer.delete()
+        raise AudereMajoraOfferStaleError
+
+    # Spend guards
+    if sheet.is_protagonism_locked:
+        raise ProtagonismLockedError
+    if has_pending_alterations(sheet):
+        raise AlterationGateError
+
+    # Path validation
+    eligible_paths = eligible_paths_for_threshold(character, threshold)
+    chosen_path = next((p for p in eligible_paths if p.pk == path_id), None)
+    if chosen_path is None:
+        raise AudereMajoraPathError
+
+    with transaction.atomic():
+        locked = PendingAudereMajoraOffer.objects.select_for_update().filter(pk=offer_id).first()
+        if locked is None:
+            raise AudereMajoraOfferNotFoundError
+
+        result = cross_threshold(
+            sheet,
+            threshold,
+            chosen_path,
+            declaration_text=declaration_text,
+        )
+        locked.delete()
+
+    return result
+
+
+def end_audere_majora(character: ObjectDB) -> None:
+    """Remove the Audere Majora condition from a character.
+
+    Safe no-op when the condition is absent or the template doesn't exist.
+
+    Note: unlike end_audere, no engagement/anima reverts are needed —
+    Audere Majora's effects are condition-modifier driven and cleared by
+    the condition removal itself.
+    """
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    template = ConditionTemplate.objects.filter(name=AUDERE_MAJORA_CONDITION_NAME).first()
+    if template is None:
+        return
+    remove_condition(character, template)
