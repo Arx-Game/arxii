@@ -420,6 +420,14 @@ class DeclareFleeTest(TestCase):
         with pytest.raises(ValueError, match="dead"):
             declare_flee(participant)
 
+    def test_cannot_flee_when_already_fled(self) -> None:
+        """A participant who has already fled (status=FLED) cannot declare flee again."""
+        participant = self._make_participant()
+        participant.status = ParticipantStatus.FLED
+        participant.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="no longer active"):
+            declare_flee(participant)
+
     def test_redeclare_action_after_flee_clears_maneuver(self) -> None:
         """Calling declare_action after declare_flee resets maneuver to None."""
         effect_type = EffectTypeFactory(name="FleeReDeclare", base_power=20)
@@ -507,6 +515,13 @@ class DeclareCoverTest(TestCase):
         self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         with pytest.raises(ValueError, match="expected 'Declaring'"):
+            declare_cover(self.participant, self.ally)
+
+    def test_cannot_cover_when_already_fled(self) -> None:
+        """A participant who has already fled (status=FLED) cannot declare cover."""
+        self.participant.status = ParticipantStatus.FLED
+        self.participant.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="no longer active"):
             declare_cover(self.participant, self.ally)
 
 

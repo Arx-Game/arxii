@@ -807,6 +807,10 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
         )
         raise ValueError(msg)
 
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot flee: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
     # Vitality check — dead characters cannot flee. Unconscious / dying
     # characters may still be dragged out (flee is passives-only).
     if is_dead(participant.character_sheet):
@@ -851,6 +855,11 @@ def declare_cover(
             f"'{encounter.get_status_display()}', expected 'Declaring'."
         )
         raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot cover: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
     if is_dead(participant.character_sheet):
         msg = "Cannot cover: character is dead."
         raise ValueError(msg)
