@@ -266,6 +266,19 @@ class AudereMajoraOfferServiceTests(TestCase):
         npc = ObjectDB.objects.create(db_key="majora_npc_no_sheet_t3")
         assert maybe_create_audere_majora_offer(npc, self.passing_intensity) is None
 
+    def test_sheet_without_primary_persona_skips_broadcast(self) -> None:
+        """primary_persona raises Persona.DoesNotExist — broadcast must no-op, not blow up."""
+        from world.scenes.models import Persona
+
+        room = self.character.location
+        SceneFactory(location=room, is_active=True)
+        Persona.objects.filter(character_sheet=self.sheet).delete()
+
+        offer = maybe_create_audere_majora_offer(self.character, self.passing_intensity)
+
+        assert offer is not None
+        assert Interaction.objects.filter(mode=InteractionMode.EMIT).count() == 0
+
 
 class CastHookImportSmokeTest(TestCase):
     """Ensure world.magic.services.techniques can be imported without cycle errors."""

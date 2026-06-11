@@ -267,7 +267,7 @@ def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
         create_interaction,
         push_interaction,
     )
-    from world.scenes.models import Scene  # noqa: PLC0415
+    from world.scenes.models import Persona, Scene  # noqa: PLC0415
 
     scene = Scene.objects.filter(location=character.location, is_active=True).first()
     if scene is None:
@@ -275,7 +275,9 @@ def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
 
     try:
         persona = character.sheet_data.primary_persona
-    except AttributeError:
+    except (AttributeError, Persona.DoesNotExist):
+        # AttributeError covers a missing sheet; DoesNotExist a sheet with no
+        # PRIMARY persona (primary_persona is intentionally loud).
         return
 
     interaction = create_interaction(
