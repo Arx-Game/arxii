@@ -99,7 +99,34 @@ def emit_terminal_renown_awards(
             _fire_award(award, _resolve_participant_persona(participant), archetypes)
             for participant in participants
         )
+    _grant_party_witness_knowledge(results, participants)
     return results
+
+
+def _grant_party_witness_knowledge(
+    results: list[RenownAwardResult],
+    participants: list,
+) -> None:
+    """#902 — the mission party witnessed each deed born from this run.
+
+    Bystanders in the final room deliberately get nothing (assumption of
+    ignorance — mission endings can be obscured); only MissionParticipants
+    learn what was done.
+    """
+    entry_ids = [r.legend_entry_id for r in results if r.legend_entry_id is not None]
+    if not entry_ids:
+        return
+    from world.societies.constants import DeedKnowledgeSource  # noqa: PLC0415
+    from world.societies.knowledge_services import grant_deed_knowledge  # noqa: PLC0415
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+
+    party = [
+        persona
+        for persona in (_resolve_participant_persona(p) for p in participants)
+        if persona is not None
+    ]
+    for entry in LegendEntry.objects.filter(pk__in=entry_ids):
+        grant_deed_knowledge(deed=entry, personas=party, source=DeedKnowledgeSource.WITNESSED)
 
 
 def _fire_award(

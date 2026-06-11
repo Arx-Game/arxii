@@ -26,7 +26,11 @@ from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.societies.constants import FameTier
+from world.societies.constants import (
+    COMMON_KNOWLEDGE_MULTIPLIER,
+    DeedKnowledgeSource,
+    FameTier,
+)
 from world.societies.types import ReputationTier
 
 # Validators for principle fields (-5 to +5 range)
@@ -923,6 +927,18 @@ class LegendEntry(AbstractLegendRecord):
             return 0
         return self.base_value + self.spread_value
 
+    @property
+    def is_common_knowledge(self) -> bool:
+        """A tale that has grown to 5× its base belongs to everyone (#902).
+
+        Computed, never stored — the gate moves with the spreads. Inactive
+        deeds are never common knowledge (total is 0), nor are zero-base
+        deeds (nothing to multiply).
+        """
+        if self.base_value <= 0:
+            return False
+        return self.get_total_value() >= COMMON_KNOWLEDGE_MULTIPLIER * self.base_value
+
 
 class LegendSpread(SharedMemoryModel):
     """
@@ -1033,6 +1049,48 @@ class LegendDeedStory(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.author.name}'s account of: {self.deed.title}"
+
+
+class PersonaDeedKnowledge(SharedMemoryModel):
+    """One persona's IC knowledge of one deed (#902).
+
+    Rows exist for the witness and heard-told vectors; the doer needs no row
+    and common knowledge is computed (``LegendEntry.is_common_knowledge``).
+    One row per (persona, deed) — the first vector to arrive wins; ``source``
+    is provenance for the fiction, never a permission tier.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="deed_knowledge",
+        help_text="The persona that knows of the deed",
+    )
+    deed = models.ForeignKey(
+        LegendEntry,
+        on_delete=models.CASCADE,
+        related_name="knowledge_rows",
+        help_text="The deed known of",
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=DeedKnowledgeSource.choices,
+        help_text="How the knowledge arrived (witnessed / heard the tale told)",
+    )
+    learned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Persona Deed Knowledge"
+        verbose_name_plural = "Persona Deed Knowledge"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "deed"],
+                name="unique_deed_knowledge_per_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.persona.name} knows of: {self.deed.title} ({self.source})"
 
 
 class CharacterLegendSummary(SharedMemoryModel):

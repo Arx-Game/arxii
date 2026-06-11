@@ -183,6 +183,25 @@ MAGNITUDE_TO_DEFAULT_REACH: dict[str, str] = {
     RenownMagnitude.VERY_HIGH.value: RenownReach.WORLD.value,
 }
 
+
+class DeedKnowledgeSource(models.TextChoices):
+    """How a persona came to know a deed (#902 — provenance, not permission).
+
+    The DOER needs no row (it's their deed); common knowledge (total legend
+    ≥ COMMON_KNOWLEDGE_MULTIPLIER × base) is computed, not stored.
+    """
+
+    WITNESSED = "witnessed", "Witnessed"
+    HEARD_TOLD = "heard_told", "Heard the tale told"
+
+
+# A deed whose total legend (base + spreads) reaches this multiple of its
+# base value has entered common knowledge: any persona may see and spread
+# it. Halfway through the 10× spread ceiling — the back half of a tale's
+# growth is the communal phase. (#902)
+COMMON_KNOWLEDGE_MULTIPLIER = 5
+
+
 # Names of the six society principle fields. Used by the archetype dot
 # product to walk fields uniformly via getattr.
 PRINCIPLE_FIELD_NAMES: tuple[str, ...] = (

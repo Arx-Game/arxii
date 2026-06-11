@@ -10,7 +10,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 
 from world.scenes.action_resolvers import register_resolver
-from world.societies.models import LegendEntry, OrganizationMembership
+from world.societies.models import LegendEntry
 
 SPREAD_TALE_ACTION_KEY = "spread_a_tale"
 # Display name shared by the Spread a Tale ActionTemplate and its CheckType.
@@ -212,20 +212,15 @@ def get_or_create_spread_a_tale_template():
 
 
 def get_spreadable_deeds(persona) -> QuerySet[LegendEntry]:
-    """Active deeds whose ``societies_aware`` intersects the persona's societies.
+    """Active deeds the persona KNOWS (#902 union).
 
-    A persona may spread tales known to any society they hold membership in
-    (via an organization in that society). Inactive deeds and deeds no society
-    of theirs knows of are excluded.
+    Society awareness (org memberships) ∪ their own deeds ∪ witnessed /
+    heard-told knowledge rows ∪ common knowledge (total ≥ 5× base). Inactive
+    deeds and tales the persona has no path to are excluded.
     """
-    society_ids = OrganizationMembership.objects.filter(persona=persona).values_list(
-        "organization__society_id", flat=True
-    )
-    return (
-        LegendEntry.objects.filter(is_active=True, societies_aware__in=society_ids)
-        .distinct()
-        .order_by("-created_at")
-    )
+    from world.societies.knowledge_services import known_deed_ids  # noqa: PLC0415
+
+    return LegendEntry.objects.filter(pk__in=known_deed_ids(persona)).order_by("-created_at")
 
 
 def save_deed_story(*, author_persona, deed, text: str):
@@ -290,6 +285,20 @@ def _resolve_spread_tale(action_request, result) -> None:
         audience_factor=Decimal(str(band.multiplier)),
         scene=action_request.scene,
     )
+    if action_request.scene is not None:
+        # #902 — everyone on the scene list heard the tale told and may now
+        # see it on the subject's card and retell it themselves.
+        from world.societies.constants import DeedKnowledgeSource  # noqa: PLC0415
+        from world.societies.knowledge_services import (  # noqa: PLC0415
+            grant_deed_knowledge,
+            scene_witness_personas,
+        )
+
+        grant_deed_knowledge(
+            deed=deed,
+            personas=scene_witness_personas(action_request.scene),
+            source=DeedKnowledgeSource.HEARD_TOLD,
+        )
     tier_changed = apply_spread_fame_bump(
         deed,
         npc_audience=int(band.multiplier * _FAME_AUDIENCE_PER_MULTIPLIER),

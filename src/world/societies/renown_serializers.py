@@ -289,7 +289,10 @@ def build_renown_card_payload(
             "tier_label": FameTier(adjusted_tier).label,
         },
         "visible_deeds": _build_card_visible_deeds(
-            target_persona, viewer_society_ids, limit=deeds_limit
+            target_persona,
+            viewer_society_ids,
+            limit=deeds_limit,
+            viewer_persona=viewer_persona,
         ),
         "visible_reputation": _build_card_visible_reputation(target_persona, viewer_society_ids),
     }
@@ -326,18 +329,36 @@ def _viewer_societies(viewer_persona: Persona | None):
 
 def _build_card_visible_deeds(
     target_persona: Persona,
-    viewer_society_ids: set[int],
+    viewer_society_ids: set[int],  # noqa: ARG001 - kept for call-shape stability; union covers it
     *,
     limit: int,
+    viewer_persona: Persona | None = None,
 ) -> list[dict]:
-    """Deeds whose ``societies_aware`` intersects the viewer's societies."""
-    if not viewer_society_ids:
-        return []
-    deeds = (
-        LegendEntry.objects.filter(persona=target_persona, societies_aware__in=viewer_society_ids)
-        .distinct()
-        .order_by("-created_at")[:limit]
-    )
+    """The target's deeds the VIEWER knows of (#902 union).
+
+    Society awareness ∪ witnessed/heard-told knowledge ∪ common knowledge.
+    Anonymous viewers (no persona) still see the target's common-knowledge
+    deeds — a tale at 5× its base belongs to everyone.
+    """
+    from world.societies.knowledge_services import known_deed_ids  # noqa: PLC0415
+
+    base = LegendEntry.objects.filter(persona=target_persona, is_active=True)
+    if viewer_persona is None:
+        from django.db.models import F, Sum  # noqa: PLC0415
+        from django.db.models.functions import Coalesce  # noqa: PLC0415
+
+        from world.societies.constants import COMMON_KNOWLEDGE_MULTIPLIER  # noqa: PLC0415
+
+        deeds = (
+            base.annotate(spread_total=Coalesce(Sum("spreads__value_added"), 0))
+            .filter(
+                base_value__gt=0,
+                spread_total__gte=(COMMON_KNOWLEDGE_MULTIPLIER - 1) * F("base_value"),
+            )
+            .order_by("-created_at")[:limit]
+        )
+    else:
+        deeds = base.filter(pk__in=known_deed_ids(viewer_persona)).order_by("-created_at")[:limit]
     return [
         {
             "id": deed.pk,

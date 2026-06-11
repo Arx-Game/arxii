@@ -362,7 +362,7 @@ The old model stored incapacitation and dying as enum values in `CharacterVitals
 
 **Known follow-ups:**
 - **Consequence-pool reconciliation** — knockout/wound/death resolution is reconciled onto the pool pipeline in Phase 9 (#560/#561). The `consequence_pool` FK on `CombatOpponent` / the C-tier pool plumbing for encounter outcomes remains future work.
-- **Frontend status surface** — the `derive_character_status` wire label is a placeholder. The richer condition-aware status surface (showing Unconscious / Bleeding-Out / other conditions to the player) is tracked in #521/#522.
+- **Frontend status surface** — the `derive_character_status` wire label is a placeholder. #521 built the vitals sheet panel (VitalsPanel + `GET /api/vitals/<id>/`, surfacing health/fatigue/status); the richer condition-aware status surface (showing Unconscious / Bleeding-Out / other conditions to the player) remains tracked in #522.
 
 **Phase 9 (complete):** Reconcile survivability consequences onto the consequence-pool pipeline (#560, #561)
 
@@ -647,7 +647,7 @@ follow-up lands.
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
-- **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), vitals display on character sheet frontend, death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps), API endpoints for vitals status
+- **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps). Built (#521): VitalsPanel on the character sheet + owner/staff-gated `GET /api/vitals/<id>/` read endpoint
 - **Conditions** — permanent wounds/scars as ConditionTemplates with authored content
 
 ## Design Document
