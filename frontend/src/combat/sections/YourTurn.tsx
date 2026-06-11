@@ -310,7 +310,8 @@ export function YourTurn({
     if (myParticipantId === null) return null;
     const actions = encounter?.current_round_actions ?? [];
     const match = actions.find(
-      (a) => typeof (a as RoundActionTyped).participant === 'number' &&
+      (a) =>
+        typeof (a as RoundActionTyped).participant === 'number' &&
         (a as RoundActionTyped).participant === myParticipantId
     );
     return (match as RoundActionTyped) ?? null;
@@ -626,10 +627,7 @@ export function YourTurn({
                 onValueChange={setCoverAllyId}
                 disabled={isLocked || !isDeclaringPhase || coverPending}
               >
-                <SelectTrigger
-                  data-testid="cover-ally-select"
-                  className="h-8 text-xs"
-                >
+                <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
                   <SelectValue placeholder="Cover an ally…" />
                 </SelectTrigger>
                 <SelectContent>

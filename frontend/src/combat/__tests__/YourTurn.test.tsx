@@ -727,8 +727,13 @@ describe('YourTurn — flee declaration', () => {
       status: 'declaring',
       participants: [makeSelfParticipant(5)],
       current_round_actions: [
-        { participant: 5, participant_name: 'Hero', maneuver: 'flee', is_ready: false,
-          focused_ally_target: null },
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
       ],
     });
 
@@ -790,8 +795,13 @@ describe('YourTurn — cover declaration', () => {
       status: 'declaring',
       participants: [makeSelfParticipant(5), makeParticipant(7, 'Shield Bearer')],
       current_round_actions: [
-        { participant: 5, participant_name: 'Hero', maneuver: 'cover', is_ready: false,
-          focused_ally_target: 7 },
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'cover',
+          is_ready: false,
+          focused_ally_target: 7,
+        },
       ],
     });
 
@@ -848,11 +858,21 @@ describe('YourTurn — own-action resolved by participant PK, not position', () 
       participants: [makeSelfParticipant(5), makeParticipant(9, 'Other Combatant')],
       current_round_actions: [
         // Another participant's action comes FIRST — must not be treated as self.
-        { participant: 9, participant_name: 'Other Combatant', maneuver: null,
-          is_ready: false, focused_ally_target: null },
+        {
+          participant: 9,
+          participant_name: 'Other Combatant',
+          maneuver: null,
+          is_ready: false,
+          focused_ally_target: null,
+        },
         // Viewer's own action — flee declared.
-        { participant: 5, participant_name: 'Hero', maneuver: 'flee', is_ready: false,
-          focused_ally_target: null },
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
       ],
     });
 
