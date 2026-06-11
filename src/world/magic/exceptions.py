@@ -301,17 +301,14 @@ class AudereOfferStaleError(AudereOfferError):
 # =============================================================================
 
 
-class AudereMajoraOfferError(Exception):
-    """Base for Audere Majora offer-surface errors. Carries user_message per
-    the no-str(exc)-in-API rule (CLAUDE.md)."""
+class AudereMajoraOfferError(AudereOfferError):
+    """Base for Audere Majora offer-surface errors.
+
+    Subclasses AudereOfferError so callers can catch the whole offer-surface
+    family in one clause; user_message semantics inherited.
+    """
 
     user_message: str = "Audere Majora offer operation failed."
-    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
-
-    def __init__(self, user_message: str | None = None) -> None:
-        if user_message is not None:
-            self.user_message = user_message
-        super().__init__(self.user_message)
 
 
 class AudereMajoraOfferNotFoundError(AudereMajoraOfferError):

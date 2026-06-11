@@ -274,10 +274,11 @@ def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
         return
 
     try:
+        # sheet_data is CharacterSheet's OneToOne reverse accessor (models.py:98).
         persona = character.sheet_data.primary_persona
     except (AttributeError, Persona.DoesNotExist):
-        # AttributeError covers a missing sheet; DoesNotExist a sheet with no
-        # PRIMARY persona (primary_persona is intentionally loud).
+        # AttributeError covers a missing sheet (plain ObjectDB); DoesNotExist
+        # a sheet with no PRIMARY persona (intentionally loud).
         return
 
     interaction = create_interaction(
@@ -311,6 +312,9 @@ def maybe_create_audere_majora_offer(
     if threshold is None:
         return None
 
+    # Sheet/Soulfray re-fetches duplicate eligibility's reads, mirroring
+    # maybe_create_audere_offer's shape. This path runs only at boundary
+    # levels with every gate open; the identity map serves the sheet.
     sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return None
