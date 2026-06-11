@@ -215,8 +215,9 @@ class CharacterClassLevel(SharedMemoryModel):
     )
     level = models.PositiveSmallIntegerField(
         default=1,
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        help_text="Current level in this class (1-10)",
+        validators=[MinValueValidator(1), MaxValueValidator(30)],
+        # Raised for tier crossings (#543): Transcendent is level 21+.
+        help_text="Current level in this class (1-30)",
     )
     is_primary = models.BooleanField(
         default=False,

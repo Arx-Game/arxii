@@ -60,7 +60,26 @@ class AudereThreshold(SharedMemoryModel):
         )
 
 
-class PendingAudereOffer(SharedMemoryModel):
+class AbstractPendingOffer(SharedMemoryModel):
+    """Shared skeleton for poll-able offer rows (Audere #873, Audere Majora #543).
+
+    Concrete subclasses own the character_sheet FK (to preserve per-model
+    related_names) and the one-pending-per-character constraint.
+    """
+
+    fired_intensity = models.PositiveIntegerField(
+        help_text="Runtime intensity of the cast that opened the gate.",
+    )
+    soulfray_stage_order = models.PositiveSmallIntegerField(
+        help_text="Soulfray stage order at fire time (display snapshot).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class PendingAudereOffer(AbstractPendingOffer):
     """A poll-able Audere offer awaiting the player's accept/decline (#873).
 
     Created by ``maybe_create_audere_offer`` when the eligibility gate opens
@@ -74,13 +93,6 @@ class PendingAudereOffer(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="audere_offers",
     )
-    fired_intensity = models.PositiveIntegerField(
-        help_text="Runtime intensity of the cast that opened the gate.",
-    )
-    soulfray_stage_order = models.PositiveSmallIntegerField(
-        help_text="Soulfray stage order at fire time (display snapshot).",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
