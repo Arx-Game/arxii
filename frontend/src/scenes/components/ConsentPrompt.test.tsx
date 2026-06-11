@@ -24,8 +24,10 @@ function createWrapper() {
 
 const MOCK_REQUEST: ActionRequest = {
   id: 7,
-  initiator_persona: { id: 1, name: 'Darth Maul' },
-  action_name: 'Intimidate',
+  initiator_persona: 1,
+  initiator_name: 'Darth Maul',
+  action_key: 'Intimidate',
+  technique: null,
   technique_name: null,
   created_at: '2026-03-22T12:00:00Z',
   strain_commitment: 0,
@@ -33,8 +35,10 @@ const MOCK_REQUEST: ActionRequest = {
 
 const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
   id: 8,
-  initiator_persona: { id: 2, name: 'Gandalf' },
-  action_name: 'Enchant',
+  initiator_persona: 2,
+  initiator_name: 'Gandalf',
+  action_key: 'Enchant',
+  technique: 9,
   technique_name: 'Mind Whisper',
   created_at: '2026-03-22T12:05:00Z',
   strain_commitment: 0,
@@ -216,5 +220,29 @@ describe('ConsentPrompt', () => {
       expect(screen.getByText('Darth Maul')).toBeInTheDocument();
     });
     expect(screen.getByText('Gandalf')).toBeInTheDocument();
+  });
+  it('shows strain text when strain_commitment > 0 (#892 merged from __tests__ dup)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, initiator_name: 'Mara', strain_commitment: 3 }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Mara is committing 3 strain/i)).toBeInTheDocument();
+    });
+  });
+
+  it('does NOT show strain text when strain_commitment === 0 (#892 merged from __tests__ dup)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, strain_commitment: 0 }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Darth Maul/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/committing/i)).not.toBeInTheDocument();
   });
 });

@@ -161,7 +161,12 @@ class CastableTechniqueSerializer(serializers.Serializer):
 class SceneActionRequestSerializer(serializers.ModelSerializer):
     initiator_name = serializers.CharField(source="initiator_persona.name", read_only=True)
     target_name = serializers.CharField(source="target_persona.name", read_only=True)
+    technique_name = serializers.SerializerMethodField()
     combat_risk_level = serializers.SerializerMethodField()
+
+    def get_technique_name(self, obj: SceneActionRequest) -> str | None:
+        """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
+        return obj.technique.name if obj.technique_id else None
 
     def get_combat_risk_level(self, obj: SceneActionRequest) -> str | None:
         """Risk level of the encounter a PENDING hostile cast would pull the target into (#777)."""
@@ -186,6 +191,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "action_key",
             "action_template",
             "technique",
+            "technique_name",
             "delivery",
             "status",
             "difficulty_choice",

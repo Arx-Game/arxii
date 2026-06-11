@@ -53,16 +53,16 @@ export function ConsentPrompt({ sceneId }: Props) {
           <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
           <div className="flex-1">
             <p className="text-sm font-medium">
-              <span className="font-semibold">{req.initiator_persona.name}</span> wants to use{' '}
+              <span className="font-semibold">{req.initiator_name}</span> wants to use{' '}
               <span className="font-semibold">
-                {req.action_name}
+                {req.action_key}
                 {req.technique_name ? ` (${req.technique_name})` : ''}
               </span>{' '}
               on your character.
             </p>
             {req.strain_commitment > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {req.initiator_persona.name} is committing {req.strain_commitment} strain.
+                {req.initiator_name} is committing {req.strain_commitment} strain.
               </p>
             )}
             {req.combat_risk_level && (
