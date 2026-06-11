@@ -3,10 +3,12 @@
 Covers:
     1. List scoped to the authenticated account's own offers
     2. advisory_text computed live and verbatim at corruption stage 3+
-    3. Respond accept — 200 with bonuses applied, offer row deleted
-    4. Respond rejects an offer belonging to another account (400, row survives)
-    5. Respond on a stale offer — 400 with stale user_message, row deleted
-    6. Unauthenticated requests rejected
+    3. Detail retrieval of a foreign account's offer is a 404 (queryset-scoped)
+    4. Respond accept — 200 with bonuses applied, offer row deleted
+    5. Respond decline — 200 with no bonuses, offer row deleted, state unchanged
+    6. Respond rejects an offer belonging to another account (400, row survives)
+    7. Respond on a stale offer — 400 with stale user_message, row deleted
+    8. Unauthenticated requests rejected
 """
 
 from __future__ import annotations
@@ -131,6 +133,15 @@ class PendingAudereOfferListTests(APITestCase):
         self.assertIn("character loss", advisory)
         self.assertEqual(advisory, corruption_advisory_for_character(character))
 
+    def test_retrieve_foreign_offer_404(self) -> None:
+        """Detail retrieval of another account's offer is a 404 (queryset-scoped)."""
+        foreign_offer = _open_gate_for_tenure(self.other_tenure, self.gate)
+
+        self.client.force_authenticate(user=self.my_account)
+        response = self.client.get(f"{_PENDING_URL}{foreign_offer.pk}/")
+
+        self.assertEqual(response.status_code, 404, response.content)
+
     def test_list_unauthenticated_rejected(self) -> None:
         """Unauthenticated GET returns 401 or 403."""
         response = self.client.get(_PENDING_URL)
@@ -169,6 +180,27 @@ class AudereRespondViewTests(APITestCase):
             self.gate.threshold.anima_pool_bonus,
         )
         self.assertFalse(PendingAudereOffer.objects.filter(pk=offer.pk).exists())
+
+    def test_respond_decline_returns_result(self) -> None:
+        """Declining returns accepted=False with no bonuses and deletes the offer row."""
+        offer = _open_gate_for_tenure(self.my_tenure, self.gate)
+        character = offer.character_sheet.character
+        engagement = CharacterEngagement.objects.get(character=character)
+        pre_decline_modifier = engagement.intensity_modifier
+
+        self.client.force_authenticate(user=self.my_account)
+        response = self.client.post(
+            _RESPOND_URL,
+            {"offer_id": offer.pk, "accept": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data["accepted"])
+        self.assertEqual(response.data["intensity_bonus_applied"], 0)
+        self.assertFalse(PendingAudereOffer.objects.filter(pk=offer.pk).exists())
+        engagement.refresh_from_db()
+        self.assertEqual(engagement.intensity_modifier, pre_decline_modifier)
 
     def test_respond_rejects_foreign_offer(self) -> None:
         """An offer belonging to another account returns 400; the row survives."""
