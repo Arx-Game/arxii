@@ -544,17 +544,12 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
         assert effective_max == 1
 
-    def test_regen_without_sheet_uses_base(self) -> None:
-        """Characters without a CharacterSheet regenerate at base rate."""
-        ActionPointConfigFactory(daily_regen=5, is_active=True)
+    def test_modifier_without_sheet_is_zero(self) -> None:
+        """Characters without a CharacterSheet have no modifiers (base rate)."""
         character_no_sheet = CharacterFactory()
         pool = ActionPointPoolFactory(character=character_no_sheet, current=100, maximum=200)
 
-        added = pool.apply_daily_regen()
-
-        assert added == 5
-        pool.refresh_from_db()
-        assert pool.current == 105
+        assert pool._get_ap_modifier("ap_daily_regen") == 0
 
     def test_unknown_target_returns_zero(self) -> None:
         """Unknown modifier target name returns 0."""
