@@ -9,7 +9,12 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models as db_models
 from django.utils import timezone
 
-from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    PoseKind,
+    ScenePrivacyMode,
+)
 from world.scenes.models import (
     Interaction,
     InteractionTargetPersona,
@@ -106,6 +111,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
     strain_committed: int = 0,
+    pose_kind: str = PoseKind.STANDARD,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -127,6 +133,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         target_personas: Explicit IC targets for thread derivation.
         strain_committed: Strain the initiator actually committed for this
             action. Persisted onto the resulting Interaction for audit.
+        pose_kind: PoseKind classification (Spec C); ENTRY poses open a
+            Make-an-Entrance reaction window (#904) at the call site.
 
     Returns:
         The created Interaction.
@@ -138,6 +146,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         scene=scene,
         place=place,
         strain_committed=strain_committed,
+        pose_kind=pose_kind,
     )
 
     # Determine receiver list
