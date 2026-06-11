@@ -215,6 +215,11 @@ FLEE_CHECK_TYPE_NAME: str = "flee"
 FLEE_BASE_DIFFICULTY: int = 15
 FLEE_COVER_BONUS: int = 10
 
+# PARTIAL's authored success_level. At or above it the fleer escapes; at or
+# below it the selected pool consequence applies (PARTIAL = escape at a cost;
+# FAILURE/BOTCH = stays in the fight, consequence still lands).
+FLEE_PARTIAL_SUCCESS_LEVEL: int = -1
+
 # ---------------------------------------------------------------------------
 # Clash enums
 # ---------------------------------------------------------------------------
