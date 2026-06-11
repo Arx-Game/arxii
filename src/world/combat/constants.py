@@ -78,6 +78,13 @@ class ParticipantStatus(models.TextChoices):
     REMOVED = "removed", "Removed"
 
 
+class CombatManeuver(models.TextChoices):
+    """Special non-technique declarations a PC can make for a round."""
+
+    FLEE = "flee", "Flee"
+    COVER = "cover", "Cover"
+
+
 DEFAULT_PACE_TIMER_MINUTES: int = 10
 
 
@@ -195,6 +202,18 @@ OFFENSE_HALF_THRESHOLD: int = 1
 # ---------------------------------------------------------------------------
 
 PENETRATION_CHECK_TYPE_NAME: str = "penetration"
+
+# ---------------------------------------------------------------------------
+# Flee-check wiring (#878)
+#
+# Name of the seeded CheckType rolled for flee attempts. Difficulty is
+# FleeConfig.base_difficulty plus the max FleeTierModifier over active
+# opponents; cover_bonus is added per ally covering this round.
+# ---------------------------------------------------------------------------
+
+FLEE_CHECK_TYPE_NAME: str = "flee"
+FLEE_BASE_DIFFICULTY: int = 15
+FLEE_COVER_BONUS: int = 10
 
 # ---------------------------------------------------------------------------
 # Clash enums
