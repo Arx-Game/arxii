@@ -497,8 +497,16 @@ def _create_result_interaction(
 
     if target_persona is None:
         # Area action (e.g. a telling to the room): no target, optional pose
-        # text echoed above the outcome.
-        outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
+        # text echoed above the outcome. A telling always names its tale
+        # (#902) — listeners can't learn a deed the echo never identifies.
+        if action_request.spread_deed_target is not None:
+            outcome_line = (
+                f"{initiator_name} spreads the tale of "
+                f"«{action_request.spread_deed_target.title}»: "
+                f"{status_word} ({outcome_name})"
+            )
+        else:
+            outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
         content = (
             f"{action_request.pose_text}\n{outcome_line}"
             if action_request.pose_text
