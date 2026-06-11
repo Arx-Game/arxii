@@ -192,7 +192,12 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 
 - **Combat escalation engine** — intensity building across rounds toward a climax
   (complementary to Strain/Audere; climax expression is clashes, Soulfray, Audere) — #872
-- **Audere offer/accept player surface** — the offer lifecycle is service-only today — #873
+- **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
+  `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
+  endpoints (`/api/magic/audere/`) and the combat-panel ceremony dialog (auto-opens on
+  a pending offer, active-Audere strip while it burns); encounter cleanup ends Audere
+  via `end_audere` (reverting the intensity modifier and anima-pool expansion) and
+  deletes unanswered offers
 - **Passive action defaults are mechanically no-ops** — design wants secondary
   defend/buff/debuff/combo-opening effects — #874
 - **NPC tier mechanics** — `OpponentTier` enum exists but Swarm has no count-based
