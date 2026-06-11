@@ -89,7 +89,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [World Clock & Scheduled Systems](world-clock.md) | in-progress | Game clock, scheduler, weather, timed emits, holidays, rate limit resets |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
 | [Covenants](covenants.md) | in-progress | Roles, speed ranks, gear compatibility, Thread anchor + API shipped — covenant entity / lifecycle / formation ritual still post-MVP |
-| Vitals | skeleton | CharacterStatus, CharacterVitals model — needs non-combat integration, API, frontend |
+| Vitals | in-progress | CharacterVitals model; #521 shipped the sheet surface — VitalsPanel on the character sheet over an owner/staff-gated `GET /api/vitals/<id>/`, FatigueBars extraction wiring the formerly-unmounted fatigue display (FatigueStatusView removed) — needs non-combat integration |
 | [GM System](gm-system.md) | in-progress | Phases 0-3 complete: identity, tables, roster/invites. Phase 4 dissolved into Stories; Phase 5 UI deferred until after Stories |
 | [Staff Inbox & Player Submissions](staff-inbox.md) | in-progress | Staff frontend complete; player-facing submission forms pending (Phase 5b) |
 
