@@ -5858,17 +5858,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/fatigue/status/:
-    get:
-      operationId: fatigue_status_retrieve
-      description: Get current fatigue status for the player's active character.
-      tags:
-      - fatigue
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          description: No response body
   /api/forms/builds/:
     get:
       operationId: forms_builds_list
@@ -15919,6 +15908,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/WeeklyVote'
           description: ''
+  /api/reaction-windows/{id}/react/:
+    post:
+      operationId: reaction_windows_react_create
+      description: |-
+        Action-only viewset: POST /reaction-windows/{pk}/react/.
+
+        Reads ride the interaction feed (windows serialize inline on their
+        event); all eligibility/validation lives in ``react_to_window``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reaction window.
+        required: true
+      tags:
+      - reaction-windows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WindowReactInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WindowReactInput'
+          description: ''
   /api/register/availability/:
     get:
       operationId: register_availability_retrieve
@@ -19913,6 +19934,35 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/vitals/{character_id}/:
+    get:
+      operationId: vitals_retrieve
+      description: |-
+        Read-only vitals payload for the character sheet page (#521).
+
+        Visibility: staff, or an account with an active tenure on the character.
+        Everyone else receives 404 (same queryset rule as CharacterAnimaViewSet).
+
+        Hot path rides the SharedMemoryModel identity map: the sheet is resolved
+        by pk and vitals/fatigue are read via the instance-cached reverse
+        accessors — repeated calls re-query none of those rows.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - vitals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterVitals'
+          description: ''
 components:
   schemas:
     AcceptTeachingOfferRequest:
@@ -22469,6 +22519,42 @@ components:
       required:
       - character_sheet
       - resonance
+    CharacterVitals:
+      type: object
+      description: Read-only vitals payload for the character sheet panel (#521).
+      properties:
+        health:
+          type: integer
+        max_health:
+          type: integer
+        health_percentage:
+          type: number
+          format: double
+        wound_description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CharacterVitalsStatusEnum'
+        fatigue:
+          $ref: '#/components/schemas/VitalsFatigue'
+      required:
+      - fatigue
+      - health
+      - health_percentage
+      - max_health
+      - status
+      - wound_description
+    CharacterVitalsStatusEnum:
+      enum:
+      - alive
+      - dying
+      - incapacitated
+      - dead
+      type: string
+      description: |-
+        * `alive` - alive
+        * `dying` - dying
+        * `incapacitated` - incapacitated
+        * `dead` - dead
     CheckTypeMinimal:
       type: object
       description: Minimal read-only representation of a CheckType model instance.
@@ -25636,6 +25722,24 @@ components:
       description: |-
         * `commoner` - Commoner
         * `noble` - Noble
+    FatiguePoolStatus:
+      type: object
+      description: One fatigue pool's status (shape produced by fatigue.services.get_full_status).
+      properties:
+        current:
+          type: integer
+        capacity:
+          type: integer
+        percentage:
+          type: number
+          format: double
+        zone:
+          type: string
+      required:
+      - capacity
+      - current
+      - percentage
+      - zone
     FormTrait:
       type: object
       properties:
@@ -26770,6 +26874,17 @@ components:
             - reacted
           description: Aggregate emoji counts with reacted-by-current-user flag.
           readOnly: true
+        reaction_windows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Reaction windows on this event (#904): choices, reactions, my_reaction.
+
+            ``my_reaction`` is per-viewer and flows through serializer context
+            (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+          readOnly: true
         receiver_persona_ids:
           type: array
           items:
@@ -26801,6 +26916,7 @@ components:
       - is_favorited
       - persona
       - place_name
+      - reaction_windows
       - reactions
       - receiver_persona_ids
       - receivers
@@ -26909,6 +27025,17 @@ components:
             - reacted
           description: Aggregate emoji counts with reacted-by-current-user flag.
           readOnly: true
+        reaction_windows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Reaction windows on this event (#904): choices, reactions, my_reaction.
+
+            ``my_reaction`` is per-viewer and flows through serializer context
+            (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+          readOnly: true
         receiver_persona_ids:
           type: array
           items:
@@ -26935,6 +27062,7 @@ components:
       - is_favorited
       - persona
       - place_name
+      - reaction_windows
       - reactions
       - receiver_persona_ids
       - target_persona_ids
@@ -39362,6 +39490,26 @@ components:
       description: |-
         * `default` - Default
         * `very_private` - Very Private
+    VitalsFatigue:
+      type: object
+      description: All three fatigue pools plus global flags.
+      properties:
+        physical:
+          $ref: '#/components/schemas/FatiguePoolStatus'
+        social:
+          $ref: '#/components/schemas/FatiguePoolStatus'
+        mental:
+          $ref: '#/components/schemas/FatiguePoolStatus'
+        well_rested:
+          type: boolean
+        rested_today:
+          type: boolean
+      required:
+      - mental
+      - physical
+      - rested_today
+      - social
+      - well_rested
     WeeklyVote:
       type: object
       description: Read serializer for WeeklyVote instances.
@@ -39414,6 +39562,33 @@ components:
         * `interaction` - Interaction
         * `scene_participation` - Scene Participation
         * `journal` - Journal Entry
+    WindowReactInput:
+      type: object
+      properties:
+        persona_id:
+          type: integer
+          description: PK of the Persona reacting (must belong to the requester).
+        choice:
+          type: string
+          description: Slug from the window's choices payload.
+          maxLength: 64
+      required:
+      - choice
+      - persona_id
+    WindowReactInputRequest:
+      type: object
+      properties:
+        persona_id:
+          type: integer
+          description: PK of the Persona reacting (must belong to the requester).
+        choice:
+          type: string
+          minLength: 1
+          description: Slug from the window's choices payload.
+          maxLength: 64
+      required:
+      - choice
+      - persona_id
     _CategoryPolish:
       type: object
       description: One polish category's value + derived tier label for a building.

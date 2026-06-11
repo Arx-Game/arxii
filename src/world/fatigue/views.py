@@ -9,10 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
-from world.fatigue.services import (
-    get_full_status,
-    rest,
-)
+from world.fatigue.services import rest
 from world.roster.models import RosterEntry
 
 
@@ -24,23 +21,6 @@ def _get_character_sheet(request: Request) -> CharacterSheet | None:
     if entry.character_sheet_id is None:
         return None
     return entry.character_sheet
-
-
-class FatigueStatusView(APIView):
-    """Get current fatigue status for the player's active character."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request: Request) -> Response:
-        sheet = _get_character_sheet(request)
-        if not sheet:
-            return Response(
-                {"detail": "No active character."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        data = get_full_status(sheet)
-        return Response(data)
 
 
 class RestView(APIView):

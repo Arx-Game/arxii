@@ -3869,23 +3869,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/fatigue/status/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Get current fatigue status for the player's active character. */
-    get: operations['fatigue_status_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/forms/builds/': {
     parameters: {
       query?: never;
@@ -9339,6 +9322,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/reaction-windows/{id}/react/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Action-only viewset: POST /reaction-windows/{pk}/react/.
+     *
+     *     Reads ride the interaction feed (windows serialize inline on their
+     *     event); all eligibility/validation lives in ``react_to_window``.
+     */
+    post: operations['reaction_windows_react_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/register/availability/': {
     parameters: {
       query?: never;
@@ -11614,6 +11619,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/vitals/{character_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only vitals payload for the character sheet page (#521).
+     *
+     *     Visibility: staff, or an account with an active tenure on the character.
+     *     Everyone else receives 404 (same queryset rule as CharacterAnimaViewSet).
+     *
+     *     Hot path rides the SharedMemoryModel identity map: the sheet is resolved
+     *     by pk and vitals/fatigue are read via the instance-cached reverse
+     *     accessors — repeated calls re-query none of those rows.
+     */
+    get: operations['vitals_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12802,6 +12833,24 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /** @description Read-only vitals payload for the character sheet panel (#521). */
+    CharacterVitals: {
+      health: number;
+      max_health: number;
+      /** Format: double */
+      health_percentage: number;
+      wound_description: string;
+      status: components['schemas']['CharacterVitalsStatusEnum'];
+      fatigue: components['schemas']['VitalsFatigue'];
+    };
+    /**
+     * @description * `alive` - alive
+     *     * `dying` - dying
+     *     * `incapacitated` - incapacitated
+     *     * `dead` - dead
+     * @enum {string}
+     */
+    CharacterVitalsStatusEnum: 'alive' | 'dying' | 'incapacitated' | 'dead';
     /** @description Minimal read-only representation of a CheckType model instance. */
     CheckTypeMinimal: {
       readonly id: number;
@@ -14258,6 +14307,14 @@ export interface components {
      * @enum {string}
      */
     FamilyTypeEnum: 'commoner' | 'noble';
+    /** @description One fatigue pool's status (shape produced by fatigue.services.get_full_status). */
+    FatiguePoolStatus: {
+      current: number;
+      capacity: number;
+      /** Format: double */
+      percentage: number;
+      zone: string;
+    };
     FormTrait: {
       readonly id: number;
       /** @description Internal key */
@@ -14792,6 +14849,15 @@ export interface components {
         count: number;
         reacted: boolean;
       }[];
+      /**
+       * @description Reaction windows on this event (#904): choices, reactions, my_reaction.
+       *
+       *     ``my_reaction`` is per-viewer and flows through serializer context
+       *     (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+       */
+      readonly reaction_windows: {
+        [key: string]: unknown;
+      }[];
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
@@ -14850,6 +14916,15 @@ export interface components {
         emoji: string;
         count: number;
         reacted: boolean;
+      }[];
+      /**
+       * @description Reaction windows on this event (#904): choices, reactions, my_reaction.
+       *
+       *     ``my_reaction`` is per-viewer and flows through serializer context
+       *     (``persona_ids``) — never a Prefetch(to_attr) on the shared instance.
+       */
+      readonly reaction_windows: {
+        [key: string]: unknown;
       }[];
       readonly receiver_persona_ids: number[];
       readonly place_name: string | null;
@@ -21532,6 +21607,14 @@ export interface components {
      * @enum {string}
      */
     VisibilityF91Enum: 'default' | 'very_private';
+    /** @description All three fatigue pools plus global flags. */
+    VitalsFatigue: {
+      physical: components['schemas']['FatiguePoolStatus'];
+      social: components['schemas']['FatiguePoolStatus'];
+      mental: components['schemas']['FatiguePoolStatus'];
+      well_rested: boolean;
+      rested_today: boolean;
+    };
     /** @description Read serializer for WeeklyVote instances. */
     WeeklyVote: {
       readonly id: number;
@@ -21556,6 +21639,18 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    WindowReactInput: {
+      /** @description PK of the Persona reacting (must belong to the requester). */
+      persona_id: number;
+      /** @description Slug from the window's choices payload. */
+      choice: string;
+    };
+    WindowReactInputRequest: {
+      /** @description PK of the Persona reacting (must belong to the requester). */
+      persona_id: number;
+      /** @description Slug from the window's choices payload. */
+      choice: string;
+    };
     /** @description One polish category's value + derived tier label for a building. */
     _CategoryPolish: {
       category_id: number;
@@ -26717,24 +26812,6 @@ export interface operations {
     };
   };
   fatigue_rest_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  fatigue_status_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -35303,6 +35380,32 @@ export interface operations {
       };
     };
   };
+  reaction_windows_react_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this reaction window. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WindowReactInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WindowReactInput'];
+        };
+      };
+    };
+  };
   register_availability_retrieve: {
     parameters: {
       query?: never;
@@ -38664,6 +38767,27 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  vitals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterVitals'];
+        };
       };
     };
   };

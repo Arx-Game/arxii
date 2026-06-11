@@ -411,6 +411,46 @@ class PoseSubmitViewTests(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["scene"] == scene.pk
 
+    def test_submit_entry_pose_opens_reaction_window(self) -> None:
+        """pose_kind=entry persists and opens a Make-an-Entrance window (#904)."""
+        from world.scenes.constants import PoseKind, ReactionWindowKind
+        from world.scenes.models import Interaction
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = SceneFactory()
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "sweeps into the hall, cloak billowing.",
+                "pose_kind": PoseKind.ENTRY.value,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        interaction = Interaction.objects.get(pk=response.data["id"])
+        assert interaction.pose_kind == PoseKind.ENTRY
+        window = ReactionWindow.objects.get(interaction=interaction)
+        assert window.kind == ReactionWindowKind.ENTRANCE
+        assert window.is_open
+
+    def test_submit_standard_pose_opens_no_window(self) -> None:
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = SceneFactory()
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "nods along.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert not ReactionWindow.objects.filter(interaction_id=response.data["id"]).exists()
+
     def test_unauthenticated_request_is_rejected(self) -> None:
         """Unauthenticated requests are rejected with 401 or 403."""
         self.client.force_authenticate(user=None)

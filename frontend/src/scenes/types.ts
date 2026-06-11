@@ -66,6 +66,31 @@ export interface ActionLink {
   action_interaction: InlineActionInteraction;
 }
 
+/** One selectable reaction chip on a window (#904). */
+export interface ReactionWindowChoice {
+  slug: string;
+  label: string;
+}
+
+/** One persona's recorded reaction (public kinds only). */
+export interface WindowReactionRow {
+  persona_id: number;
+  persona_name: string;
+  choice: string;
+}
+
+/** A reaction window attached to a scene event (#904). */
+export interface ReactionWindowPayload {
+  id: number;
+  kind: string;
+  is_open: boolean;
+  public: boolean;
+  choices: ReactionWindowChoice[];
+  reactions: WindowReactionRow[];
+  counts: Record<string, number>;
+  my_reaction: string | null;
+}
+
 export interface Interaction {
   id: number;
   persona: InteractionPersona;
@@ -75,6 +100,8 @@ export interface Interaction {
   timestamp: string;
   scene: number | null;
   reactions: InteractionReaction[];
+  /** Reaction windows on this event (#904); absent/empty for most rows. */
+  reaction_windows?: ReactionWindowPayload[];
   is_favorited: boolean;
   place: number | null;
   place_name: string | null;

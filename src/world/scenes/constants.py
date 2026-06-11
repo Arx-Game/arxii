@@ -82,3 +82,15 @@ class PoseKind(models.TextChoices):
     STANDARD = "standard", "Standard"
     ENTRY = "entry", "Entry"
     DEPARTURE = "departure", "Departure"  # reserved — future departure mechanic
+
+
+class ReactionWindowKind(models.TextChoices):
+    """Kinds of reaction windows on scene events (#904).
+
+    Each kind registers a ReactionKindConfig (choices provider + handlers)
+    via world.scenes.reaction_services.register_reaction_kind — usually from
+    the owning app's AppConfig.ready(). Future consumers (spread-assist,
+    fashion, kudos/pose-voting) add values here with their handlers.
+    """
+
+    ENTRANCE = "entrance", "Make an Entrance"

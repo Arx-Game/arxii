@@ -12,6 +12,7 @@ import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
+import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -46,6 +47,7 @@ export function CharacterSheetPage() {
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
+          <VitalsPanel characterId={entry.character.id} />
           {entry.description && (
             <section>
               <h3 className="text-xl font-semibold">Description</h3>

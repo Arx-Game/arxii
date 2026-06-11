@@ -24,3 +24,11 @@ class MagicConfig(AppConfig):
             RoomFeatureServiceStrategy.SANCTUM,
             handle_progression,
         )
+
+        # Register Make an Entrance as a reaction-window kind (#904) —
+        # scenes owns the primitive; magic owns the entrance behavior.
+        from world.magic.reaction_kinds import ENTRANCE_KIND  # noqa: PLC0415
+        from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+        from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
+
+        register_reaction_kind(ReactionWindowKind.ENTRANCE, ENTRANCE_KIND)
