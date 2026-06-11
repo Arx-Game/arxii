@@ -38,6 +38,7 @@ from world.combat.serializers import (
     ACTIVE_CONDITIONS_CACHE_ATTR,
     AddOpponentSerializer,
     AddParticipantSerializer,
+    CoverSerializer,
     DeclareActionSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
@@ -51,6 +52,7 @@ from world.combat.services import (
     add_participant,
     begin_declaration_phase,
     declare_action,
+    declare_cover,
     declare_flee,
     join_encounter,
     resolve_round,
@@ -94,6 +96,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "upgrade_combo",
             "revert_combo",
             "flee",
+            "cover",
         ):
             return [IsAuthenticated(), IsEncounterParticipant()]
         if self.action == "join":
@@ -525,7 +528,11 @@ class CombatEncounterViewSet(ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def flee(self, request: Request, pk: int | None = None) -> Response:
-        """Declare intent to flee. Creates a passives-only action."""
+        """Declare intent to flee.
+
+        Creates a passives-only action with maneuver=FLEE. Flee resolves as
+        a check at round resolution; the participant remains ACTIVE until then.
+        """
         encounter = self.get_object()
         participant = self._get_participant(request, encounter)
         if not participant:
@@ -533,11 +540,42 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        declare_flee(participant)
-        # Participant is now FLED — remove from cached active list
-        encounter.participants_cached = [
-            p for p in encounter.participants_cached if p.pk != participant.pk
-        ]
+        try:
+            declare_flee(participant)
+        except ValueError:
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def cover(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a covering maneuver for an ally.
+
+        Creates a passives-only action with maneuver=COVER and
+        focused_ally_target set to the named ally. The participant remains
+        ACTIVE; cover resolves at round resolution as a bonus to the ally's
+        flee check.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = CoverSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ally_id = serializer.validated_data["ally_participant_id"]
+        ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
+        try:
+            declare_cover(participant, ally)
+        except ValueError:
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return self._serialize_encounter(request, encounter)
 
     # --- Helpers ---

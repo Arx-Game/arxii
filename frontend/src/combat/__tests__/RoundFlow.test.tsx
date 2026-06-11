@@ -26,6 +26,7 @@ function createWrapper() {
 function makeParticipant(id: number, name: string): Participant {
   return {
     id,
+    character_sheet_id: id + 1000,
     character_name: name,
     status: 'active',
     health: 10,

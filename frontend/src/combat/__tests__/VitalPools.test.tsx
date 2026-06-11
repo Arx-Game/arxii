@@ -39,6 +39,7 @@ const mockedUseCharacterAnima = magicQueries.useCharacterAnima as ReturnType<typ
 function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
+    character_sheet_id: 1001,
     character_name: 'TestChar',
     status: 'active',
     health: 8,

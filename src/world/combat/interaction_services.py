@@ -228,6 +228,31 @@ def render_action_outcome_narration(
     return _assemble_hit_line(head, tail, power_clause)
 
 
+def render_flee_outcome_narration(
+    *,
+    actor_label: str,
+    escaped: bool,
+    at_cost: bool,
+) -> str:
+    """Render a one-line, deterministic outcome narration for a flee attempt.
+
+    Pure function — no DB access, no randomness. Sibling of
+    ``render_action_outcome_narration`` for the flee-maneuver path (#878).
+    Three cases: clean escape, escape at a cost (PARTIAL — the selected pool
+    consequence landed on the way out), and failed escape.
+
+    Examples:
+        "Kira breaks away and escapes the fight."
+        "Kira escapes the fight, but not unscathed."
+        "Kira tries to break away but cannot escape."
+    """
+    if escaped and at_cost:
+        return f"{actor_label} escapes the fight, but not unscathed."
+    if escaped:
+        return f"{actor_label} breaks away and escapes the fight."
+    return f"{actor_label} tries to break away but cannot escape."
+
+
 def render_challenge_outcome_narration(
     *,
     actor_label: str,

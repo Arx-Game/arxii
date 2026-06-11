@@ -148,6 +148,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
 function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
+    character_sheet_id: 1001,
     character_name: 'Aerande',
     status: 'active',
     health: 8,

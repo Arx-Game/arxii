@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
+    from world.combat.models import FleeConfig
     from world.conditions.models import PenetrationOutcomeFactor
     from world.mechanics.models import ModifierTarget
 
@@ -24,6 +25,15 @@ class PenetrationContestResult:
     check_type: CheckType
     factors: list[PenetrationOutcomeFactor]
     modifier_target: ModifierTarget
+
+
+@dataclass
+class FleeSeedResult:
+    """Returned by seed_flee_check()."""
+
+    check_type: CheckType
+    modifier_target: ModifierTarget
+    config: FleeConfig
 
 
 def seed_penetration_contest() -> PenetrationContestResult:
@@ -49,4 +59,31 @@ def seed_penetration_contest() -> PenetrationContestResult:
         check_type=check_type,
         factors=wire_penetration_factors(),
         modifier_target=modifier_target,
+    )
+
+
+def seed_flee_check() -> FleeSeedResult:
+    """Seed the #878 flee check for production play.
+
+    Composes the three flee wire functions: the trait-weighted ``flee``
+    CheckType (agility 1.00 / wits 0.50), the check-scoped ``flee``
+    ModifierTarget for character-side buffs, and the FleeConfig singleton
+    with tier modifiers and starter consequence pool. Idempotent — re-runs
+    are no-ops and staff edits to existing rows are preserved.
+    """
+    from world.combat.factories import (  # noqa: PLC0415
+        wire_flee_check_type,
+        wire_flee_config,
+        wire_flee_modifier_target,
+    )
+
+    # Capture the CheckType for the result; wire_flee_modifier_target() and
+    # wire_flee_config() call wire_flee_check_type() internally (idempotent).
+    check_type = wire_flee_check_type()
+    modifier_target = wire_flee_modifier_target()
+    config = wire_flee_config()
+    return FleeSeedResult(
+        check_type=check_type,
+        modifier_target=modifier_target,
+        config=config,
     )
