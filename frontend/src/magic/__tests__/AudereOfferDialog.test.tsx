@@ -112,7 +112,7 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('clicking "Break Through" responds with { offer_id, accept: true }', async () => {
+  it('clicking "Break Through" responds with { offer_id, accept: true } and closes on success', async () => {
     const user = userEvent.setup();
     vi.mocked(api.respondToAudere).mockResolvedValue({
       accepted: true,
@@ -129,9 +129,13 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     await waitFor(() => {
       expect(api.respondToAudere).toHaveBeenCalledWith({ offer_id: 5, accept: true });
     });
+    // The dialog closes only after the mutation succeeds.
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
   });
 
-  it('clicking "Hold Fast" responds with { offer_id, accept: false }', async () => {
+  it('clicking "Hold Fast" responds with { offer_id, accept: false } and closes on success', async () => {
     const user = userEvent.setup();
     vi.mocked(api.respondToAudere).mockResolvedValue({
       accepted: false,
@@ -148,6 +152,27 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     await waitFor(() => {
       expect(api.respondToAudere).toHaveBeenCalledWith({ offer_id: 5, accept: false });
     });
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('a rejecting respond keeps the dialog open and shows the failure alert', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.respondToAudere).mockRejectedValue(new Error('500'));
+
+    renderGate([OFFER]);
+
+    await screen.findByRole('alertdialog');
+    await user.click(screen.getByRole('button', { name: /break through/i }));
+
+    await waitFor(() => {
+      expect(api.respondToAudere).toHaveBeenCalledWith({ offer_id: 5, accept: true });
+    });
+    // Failure surfaces inside the still-open dialog.
+    const error = await screen.findByTestId('audere-respond-error');
+    expect(error).toHaveAttribute('role', 'alert');
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 });
 

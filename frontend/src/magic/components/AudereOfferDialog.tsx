@@ -26,6 +26,8 @@ interface AudereOfferDialogProps {
   onAccept: () => void;
   onDecline: () => void;
   isPending: boolean;
+  /** When set, renders a role="alert" failure line above the footer. */
+  errorMessage?: string | null;
 }
 
 export function AudereOfferDialog({
@@ -35,6 +37,7 @@ export function AudereOfferDialog({
   onAccept,
   onDecline,
   isPending,
+  errorMessage = null,
 }: AudereOfferDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -68,6 +71,16 @@ export function AudereOfferDialog({
             className="rounded-md border border-red-600/60 bg-red-950/40 p-3 text-sm font-medium text-red-200"
           >
             {offer.advisory_text}
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div
+            role="alert"
+            data-testid="audere-respond-error"
+            className="rounded-md border border-red-600/60 bg-red-950/40 p-3 text-sm font-medium text-red-200"
+          >
+            {errorMessage}
           </div>
         ) : null}
 
