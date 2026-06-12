@@ -1913,6 +1913,7 @@ def wire_soul_tether_content() -> object:
     """Idempotent seed for all Spec B authored content.
 
     Creates (get_or_create):
+    - Magic CheckTypes including "Magical Endurance" (required by rescue checks)
     - StatDefinition rows for all Soul Tether stats (Phase 12)
     - TetherStrainTemplate + 5 stages
     - SoulTetherActiveTemplate (marker condition)
@@ -1924,6 +1925,9 @@ def wire_soul_tether_content() -> object:
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.
     """
+    from world.magic.seeds_checks import ensure_magic_check_types
+
+    ensure_magic_check_types()
     from dataclasses import dataclass
 
     @dataclass(frozen=True)
