@@ -223,7 +223,7 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
       level_after: 5,
       chosen_path_name: '',
       advisory_text: '',
-      declaration_interaction_id: 0,
+      declaration_interaction_id: null,
     });
 
     renderGate([OFFER]);

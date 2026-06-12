@@ -474,7 +474,8 @@ export interface AudereMajoraCrossingResult {
   level_after: number;
   chosen_path_name: string;
   advisory_text: string;
-  declaration_interaction_id: number;
+  /** null on decline and on no-scene crossings. */
+  declaration_interaction_id: number | null;
 }
 
 /** A declared path intent as returned by GET /api/progression/path-intent/. */
