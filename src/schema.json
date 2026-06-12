@@ -24879,11 +24879,29 @@ components:
             Falls back to a direct filter for callers that don't use the viewset
             (e.g. unit tests that call the serializer directly).
           readOnly: true
+        escalation_curve:
+          type: integer
+          nullable: true
+        escalation_curve_name:
+          type: string
+          readOnly: true
+          nullable: true
+        escalation_start_round:
+          type: integer
+          readOnly: true
+          nullable: true
+        escalation_tick_narration:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - clashes
       - completed_at
       - created_at
       - current_round_actions
+      - escalation_curve_name
+      - escalation_start_round
+      - escalation_tick_narration
       - id
       - is_gm
       - is_participant
@@ -24923,6 +24941,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     EncounterList:
       type: object
       description: Lightweight listing serializer for combat encounters.
@@ -32543,15 +32564,33 @@ components:
 
             ``None`` when there is no primary persona or it has no thumbnail.
           readOnly: true
+        escalation_level:
+          type: integer
+          nullable: true
+          description: Escalation pressure on this combatant — public dramatic state.
+          readOnly: true
+        intensity_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived intensity bonus from the COMBAT engagement.
+          readOnly: true
+        control_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived control bonus from the COMBAT engagement.
+          readOnly: true
       required:
       - active_conditions
       - available_strain
       - character_name
       - character_sheet_id
       - character_status
+      - control_modifier
+      - escalation_level
       - fatigue
       - health
       - id
+      - intensity_modifier
       - max_health
       - thumbnail_media_url
       - thumbnail_url
@@ -32932,6 +32971,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     PatchedEpisodeDetailRequest:
       type: object
       description: Full serializer for episode details

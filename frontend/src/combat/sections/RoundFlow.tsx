@@ -74,6 +74,39 @@ function buildActedSet(roundActions: RoundAction[]): Set<number> {
 }
 
 // ---------------------------------------------------------------------------
+// EscalationStrip — pressure level + tick narration for escalating encounters
+// ---------------------------------------------------------------------------
+
+const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+/** Highest escalation level among participants (encounter-wide ramp). */
+function escalationLevel(participants: Participant[]): number {
+  return Math.max(0, ...participants.map((p) => p.escalation_level ?? 0));
+}
+
+function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
+  if (!encounter.escalation_curve_name) {
+    return null;
+  }
+  const level = escalationLevel(encounter.participants);
+  return (
+    <div
+      className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5"
+      data-testid="escalation-strip"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+        Escalation {ROMAN[Math.min(level, ROMAN.length - 1)]}
+      </span>
+      {encounter.escalation_tick_narration && (
+        <p className="mt-0.5 text-xs italic text-muted-foreground">
+          {encounter.escalation_tick_narration}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // InitiativeChip — one participant's acted/pending indicator
 // ---------------------------------------------------------------------------
 
@@ -158,6 +191,9 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
           <p className="text-xs text-muted-foreground" data-testid="round-flow-summary">
             Round {roundNumber ?? 0} &middot; {actedCount}/{totalCount} acted
           </p>
+
+          {/* Escalation strip (escalating encounters only) */}
+          <EscalationStrip encounter={encounter} />
 
           {/* Declarations counter */}
           <div

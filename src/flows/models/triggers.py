@@ -98,8 +98,13 @@ class Trigger(SharedMemoryModel):
     source_condition = models.ForeignKey(
         "conditions.ConditionInstance",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="triggers",
-        help_text="Condition that installed this trigger. Required.",
+        help_text=(
+            "Condition that installed this trigger. Null for system-installed "
+            "triggers (e.g. combat escalation room triggers)."
+        ),
     )
     source_stage = models.ForeignKey(
         "conditions.ConditionStage",
