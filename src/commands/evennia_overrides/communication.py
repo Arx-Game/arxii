@@ -8,7 +8,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia import Command
 from evennia.utils import search
 
-from actions.definitions.communication import EmitAction, PoseAction, SayAction, WhisperAction
+from actions.definitions.communication import (
+    EmitAction,
+    PemitAction,
+    PoseAction,
+    SayAction,
+    WhisperAction,
+)
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
@@ -174,6 +180,41 @@ class CmdPose(ArxCommand):
         if targets:
             result["targets"] = targets
         return result
+
+
+class CmdPemit(ArxCommand):
+    """Staff-only private narrative emit to specific characters (#906).
+
+    Usage: pemit <name>[,<name>...]=<text>
+
+    Delivers GM narration only to the listed characters; the persisted
+    interaction is receiver-scoped, so nobody else (or the log) sees more
+    than the receivers heard. Works in and out of scenes.
+    """
+
+    key = "pemit"
+    locks = "cmd:perm(Builder)"
+    action = PemitAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if "=" not in args:
+            msg = "Usage: pemit <name>[,<name>...]=<text>"
+            raise CommandError(msg)
+        names_part, text = args.split("=", 1)
+        text = text.strip()
+        names = [n.strip() for n in names_part.split(",") if n.strip()]
+        if not names or not text:
+            msg = "Usage: pemit <name>[,<name>...]=<text>"
+            raise CommandError(msg)
+        receivers = []
+        for name in names:
+            target = self.caller.search(name)
+            if not target:
+                msg = f"Could not find '{name}'."
+                raise CommandError(msg)
+            receivers.append(target)
+        return {"receivers": receivers, "text": text}
 
 
 class CmdEmit(ArxCommand):

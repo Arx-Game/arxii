@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from actions.base import Action
-from actions.definitions.communication import PoseAction, SayAction, WhisperAction
+from actions.definitions.communication import (
+    PemitAction,
+    PoseAction,
+    SayAction,
+    WhisperAction,
+)
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
@@ -30,6 +35,7 @@ _ALL_ACTIONS: list[Action] = [
     SayAction(),
     PoseAction(),
     WhisperAction(),
+    PemitAction(),
     GetAction(),
     DropAction(),
     GiveAction(),
