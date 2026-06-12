@@ -18,6 +18,7 @@ from world.combat.services import (
     cleanup_completed_encounter,
     declare_flee,
     join_encounter,
+    remove_participant,
     resolve_round,
 )
 from world.covenants.factories import CovenantRoleFactory
@@ -105,5 +106,43 @@ class EngagementLifecycleWiringTests(TestCase):
         participant.refresh_from_db()
         self.assertEqual(participant.status, ParticipantStatus.FLED)
         self.assertFalse(
+            CharacterEngagement.objects.filter(character=sheet.character).exists()
+        )
+
+    def test_remove_participant_deletes_engagement(self):
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
+        remove_participant(self.participant)
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
+        self.assertFalse(
+            CharacterEngagement.objects.filter(character=self.character).exists()
+        )
+
+    def test_flee_failure_preserves_engagement(self):
+        # A failed flee (success_level < FLEE_PARTIAL_SUCCESS_LEVEL) leaves
+        # the participant ACTIVE and the combat engagement intact.
+        fast_role = CovenantRoleFactory(speed_rank=3)
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        CombatOpponentFactory(encounter=encounter)
+        sheet = CharacterSheetFactory()
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            covenant_role=fast_role,
+        )
+        begin_engagement(sheet.character, EngagementType.COMBAT, source=encounter)
+        FleeConfig.objects.filter(pk=1).delete()
+        FleeConfig.objects.create(pk=1, check_type=CheckTypeFactory())
+        declare_flee(participant)
+
+        # success_level=-2 is below FLEE_PARTIAL_SUCCESS_LEVEL (-1) → no escape.
+        failure = CheckOutcomeFactory(name="EngagementFleeFailure", success_level=-2)
+        with force_check_outcome(failure):
+            resolve_round(encounter)
+
+        participant.refresh_from_db()
+        self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
+        self.assertTrue(
             CharacterEngagement.objects.filter(character=sheet.character).exists()
         )

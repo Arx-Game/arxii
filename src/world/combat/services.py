@@ -752,6 +752,20 @@ def add_participant(
     return participant
 
 
+def remove_participant(participant: CombatParticipant) -> None:
+    """Remove a participant: status write + combat engagement teardown (#872)."""
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+    participant.status = ParticipantStatus.REMOVED
+    participant.save(update_fields=["status"])
+    end_engagement(
+        participant.character_sheet.character,
+        EngagementType.COMBAT,
+        source=participant.encounter,
+    )
+
+
 def acknowledge_encounter_risk(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -1004,7 +1018,7 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
-    # --- Round-tick: fire start-of-round DoT ---
+    # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
     from world.conditions.services import process_round_start  # noqa: PLC0415
 
     active_participants_start = CombatParticipant.objects.filter(
@@ -1013,8 +1027,9 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     ).select_related("character_sheet__character")
     for p in active_participants_start:
         process_round_start(p.character_sheet.character)
-        # Backfill the combat-owned engagement (#872) for participants added
-        # outside the service entry points (e.g. factories, legacy rows).
+        # Permanent idempotency safety net: any participant that reached this
+        # point without a combat engagement (however they were created) gets
+        # one ensured here so all downstream engagement-dependent paths are safe.
         _ensure_combat_engagement(p)
 
     active_opponents_start = CombatOpponent.objects.filter(
