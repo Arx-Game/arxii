@@ -12,18 +12,32 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from world.currency.constants import (
+    BUSINESS_BASE_WEEKLY_PER_LEVEL,
+    CHORE_MULTIPLIER_CRIT,
+    CHORE_MULTIPLIER_FAIL,
+    CHORE_MULTIPLIER_SUCCESS,
+    CONTRACT_DEFAULT_AFTER_MISSES,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
     MINT_FEE_PCT,
+    NOTARY_FEE_COPPERS,
+    ContractFormality,
+    ContractStatus,
     format_coppers,
 )
 from world.currency.models import (
+    Business,
+    CharacterEmployment,
     CharacterPurse,
+    Contract,
+    ContractTerm,
     ContributionRecord,
     CurrencyInstrumentDetails,
     CurrencyTransfer,
+    DebtInstrument,
     IncomeDeclaration,
     OrganizationTreasury,
     OrgEconomicsProfile,
@@ -233,6 +247,11 @@ def process_income_stream(
             to_treasury=treasury,
         )
 
+    # Costs come off before the money is "yours" (#927): debt service
+    # withholds at the source, then any defaulted-contract liens (#928).
+    _withhold_debt_service(stream, treasury, net)
+    _enforce_garnishments(stream, treasury, net)
+
     declared = net if declared_amount is None else declared_amount
     return IncomeDeclaration.objects.create(
         stream=stream,
@@ -335,3 +354,370 @@ def treat_servants(
     economics.graft_pct = max(GRAFT_FLOOR_PCT, economics.graft_pct - graft_reduction)
     economics.save(update_fields=["graft_pct"])
     return economics
+
+
+@transaction.atomic
+def extend_loan(
+    *,
+    creditor: Organization,
+    debtor: Organization,
+    principal: int,
+    interest_bps_monthly: int = 50,
+    fiat: bool = False,
+) -> DebtInstrument:
+    """Create a loan: principal moves creditor→debtor, instrument records it (#927).
+
+    ``fiat`` mints the principal instead of drawing the creditor's treasury —
+    for NPC moneylenders whose books exist only as fiction (Blighton's vaults
+    are not a player-visible balance).
+    """
+    transfer(
+        amount=principal,
+        reason=f"loan principal: {creditor.name}",
+        from_treasury=None if fiat else get_or_create_treasury(creditor),
+        to_treasury=get_or_create_treasury(debtor),
+    )
+    return DebtInstrument.objects.create(
+        debtor_organization=debtor,
+        creditor_organization=creditor,
+        principal=principal,
+        interest_bps_monthly=interest_bps_monthly,
+    )
+
+
+def accrue_monthly_interest(organization: Organization) -> int:
+    """One month's interest lands in arrears (#927). Returns total accrued.
+
+    No money moves here — arrears are withheld from incomes at the source
+    by ``process_income_stream``. Run by the monthly cron (#932).
+    """
+    total = 0
+    for debt in DebtInstrument.objects.filter(debtor_organization=organization, active=True):
+        interest = debt.monthly_interest
+        if interest <= 0:
+            continue
+        debt.arrears += interest
+        debt.save(update_fields=["arrears"])
+        total += interest
+    return total
+
+
+def _withhold_debt_service(
+    stream: OrgIncomeStream, treasury: OrganizationTreasury, available: int
+) -> int:
+    """Pay down arrears at the income source (#927). Returns coppers withheld.
+
+    Oldest debt first; capped at the income available — over-leverage
+    bottoms out at zero spendable income, never seizure. Diverting debts
+    are skipped: that money reaches the books whole, the arrears keep
+    growing, and discovery is the player-facing risk loop.
+    """
+    withheld = 0
+    debts = DebtInstrument.objects.filter(
+        debtor_organization=stream.organization,
+        active=True,
+        diverting=False,
+        arrears__gt=0,
+    ).order_by("created_at")
+    for debt in debts:
+        if available <= 0:
+            break
+        payment = min(debt.arrears, available)
+        transfer(
+            amount=payment,
+            reason=f"debt service: {debt.creditor_organization.name}",
+            from_treasury=treasury,
+            to_treasury=get_or_create_treasury(debt.creditor_organization),
+        )
+        debt.arrears -= payment
+        debt.save(update_fields=["arrears"])
+        available -= payment
+        withheld += payment
+    return withheld
+
+
+@transaction.atomic
+def repay_principal(debt: DebtInstrument, amount: int) -> CurrencyTransfer:
+    """Pay down (or off) a debt's principal, treasury→treasury (#927)."""
+    if amount <= 0 or amount > debt.principal:
+        msg = "Repayment must be positive and at most the outstanding principal."
+        raise ValidationError(msg)
+    row = transfer(
+        amount=amount,
+        reason=f"loan repayment: {debt.creditor_organization.name}",
+        from_treasury=get_or_create_treasury(debt.debtor_organization),
+        to_treasury=get_or_create_treasury(debt.creditor_organization),
+    )
+    debt.principal -= amount
+    update_fields = ["principal"]
+    if debt.principal == 0:
+        debt.active = False
+        update_fields.append("active")
+    debt.save(update_fields=update_fields)
+    return row
+
+
+def _enforce_garnishments(
+    stream: OrgIncomeStream, treasury: OrganizationTreasury, net: int
+) -> None:
+    """Divert liened income from a defaulted contract's stream (#928).
+
+    The lien was agreed at signing; enforcement only begins after default —
+    the system enforces agreed terms, it never initiates antagonism.
+    """
+    for lien in Contract.objects.filter(
+        garnish_stream=stream,
+        status=ContractStatus.DEFAULTED,
+        garnish_percent__gt=0,
+    ):
+        amount = net * lien.garnish_percent // 100
+        if amount == 0:
+            continue
+        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
+        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
+        transfer(
+            amount=amount,
+            reason=f"garnishment: {lien.title}",
+            from_treasury=treasury,
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+
+
+def _party_accounts(
+    contract: Contract, *, proposer: bool
+) -> tuple[CharacterPurse | None, OrganizationTreasury | None]:
+    """Resolve one contract side to its money container (purse XOR treasury)."""
+    persona = contract.proposer_persona if proposer else contract.counterparty_persona
+    organization = (
+        contract.proposer_organization if proposer else contract.counterparty_organization
+    )
+    if persona is not None:
+        return get_or_create_purse(persona.character_sheet), None
+    if organization is None:  # pragma: no cover - DB constraint guards this
+        msg = "Contract side has no party."
+        raise ValidationError(msg)
+    return None, get_or_create_treasury(organization)
+
+
+@transaction.atomic
+def sign_contract(contract: Contract) -> Contract:
+    """The consent moment (#928): counterparty accepts the fixed terms.
+
+    Terms, stakes, and the default-consequence menu must already be on the
+    row — nothing about the deal may change after consent. Notarized
+    contracts charge the notary fee (a sink) from the proposer's side and
+    require a notary org. Handshakes activate with no machinery.
+    """
+    if contract.status != ContractStatus.PROPOSED:
+        msg = "Only a proposed contract can be signed."
+        raise ValidationError(msg)
+    if contract.formality == ContractFormality.NOTARIZED:
+        if contract.notary_organization is None:
+            msg = "Notarized contracts need a notary organization."
+            raise ValidationError(msg)
+        purse, treasury = _party_accounts(contract, proposer=True)
+        transfer(
+            amount=NOTARY_FEE_COPPERS,
+            reason=f"notary fee: {contract.title}",
+            from_purse=purse,
+            from_treasury=treasury,
+        )
+    contract.status = ContractStatus.ACTIVE
+    contract.signed_at = timezone.now()
+    contract.save(update_fields=["status", "signed_at"])
+    return contract
+
+
+def _pay_contract_term(contract: Contract, term: ContractTerm) -> CurrencyTransfer | None:
+    """Pay one term payer→payee; None on insufficient funds (a miss)."""
+    from_purse, from_treasury = _party_accounts(contract, proposer=term.payer_is_proposer)
+    to_purse, to_treasury = _party_accounts(contract, proposer=not term.payer_is_proposer)
+    try:
+        return transfer(
+            amount=term.amount,
+            reason=f"contract: {contract.title}",
+            from_purse=from_purse,
+            from_treasury=from_treasury,
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+    except ValidationError:
+        return None
+
+
+@transaction.atomic
+def settle_contract_cycle(contract: Contract) -> list[CurrencyTransfer]:
+    """Run one settlement cycle for an ACTIVE notarized contract (#928).
+
+    Due terms (unfulfilled one-shots + all recurring) pay payer→payee. A
+    funds-short cycle counts one miss; CONTRACT_DEFAULT_AFTER_MISSES
+    consecutive misses flips the contract DEFAULTED — activating the agreed
+    consequence menu (the garnishment lien is enforced by
+    process_income_stream; collateral/reputation are story content). When
+    no recurring terms remain and every one-shot is fulfilled, the
+    contract COMPLETES. Handshake contracts are never settled — RP only.
+    """
+    if not contract.is_enforced:
+        msg = "Handshake contracts are not enforced by the system."
+        raise ValidationError(msg)
+    if contract.status != ContractStatus.ACTIVE:
+        msg = "Only active contracts settle."
+        raise ValidationError(msg)
+
+    transfers: list[CurrencyTransfer] = []
+    missed = False
+    terms = list(contract.payment_terms.all())
+    for term in terms:
+        if term.fulfilled and not term.recurring:
+            continue
+        row = _pay_contract_term(contract, term)
+        if row is None:
+            missed = True
+            continue
+        transfers.append(row)
+        if not term.recurring:
+            term.fulfilled = True
+            term.save(update_fields=["fulfilled"])
+
+    _update_contract_status(contract, terms=terms, missed=missed)
+    return transfers
+
+
+def _update_contract_status(contract: Contract, *, terms: list[ContractTerm], missed: bool) -> None:
+    """Advance miss counters / default / completion after a settlement pass."""
+    if missed:
+        contract.consecutive_missed += 1
+        update_fields = ["consecutive_missed"]
+        if contract.consecutive_missed >= CONTRACT_DEFAULT_AFTER_MISSES:
+            contract.status = ContractStatus.DEFAULTED
+            update_fields.append("status")
+        contract.save(update_fields=update_fields)
+        return
+
+    if contract.consecutive_missed:
+        contract.consecutive_missed = 0
+        contract.save(update_fields=["consecutive_missed"])
+
+    has_recurring = any(t.recurring for t in terms)
+    all_oneshots_done = all(t.fulfilled for t in terms if not t.recurring)
+    if not has_recurring and all_oneshots_done:
+        contract.status = ContractStatus.COMPLETED
+        contract.save(update_fields=["status"])
+
+
+@transaction.atomic
+def run_weekly_employment(employment: CharacterEmployment, *, was_active: bool) -> int:
+    """One week's automated wages for a held job (#929).
+
+    The profession's AP allotment is locked first — spent from the pool
+    exactly like adventuring AP would be, because it IS the AP you'd have
+    adventured with. Wages mint on the AP actually reserved, and ONLY for
+    a week the character was actively played (the activity signal comes
+    from the weekly cron, #932). Returns coppers paid.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    if not employment.active or not was_active:
+        return 0
+
+    pool = ActionPointPool.get_or_create_for_character(employment.character_sheet.character)
+    reserved = min(employment.profession.ap_reservation_weekly, pool.current)
+    if reserved <= 0:
+        return 0
+    if not pool.spend(reserved):  # pragma: no cover - min() guards this
+        return 0
+
+    wages = reserved * employment.profession.wage_per_ap
+    transfer(
+        amount=wages,
+        reason=f"wages: {employment.profession.name}",
+        to_purse=get_or_create_purse(employment.character_sheet),
+    )
+    return wages
+
+
+@transaction.atomic
+def work_chore(employment: CharacterEmployment, *, ap_spent: int) -> int:
+    """Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.
+
+    Rolls the profession's chore check through perform_check — character
+    identity always matters. success_level maps to the wage multiplier
+    (fail 1×, success 1.5×, strong success 2×). Returns coppers paid.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    if not employment.active:
+        msg = "You do not hold that job."
+        raise ValidationError(msg)
+    if ap_spent <= 0:
+        msg = "Chore work needs AP."
+        raise ValidationError(msg)
+
+    pool = ActionPointPool.get_or_create_for_character(employment.character_sheet.character)
+    if not pool.spend(ap_spent):
+        msg = "Not enough AP."
+        raise ValidationError(msg)
+
+    multiplier = CHORE_MULTIPLIER_FAIL
+    if employment.profession.chore_check_type is not None:
+        result = perform_check(
+            employment.character_sheet.character,
+            employment.profession.chore_check_type,
+        )
+        if result.success_level >= 2:  # noqa: PLR2004 - chart success degrees
+            multiplier = CHORE_MULTIPLIER_CRIT
+        elif result.success_level >= 1:
+            multiplier = CHORE_MULTIPLIER_SUCCESS
+
+    wages = ap_spent * employment.profession.wage_per_ap * multiplier // 100
+    if wages > 0:
+        transfer(
+            amount=wages,
+            reason=f"chore wages: {employment.profession.name}",
+            to_purse=get_or_create_purse(employment.character_sheet),
+        )
+    return wages
+
+
+@transaction.atomic
+def invest_in_business(business: Business, *, amount: int) -> Business:
+    """Sink owner money into a venture (#929); investment raises the level."""
+    if amount <= 0:
+        msg = "Investment must be positive."
+        raise ValidationError(msg)
+    transfer(
+        amount=amount,
+        reason=f"investment: {business.name}",
+        from_purse=get_or_create_purse(business.owner_persona.character_sheet),
+    )
+    business.invested += amount
+    business.save(update_fields=["invested"])
+    return business
+
+
+@transaction.atomic
+def run_business_week(business: Business, *, fortune: int) -> int:
+    """One week's business result (#929). ``fortune`` is -100..100.
+
+    The weekly cron supplies fortune (a roll, market events, story).
+    Yield = level × base × (100 + fortune) / 100 − level × base, i.e.
+    fortune IS the profit/loss percentage on the level's base turnover —
+    a bad week (negative fortune) draws real money from the owner's purse.
+    Returns signed coppers (negative = loss taken).
+    """
+    if not business.active:
+        return 0
+    fortune = max(-100, min(100, fortune))
+    base = business.level * BUSINESS_BASE_WEEKLY_PER_LEVEL
+    net = base * fortune // 100
+    purse = get_or_create_purse(business.owner_persona.character_sheet)
+    if net > 0:
+        transfer(amount=net, reason=f"business profit: {business.name}", to_purse=purse)
+    elif net < 0:
+        loss = min(-net, purse.balance)  # can't lose money you don't have
+        if loss > 0:
+            transfer(amount=loss, reason=f"business loss: {business.name}", from_purse=purse)
+        net = -loss
+    return net

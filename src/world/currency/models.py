@@ -16,10 +16,13 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.currency.constants import (
     GRAFT_DEFAULT_PCT,
     GRAFT_FLOOR_PCT,
     GRAFT_MAX_PCT,
+    ContractFormality,
+    ContractStatus,
     Denomination,
     IncomeStreamKind,
 )
@@ -360,3 +363,329 @@ class ContributionRecord(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Contribution({self.persona_id}→{self.organization_id}: {self.amount}c)"
+
+
+class DebtInstrument(SharedMemoryModel):
+    """A standing debt on an org treasury (#927).
+
+    Interest accrues monthly into ``arrears`` (basis points; 50 = the
+    0.5%/mo reference). Servicing is **withholding at the income source**:
+    every income payout pays down arrears before money reaches the books —
+    honest debtors never manage debt, they just see smaller incomes, and
+    over-leverage bottoms out at zero spendable income, never offscreen
+    loss. The only road to consequences is the cheat: ``diverting`` routes
+    income past the withholding (full money arrives, arrears balloon,
+    exposure accrues). Getting caught is story content — staff/story sets
+    ``in_default``; nothing mechanical ever flips it on its own.
+    """
+
+    debtor_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        related_name="debts",
+    )
+    creditor_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        related_name="loans_extended",
+        help_text="The creditor (e.g. Blighton, the canonical NPC moneylender house).",
+    )
+    principal = models.PositiveBigIntegerField(help_text="Coppers owed.")
+    interest_bps_monthly = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Monthly interest in basis points (50 = 0.5%/month).",
+    )
+    arrears = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Accrued unpaid interest, withheld from incomes at source.",
+    )
+    diverting = models.BooleanField(
+        default=False,
+        help_text=(
+            "The cheat: route income past the withholding. An active IC "
+            "decision with discovery consequences — never a bookkeeping state."
+        ),
+    )
+    in_default = models.BooleanField(
+        default=False,
+        help_text="Set by story/staff when a divert is CAUGHT — never automatic.",
+    )
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(debtor_organization=models.F("creditor_organization")),
+                name="debt_not_self",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Debt({self.debtor_organization_id}→{self.creditor_organization_id}: "
+            f"{self.principal}c @ {self.interest_bps_monthly}bps)"
+        )
+
+    @property
+    def monthly_interest(self) -> int:
+        return self.principal * self.interest_bps_monthly // 10000
+
+
+class Contract(SharedMemoryModel):
+    """A consent-gated agreement between two economic parties (#928).
+
+    Signing is THE consent moment — terms, stakes, and default consequences
+    are all fixed before the counterparty accepts (mirrors the combat
+    risk-acknowledgement pattern). Formality decides enforcement: NOTARIZED
+    contracts settle automatically and can default; HANDSHAKE contracts are
+    RP-only and the system never touches them after signing. Golden-rule
+    scoping: the system enforces agreed terms; it never initiates
+    antagonism.
+
+    Each side is exactly one of (persona, organization) — typed nullable
+    FK pairs like CurrencyTransfer.
+    """
+
+    proposer_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_proposed",
+    )
+    proposer_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_proposed",
+    )
+    counterparty_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_received",
+    )
+    counterparty_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_received",
+    )
+    title = models.CharField(max_length=120)
+    terms = models.TextField(help_text="The agreed terms, exactly as shown at the consent moment.")
+    formality = models.CharField(
+        max_length=20,
+        choices=ContractFormality.choices,
+        default=ContractFormality.HANDSHAKE,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ContractStatus.choices,
+        default=ContractStatus.PROPOSED,
+    )
+    notary_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contracts_notarized",
+        help_text="The org that notarized (required for NOTARIZED formality).",
+    )
+    # Default-consequence menu, agreed at signing (#928). All optional.
+    collateral_description = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Named collateral that cedes on default (story content).",
+    )
+    reputation_stake = models.BooleanField(
+        default=False,
+        help_text="Default carries reputation/standing damage.",
+    )
+    garnish_stream = models.ForeignKey(
+        OrgIncomeStream,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="garnishing_contracts",
+        help_text="Income stream liened at signing; garnished after default.",
+    )
+    garnish_percent = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of the liened stream's net diverted after default.",
+    )
+    signed_at = models.DateTimeField(null=True, blank=True)
+    consecutive_missed = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(proposer_persona__isnull=False)
+                    ^ models.Q(proposer_organization__isnull=False)
+                ),
+                name="contract_one_proposer",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(counterparty_persona__isnull=False)
+                    ^ models.Q(counterparty_organization__isnull=False)
+                ),
+                name="contract_one_counterparty",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Contract({self.title}: {self.status})"
+
+    @property
+    def is_enforced(self) -> bool:
+        return self.formality == ContractFormality.NOTARIZED
+
+
+class ContractTerm(SharedMemoryModel):
+    """One scheduled payment inside a contract (#928).
+
+    ``payer_is_proposer`` picks the direction; recurring terms run every
+    settlement cycle (stipends, pensions, patronage), one-shots run once
+    (ransom payment, hired muscle's fee).
+    """
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="payment_terms",
+    )
+    payer_is_proposer = models.BooleanField(
+        help_text="True: proposer pays counterparty; False: the reverse.",
+    )
+    amount = models.PositiveBigIntegerField(help_text="Coppers per cycle.")
+    recurring = models.BooleanField(
+        default=False,
+        help_text="Runs every settlement cycle until the contract ends.",
+    )
+    fulfilled = models.BooleanField(
+        default=False,
+        help_text="One-shot terms flip this after paying.",
+    )
+
+    class Meta:
+        ordering = ["contract_id", "id"]
+
+    def __str__(self) -> str:
+        direction = "proposer→counterparty" if self.payer_is_proposer else "counterparty→proposer"
+        return f"Term({self.amount}c {direction}{' recurring' if self.recurring else ''})"
+
+
+class Profession(NaturalKeyMixin, SharedMemoryModel):
+    """An on-grid job (#929): a wage rate bought with a locked AP allotment.
+
+    The deliberate texture: a profession reserves the AP you'd otherwise
+    adventure with — wealth buys back your week. Lower-class reference is
+    1 silver (10c) per AP at 40 AP/week ≈ 4g/week; high-end ~10g/week.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    wage_per_ap = models.PositiveIntegerField(
+        help_text="Coppers earned per reserved AP (10 = the lower-class 1s/AP)."
+    )
+    ap_reservation_weekly = models.PositiveSmallIntegerField(
+        default=40,
+        help_text="AP locked out of the pool each week to hold this job.",
+    )
+    chore_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="professions",
+        help_text="Check rolled for active on-grid chore work (up to 2× wages).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CharacterEmployment(SharedMemoryModel):
+    """A character's current job (#929). One active employment at a time."""
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="employments",
+    )
+    profession = models.ForeignKey(
+        Profession,
+        on_delete=models.PROTECT,
+        related_name="employees",
+    )
+    active = models.BooleanField(default=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet"],
+                condition=models.Q(active=True),
+                name="one_active_employment_per_sheet",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Employment({self.character_sheet_id}: {self.profession.name})"
+
+
+class Business(SharedMemoryModel):
+    """A persona-owned managed income venture (#929).
+
+    Modest by design, with NEGATIVE variance — a bad week loses money.
+    Investment raises the level; the top tiers (merchant princesses,
+    hundreds of gold a week) live under constant story threat rather than
+    mechanical safety.
+    """
+
+    owner_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="businesses",
+    )
+    name = models.CharField(max_length=120)
+    invested = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Total coppers sunk into the venture.",
+    )
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "Businesses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner_persona", "name"], name="business_name_unique_per_owner"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Business({self.name}, L{self.level})"
+
+    @property
+    def level(self) -> int:
+        from world.currency.constants import BUSINESS_INVESTMENT_PER_LEVEL  # noqa: PLC0415
+
+        return 1 + self.invested // BUSINESS_INVESTMENT_PER_LEVEL
