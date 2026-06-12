@@ -513,3 +513,17 @@ class AnimaRitualBudgetGuardTests(TestCase):
         self.assertEqual(result.severity_reduced, 0)
         self.assertEqual(result.anima_recovered, 3)
         mock_scene.assert_called()
+
+
+class NullCheckTypeGuardTests(TestCase):
+    """#709: a config with NULL check_type raises NoRitualConfigured, not a crash."""
+
+    def test_perform_raises_when_check_type_missing(self):
+        sheet = CharacterSheetFactory()
+        ritual = _make_ritual_for_sheet(sheet)
+        config = ritual.check_config
+        config.check_type = None
+        config.save(update_fields=["check_type"])
+        scene = SceneFactory()
+        with self.assertRaises(NoRitualConfigured):
+            perform_anima_ritual(sheet, scene)
