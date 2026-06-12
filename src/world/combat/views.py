@@ -18,7 +18,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ClashStatus, ParticipantStatus
+from world.combat.constants import ClashStatus, EncounterStatus, ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
 from world.combat.models import (
     Clash,
@@ -54,6 +54,7 @@ from world.combat.services import (
     declare_action,
     declare_cover,
     declare_flee,
+    end_encounter,
     join_encounter,
     resolve_round,
     revert_combo_upgrade,
@@ -308,6 +309,18 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter.is_paused = not encounter.is_paused
         encounter.save(update_fields=["is_paused"])
         # save() updates the identity map — no re-fetch needed
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def end(self, request: Request, pk: int | None = None) -> Response:
+        """GM: force-end the encounter as ABANDONED (#876)."""
+        encounter = self.get_object()
+        if encounter.status == EncounterStatus.COMPLETED:
+            return Response(
+                {"detail": "Encounter is already completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        end_encounter(encounter)
         return self._serialize_encounter(request, encounter)
 
     # --- Player Actions ---

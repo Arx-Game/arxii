@@ -2809,6 +2809,12 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     cleanup_completed_encounter(encounter)
 
 
+def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
+    """GM force-end: completes as ABANDONED (#876 §8) — the sole ABANDONED producer."""
+    complete_encounter(encounter, outcome=EncounterOutcome.ABANDONED)
+    return encounter
+
+
 def _broadcast_encounter_outcome(
     encounter: CombatEncounter, outcome: EncounterOutcome
 ) -> Interaction | None:

@@ -5,12 +5,15 @@ from unittest.mock import MagicMock, patch
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
+from rest_framework import status as http_status
+from rest_framework.test import APIClient
 
 from actions.factories import (
     ActionTemplateFactory,
     ConsequencePoolEntryFactory,
     ConsequencePoolFactory,
 )
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from flows.constants import EventName
 from world.achievements.models import StatDefinition
 from world.character_sheets.factories import CharacterSheetFactory
@@ -49,8 +52,9 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import InteractionMode
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
@@ -450,3 +454,89 @@ class ResolveRoundCompletionTests(TestCase):
         self.assertEqual(encounter.status, EncounterStatus.COMPLETED)
         self.assertEqual(encounter.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(encounter.completed_at)
+
+
+class EndEncounterApiTests(TestCase):
+    """API tests for the GM end endpoint (#876 Task 5)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.gm_account = AccountFactory(username="aftermath_gm")
+        cls.gm_character = CharacterFactory(db_key="aftermath_gmchar")
+        cls.gm_sheet = CharacterSheetFactory(character=cls.gm_character)
+        cls.gm_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.gm_character,
+            player_data__account=cls.gm_account,
+        )
+
+        cls.player_account = AccountFactory(username="aftermath_player")
+        cls.player_character = CharacterFactory(db_key="aftermath_playerchar")
+        cls.player_sheet = CharacterSheetFactory(character=cls.player_character)
+        cls.player_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.player_character,
+            player_data__account=cls.player_account,
+        )
+
+        cls.scene = SceneFactory()
+        SceneParticipationFactory(
+            scene=cls.scene,
+            account=cls.gm_account,
+            is_gm=True,
+        )
+
+    def setUp(self) -> None:
+        # Fresh encounter per test so completed_at state doesn't bleed across tests.
+        self.encounter = CombatEncounterFactory(scene=self.scene)
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+    def test_gm_end_returns_200_with_abandoned_outcome(self) -> None:
+        """GM POST /api/combat/{id}/end/ → 200; response has status=completed, outcome=abandoned."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(f"/api/combat/{self.encounter.pk}/end/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], EncounterStatus.COMPLETED)
+        self.assertEqual(response.data["outcome"], EncounterOutcome.ABANDONED)
+        self.encounter.refresh_from_db()
+        self.assertIsNotNone(self.encounter.completed_at)
+
+    def test_non_gm_participant_end_returns_403(self) -> None:
+        """Non-GM participant POST → 403."""
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(f"/api/combat/{self.encounter.pk}/end/")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_gm_end_already_completed_returns_400(self) -> None:
+        """GM POST on already-COMPLETED encounter → 400 with detail message."""
+        complete_encounter(self.encounter, outcome=EncounterOutcome.VICTORY)
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(f"/api/combat/{self.encounter.pk}/end/")
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "Encounter is already completed.")
+
+    def test_detail_response_includes_outcome_and_completed_at(self) -> None:
+        """Detail GET response includes outcome and completed_at keys."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertIn("outcome", response.data)
+        self.assertIn("completed_at", response.data)
+
+    def test_list_response_items_include_outcome_and_completed_at(self) -> None:
+        """List GET items include outcome and completed_at keys."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.get("/api/combat/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertTrue(len(results) > 0)
+        item = results[0]
+        self.assertIn("outcome", item)
+        self.assertIn("completed_at", item)
