@@ -3106,6 +3106,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+     *
+     *     No list endpoint: books are reached from an org you belong to, not
+     *     browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+     */
+    get: operations['currency_org_books_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -13395,6 +13417,13 @@ export interface components {
       | 'effort'
       | 'fatigue'
       | 'strain';
+    ContributionRow: {
+      persona_name: string;
+      amount: number;
+      reason: string;
+      /** Format: date-time */
+      created_at: string;
+    };
     /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
     Covenant: {
       readonly id: number;
@@ -13590,6 +13619,14 @@ export interface components {
       /** @description Hex color for UI display (e.g., #FF4400 for fire) */
       readonly color_hex: string;
       readonly icon: string;
+    };
+    DebtRow: {
+      creditor: string;
+      principal: number;
+      arrears: number;
+      interest_bps_monthly: number;
+      diverting: boolean;
+      in_default: boolean;
     };
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
@@ -14962,6 +14999,12 @@ export interface components {
       /** @description The minimum tier number that must be reached on this track */
       readonly minimum_tier: number;
     };
+    IncomeStreamRow: {
+      name: string;
+      kind: string;
+      gross_amount: number;
+      active: boolean;
+    };
     /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
     InlineActionInteraction: {
       readonly id: number;
@@ -15338,6 +15381,13 @@ export interface components {
       current_node_flavor: string;
       compass_rooms: string[];
       compass_anywhere: boolean;
+    };
+    LedgerRow: {
+      amount: number;
+      reason: string;
+      direction: string;
+      /** Format: date-time */
+      created_at: string;
     };
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
@@ -16277,6 +16327,12 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    ObligationRow: {
+      name: string;
+      to_organization: string;
+      percent: number;
+      active: boolean;
+    };
     /**
      * @description Staff CRUD for per-(offer, persona) cooldown rows.
      *
@@ -16394,6 +16450,19 @@ export interface components {
      * @enum {string}
      */
     OptionKindEnum: 'branch' | 'check';
+    /** @description The whole books page in one read. */
+    OrgBooks: {
+      organization_id: number;
+      organization_name: string;
+      balance: number;
+      spend_rank_max: number;
+      graft_pct: number;
+      income_streams: components['schemas']['IncomeStreamRow'][];
+      debts: components['schemas']['DebtRow'][];
+      obligations: components['schemas']['ObligationRow'][];
+      contributions: components['schemas']['ContributionRow'][];
+      ledger: components['schemas']['LedgerRow'][];
+    };
     OrganizationSearch: {
       id: number;
       name: string;
@@ -25845,6 +25914,41 @@ export interface operations {
         content: {
           'application/json': components['schemas']['CovenantRole'];
         };
+      };
+    };
+  };
+  currency_org_books_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
