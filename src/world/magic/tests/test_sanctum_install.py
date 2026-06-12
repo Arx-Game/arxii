@@ -15,15 +15,17 @@ from world.magic.models import (
     SanctumPendingPayout,
     Thread,
 )
+from world.magic.seeds_checks import (
+    SANCTUM_DISSOLUTION_CHECK_TYPE_NAME,
+    ensure_magic_check_types,
+)
 from world.magic.seeds_sanctum import (
     DISSOLUTION_RITUAL_NAME,
     SANCTIFICATION_COVENANT_RITUAL_NAME,
     SANCTIFICATION_PERSONAL_RITUAL_NAME,
-    SANCTUM_DISSOLUTION_CHECK_TYPE_NAME,
     ensure_dissolution_ritual,
     ensure_sanctification_covenant_ritual,
     ensure_sanctification_personal_ritual,
-    ensure_sanctum_dissolution_check_type,
     ensure_sanctum_rituals,
 )
 from world.magic.services.sanctum_install import (
@@ -98,11 +100,13 @@ class RitualSeedTests(TestCase):
         self.assertIn("perform_dissolution", r1.service_function_path)
 
     def test_dissolution_check_type_idempotent(self) -> None:
-        c1 = ensure_sanctum_dissolution_check_type()
-        c2 = ensure_sanctum_dissolution_check_type()
+        """ensure_magic_check_types() seeds the Sanctum Dissolution CheckType idempotently."""
+        run1 = ensure_magic_check_types()
+        run2 = ensure_magic_check_types()
+        c1 = run1[SANCTUM_DISSOLUTION_CHECK_TYPE_NAME]
+        c2 = run2[SANCTUM_DISSOLUTION_CHECK_TYPE_NAME]
         self.assertEqual(c1.pk, c2.pk)
         self.assertEqual(c1.name, SANCTUM_DISSOLUTION_CHECK_TYPE_NAME)
-        self.assertIn("PLACEHOLDER", c1.description)
 
     def test_orchestrator_seeds_everything_and_links(self) -> None:
         from world.room_features.models import RoomFeatureKindInstallRitual

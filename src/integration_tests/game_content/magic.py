@@ -471,27 +471,16 @@ def _seed_endure_hallowed_ground_check() -> None:
     `endure_hallowed_ground` deterministically (the pipeline test uses
     force_check_outcome to bypass the dice).
 
+    The Magic CheckCategory and endure_hallowed_ground CheckType are seeded
+    via ``world.magic.seeds_checks.ensure_magic_check_types()`` (#709).
     CheckOutcome rows are not migration-seeded; this helper creates them via
     get_or_create so repeated calls are idempotent.
     """
-    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.magic.seeds_checks import ensure_magic_check_types  # noqa: PLC0415
     from world.traits.models import CheckOutcome, ResultChart, ResultChartOutcome  # noqa: PLC0415
 
-    # --- Ensure the "Magic" CheckCategory exists (shared with seed_magic_config) ---
-    magic_category, _ = CheckCategory.objects.get_or_create(name="Magic")
-
-    # --- CheckType ---
-    CheckType.objects.get_or_create(
-        name="endure_hallowed_ground",
-        defaults={
-            "category": magic_category,
-            "description": (
-                "Endurance check against the spiritual pressure of hallowed ground. "
-                "Placeholder — tuning replaced in Phase 2 task 2F."
-            ),
-            "is_active": True,
-        },
-    )
+    # --- Ensure the "Magic" CheckCategory + all Magic CheckTypes (incl. endure_hallowed_ground) ---
+    ensure_magic_check_types()
 
     # --- Canonical CheckOutcome rows (not migration-seeded; idempotent) ---
     canonical_outcomes: dict[str, int] = {
@@ -1543,7 +1532,6 @@ def seed_magic_config() -> MagicConfigResult:
         MagicConfigResult dataclass with all created/fetched instances.
     """
     from actions.models.consequence_pools import ConsequencePool  # noqa: PLC0415
-    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
     from world.magic.factories import SoulfrayContentFactory  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
@@ -1559,14 +1547,14 @@ def seed_magic_config() -> MagicConfigResult:
     anima_config = AnimaConfig.get_singleton()
 
     # --- SoulfrayConfig (singleton, no get_or_create on factory) ---
-    # Use direct ORM rather than CheckTypeFactory: the factory's SubFactory
-    # generates a fresh CheckCategory on every call, making (name, category)
-    # novel and leaking an orphan CheckType row on each re-run.
-    magic_check_category, _ = CheckCategory.objects.get_or_create(name="Magic")
-    resilience_check_type, _ = CheckType.objects.get_or_create(
-        name="Magical Endurance",
-        defaults={"category": magic_check_category},
+    # Delegate to seeds_checks so the canonical composition (skills, aspects,
+    # trait weights) is also present, not just the bare CheckType row.
+    from world.magic.seeds_checks import (  # noqa: PLC0415
+        MAGICAL_ENDURANCE_CHECK_TYPE_NAME,
+        ensure_magic_check_types,
     )
+
+    resilience_check_type = ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
     soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
         pk=1,
         defaults={

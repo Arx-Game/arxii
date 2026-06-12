@@ -348,7 +348,7 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     if check_type is None:
         msg = (
             f"CheckType {SANCTUM_DISSOLUTION_CHECK_TYPE_NAME!r} not seeded. "
-            "Run world.magic.seeds_sanctum.ensure_sanctum_dissolution_check_type()."
+            "Run world.magic.seeds_checks.ensure_magic_check_types()."
         )
         raise DissolutionCheckTypeMissingError(msg)
 
