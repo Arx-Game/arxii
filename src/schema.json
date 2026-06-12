@@ -3287,6 +3287,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/end/:
+    post:
+      operationId: combat_end_create
+      description: 'GM: force-end the encounter as ABANDONED (#876).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/flee/:
     post:
       operationId: combat_flee_create
@@ -20756,7 +20783,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -20940,7 +20967,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -24696,6 +24723,22 @@ components:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
           $ref: '#/components/schemas/Status4e6Enum'
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          readOnly: true
+          description: |-
+            Typed result recorded at completion (#876); empty until completed.
+
+            * `victory` - Victory
+            * `defeat` - Defeat
+            * `fled` - Fled
+            * `abandoned` - Abandoned
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         round_number:
           type: integer
           maximum: 2147483647
@@ -24770,12 +24813,14 @@ components:
           readOnly: true
       required:
       - clashes
+      - completed_at
       - created_at
       - current_round_actions
       - id
       - is_gm
       - is_participant
       - opponents
+      - outcome
       - participants
     EncounterDetailRequest:
       type: object
@@ -24824,6 +24869,22 @@ components:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
           $ref: '#/components/schemas/Status4e6Enum'
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          readOnly: true
+          description: |-
+            Typed result recorded at completion (#876); empty until completed.
+
+            * `victory` - Victory
+            * `defeat` - Defeat
+            * `fled` - Fled
+            * `abandoned` - Abandoned
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         round_number:
           type: integer
           maximum: 2147483647
@@ -24846,8 +24907,10 @@ components:
           description: Return opponent count, preferring cached list.
           readOnly: true
       required:
+      - completed_at
       - id
       - opponent_count
+      - outcome
       - participant_count
     EncounterTypeEnum:
       enum:
@@ -29807,6 +29870,32 @@ components:
       required:
       - id
       - name
+    Outcome88eEnum:
+      enum:
+      - victory
+      - defeat
+      - fled
+      - abandoned
+      type: string
+      description: |-
+        * `victory` - Victory
+        * `defeat` - Defeat
+        * `fled` - Fled
+        * `abandoned` - Abandoned
+    OutcomeD50Enum:
+      enum:
+      - unsatisfied
+      - success
+      - failure
+      - expired
+      - pending_gm_review
+      type: string
+      description: |-
+        * `unsatisfied` - Unsatisfied
+        * `success` - Success
+        * `failure` - Failure
+        * `expired` - Expired
+        * `pending_gm_review` - Pending GM review
     OutcomeDetail:
       type: object
       properties:
@@ -29823,20 +29912,6 @@ components:
       required:
       - action_interaction_id
       - effects
-    OutcomeEnum:
-      enum:
-      - unsatisfied
-      - success
-      - failure
-      - expired
-      - pending_gm_review
-      type: string
-      description: |-
-        * `unsatisfied` - Unsatisfied
-        * `success` - Success
-        * `failure` - Failure
-        * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     OutfitRead:
       type: object
       description: Read serializer for Outfit — nests slot rows.
@@ -32374,7 +32449,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 

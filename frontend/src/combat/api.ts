@@ -134,6 +134,35 @@ export async function postFlee(encounterId: number): Promise<EncounterDetail> {
 }
 
 // ---------------------------------------------------------------------------
+// End encounter (GM only)
+// ---------------------------------------------------------------------------
+
+/**
+ * End the encounter early, recording the "abandoned" outcome (#876).
+ * POST /api/combat/{encounterId}/end/
+ * No body required. 400 if already completed; 403 non-GM.
+ */
+export async function postEndEncounter(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/end/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    let detail = 'Failed to end encounter';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
 // Cover declaration
 // ---------------------------------------------------------------------------
 

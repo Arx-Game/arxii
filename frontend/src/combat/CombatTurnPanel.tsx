@@ -22,6 +22,7 @@ import { VitalPools, findViewerParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
+import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { OutcomeDisplayRow } from './api';
 import type { components } from '@/generated/api';
@@ -110,6 +111,30 @@ export function CombatTurnPanel({
     return (
       <div className="p-4 text-sm text-destructive" data-testid="combat-panel-error">
         Failed to load encounter.
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Completed encounter — outcome banner replaces the live rail sections (#876)
+  // ---------------------------------------------------------------------------
+
+  if (encounter.status === 'completed') {
+    // Pre-#876 rows completed without a recorded outcome (the API sends "" —
+    // the generated enum omits the blank); fall back to "abandoned" so the
+    // banner always names a result.
+    const outcome: string = encounter.outcome || 'abandoned';
+    return (
+      <div
+        className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
+        data-testid="combat-turn-panel"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-foreground">
+            Encounter Concluded — Round {encounter.round_number ?? 0}
+          </h2>
+        </div>
+        <EncounterOutcomeBanner outcome={outcome} />
       </div>
     );
   }

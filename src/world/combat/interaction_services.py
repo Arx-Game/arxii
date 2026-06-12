@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.constants import ClashResolution
+from world.combat.constants import ClashResolution, EncounterOutcome
 from world.magic.narration import power_outcome_clause
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
@@ -315,6 +315,43 @@ def render_clash_outcome_narration(
     if consequence_label:
         return f"{head}, leaving {consequence_label}."
     return f"{head}."
+
+
+_ENCOUNTER_OUTCOME_HEADLINES: dict[str, str] = {
+    "victory": "The field falls silent — victory.",
+    "defeat": "The field falls silent — the defenders lie broken.",
+    "fled": "The field falls silent — the survivors have scattered.",
+    "abandoned": "The encounter disperses, its ending unwritten.",
+}
+
+
+def _join_labels(labels: list[str]) -> str:
+    """Format labels as a natural-language series: "A", "A and B", "A, B and C"."""
+    if len(labels) <= 1:
+        return labels[0] if labels else ""
+    return ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
+def render_encounter_outcome_narration(
+    *,
+    outcome: str,
+    active_labels: list[str],
+    fled_labels: list[str],
+    defeated_opponent_labels: list[str],
+) -> str:
+    """Ceremonial encounter-level OUTCOME line (#876)."""
+    # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
+    clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
+    if outcome == EncounterOutcome.VICTORY:
+        if defeated_opponent_labels:
+            clauses.append(f"{_join_labels(defeated_opponent_labels)} will trouble no one further.")
+        if active_labels:
+            clauses.append(f"{_join_labels(active_labels)} stand victorious.")
+    elif outcome == EncounterOutcome.DEFEAT and active_labels:
+        clauses.append(f"{_join_labels(active_labels)} can fight no longer.")
+    if fled_labels:
+        clauses.append(f"{_join_labels(fled_labels)} fled the field.")
+    return " ".join(clauses)
 
 
 def broadcast_action_outcome(
