@@ -297,6 +297,36 @@ class AudereOfferStaleError(AudereOfferError):
 
 
 # =============================================================================
+# Audere Majora offer exceptions (#543)
+# =============================================================================
+
+
+class AudereMajoraOfferError(AudereOfferError):
+    """Base for Audere Majora offer-surface errors.
+
+    Subclasses AudereOfferError so callers can catch the whole offer-surface
+    family in one clause; user_message semantics inherited.
+    """
+
+    user_message: str = "Audere Majora offer operation failed."
+
+
+class AudereMajoraOfferNotFoundError(AudereMajoraOfferError):
+    user_message = "No pending Crossing offer found."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class AudereMajoraOfferStaleError(AudereMajoraOfferError):
+    user_message = "The moment has passed — the threshold no longer answers."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class AudereMajoraPathError(AudereMajoraOfferError):
+    user_message = "That path is not open to you at this crossing."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+# =============================================================================
 # Technique Builder exceptions (#537)
 # =============================================================================
 

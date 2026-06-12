@@ -5417,6 +5417,71 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/audere-majora/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+     *
+     *     GET /api/magic/audere-majora/pending/
+     *     GET /api/magic/audere-majora/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_audere_majora_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere-majora/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+     *
+     *     GET /api/magic/audere-majora/pending/
+     *     GET /api/magic/audere-majora/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_audere_majora_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere-majora/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate ownership + dispatch resolve_audere_majora_offer; return the result. */
+    post: operations['magic_audere_majora_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/audere/pending/': {
     parameters: {
       query?: never;
@@ -9295,6 +9360,25 @@ export interface paths {
     /** @description Claim kudos for XP conversion. */
     post: operations['progression_claim_kudos_create'];
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/path-intent/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET — return current intent or {"intent": null}. */
+    get: operations['progression_path_intent_retrieve'];
+    /** @description PUT — declare or replace the intent for this character. */
+    put: operations['progression_path_intent_update'];
+    post?: never;
+    /** @description DELETE — clear the intent (idempotent). */
+    delete: operations['progression_path_intent_destroy'];
     options?: never;
     head?: never;
     patch?: never;
@@ -17235,6 +17319,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingAlteration'][];
     };
+    PaginatedPendingAudereMajoraOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PendingAudereMajoraOffer'][];
+    };
     PaginatedPendingAudereOfferList: {
       /** @example 123 */
       count: number;
@@ -18969,6 +19068,36 @@ export interface components {
      * @enum {string}
      */
     PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
+    /**
+     * @description Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
+     *
+     *     advisory_text is computed live so the corruption warning is always current.
+     *     eligible_paths is computed per-object and memoized to avoid N+1 queries.
+     */
+    PendingAudereMajoraOffer: {
+      readonly id: number;
+      readonly character_sheet_id: number;
+      /** @description IC display name via the primary persona. */
+      readonly character_name: string;
+      /** @description Runtime intensity of the cast that opened the gate. */
+      readonly fired_intensity: number;
+      /** @description Soulfray stage order at fire time (display snapshot). */
+      readonly soulfray_stage_order: number;
+      readonly boundary_level: number;
+      /** @description Human-readable label for the target PathStage. */
+      readonly target_stage_display: string;
+      readonly vision_text: string;
+      /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
+      readonly advisory_text: string;
+      /** @description Fixed risk copy (approved verbatim). */
+      readonly risk_text: string;
+      /** @description Eligible child paths serialized through EligiblePathSerializer. */
+      readonly eligible_paths: unknown[];
+      /** @description Return the PathIntent's intended_path_id if it is among eligible paths, else None. */
+      readonly intended_path_id: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /**
      * @description Player-facing view of a pending Audere offer (#873). Read-only.
      *
@@ -29275,6 +29404,69 @@ export interface operations {
       };
     };
   };
+  magic_audere_majora_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingAudereMajoraOfferList'];
+        };
+      };
+    };
+  };
+  magic_audere_majora_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingAudereMajoraOffer'];
+        };
+      };
+    };
+  };
+  magic_audere_majora_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_audere_pending_list: {
     parameters: {
       query?: {
@@ -35475,6 +35667,60 @@ export interface operations {
     responses: {
       /** @description No response body */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_path_intent_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_path_intent_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_path_intent_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
         headers: {
           [name: string]: unknown;
         };

@@ -60,7 +60,26 @@ class AudereThreshold(SharedMemoryModel):
         )
 
 
-class PendingAudereOffer(SharedMemoryModel):
+class AbstractPendingOffer(SharedMemoryModel):
+    """Shared skeleton for poll-able offer rows (Audere #873, Audere Majora #543).
+
+    Concrete subclasses own the character_sheet FK (to preserve per-model
+    related_names) and the one-pending-per-character constraint.
+    """
+
+    fired_intensity = models.PositiveIntegerField(
+        help_text="Runtime intensity of the cast that opened the gate.",
+    )
+    soulfray_stage_order = models.PositiveSmallIntegerField(
+        help_text="Soulfray stage order at fire time (display snapshot).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class PendingAudereOffer(AbstractPendingOffer):
     """A poll-able Audere offer awaiting the player's accept/decline (#873).
 
     Created by ``maybe_create_audere_offer`` when the eligibility gate opens
@@ -74,13 +93,6 @@ class PendingAudereOffer(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="audere_offers",
     )
-    fired_intensity = models.PositiveIntegerField(
-        help_text="Runtime intensity of the cast that opened the gate.",
-    )
-    soulfray_stage_order = models.PositiveSmallIntegerField(
-        help_text="Soulfray stage order at fire time (display snapshot).",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -136,6 +148,27 @@ def _check_soulfray_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
     if soulfray_instance is None or soulfray_instance.current_stage is None:
         return False
     return soulfray_instance.current_stage.stage_order >= minimum_stage_order
+
+
+def soulfray_stage_order_snapshot(character: ObjectDB) -> int:
+    """Return the character's current Soulfray stage_order, or 0 if absent.
+
+    Shared by ``maybe_create_audere_offer`` and ``maybe_create_audere_majora_offer``
+    to snapshot the Soulfray stage at offer-creation time.
+    """
+    from world.conditions.models import ConditionInstance
+
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    if soulfray_instance is None or soulfray_instance.current_stage is None:
+        return 0
+    return soulfray_instance.current_stage.stage_order
 
 
 def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> bool:
@@ -293,7 +326,6 @@ def maybe_create_audere_offer(
     single row per character (update_or_create).
     """
     from world.character_sheets.models import CharacterSheet
-    from world.conditions.models import ConditionInstance
 
     sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
@@ -301,17 +333,7 @@ def maybe_create_audere_offer(
     if not check_audere_eligibility(character, runtime_intensity):
         return None
 
-    soulfray_instance = (
-        ConditionInstance.objects.filter(
-            target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
-        )
-        .select_related("current_stage")
-        .first()
-    )
-    stage_order = 0
-    if soulfray_instance is not None and soulfray_instance.current_stage is not None:
-        stage_order = soulfray_instance.current_stage.stage_order
+    stage_order = soulfray_stage_order_snapshot(character)
 
     offer, _created = PendingAudereOffer.objects.update_or_create(
         character_sheet=sheet,

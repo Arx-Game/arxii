@@ -327,6 +327,39 @@ evaluated in `accrue_corruption` on the Sineater's own casting path. Value deriv
 - `StageAdvanceBonusResult` — outcome of the Sineater's stage-advance response.
 - `RescueOutcome` — frozen dataclass; severity_reduced, stage_before/after, strain_taken.
 
+### Audere & Audere Majora (#873, #543)
+
+`audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global
+config), `PendingAudereOffer` (poll-able offer, one per character),
+`check_audere_eligibility` (intensity tier + Soulfray stage + engagement),
+`offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
+
+`audere_majora.py` — Audere Majora / Crossing the Threshold, the unified tier-crossing
+event:
+- `AudereMajoraThreshold` — one authored row per boundary level (5/10/15/20): gate
+  thresholds (`minimum_intensity_tier`, `minimum_warp_stage`, `requires_active_audere`)
+  + ceremony content. **`vision_text`/`manifestation_text` are spoiler-private:
+  authored in the DB only; factories/tests use placeholders; never commit real
+  ceremony wording.**
+- `PendingAudereMajoraOffer` — poll-able Crossing offer (AbstractPendingOffer +
+  threshold FK; one per character).
+- `AudereMajoraCrossing` — irreversible receipt (unique per sheet+threshold;
+  `chosen_path`, scene + declaration-interaction links, level_before/after). Survives
+  character death.
+- Services: `check_audere_majora_eligibility` (8 gates),
+  `eligible_paths_for_threshold` (current path's child paths at the target stage),
+  `maybe_create_audere_majora_offer` (cast hook in `services/techniques.py`;
+  manifestation EMIT broadcast on creation only), `resolve_audere_majora_offer`
+  (two-phase staleness + spend guards + path validation),
+  `cross_threshold` (atomic: declaration pose → level write → path history → receipt
+  → Majora condition), `end_audere_majora` (encounter cleanup calls it alongside
+  `end_audere`).
+- API: `/api/magic/audere-majora/pending/` + `/respond/`; frontend
+  `AudereMajoraOfferGate`/`AudereMajoraOfferDialog` (amber ceremony dialog with path
+  choice + declaration composer) mounted in the combat panel.
+- `PathIntent` (`world/progression`) — pre-declared next path; the offer serializer
+  pre-selects it when eligible.
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:

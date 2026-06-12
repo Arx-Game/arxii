@@ -17,6 +17,7 @@ import type {
   AlterationResolvePayload,
   ApplicablePullsRequest,
   AudereRespondRequest,
+  AudereMajoraRespondRequest,
   CrossXPLockRequest,
   DissolveRequest,
   PatchThreadRequest,
@@ -72,6 +73,10 @@ export const magicKeys = {
     [...magicKeys.pendingAlterations(), 'library', pendingId] as const,
 
   auderePending: () => [...magicKeys.all, 'audere', 'pending'] as const,
+
+  audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
+
+  pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -621,6 +626,88 @@ export function useResolveAlteration() {
       // Prefix-invalidates alterationLibrary(id) queries too — intended: a
       // resolved pending's library snapshot is dead weight.
       qc.invalidateQueries({ queryKey: magicKeys.pendingAlterations() }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Audere Majora (Crossing offer), #543
+// ---------------------------------------------------------------------------
+
+/**
+ * Pending Audere Majora crossing offers for the account. Mounted only inside
+ * the combat panel; the 5 s poll runs only where it matters.
+ * throwOnError deliberately NOT set: same rationale as usePendingAudereOffers.
+ */
+export function usePendingAudereMajoraOffers(enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.audereMajoraPending(),
+    queryFn: () => api.getPendingAudereMajoraOffers(),
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+/**
+ * Accept or decline a pending Audere Majora crossing offer.
+ * On success invalidates the majora inbox, the base audere inbox (both poll
+ * the combat panel), and the path intent (a crossing may clear or confirm it).
+ */
+export function useRespondToAudereMajora(characterId: number, encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AudereMajoraRespondRequest) => api.respondToAudereMajora(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.audereMajoraPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.auderePending() }).catch(() => {});
+      // Prefix-invalidate all pathIntent keys (any characterId).
+      qc.invalidateQueries({ queryKey: [...magicKeys.all, 'path-intent'] }).catch(() => {});
+      // A crossing changes level, conditions, and combat state — mirror
+      // useRespondToAudere's post-respond refreshes.
+      qc.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PathIntent, #543
+// ---------------------------------------------------------------------------
+
+/**
+ * Current path intent for the given character.
+ * Returns `{ intent: null }` when none is declared.
+ * Disabled when characterId ≤ 0.
+ */
+export function usePathIntent(characterId: number) {
+  return useQuery({
+    queryKey: magicKeys.pathIntent(characterId),
+    queryFn: () => api.getPathIntent(characterId),
+    enabled: characterId > 0,
+  });
+}
+
+/** Declare (or overwrite) the calling character's path intent. */
+export function useDeclarePathIntent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, pathId }: { characterId: number; pathId: number }) =>
+      api.putPathIntent(characterId, pathId),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: magicKeys.pathIntent(variables.characterId) }).catch(
+        () => {}
+      );
+    },
+  });
+}
+
+/** Clear the calling character's path intent. */
+export function useClearPathIntent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (characterId: number) => api.deletePathIntent(characterId),
+    onSuccess: (_data, characterId) => {
+      qc.invalidateQueries({ queryKey: magicKeys.pathIntent(characterId) }).catch(() => {});
     },
   });
 }

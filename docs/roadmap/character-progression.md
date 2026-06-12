@@ -21,6 +21,7 @@ The central spine connecting every system in the game. Characters develop throug
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
 - **Frontend:** XP/Kudos page in progression section
+- **Audere Majora / Crossing the Threshold (#543):** the unified tier-crossing event. Per-boundary `AudereMajoraThreshold` rows (levels 5/10/15/20) gate a cast-time offer (intensity tier + deep Soulfray + engagement + active Audere + eligible next-stage path). Accepting atomically advances the level boundary, writes `CharacterPathHistory`, records an irreversible `AudereMajoraCrossing` receipt, and applies the Audere Majora power-spike condition (DeathDeferred — consequences resolve when the blaze ends). Ceremony content is DB-authored and spoiler-private. `PathIntent` lets players pre-declare their next path; the offer pre-selects it. REST + React offer surfaces mirror the Audere offer family
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP
@@ -43,8 +44,7 @@ The central spine connecting every system in the game. Characters develop throug
 - Scene check dev points — certain scene checks award dp and prevent rust (defined in scenes roadmap)
 
 ### Path Leveling
-- Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest)
-- Audere Majora system — the dramatic threshold-crossing mechanic that gates major power tiers
+- Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics
 
