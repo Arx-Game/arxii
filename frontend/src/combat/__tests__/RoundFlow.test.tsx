@@ -171,6 +171,30 @@ describe('RoundFlow', () => {
     expect(screen.queryByTestId('initiative-chip-1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('round-flow-summary')).not.toBeInTheDocument();
   });
+
+  it('renders escalation strip when the encounter escalates', () => {
+    const participant = { ...makeParticipant(1, 'Aria'), escalation_level: 2 };
+    const encounter = {
+      ...makeEncounter([participant], [], 3),
+      escalation_curve_name: 'Boss Ramp',
+      escalation_tick_narration: 'The air itself begins to burn.',
+    };
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent('Escalation II');
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent(
+      'The air itself begins to burn.'
+    );
+  });
+
+  it('hides escalation strip for non-escalating encounters', () => {
+    const encounter = makeEncounter([makeParticipant(1, 'A')], [], 1);
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('escalation-strip')).not.toBeInTheDocument();
+  });
 });
 
 describe('RoundFlow — GM end-encounter control (#876)', () => {
