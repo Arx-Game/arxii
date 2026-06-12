@@ -24,14 +24,17 @@ from world.buildings.upkeep_services import (
     apply_weekly_upkeep_for_building,
 )
 from world.character_sheets.factories import CharacterSheetFactory
-from world.items.models import CurrencyBalance
+from world.currency.services import get_or_create_purse, transfer
 
 
 def _make_persona_with_wallet(gold: int = 0):
-    """Persona whose body has a CurrencyBalance with ``gold`` gold."""
+    """Persona whose purse holds ``gold`` coppers (#932: purse ledger)."""
     character = CharacterFactory()
     sheet = CharacterSheetFactory(character=character)
-    CurrencyBalance.objects.create(character=character, gold=gold)
+    if gold:
+        transfer(
+            amount=gold, reason="test seed", to_purse=get_or_create_purse(character.sheet_data)
+        )
     return sheet.primary_persona
 
 
@@ -62,8 +65,9 @@ class WeeklyUpkeepPaymentTests(TestCase):
         paid = apply_weekly_upkeep_for_building(building)
 
         self.assertTrue(paid)
-        wallet = CurrencyBalance.objects.get(character=owner.character_sheet.character)
-        self.assertEqual(wallet.gold, 490)
+        wallet = get_or_create_purse(owner.character_sheet)
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, 490)
         instance.refresh_from_db()
         self.assertEqual(instance.consecutive_missed_upkeep, 0)
         self.assertIsNotNone(instance.last_upkeep_paid_at)
@@ -78,8 +82,9 @@ class WeeklyUpkeepPaymentTests(TestCase):
         paid = apply_weekly_upkeep_for_building(building)
 
         self.assertFalse(paid)
-        wallet = CurrencyBalance.objects.get(character=owner.character_sheet.character)
-        self.assertEqual(wallet.gold, 5)  # nothing deducted on miss
+        wallet = get_or_create_purse(owner.character_sheet)
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, 5)  # nothing deducted on miss
         instance.refresh_from_db()
         self.assertEqual(instance.consecutive_missed_upkeep, 1)
         # First miss decays by DECAY_BASE_AMOUNT.
