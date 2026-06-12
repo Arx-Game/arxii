@@ -18,6 +18,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EscalationCurve,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -328,3 +329,9 @@ class ClashConfigAdmin(admin.ModelAdmin):
         "max_round_cap",
         "updated_at",
     ]
+
+
+@admin.register(EscalationCurve)
+class EscalationCurveAdmin(admin.ModelAdmin):
+    list_display = ("name", "start_round", "intensity_step", "max_escalation_level")
+    search_fields = ("name",)

@@ -2285,6 +2285,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description GM: force-end the encounter as ABANDONED (#876). */
+    post: operations['combat_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/flee/': {
     parameters: {
       query?: never;
@@ -12134,7 +12151,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -12234,7 +12251,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -13920,6 +13937,17 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
+      /**
+       * @description Typed result recorded at completion (#876); empty until completed.
+       *
+       *     * `victory` - Victory
+       *     * `defeat` - Defeat
+       *     * `fled` - Fled
+       *     * `abandoned` - Abandoned
+       */
+      readonly outcome: components['schemas']['Outcome88eEnum'];
+      /** Format: date-time */
+      readonly completed_at: string | null;
       round_number?: number;
       risk_level?: components['schemas']['RiskLevelEnum'];
       stakes_level?: components['schemas']['StakesLevelEnum'];
@@ -13964,6 +13992,10 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
+      escalation_curve?: number | null;
+      readonly escalation_curve_name: string | null;
+      readonly escalation_start_round: number | null;
+      readonly escalation_tick_narration: string | null;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -13982,6 +14014,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Lightweight listing serializer for combat encounters. */
     EncounterList: {
@@ -13989,6 +14022,17 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
+      /**
+       * @description Typed result recorded at completion (#876); empty until completed.
+       *
+       *     * `victory` - Victory
+       *     * `defeat` - Defeat
+       *     * `fled` - Fled
+       *     * `abandoned` - Abandoned
+       */
+      readonly outcome: components['schemas']['Outcome88eEnum'];
+      /** Format: date-time */
+      readonly completed_at: string | null;
       round_number?: number;
       pace_mode?: components['schemas']['PaceModeEnum'];
       /** @description Minutes before auto-resolving in timed mode. */
@@ -16467,11 +16511,14 @@ export interface components {
       id: number;
       name: string;
     };
-    OutcomeDetail: {
-      action_interaction_id: number;
-      effects: components['schemas']['EffectRow'][];
-      power_ledger?: components['schemas']['PowerLedger'] | null;
-    };
+    /**
+     * @description * `victory` - Victory
+     *     * `defeat` - Defeat
+     *     * `fled` - Fled
+     *     * `abandoned` - Abandoned
+     * @enum {string}
+     */
+    Outcome88eEnum: 'victory' | 'defeat' | 'fled' | 'abandoned';
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success
@@ -16480,7 +16527,12 @@ export interface components {
      *     * `pending_gm_review` - Pending GM review
      * @enum {string}
      */
-    OutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    OutcomeD50Enum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    OutcomeDetail: {
+      action_interaction_id: number;
+      effects: components['schemas']['EffectRow'][];
+      power_ledger?: components['schemas']['PowerLedger'] | null;
+    };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
       readonly id: number;
@@ -18032,6 +18084,12 @@ export interface components {
        *     ``None`` when there is no primary persona or it has no thumbnail.
        */
       readonly thumbnail_media_url: string | null;
+      /** @description Escalation pressure on this combatant — public dramatic state. */
+      readonly escalation_level: number | null;
+      /** @description Process-derived intensity bonus from the COMBAT engagement. */
+      readonly intensity_modifier: number | null;
+      /** @description Process-derived control bonus from the COMBAT engagement. */
+      readonly control_modifier: number | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -18079,7 +18137,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description?: string;
@@ -18253,6 +18311,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Full serializer for episode details */
     PatchedEpisodeDetailRequest: {
@@ -18801,14 +18860,14 @@ export interface components {
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     PatchedRitualPatchRequest: {
       name?: string;
       description?: string;
       narrative_prose?: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatchRequest'];
+      check_config?: components['schemas']['RitualCheckConfigPatchRequest'];
     };
     /** @description Full scene representation with personas */
     PatchedSceneDetailRequest: {
@@ -20048,7 +20107,7 @@ export interface components {
      *     Exposes name, description, narrative_prose, dispatch metadata, the
      *     `input_schema` blob the frontend uses to render its perform form,
      *     `author_account_id` for client-side "authored by you" filtering,
-     *     and the nested `scene_action_config` for SCENE_ACTION rituals.
+     *     and the nested `check_config` when present.
      */
     Ritual: {
       readonly id: number;
@@ -20061,8 +20120,8 @@ export interface components {
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
       readonly author_account_id: number | null;
-      /** @description Return nested scene_action_config for SCENE_ACTION rituals, else None. */
-      readonly scene_action_config: {
+      /** @description Return nested check_config when present, else None. */
+      readonly check_config: {
         [key: string]: unknown;
       } | null;
       /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
@@ -20072,47 +20131,47 @@ export interface components {
       readonly max_participants: number | null;
     };
     /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatch: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatchRequest: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     RitualPatch: {
       name: string;
       description: string;
       narrative_prose: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatch'];
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatch: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatchRequest: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
+      check_config?: components['schemas']['RitualCheckConfigPatch'];
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/{id}/accept/.
@@ -25021,6 +25080,32 @@ export interface operations {
     };
   };
   combat_declare_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_end_create: {
     parameters: {
       query?: never;
       header?: never;

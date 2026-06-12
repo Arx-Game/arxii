@@ -76,13 +76,15 @@ def perform_anima_ritual(
             author_account=character_sheet.character.db_account,
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         )
-        .select_related("scene_action_config")
+        .select_related("check_config")
         .first()
     )
-    if ritual is None or not hasattr(ritual, "scene_action_config"):
+    if ritual is None or not hasattr(ritual, "check_config"):
         raise NoRitualConfigured
 
-    config = ritual.scene_action_config
+    config = ritual.check_config
+    if config.check_type is None:
+        raise NoRitualConfigured
     character = character_sheet.character
 
     if CharacterEngagement.objects.filter(character=character).exists():
@@ -219,7 +221,7 @@ def provision_player_anima_ritual(
     """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
-    from world.magic.models.ritual_scene_action import RitualSceneActionConfig  # noqa: PLC0415
+    from world.magic.models.ritual_check_config import RitualCheckConfig  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
     from world.skills.models import CharacterSkillValue, Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
@@ -267,11 +269,28 @@ def provision_player_anima_ritual(
         author_account=account,
     )
 
-    # 4. Create the sidecar (stat + skill; check_type/resonance left null for player to set).
-    RitualSceneActionConfig.objects.create(
+    # 4. Create the config. check_type defaults to the seeded Anima Restoration
+    # CheckType; resonance is left null for the player to set. Provisioning never
+    # blocks finalization — an unseeded environment just leaves check_type NULL.
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.magic.seeds_checks import (  # noqa: PLC0415
+        ANIMA_RESTORATION_CHECK_TYPE_NAME,
+    )
+
+    check_type = CheckType.objects.filter(name=ANIMA_RESTORATION_CHECK_TYPE_NAME).first()
+    if check_type is None:
+        logger.warning(
+            "provision_player_anima_ritual: %r CheckType not seeded; leaving "
+            "check_type NULL for character %s",
+            ANIMA_RESTORATION_CHECK_TYPE_NAME,
+            character.pk,
+        )
+
+    RitualCheckConfig.objects.create(
         ritual=ritual,
         stat=stat_trait,
         skill=skill,
+        check_type=check_type,
     )
 
     # 5. Grant knowledge so the ritual appears in the scene action menu.

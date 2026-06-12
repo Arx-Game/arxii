@@ -17,12 +17,15 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    EscalationCurve,
 )
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
+from world.mechanics.constants import EngagementType
+from world.mechanics.engagement import CharacterEngagement
 from world.scenes.constants import PersonaType
 
 if TYPE_CHECKING:
@@ -188,6 +191,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    escalation_level = serializers.SerializerMethodField()
+    intensity_modifier = serializers.SerializerMethodField()
+    control_modifier = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -204,6 +210,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
+            "escalation_level",
+            "intensity_modifier",
+            "control_modifier",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -342,6 +351,45 @@ class ParticipantSerializer(serializers.ModelSerializer):
             can_view_hidden=self._can_view_vitals(obj),
             context=self.context,
         )
+
+    def _combat_engagement(self, obj: CombatParticipant) -> CharacterEngagement | None:
+        """Resolve the participant's COMBAT CharacterEngagement, if any.
+
+        Reads the reverse OneToOne accessor (``character.engagement``) rather
+        than a fresh ``.filter()`` — the descriptor caches the result (even
+        the no-row case) on the identity-mapped ObjectDB instance, so the
+        three escalation fields share at most one query per character and the
+        warm API path pays zero (no prefetch machinery; the idmapper is the
+        cache layer). ``None`` when the character has no engagement, or its
+        engagement is non-COMBAT (challenge/mission stakes are not combat
+        escalation).
+        """
+        try:
+            engagement = obj.character_sheet.character.engagement
+        except (AttributeError, CharacterEngagement.DoesNotExist):
+            return None
+        # Queryset deletes null the pk on the cached instance without clearing
+        # the reverse accessor; treat a pk-less engagement as gone.
+        if engagement.pk is None:
+            return None
+        if engagement.engagement_type != EngagementType.COMBAT:
+            return None
+        return engagement
+
+    def get_escalation_level(self, obj: CombatParticipant) -> int | None:
+        """Escalation pressure on this combatant — public dramatic state."""
+        engagement = self._combat_engagement(obj)
+        return engagement.escalation_level if engagement else None
+
+    def get_intensity_modifier(self, obj: CombatParticipant) -> int | None:
+        """Process-derived intensity bonus from the COMBAT engagement."""
+        engagement = self._combat_engagement(obj)
+        return engagement.intensity_modifier if engagement else None
+
+    def get_control_modifier(self, obj: CombatParticipant) -> int | None:
+        """Process-derived control bonus from the COMBAT engagement."""
+        engagement = self._combat_engagement(obj)
+        return engagement.control_modifier if engagement else None
 
     def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
         """Resolve the participant's PRIMARY persona through the cached accessor.
@@ -537,6 +585,8 @@ class EncounterListSerializer(serializers.ModelSerializer):
             "scene",
             "encounter_type",
             "status",
+            "outcome",
+            "completed_at",
             "round_number",
             "pace_mode",
             "pace_timer_minutes",
@@ -544,6 +594,10 @@ class EncounterListSerializer(serializers.ModelSerializer):
             "participant_count",
             "opponent_count",
         ]
+        extra_kwargs = {
+            "outcome": {"read_only": True},
+            "completed_at": {"read_only": True},
+        }
 
     def get_participant_count(self, obj: CombatEncounter) -> int:
         """Return participant count, preferring cached list."""
@@ -577,6 +631,21 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
+    escalation_curve = serializers.PrimaryKeyRelatedField(
+        queryset=EscalationCurve.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    # null = encounter has no curve; tick_narration "" = curve set, no narration authored.
+    escalation_curve_name = serializers.CharField(
+        source="escalation_curve.name", read_only=True, default=None, allow_null=True
+    )
+    escalation_start_round = serializers.IntegerField(
+        source="escalation_curve.start_round", read_only=True, default=None, allow_null=True
+    )
+    escalation_tick_narration = serializers.CharField(
+        source="escalation_curve.tick_narration", read_only=True, default=None, allow_null=True
+    )
 
     class Meta:
         model = CombatEncounter
@@ -585,6 +654,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "scene",
             "encounter_type",
             "status",
+            "outcome",
+            "completed_at",
             "round_number",
             "risk_level",
             "stakes_level",
@@ -599,7 +670,15 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_participant",
             "is_gm",
             "clashes",
+            "escalation_curve",
+            "escalation_curve_name",
+            "escalation_start_round",
+            "escalation_tick_narration",
         ]
+        extra_kwargs = {
+            "outcome": {"read_only": True},
+            "completed_at": {"read_only": True},
+        }
 
     def to_representation(self, instance: CombatEncounter) -> dict[str, Any]:
         """Inject is_gm into context before nested serializers run.

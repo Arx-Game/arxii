@@ -64,6 +64,12 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     current_round_actions: [],
     clashes: clashes as unknown as EncounterDetail['clashes'],
     created_at: '2026-01-01T00:00:00Z',
+    // Runtime sends "" until completion; the generated enum omits the blank.
+    outcome: '' as EncounterDetail['outcome'],
+    completed_at: null,
+    escalation_curve_name: null,
+    escalation_start_round: null,
+    escalation_tick_narration: null,
   };
 }
 

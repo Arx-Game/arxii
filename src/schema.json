@@ -3287,6 +3287,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/end/:
+    post:
+      operationId: combat_end_create
+      description: 'GM: force-end the encounter as ABANDONED (#876).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/flee/:
     post:
       operationId: combat_flee_create
@@ -20785,7 +20812,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -20969,7 +20996,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -24764,6 +24791,22 @@ components:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
           $ref: '#/components/schemas/Status4e6Enum'
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          readOnly: true
+          description: |-
+            Typed result recorded at completion (#876); empty until completed.
+
+            * `victory` - Victory
+            * `defeat` - Defeat
+            * `fled` - Fled
+            * `abandoned` - Abandoned
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         round_number:
           type: integer
           maximum: 2147483647
@@ -24836,14 +24879,34 @@ components:
             Falls back to a direct filter for callers that don't use the viewset
             (e.g. unit tests that call the serializer directly).
           readOnly: true
+        escalation_curve:
+          type: integer
+          nullable: true
+        escalation_curve_name:
+          type: string
+          readOnly: true
+          nullable: true
+        escalation_start_round:
+          type: integer
+          readOnly: true
+          nullable: true
+        escalation_tick_narration:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - clashes
+      - completed_at
       - created_at
       - current_round_actions
+      - escalation_curve_name
+      - escalation_start_round
+      - escalation_tick_narration
       - id
       - is_gm
       - is_participant
       - opponents
+      - outcome
       - participants
     EncounterDetailRequest:
       type: object
@@ -24878,6 +24941,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     EncounterList:
       type: object
       description: Lightweight listing serializer for combat encounters.
@@ -24892,6 +24958,22 @@ components:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
           $ref: '#/components/schemas/Status4e6Enum'
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          readOnly: true
+          description: |-
+            Typed result recorded at completion (#876); empty until completed.
+
+            * `victory` - Victory
+            * `defeat` - Defeat
+            * `fled` - Fled
+            * `abandoned` - Abandoned
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         round_number:
           type: integer
           maximum: 2147483647
@@ -24914,8 +24996,10 @@ components:
           description: Return opponent count, preferring cached list.
           readOnly: true
       required:
+      - completed_at
       - id
       - opponent_count
+      - outcome
       - participant_count
     EncounterTypeEnum:
       enum:
@@ -29969,6 +30053,32 @@ components:
       required:
       - id
       - name
+    Outcome88eEnum:
+      enum:
+      - victory
+      - defeat
+      - fled
+      - abandoned
+      type: string
+      description: |-
+        * `victory` - Victory
+        * `defeat` - Defeat
+        * `fled` - Fled
+        * `abandoned` - Abandoned
+    OutcomeD50Enum:
+      enum:
+      - unsatisfied
+      - success
+      - failure
+      - expired
+      - pending_gm_review
+      type: string
+      description: |-
+        * `unsatisfied` - Unsatisfied
+        * `success` - Success
+        * `failure` - Failure
+        * `expired` - Expired
+        * `pending_gm_review` - Pending GM review
     OutcomeDetail:
       type: object
       properties:
@@ -29985,20 +30095,6 @@ components:
       required:
       - action_interaction_id
       - effects
-    OutcomeEnum:
-      enum:
-      - unsatisfied
-      - success
-      - failure
-      - expired
-      - pending_gm_review
-      type: string
-      description: |-
-        * `unsatisfied` - Unsatisfied
-        * `success` - Success
-        * `failure` - Failure
-        * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     OutfitRead:
       type: object
       description: Read serializer for Outfit — nests slot rows.
@@ -32468,15 +32564,33 @@ components:
 
             ``None`` when there is no primary persona or it has no thumbnail.
           readOnly: true
+        escalation_level:
+          type: integer
+          nullable: true
+          description: Escalation pressure on this combatant — public dramatic state.
+          readOnly: true
+        intensity_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived intensity bonus from the COMBAT engagement.
+          readOnly: true
+        control_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived control bonus from the COMBAT engagement.
+          readOnly: true
       required:
       - active_conditions
       - available_strain
       - character_name
       - character_sheet_id
       - character_status
+      - control_modifier
+      - escalation_level
       - fatigue
       - health
       - id
+      - intensity_modifier
       - max_health
       - thumbnail_media_url
       - thumbnail_url
@@ -32536,7 +32650,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeEnum'
+          - $ref: '#/components/schemas/OutcomeD50Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -32857,6 +32971,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     PatchedEpisodeDetailRequest:
       type: object
       description: Full serializer for episode details
@@ -33774,8 +33891,8 @@ components:
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -33787,8 +33904,8 @@ components:
         narrative_prose:
           type: string
           minLength: 1
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatchRequest'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatchRequest'
     PatchedSceneDetailRequest:
       type: object
       description: Full scene representation with personas
@@ -36273,7 +36390,7 @@ components:
         Exposes name, description, narrative_prose, dispatch metadata, the
         `input_schema` blob the frontend uses to render its perform form,
         `author_account_id` for client-side "authored by you" filtering,
-        and the nested `scene_action_config` for SCENE_ACTION rituals.
+        and the nested `check_config` when present.
       properties:
         id:
           type: integer
@@ -36307,12 +36424,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        scene_action_config:
+        check_config:
           type: object
           additionalProperties: {}
           nullable: true
-          description: Return nested scene_action_config for SCENE_ACTION rituals,
-            else None.
+          description: Return nested check_config when present, else None.
           readOnly: true
         client_hosted:
           type: boolean
@@ -36333,6 +36449,7 @@ components:
           nullable: true
       required:
       - author_account_id
+      - check_config
       - client_hosted
       - description
       - execution_kind
@@ -36345,15 +36462,64 @@ components:
       - name
       - narrative_prose
       - participation_rule
-      - scene_action_config
+    RitualCheckConfigPatch:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
+    RitualCheckConfigPatchRequest:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
     RitualPatch:
       type: object
       description: |-
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -36362,62 +36528,12 @@ components:
           type: string
         narrative_prose:
           type: string
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatch'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatch'
       required:
       - description
       - name
       - narrative_prose
-    RitualSceneActionConfigPatch:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
-    RitualSceneActionConfigPatchRequest:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
     RitualSessionAccept:
       type: object
       description: |-

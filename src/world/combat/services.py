@@ -17,17 +17,18 @@ from django.utils import timezone
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
-    from world.scenes.models import Persona
+    from world.scenes.models import Interaction, Persona
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -40,6 +41,7 @@ from flows.events.payloads import (
     CharacterKilledPayload,
     DamageAppliedPayload,
     DamagePreApplyPayload,
+    EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
@@ -58,6 +60,7 @@ from world.combat.constants import (
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
     CombatManeuver,
+    EncounterOutcome,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -78,6 +81,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     FleeConfig,
     FleeTierModifier,
@@ -708,6 +712,22 @@ def resolve_combat_technique(
     return _build_combat_result(technique_use_result, resolver)
 
 
+def _ensure_combat_engagement(participant: CombatParticipant) -> None:
+    """Ensure the participant's character holds an engagement (combat-owned, #872).
+
+    Existing non-combat engagements are preserved (begin_engagement contract);
+    such participants do not tick or spike this encounter.
+    """
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import begin_engagement  # noqa: PLC0415
+
+    begin_engagement(
+        participant.character_sheet.character,
+        EngagementType.COMBAT,
+        source=participant.encounter,
+    )
+
+
 def add_participant(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -723,10 +743,26 @@ def add_participant(
         from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
         covenant_role = precedence_role_for_combat(character_sheet)
-    return CombatParticipant.objects.create(
+    participant = CombatParticipant.objects.create(
         encounter=encounter,
         character_sheet=character_sheet,
         covenant_role=covenant_role,
+    )
+    _ensure_combat_engagement(participant)
+    return participant
+
+
+def remove_participant(participant: CombatParticipant) -> None:
+    """Remove a participant: status write + combat engagement teardown (#872)."""
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+    participant.status = ParticipantStatus.REMOVED
+    participant.save(update_fields=["status"])
+    end_engagement(
+        participant.character_sheet.character,
+        EngagementType.COMBAT,
+        source=participant.encounter,
     )
 
 
@@ -783,6 +819,7 @@ def join_encounter(
         covenant_role=covenant_role,
         status=ParticipantStatus.ACTIVE,
     )
+    _ensure_combat_engagement(participant)
     acknowledge_encounter_risk(encounter, character_sheet)
     return participant
 
@@ -981,7 +1018,7 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
-    # --- Round-tick: fire start-of-round DoT ---
+    # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
     from world.conditions.services import process_round_start  # noqa: PLC0415
 
     active_participants_start = CombatParticipant.objects.filter(
@@ -990,6 +1027,10 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     ).select_related("character_sheet__character")
     for p in active_participants_start:
         process_round_start(p.character_sheet.character)
+        # Permanent idempotency safety net: any participant that reached this
+        # point without a combat engagement (however they were created) gets
+        # one ensured here so all downstream engagement-dependent paths are safe.
+        _ensure_combat_engagement(p)
 
     active_opponents_start = CombatOpponent.objects.filter(
         encounter=enc,
@@ -998,6 +1039,16 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     for opp in active_opponents_start:
         if opp.objectdb is not None:
             process_round_start(opp.objectdb)
+
+    # --- Escalation tick (#872): opted-in encounters build pressure each round ---
+    from world.combat.escalation import (  # noqa: PLC0415
+        apply_escalation_tick,
+        install_escalation_room_triggers,
+    )
+
+    if enc.escalation_curve is not None:
+        install_escalation_room_triggers(enc)
+        apply_escalation_tick(enc)
 
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
@@ -1495,7 +1546,8 @@ def apply_damage_to_participant(  # noqa: PLR0913
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
     - DAMAGE_APPLIED (post-save, frozen)
-    - CHARACTER_INCAPACITATED (if knockout_eligible)
+    - CHARACTER_INCAPACITATED (only on the transition into the knockout band,
+      and only when the death gate does not also fire — death supersedes)
     - CHARACTER_KILLED (if death_eligible or force_death)
     """
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
@@ -1547,16 +1599,24 @@ def apply_damage_to_participant(  # noqa: PLR0913
         resistance = character.conditions.resistance_modifier(damage_type)
         effective_damage = max(0, effective_damage - resistance)
 
+    health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
 
     if vitals.max_health > 0:
         health_pct = max(0.0, health_after / vitals.max_health)
+        health_before_pct = max(0.0, health_before / vitals.max_health)
     else:
         health_pct = 0.0
+        health_before_pct = 0.0
 
     knockout_eligible = (
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD
+    )
+    # Same band test applied to pre-hit health — used only to latch the
+    # CHARACTER_INCAPACITATED emit to the transition into the band.
+    was_in_knockout_band = (
+        health_before_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_before > DEATH_HEALTH_THRESHOLD
     )
     death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
     permanent_wound_eligible = effective_damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
@@ -1589,7 +1649,13 @@ def apply_damage_to_participant(  # noqa: PLR0913
         )
 
         # --- Incapacitation / death gates ---
-        if knockout_eligible:
+        # CHARACTER_INCAPACITATED marks the dramatic beat (the fall), not
+        # per-hit at-risk status: it fires only on the transition INTO the
+        # knockout band, and never alongside the death gate — one narrative
+        # beat, one event. knockout_eligible itself stays per-hit for the
+        # survivability-check pipeline (process_damage_consequences).
+        will_emit_death_gate = death_eligible or force_death
+        if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
             emit_event(
                 EventName.CHARACTER_INCAPACITATED,
                 CharacterIncapacitatedPayload(
@@ -1599,7 +1665,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
                 location=room,
             )
 
-        if death_eligible or force_death:
+        if will_emit_death_gate:
             _emit_death_gate(character, room)
 
     return ParticipantDamageResult(
@@ -2182,6 +2248,42 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
+def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_outcome's fields
+    sheet: CharacterSheet,
+    check_type: CheckType,
+    pool: ConsequencePool,
+    pending: PendingResolution,
+    breakdown: ModifierBreakdown,
+    *,
+    interaction: Interaction | None,
+    summary: str,
+) -> None:
+    """Persist ConsequenceOutcome provenance for a pool-routed combat resolution.
+
+    Mirrors vitals' _record_combat_outcome guard: a sourceless ConsequenceOutcome
+    is forbidden, so skip when no interaction anchor exists (sheet without a
+    PRIMARY persona). Shared by flee and encounter-aftermath resolution.
+    """
+    if interaction is None:
+        return
+
+    from actions.types import WeightedConsequence  # noqa: PLC0415
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+    selected = pending.selected_consequence
+    if isinstance(selected, WeightedConsequence):
+        selected = selected.consequence
+    record_consequence_outcome(
+        sheet,
+        check_type,
+        pool,
+        selected if selected.pk is not None else None,
+        breakdown,
+        combat_interaction=interaction,
+        summary=summary,
+    )
+
+
 def _resolve_flee(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -2274,6 +2376,16 @@ def _resolve_flee(
         participant.status = ParticipantStatus.FLED
         participant.save(update_fields=["status"])
 
+        # Combat-owned engagement teardown on successful flee (#872).
+        from world.mechanics.constants import EngagementType  # noqa: PLC0415
+        from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+        end_engagement(
+            participant.character_sheet.character,
+            EngagementType.COMBAT,
+            source=participant.encounter,
+        )
+
     # ACTION-mode Interaction anchor + live broadcast (mirrors the tail of
     # _resolve_pc_action).
     from world.combat.interaction_services import (  # noqa: PLC0415
@@ -2296,25 +2408,15 @@ def _resolve_flee(
 
     if consequence_applies and config.consequence_pool_id is not None:
         apply_resolution(pending, ResolutionContext(character=character))
-        # Record provenance. Mirrors vitals' _record_combat_outcome guard: a
-        # sourceless ConsequenceOutcome is forbidden, so skip when no
-        # interaction anchor exists (sheet without a PRIMARY persona).
-        if interaction is not None:
-            from actions.types import WeightedConsequence  # noqa: PLC0415
-            from world.checks.services import record_consequence_outcome  # noqa: PLC0415
-
-            selected = pending.selected_consequence
-            if isinstance(selected, WeightedConsequence):
-                selected = selected.consequence
-            record_consequence_outcome(
-                participant.character_sheet,
-                config.check_type,
-                config.consequence_pool,
-                selected if selected.pk is not None else None,
-                breakdown,
-                combat_interaction=interaction,
-                summary="flee attempt",
-            )
+        _record_combat_consequence(
+            participant.character_sheet,
+            config.check_type,
+            config.consequence_pool,
+            pending,
+            breakdown,
+            interaction=interaction,
+            summary="flee attempt",
+        )
 
     narration = render_flee_outcome_narration(
         actor_label=str(participant),
@@ -2677,6 +2779,21 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 
+    # Combat-owned engagement teardown (#872): deleting the engagement discards
+    # the transient escalation process modifiers. Must run AFTER end_audere
+    # (which subtracts its own bonus from the row first — see comment above).
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+    for target in participant_targets:
+        end_engagement(target, EngagementType.COMBAT, source=encounter)
+
+    # Escalation room-trigger teardown (#872): drop the spike triggers unless
+    # another live escalating encounter still shares the room.
+    from world.combat.escalation import remove_escalation_room_triggers  # noqa: PLC0415
+
+    remove_escalation_room_triggers(encounter)
+
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
         objectdb_is_ephemeral=True,
@@ -2722,6 +2839,243 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     all_pcs_down = not any(can_act(p.character_sheet) for p in active_participants)
 
     return all_opponents_down or all_pcs_down
+
+
+def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
+    """Classify a completing encounter (#876 spec §1).
+
+    1. No ACTIVE opponents → VICTORY.
+    2. No ACTIVE participants and at least one FLED → FLED.
+    3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
+    """
+    any_active_opponents = CombatOpponent.objects.filter(
+        encounter=encounter, status=OpponentStatus.ACTIVE
+    ).exists()
+    if not any_active_opponents:
+        return EncounterOutcome.VICTORY
+
+    statuses = set(
+        CombatParticipant.objects.filter(encounter=encounter).values_list("status", flat=True)
+    )
+    no_active = ParticipantStatus.ACTIVE not in statuses
+    if no_active and ParticipantStatus.FLED in statuses:
+        return EncounterOutcome.FLED
+    return EncounterOutcome.DEFEAT
+
+
+@transaction.atomic
+def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome) -> None:
+    """Single completion seam for round resolution and the GM end endpoint (#876).
+
+    Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
+    that interaction, before ephemeral-NPC cleanup) → counters → completion
+    event → cleanup. ABANDONED is administrative closure: skips aftermath and
+    counters but still narrates, emits, and cleans up.
+
+    Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
+    flip with the aftermath/cleanup tail skipped — the double-completion guard
+    would otherwise block any retry. Inside resolve_round it is a savepoint.
+    """
+    if encounter.status == EncounterStatus.COMPLETED:
+        msg = f"Encounter {encounter.pk} is already completed."
+        raise ValueError(msg)
+
+    encounter.status = EncounterStatus.COMPLETED
+    encounter.outcome = outcome
+    encounter.completed_at = timezone.now()
+    encounter.save(update_fields=["status", "outcome", "completed_at"])
+
+    interaction = _broadcast_encounter_outcome(encounter, outcome)
+
+    if outcome != EncounterOutcome.ABANDONED:
+        _apply_aftermath_rules(encounter, outcome, interaction)
+        _apply_opponent_aftermath_pools(encounter, outcome)
+        _increment_completion_counters(encounter, outcome)
+
+    _emit_encounter_completed(encounter, outcome)
+    cleanup_completed_encounter(encounter)
+
+
+def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
+    """GM force-end: completes as ABANDONED (#876 §8) — the sole ABANDONED producer."""
+    complete_encounter(encounter, outcome=EncounterOutcome.ABANDONED)
+    return encounter
+
+
+def _broadcast_encounter_outcome(
+    encounter: CombatEncounter, outcome: EncounterOutcome
+) -> Interaction | None:
+    """Assemble side labels and persist+broadcast the ceremonial OUTCOME line."""
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        render_encounter_outcome_narration,
+    )
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
+            "character_sheet__character"
+        )
+    )
+    opponents = list(CombatOpponent.objects.filter(encounter=encounter))
+    narration = render_encounter_outcome_narration(
+        outcome=outcome,
+        active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
+        fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
+        defeated_opponent_labels=[o.name for o in opponents if o.status == OpponentStatus.DEFEATED],
+    )
+    return broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _apply_aftermath_rules(
+    encounter: CombatEncounter,
+    outcome: EncounterOutcome,
+    interaction: Interaction | None,
+) -> None:
+    """Per-PC graded aftermath via the authored (outcome, risk) cell (#876 §3).
+
+    Mirrors _resolve_flee's pipeline: modifiers → select_consequence (theater
+    included) → apply_resolution → record_consequence_outcome anchored to the
+    encounter OUTCOME interaction. Legend, when authored, rides LEGEND_AWARD
+    consequences in the pool — context.participants carries the PC's persona.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    rule = (
+        EncounterAftermathRule.objects.filter(outcome=outcome, risk_level=encounter.risk_level)
+        .select_related("check_type", "consequence_pool")
+        .first()
+    )
+    if rule is None or rule.consequence_pool_id is None:
+        return
+
+    affected_status = (
+        ParticipantStatus.FLED if outcome == EncounterOutcome.FLED else ParticipantStatus.ACTIVE
+    )
+    affected = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter, status=affected_status
+        ).select_related("character_sheet__character")
+    )
+    consequences = resolve_pool_consequences(rule.consequence_pool)
+
+    for participant in affected:
+        sheet = participant.character_sheet
+        character = sheet.character
+        breakdown = collect_check_modifiers(sheet, rule.check_type)
+        pending = select_consequence(
+            character,
+            rule.check_type,
+            rule.base_difficulty,
+            consequences,
+            extra_modifiers=breakdown.total,
+        )
+        try:
+            participants_ctx = [sheet.primary_persona]
+        except Persona.DoesNotExist:
+            participants_ctx = None
+        apply_resolution(
+            pending,
+            ResolutionContext(
+                character=character,
+                scene=encounter.scene,
+                participants=participants_ctx,
+            ),
+        )
+        _record_combat_consequence(
+            sheet,
+            rule.check_type,
+            rule.consequence_pool,
+            pending,
+            breakdown,
+            interaction=interaction,
+            summary=f"encounter aftermath ({outcome.label})",
+        )
+
+
+def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """Fire each DEFEATED opponent's authored aftermath pool on PC victory (#876 §4).
+
+    Deterministic (story-consequence semantics, like beat pools). Context follows
+    the beats GLOBAL idiom: the opponent's ObjectDB when set, else an unsaved
+    stub that is only identity-safe for non-character effects.
+    """
+    if outcome != EncounterOutcome.VICTORY:
+        return
+
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_deterministically,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+    qs = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.DEFEATED,
+        aftermath_pool__isnull=False,
+    ).select_related("aftermath_pool", "objectdb")
+    for opponent in qs:
+        character = opponent.objectdb or ObjectDB()  # unsaved stub — non-character effects only
+        apply_pool_deterministically(
+            pool=opponent.aftermath_pool,
+            context=ResolutionContext(character=character, scene=encounter.scene),
+        )
+
+
+def _increment_completion_counters(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """encounters_won / encounters_lost / encounters_fled aggregates (#876 §7)."""
+    from world.combat.achievement_counters import (  # noqa: PLC0415
+        STAT_KEY_ENCOUNTERS_FLED,
+        STAT_KEY_ENCOUNTERS_LOST,
+        STAT_KEY_ENCOUNTERS_WON,
+        increment_combat_counter,
+    )
+
+    outcome_key = {
+        EncounterOutcome.VICTORY: STAT_KEY_ENCOUNTERS_WON,
+        EncounterOutcome.DEFEAT: STAT_KEY_ENCOUNTERS_LOST,
+    }.get(outcome)
+
+    participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
+        "character_sheet"
+    )
+    for participant in participants:
+        if participant.status == ParticipantStatus.FLED:
+            increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_FLED)
+        elif participant.status == ParticipantStatus.ACTIVE and outcome_key is not None:
+            increment_combat_counter(participant.character_sheet, outcome_key)
+
+
+def _emit_encounter_completed(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """Emit the ENCOUNTER_COMPLETED reactive hook (#876 §6).
+
+    Downstream systems — stories, missions, achievements, Legend — subscribe
+    via triggers. Never XP: combat does not award XP. Skips when no room
+    (emit_event requires a location); mirrors the _emit_death_gate idiom.
+    """
+    room = encounter.room
+    if room is None:
+        logger.debug(
+            "Encounter %s completed with no room; skipping ENCOUNTER_COMPLETED emit.",
+            encounter.pk,
+        )
+        return
+    emit_event(
+        EventName.ENCOUNTER_COMPLETED,
+        EncounterCompletedPayload(
+            encounter=encounter,
+            outcome=str(outcome),
+            scene=encounter.scene,
+            room=room,
+        ),
+        location=room,
+    )
 
 
 def _resolve_declared_challenges(
@@ -3176,17 +3530,17 @@ def resolve_round(
 
     # --- Check encounter completion ---
     if _check_encounter_completion(encounter):
-        enc.status = EncounterStatus.COMPLETED
         result.encounter_completed = True
-        cleanup_completed_encounter(encounter)
+        enc.round_started_at = None
+        enc.save(update_fields=["round_started_at"])
+        complete_encounter(enc, outcome=_classify_encounter_outcome(enc))
     else:
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from
         # BETWEEN_ROUNDS to DECLARING for the next round.
         enc.status = EncounterStatus.BETWEEN_ROUNDS
-
-    enc.round_started_at = None
-    enc.save(update_fields=["status", "round_started_at"])
+        enc.round_started_at = None
+        enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()
 
     return result

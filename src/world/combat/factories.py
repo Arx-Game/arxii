@@ -9,11 +9,13 @@ from world.combat.constants import (
     ClashActionSlot,
     ClashFlavor,
     ComboLearningMethod,
+    EncounterOutcome,
     EncounterType,
     LockPcRole,
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    RiskLevel,
     TargetingMode,
     TargetSelection,
 )
@@ -32,6 +34,8 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterAftermathRule,
+    EscalationCurve,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -394,6 +398,19 @@ class ClashContributionFactory(factory_django.DjangoModelFactory):
     progress_delta = 1
 
 
+class EncounterAftermathRuleFactory(factory_django.DjangoModelFactory):
+    """Factory for EncounterAftermathRule (#876)."""
+
+    class Meta:
+        model = EncounterAftermathRule
+
+    outcome = EncounterOutcome.DEFEAT
+    risk_level = RiskLevel.MODERATE
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    base_difficulty = 25
+    consequence_pool = None
+
+
 # =============================================================================
 # Playable combat scenario — composition helper, not a DjangoModelFactory.
 # =============================================================================
@@ -645,6 +662,36 @@ def wire_flee_modifier_target():
     )
 
 
+class EscalationCurveFactory(factory_django.DjangoModelFactory):
+    """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
+
+    class Meta:
+        model = EscalationCurve
+
+    name = factory.Sequence(lambda n: f"Escalation Curve {n}")
+    start_round = 2
+    intensity_step = 1
+    pace_difficulty_base = 0
+    pace_difficulty_per_level = 0
+    control_step_on_success = 1
+    control_step_on_partial = 0
+    control_step_on_botch = -1
+    spike_intensity_amount = 2
+    spike_minimum_track_points = 1
+
+    @factory.lazy_attribute
+    def pace_check_type(self) -> object:
+        from world.checks.models import CheckCategory, CheckType
+
+        category, _ = CheckCategory.objects.get_or_create(name="Combat")
+        check, _ = CheckType.objects.get_or_create(
+            name="Escalation Pace",
+            category=category,
+            defaults={"description": "Keep control in pace with rising intensity."},
+        )
+        return check
+
+
 def wire_flee_config():
     """Seed the FleeConfig singleton (pk=1) + tier modifier rows + starter pool (#878).
 
@@ -742,3 +789,78 @@ def wire_flee_config():
         )
 
     return config
+
+
+# Sentinel parameter value resolved by the flows pipeline to the live event
+# payload at dispatch time (FlowExecution variable_mapping seeds "payload";
+# "@payload" is the @variable reference). Mirrors world.magic.factories.
+_PAYLOAD_PARAM = "@payload"
+
+
+def _build_escalation_spike_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
+
+    The step calls ``relationship_spike_handler`` with the event payload.
+    Shared by both escalation spike TriggerDefinitions (#872).
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_relationship_spike")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.combat.escalation.relationship_spike_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class EscalationSpikeOnIncapacitatedTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CHARACTER_INCAPACITATED escalation spike (#872).
+
+    Installed on encounter rooms by ``install_escalation_room_triggers``; calls
+    the relationship spike handler so bonded co-combatants surge in intensity.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_incapacitated"
+    event_name = "character_incapacitated"
+    flow_definition = factory.LazyFunction(_build_escalation_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CHARACTER_KILLED escalation spike (#872)."""
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_killed"
+    event_name = "character_killed"
+    flow_definition = factory.LazyFunction(_build_escalation_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+def wire_escalation_content() -> None:
+    """Seed the escalation spike trigger definitions (idempotent).
+
+    Creates (get_or_create):
+    - "escalation_relationship_spike" FlowDefinition (one CALL_SERVICE_FUNCTION
+      step -> world.combat.escalation.relationship_spike_handler)
+    - "escalation_spike_on_incapacitated" TriggerDefinition
+    - "escalation_spike_on_killed" TriggerDefinition
+
+    Doubles as integration-test setup and staff seed content. Safe to call
+    multiple times — does not create duplicates.
+    """
+    EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
+    EscalationSpikeOnKilledTriggerDefinitionFactory()

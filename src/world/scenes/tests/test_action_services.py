@@ -401,7 +401,7 @@ class TestCreateActionRequestSnapshotFields(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, RitualFactory
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
@@ -411,7 +411,7 @@ class TestCreateActionRequestSnapshotFields(TestCase):
             service_function_path="",
             flow=None,
         )
-        cls.config = RitualSceneActionConfigFactory(ritual=cls.ritual)
+        cls.config = RitualCheckConfigFactory(ritual=cls.ritual)
 
     def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
         """When ritual_id is provided, all snapshot fields are populated from the ritual."""

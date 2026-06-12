@@ -18,9 +18,26 @@
  * TODO(round-flow): add "current" chip state when backend exposes active actor.
  *
  * Phase 8, Task 8.5 — unified-combat-ui plan.
+ * GM end-encounter control (#876): when the viewer is the scene GM and the
+ * encounter is still live, an "End Encounter" button (AlertDialog-confirmed)
+ * calls POST /api/combat/{id}/end/ via useEndEncounter.
  */
 
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { useEndEncounter } from '../queries';
 import type { EncounterDetail, Participant, RoundAction } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -54,6 +71,39 @@ function buildActedSet(roundActions: RoundAction[]): Set<number> {
     }
   }
   return acted;
+}
+
+// ---------------------------------------------------------------------------
+// EscalationStrip — pressure level + tick narration for escalating encounters
+// ---------------------------------------------------------------------------
+
+const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+/** Highest escalation level among participants (encounter-wide ramp). */
+function escalationLevel(participants: Participant[]): number {
+  return Math.max(0, ...participants.map((p) => p.escalation_level ?? 0));
+}
+
+function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
+  if (!encounter.escalation_curve_name) {
+    return null;
+  }
+  const level = escalationLevel(encounter.participants);
+  return (
+    <div
+      className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5"
+      data-testid="escalation-strip"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+        Escalation {ROMAN[Math.min(level, ROMAN.length - 1)]}
+      </span>
+      {encounter.escalation_tick_narration && (
+        <p className="mt-0.5 text-xs italic text-muted-foreground">
+          {encounter.escalation_tick_narration}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +148,18 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
   const actedCount = participants.filter((p) => actedSet.has(p.id)).length;
   const totalCount = participants.length;
 
+  // GM end-encounter control (#876).
+  const endEncounter = useEndEncounter(encounter.id);
+  const showEndControl = encounter.is_gm && encounter.status !== 'completed';
+
+  function handleEndEncounter() {
+    endEncounter.mutate(undefined, {
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to end encounter.');
+      },
+    });
+  }
+
   return (
     <div className="rounded-md border border-border bg-card" data-testid="round-flow-section">
       {/* Section header */}
@@ -130,6 +192,9 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
             Round {roundNumber ?? 0} &middot; {actedCount}/{totalCount} acted
           </p>
 
+          {/* Escalation strip (escalating encounters only) */}
+          <EscalationStrip encounter={encounter} />
+
           {/* Declarations counter */}
           <div
             className="flex items-center justify-between rounded border border-border bg-muted/30 px-2 py-1"
@@ -154,6 +219,42 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
             <p className="text-xs text-muted-foreground" data-testid="round-flow-empty">
               No participants yet.
             </p>
+          )}
+
+          {/* GM end-encounter control (#876) — confirm before the curtain falls. */}
+          {showEndControl && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  disabled={endEncounter.isPending}
+                  data-testid="end-encounter-trigger"
+                >
+                  {endEncounter.isPending ? 'Ending…' : 'End Encounter'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>End this encounter?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The encounter is marked completed and the Narrator records the outcome in the
+                    scene log. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleEndEncounter}
+                    disabled={endEncounter.isPending}
+                    data-testid="end-encounter-confirm"
+                  >
+                    End Encounter
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       )}

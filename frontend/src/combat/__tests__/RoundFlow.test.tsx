@@ -3,12 +3,21 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 
+// Mock the queries module — RoundFlow only consumes useEndEncounter (#876).
+vi.mock('../queries', () => ({
+  useEndEncounter: vi.fn(),
+}));
+
+import * as combatQueries from '../queries';
 import { RoundFlow } from '../sections/RoundFlow';
 import type { EncounterDetail, Participant } from '../types';
+
+const mockedUseEndEncounter = combatQueries.useEndEncounter as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,13 +46,17 @@ function makeParticipant(id: number, name: string): Participant {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    escalation_level: null,
+    intensity_modifier: null,
+    control_modifier: null,
   };
 }
 
 function makeEncounter(
   participants: Participant[] = [],
   actedParticipantIds: number[] = [],
-  roundNumber = 1
+  roundNumber = 1,
+  overrides: Partial<EncounterDetail> = {}
 ): EncounterDetail {
   const currentRoundActions = actedParticipantIds.map((pid) => ({ participant: pid }));
   return {
@@ -56,6 +69,13 @@ function makeEncounter(
     current_round_actions: currentRoundActions,
     clashes: [],
     created_at: '2026-01-01T00:00:00Z',
+    // Runtime sends "" until completion; the generated enum omits the blank.
+    outcome: '' as EncounterDetail['outcome'],
+    completed_at: null,
+    escalation_curve_name: null,
+    escalation_start_round: null,
+    escalation_tick_narration: null,
+    ...overrides,
   };
 }
 
@@ -65,6 +85,7 @@ function makeEncounter(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
 });
 
 // ---------------------------------------------------------------------------
@@ -155,5 +176,101 @@ describe('RoundFlow', () => {
 
     expect(screen.queryByTestId('initiative-chip-1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('round-flow-summary')).not.toBeInTheDocument();
+  });
+
+  it('renders escalation strip when the encounter escalates', () => {
+    const participant = { ...makeParticipant(1, 'Aria'), escalation_level: 2 };
+    const encounter = {
+      ...makeEncounter([participant], [], 3),
+      escalation_curve_name: 'Boss Ramp',
+      escalation_tick_narration: 'The air itself begins to burn.',
+    };
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent('Escalation II');
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent(
+      'The air itself begins to burn.'
+    );
+  });
+
+  it('hides escalation strip for non-escalating encounters', () => {
+    const encounter = makeEncounter([makeParticipant(1, 'A')], [], 1);
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('escalation-strip')).not.toBeInTheDocument();
+  });
+});
+
+describe('RoundFlow — GM end-encounter control (#876)', () => {
+  it('shows the End Encounter button for the GM on a live encounter', () => {
+    const encounter = makeEncounter([], [], 1, { is_gm: true, status: 'declaring' });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('end-encounter-trigger')).toBeInTheDocument();
+  });
+
+  it('hides the End Encounter button for non-GMs', () => {
+    const encounter = makeEncounter([], [], 1, { is_gm: false, status: 'declaring' });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('end-encounter-trigger')).not.toBeInTheDocument();
+  });
+
+  it('hides the End Encounter button on a completed encounter', () => {
+    const encounter = makeEncounter([], [], 1, {
+      is_gm: true,
+      status: 'completed',
+      outcome: 'abandoned',
+    });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('end-encounter-trigger')).not.toBeInTheDocument();
+  });
+
+  it('requires confirmation before firing the mutation', async () => {
+    const user = userEvent.setup();
+    const mutate = vi.fn();
+    mockedUseEndEncounter.mockReturnValue({ mutate, isPending: false });
+    const encounter = makeEncounter([], [], 1, { is_gm: true, status: 'declaring' });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByTestId('end-encounter-trigger'));
+    // Confirm dialog is open; nothing fired yet.
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('end-encounter-confirm'));
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire the mutation when the dialog is cancelled', async () => {
+    const user = userEvent.setup();
+    const mutate = vi.fn();
+    mockedUseEndEncounter.mockReturnValue({ mutate, isPending: false });
+    const encounter = makeEncounter([], [], 1, { is_gm: true, status: 'declaring' });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByTestId('end-encounter-trigger'));
+    await user.click(await screen.findByRole('button', { name: /cancel/i }));
+
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('disables the trigger while the mutation is pending', () => {
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: true });
+    const encounter = makeEncounter([], [], 1, { is_gm: true, status: 'declaring' });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByTestId('end-encounter-trigger');
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveTextContent('Ending…');
   });
 });

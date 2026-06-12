@@ -25,6 +25,8 @@ from world.locations.services import effective_owner
 from world.magic.constants import GainSource  # noqa: F401
 from world.magic.exceptions import ResonanceInsufficient
 from world.magic.models import CharacterResonance, SanctumOwnerMode
+from world.magic.seeds_sanctum import HOMECOMING_RITUAL_NAME, PURGING_RITUAL_NAME
+from world.magic.services.ritual_checks import OutcomeTier, perform_ritual_check
 from world.magic.services.sanctum_lvm import (
     apply_homecoming_gain,
     drain_homecoming_for_purge,
@@ -55,6 +57,22 @@ DEFAULT_PURGING_COST_MULTIPLIER = Decimal("1.0")
 """Sacrifice cost multiplier for Purging: at least this fraction of the
 current Homecoming-grown sum must be paid from the leader's pool."""
 
+HOMECOMING_GAIN_MULTIPLIERS: dict[OutcomeTier, Decimal] = {
+    OutcomeTier.CRIT: Decimal("1.25"),
+    OutcomeTier.SUCCESS: Decimal("1.00"),
+    OutcomeTier.FAIL: Decimal("0.50"),
+    OutcomeTier.BOTCH: Decimal("0.25"),
+}
+"""Outcome-tier multiplier on Homecoming imbue efficiency. TUNING PLACEHOLDERS."""
+
+PURGING_RETENTION_MODIFIERS: dict[OutcomeTier, Decimal] = {
+    OutcomeTier.CRIT: Decimal("0.25"),
+    OutcomeTier.SUCCESS: Decimal("0.00"),
+    OutcomeTier.FAIL: Decimal("-0.15"),
+    OutcomeTier.BOTCH: Decimal("-0.30"),
+}
+"""Outcome-tier adjustment to the Purging retention fraction. TUNING PLACEHOLDERS."""
+
 
 class HomecomingValidationError(ValueError):
     user_message: str = "This Homecoming ritual cannot be performed."
@@ -84,6 +102,7 @@ class HomecomingResult:
     overflow_escrowed: int
     new_homecoming_sum: int
     new_cap: int
+    success_level: int
 
 
 @dataclass(frozen=True)
@@ -93,6 +112,7 @@ class PurgingResult:
     new_resonance_id: int
     sum_after_drain: int
     sacrifice_paid: int
+    success_level: int
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +244,12 @@ def perform_homecoming_ritual(
     _validate_leader_for_sanctum(sanctum, leader_persona)
     _spend_from_leader_pool(leader_persona, sanctum.resonance_type, resonance_sacrificed)
 
-    gain = resonance_sacrificed // HOMECOMING_EFFICIENCY
+    roll = perform_ritual_check(
+        HOMECOMING_RITUAL_NAME,
+        leader_persona.character_sheet.character,
+    )
+    base_gain = resonance_sacrificed // HOMECOMING_EFFICIENCY
+    gain = int(Decimal(base_gain) * HOMECOMING_GAIN_MULTIPLIERS[roll.tier])
     cap = _compute_cap(sanctum)
     applied, overflow = apply_homecoming_gain(sanctum, gain, cap)
 
@@ -240,6 +265,7 @@ def perform_homecoming_ritual(
         overflow_escrowed=overflow,
         new_homecoming_sum=sum_homecoming_value(sanctum),
         new_cap=cap,
+        success_level=roll.success_level,
     )
 
 
@@ -281,10 +307,19 @@ def perform_purging_ritual(  # noqa: PLR0913
 
     _spend_from_leader_pool(leader_persona, sanctum.resonance_type, resonance_sacrificed)
 
+    roll = perform_ritual_check(
+        PURGING_RITUAL_NAME,
+        leader_persona.character_sheet.character,
+    )
+    effective_retention = min(
+        Decimal("1.0"),
+        max(Decimal("0.0"), retention + PURGING_RETENTION_MODIFIERS[roll.tier]),
+    )
+
     # Order matters: retag first (rows still match the old source tag, just
-    # adopt the new resonance FK), then drain (multiplies values by retention).
+    # adopt the new resonance FK), then drain (multiplies values by effective_retention).
     retag_homecoming_for_new_resonance(sanctum, new_resonance)
-    drain_homecoming_for_purge(sanctum, retention)
+    drain_homecoming_for_purge(sanctum, effective_retention)
 
     sanctum.resonance_type = new_resonance
     sanctum.last_purging_ritual_at = timezone.now()
@@ -294,4 +329,5 @@ def perform_purging_ritual(  # noqa: PLR0913
         new_resonance_id=new_resonance.pk,
         sum_after_drain=sum_homecoming_value(sanctum),
         sacrifice_paid=resonance_sacrificed,
+        success_level=roll.success_level,
     )

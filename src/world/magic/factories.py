@@ -58,8 +58,8 @@ from world.magic.models import (
     Resonance,
     Restriction,
     Ritual,
+    RitualCheckConfig,
     RitualComponentRequirement,
-    RitualSceneActionConfig,
     SoulfrayConfig,
     Technique,
     TechniqueAppliedCondition,
@@ -810,15 +810,15 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     min_quality_tier = None
 
 
-class RitualSceneActionConfigFactory(factory.django.DjangoModelFactory):
-    """Factory for RitualSceneActionConfig sidecar.
+class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualCheckConfig.
 
-    Requires a SCENE_ACTION ritual. The stat/skill/check_type mirrors the
-    CharacterAnimaRitual factory pattern.
+    Requires a SCENE_ACTION ritual by default. The stat/skill/check_type mirrors the
+    CharacterAnimaRitual factory pattern. Other ritual kinds may also use this factory.
     """
 
     class Meta:
-        model = RitualSceneActionConfig
+        model = RitualCheckConfig
 
     ritual = factory.SubFactory(
         RitualFactory,
@@ -838,7 +838,7 @@ class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
     """Factory for AnimaRitualPerformance records.
 
     The ritual FK points to Ritual (execution_kind=SCENE_ACTION).
-    Use RitualSceneActionConfigFactory(ritual=...) to build the full pair.
+    Use RitualCheckConfigFactory(ritual=...) to build the full pair.
     """
 
     class Meta:
@@ -1392,21 +1392,13 @@ _ABYSSAL_AFFINITY_NAME: str = "abyssal"
 
 
 def _make_magical_endurance_check_type():
-    """Return the canonical 'Magical Endurance' CheckType, creating it if absent.
-
-    Uses direct ORM get_or_create so the call is idempotent and converges with
-    the row authored by seed_magic_config().  The old CheckTypeFactory approach
-    created a fresh CheckCategory SubFactory on every call, making the
-    (name, category) natural key novel each time and leaking orphan CheckType rows.
-    """
-    from world.checks.models import CheckCategory, CheckType
-
-    magic_cat, _ = CheckCategory.objects.get_or_create(name="Magic")
-    check_type, _ = CheckType.objects.get_or_create(
-        name="Magical Endurance",
-        defaults={"category": magic_cat},
+    """Return the canonical 'Magical Endurance' CheckType via the #709 seed chain."""
+    from world.magic.seeds_checks import (
+        MAGICAL_ENDURANCE_CHECK_TYPE_NAME,
+        ensure_magic_check_types,
     )
-    return check_type
+
+    return ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
 
 
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
@@ -1921,6 +1913,7 @@ def wire_soul_tether_content() -> object:
     """Idempotent seed for all Spec B authored content.
 
     Creates (get_or_create):
+    - Magic CheckTypes including "Magical Endurance" (required by rescue checks)
     - StatDefinition rows for all Soul Tether stats (Phase 12)
     - TetherStrainTemplate + 5 stages
     - SoulTetherActiveTemplate (marker condition)
@@ -1933,6 +1926,10 @@ def wire_soul_tether_content() -> object:
     Safe to call multiple times — does not create duplicates.
     """
     from dataclasses import dataclass
+
+    from world.magic.seeds_checks import ensure_magic_check_types
+
+    ensure_magic_check_types()
 
     @dataclass(frozen=True)
     class SoulTetherContent:

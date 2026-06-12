@@ -1025,6 +1025,9 @@ def _make_tethered_pair_with_corruption(
     - Sineater: Primal-primary + seed CharacterResonance with ample balance.
     - Active tether formed (both directions + capstone + thread).
     - Returns Sineater→Sinner CharacterRelationship (Sineater is source, Sinner is target).
+
+    ``wire_soul_tether_content()`` seeds the "Magical Endurance" CheckType that
+    ``_perform_rescue_check`` looks up with a strict ``.get()``.
     """
     from world.magic.factories import (
         with_corruption_at_stage,

@@ -85,6 +85,9 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    escalation_level: null,
+    intensity_modifier: null,
+    control_modifier: null,
     ...overrides,
   };
 }
@@ -119,6 +122,12 @@ function makeEncounter(
     current_round_actions: [],
     clashes: [],
     created_at: '2026-01-01T00:00:00Z',
+    // Runtime sends "" until completion; the generated enum omits the blank.
+    outcome: '' as EncounterDetail['outcome'],
+    completed_at: null,
+    escalation_curve_name: null,
+    escalation_start_round: null,
+    escalation_tick_narration: null,
   };
 }
 

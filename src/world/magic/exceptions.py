@@ -54,6 +54,10 @@ class NoRitualConfigured(MagicError):
     user_message = "You don't have an anima ritual configured."
 
 
+class RitualCheckConfigMissing(MagicError):
+    user_message = "This ritual's check has not been configured."
+
+
 class RitualAlreadyPerformedThisScene(MagicError):
     user_message = "You've already performed your ritual in this scene."
 

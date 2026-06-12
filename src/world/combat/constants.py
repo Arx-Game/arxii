@@ -34,6 +34,15 @@ class EncounterStatus(models.TextChoices):
     COMPLETED = "completed", "Completed"
 
 
+class EncounterOutcome(models.TextChoices):
+    """Typed result recorded when an encounter completes (#876)."""
+
+    VICTORY = "victory", "Victory"
+    DEFEAT = "defeat", "Defeat"
+    FLED = "fled", "Fled"
+    ABANDONED = "abandoned", "Abandoned"
+
+
 class RiskLevel(models.TextChoices):
     """How dangerous the encounter is for participants."""
 

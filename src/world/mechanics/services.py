@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
+    from world.mechanics.engagement import CharacterEngagement
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
@@ -896,3 +897,60 @@ def _get_difficulty_indicator_for_check(
     if rank_diff >= _RANK_DIFF_HARD:
         return DifficultyIndicator.HARD
     return DifficultyIndicator.VERY_HARD
+
+
+# =============================================================================
+# Engagement Lifecycle
+# =============================================================================
+
+
+def begin_engagement(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    engagement_type: str,
+    *,
+    source: object,
+) -> CharacterEngagement:
+    """Ensure the character has an engagement; create one if none exists.
+
+    Looks up by character only (the OneToOne makes any narrower get_or_create
+    raise IntegrityError). An existing engagement of ANY type is returned
+    unchanged — a character already in stakes (challenge/mission) is not
+    re-engaged by combat. ``source`` must be a saved Django model instance
+    (it must have a valid ``.pk``).
+    """
+    from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
+
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    engagement, _ = CharacterEngagement.objects.get_or_create(
+        character=character,
+        defaults={
+            "engagement_type": engagement_type,
+            "source_content_type": ContentType.objects.get_for_model(source),
+            "source_id": source.pk,
+        },
+    )
+    return engagement
+
+
+def end_engagement(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    engagement_type: str,
+    *,
+    source: object,
+) -> None:
+    """Delete the character's engagement iff it matches type AND source.
+
+    Deleting the engagement discards its transient process modifiers
+    (intensity/control) by design. No-op when no matching row exists.
+    """
+    from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
+
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    CharacterEngagement.objects.filter(
+        character=character,
+        engagement_type=engagement_type,
+        source_content_type=ContentType.objects.get_for_model(source),
+        source_id=source.pk,
+    ).delete()

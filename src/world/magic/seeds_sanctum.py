@@ -1,9 +1,14 @@
 """Idempotent seeds for the Sanctum subsystem (Plan 4 §F).
 
-Seeds the two Ritual rows (Homecoming + Purging) wired to the SERVICE
-dispatch paths in ``world.magic.services.sanctum_rituals``. Per repo
-discipline (#683): seeds live in code, called via ``get_or_create``.
-NOT a committed fixture.
+Seeds the five SERVICE Ritual rows (Homecoming, Purging, Personal and Covenant
+Sanctification, Dissolution) wired to the dispatch paths in
+``world.magic.services.sanctum_rituals`` and
+``world.magic.services.sanctum_install``.  Per repo discipline (#683): seeds
+live in code, called via ``get_or_create``.  NOT a committed fixture.
+
+CheckType / CheckCategory authoring lives in ``world.magic.seeds_checks``
+(#709); ``ensure_sanctum_rituals()`` creates the Ritual rows first, then calls
+``seeds_checks.ensure_ritual_check_configs()`` to bind their check configs.
 """
 
 from __future__ import annotations
@@ -16,9 +21,6 @@ PURGING_RITUAL_NAME = "Ritual of Purging"
 SANCTIFICATION_PERSONAL_RITUAL_NAME = "Ritual of Thine Own Sanctum"
 SANCTIFICATION_COVENANT_RITUAL_NAME = "Ritual of Blood Covenant Sanctification"
 DISSOLUTION_RITUAL_NAME = "Ritual of Dissolution"
-
-SANCTUM_DISSOLUTION_CHECK_CATEGORY_NAME = "Magic"
-SANCTUM_DISSOLUTION_CHECK_TYPE_NAME = "Sanctum Dissolution"
 
 
 def ensure_homecoming_ritual() -> Ritual:
@@ -149,9 +151,8 @@ def ensure_sanctification_covenant_ritual() -> Ritual:
 def ensure_dissolution_ritual() -> Ritual:
     """Get-or-create ``Ritual of Dissolution``.
 
-    SERVICE-dispatched. Service function rolls a magical check (the
-    PLACEHOLDER ``CheckType`` is seeded via
-    :func:`ensure_sanctum_dissolution_check_type`). Outcome tier
+    SERVICE-dispatched. Service function rolls a ``Sanctum Dissolution``
+    magical check (seeded via ``world.magic.seeds_checks``). Outcome tier
     determines fraction of imbued reservoir recovered.
     """
     ritual, _ = Ritual.objects.get_or_create(
@@ -173,37 +174,6 @@ def ensure_dissolution_ritual() -> Ritual:
     return ritual
 
 
-def ensure_sanctum_dissolution_check_type():
-    """PLACEHOLDER CheckType + Magic CheckCategory for the Dissolution check.
-
-    Real content authoring (Ritualism / Occult Skills + proper trait
-    weights + aspect weights + difficulty tuning) lands in #709. This
-    placeholder ships the bare minimum to let ``perform_check`` resolve
-    against this CheckType — staff replaces the row's composition later.
-    """
-    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
-
-    category, _ = CheckCategory.objects.get_or_create(
-        name=SANCTUM_DISSOLUTION_CHECK_CATEGORY_NAME,
-        defaults={
-            "description": "PLACEHOLDER — Magic checks (Plan 4 §F).",
-        },
-    )
-    check_type, _ = CheckType.objects.get_or_create(
-        name=SANCTUM_DISSOLUTION_CHECK_TYPE_NAME,
-        category=category,
-        defaults={
-            "description": (
-                "PLACEHOLDER — Sanctum Dissolution check. Real authoring "
-                "in #709 (Ritualism / Occult Skills + trait weights + "
-                "aspect weights)."
-            ),
-            "is_active": True,
-        },
-    )
-    return check_type
-
-
 def _link_install_ritual_to_sanctum(ritual: Ritual, variant_label: str) -> None:
     """Idempotent RoomFeatureKindInstallRitual link from the magic side."""
     from world.room_features.models import (  # noqa: PLC0415
@@ -223,17 +193,21 @@ def _link_install_ritual_to_sanctum(ritual: Ritual, variant_label: str) -> None:
 
 
 def ensure_sanctum_rituals() -> None:
-    """Seed all Sanctum rituals + the Dissolution CheckType. Safe to call repeatedly.
+    """Seed all Sanctum Ritual rows + check content. Safe to call repeatedly.
 
-    Wires the two Sanctification ritual rows to the Sanctum
-    ``RoomFeatureKind`` via ``RoomFeatureKindInstallRitual`` so the
-    framework's install UI can enumerate variants.
+    Seeds the five SERVICE Ritual rows, wires the two Sanctification rows to
+    the Sanctum ``RoomFeatureKind`` via ``RoomFeatureKindInstallRitual``, then
+    calls ``seeds_checks.ensure_ritual_check_configs()`` to bind
+    CheckType/RitualCheckConfig rows for all five rituals.
     """
     ensure_homecoming_ritual()
     ensure_purging_ritual()
     personal = ensure_sanctification_personal_ritual()
     covenant = ensure_sanctification_covenant_ritual()
     ensure_dissolution_ritual()
-    ensure_sanctum_dissolution_check_type()
     _link_install_ritual_to_sanctum(personal, "Personal")
     _link_install_ritual_to_sanctum(covenant, "Covenant")
+
+    from world.magic.seeds_checks import ensure_ritual_check_configs  # noqa: PLC0415
+
+    ensure_ritual_check_configs()

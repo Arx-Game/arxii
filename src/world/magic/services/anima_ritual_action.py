@@ -40,18 +40,18 @@ def _resolve_anima_ritual(
                 author_account=initiator_sheet.character.db_account,
                 execution_kind=RitualExecutionKind.SCENE_ACTION,
             )
-            .select_related("scene_action_config")
+            .select_related("check_config")
             .first()
         )
 
     if ritual is None:
         return  # silently no-op on malformed request
 
-    # Ensure the sidecar is loaded (may already be via select_related above).
+    # Ensure the config is loaded (may already be via select_related above).
     try:
-        _ = ritual.scene_action_config
+        _ = ritual.check_config
     except Exception:  # noqa: BLE001
-        return  # SCENE_ACTION ritual missing sidecar — silently skip
+        return  # SCENE_ACTION ritual missing config — silently skip
 
     main_result = result.action_resolution.main_result
     if main_result is None or main_result.check_result is None:

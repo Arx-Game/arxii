@@ -24,6 +24,7 @@ from world.combat.constants import (
     ClashStatus,
     CombatManeuver,
     ComboLearningMethod,
+    EncounterOutcome,
     EncounterStatus,
     EncounterType,
     LockPcRole,
@@ -71,6 +72,14 @@ class CombatEncounter(SharedMemoryModel):
         choices=EncounterStatus.choices,
         default=EncounterStatus.BETWEEN_ROUNDS,
     )
+    outcome = models.CharField(
+        max_length=20,
+        choices=EncounterOutcome.choices,
+        blank=True,
+        default="",
+        help_text="Typed result recorded at completion (#876); empty until completed.",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
     risk_level = models.CharField(
         max_length=20,
         choices=RiskLevel.choices,
@@ -97,6 +106,14 @@ class CombatEncounter(SharedMemoryModel):
     )
     is_paused = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    escalation_curve = models.ForeignKey(
+        "combat.EscalationCurve",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="encounters",
+        help_text="Authored escalation ramp; null = this encounter does not escalate (#872).",
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":
@@ -330,6 +347,17 @@ class CombatOpponent(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text=("Consequence pool fired when PCs successfully break this opponent's barrier."),
+    )
+    aftermath_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Fired deterministically when the encounter completes in PC victory and "
+            "this opponent is DEFEATED (#876). Author non-character-targeted effects."
+        ),
     )
 
     class Meta:
@@ -1238,6 +1266,49 @@ class FleeTierModifier(SharedMemoryModel):
         return f"FleeTierModifier({self.tier}: {self.difficulty_modifier:+d})"
 
 
+class EncounterAftermathRule(SharedMemoryModel):
+    """Authored aftermath wiring per (outcome, risk_level) cell (#876).
+
+    Mirrors FleeConfig's authored-wiring pattern: check_type + base_difficulty
+    drive a graded per-participant roll against consequence_pool. A missing
+    cell means no aftermath for that combination; a null pool means the cell
+    rolls nothing (outcome-only). Never an XP source — Legend awards are
+    authored LEGEND_AWARD consequences inside the pool.
+    """
+
+    outcome = models.CharField(max_length=20, choices=EncounterOutcome.choices)
+    risk_level = models.CharField(max_length=20, choices=RiskLevel.choices)
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="CheckType rolled per affected participant.",
+    )
+    base_difficulty = models.PositiveIntegerField(
+        help_text="Authored difficulty for the aftermath check.",
+    )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Pool for graded aftermath outcomes; null degrades to outcome-only.",
+    )
+
+    class Meta:
+        ordering = ["outcome", "risk_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["outcome", "risk_level"],
+                name="unique_aftermath_rule_per_outcome_risk",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"AftermathRule({self.outcome} @ {self.risk_level})"
+
+
 # =============================================================================
 # Clash model (Task 1.3) — discriminator model for multi-round contested struggles
 # =============================================================================
@@ -1671,3 +1742,81 @@ class EncounterRiskAcknowledgement(SharedMemoryModel):
             f"{self.character_sheet_id} acknowledged {self.acknowledged_risk_level} "
             f"in encounter {self.encounter_id}"
         )
+
+
+# =============================================================================
+# Escalation Curve authored model (Task 3, #872)
+# =============================================================================
+
+
+class EscalationCurve(SharedMemoryModel):
+    """Authored escalation ramp for opted-in encounters (#872).
+
+    Referenced by ``CombatEncounter.escalation_curve``; null FK = the
+    encounter does not escalate. Multiple curves are the authoring knob
+    (boss fight vs. skirmish), so this is authored rows, not a singleton.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    start_round = models.PositiveIntegerField(
+        default=2,
+        help_text="First round the escalation tick fires (>=2 keeps round one calm).",
+    )
+    intensity_step = models.PositiveIntegerField(
+        default=1,
+        help_text="Intensity modifier added to each participant's engagement per tick.",
+    )
+    pace_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="escalation_curves",
+        help_text="Check rolled each tick to keep control in pace with intensity.",
+    )
+    pace_difficulty_base = models.PositiveIntegerField(
+        default=0,
+        help_text="Base difficulty of the pace check.",
+    )
+    pace_difficulty_per_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Difficulty added per accumulated escalation level.",
+    )
+    control_step_on_success = models.PositiveIntegerField(
+        default=1,
+        help_text="Control modifier gained on a pace-check success (success_level >= 1).",
+    )
+    control_step_on_partial = models.PositiveIntegerField(
+        default=0,
+        help_text="Control modifier gained on a partial success (success_level == 0).",
+    )
+    control_step_on_botch = models.IntegerField(
+        default=-1,
+        help_text="Control modifier change on a botch (success_level <= -2); author negative.",
+    )
+    max_escalation_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Tick stops raising pressure past this level. 0 = uncapped.",
+    )
+    spike_intensity_amount = models.PositiveIntegerField(
+        default=2,
+        help_text="Intensity spike applied to bonded co-combatants when an ally falls.",
+    )
+    spike_minimum_track_points = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Minimum developed_points on a spike-fueling relationship track "
+            "for the bond to qualify."
+        ),
+    )
+    tick_narration = models.TextField(
+        blank=True,
+        help_text="Narrative line surfaced to the combat panel on each tick.",
+    )
+
+    class Meta:
+        verbose_name = "Escalation Curve"
+        verbose_name_plural = "Escalation Curves"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
