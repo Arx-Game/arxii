@@ -20,9 +20,8 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from world.combat.models import CombatEncounter, EscalationCurve
+    from world.combat.types import PerformCheckFn
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ def _control_step(curve: EscalationCurve, success_level: int) -> int:
 def apply_escalation_tick(
     encounter: CombatEncounter,
     *,
-    check_fn: Callable | None = None,
+    check_fn: PerformCheckFn | None = None,
 ) -> list[EscalationTickResult]:
     """Run one escalation tick for every ACTIVE participant of ``encounter``.
 
@@ -107,7 +106,7 @@ def apply_escalation_tick(
                 + curve.pace_difficulty_per_level * engagement.escalation_level
             )
             check_result = check_fn(character, curve.pace_check_type, target_difficulty=difficulty)
-            outcome = getattr(check_result, "outcome", None)
+            outcome = check_result.outcome
             if outcome is not None:
                 pace_success_level = outcome.success_level
                 engagement.control_modifier += _control_step(curve, pace_success_level)

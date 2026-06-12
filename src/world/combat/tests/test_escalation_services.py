@@ -4,6 +4,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ParticipantStatus
 from world.combat.escalation import apply_escalation_tick
 from world.combat.factories import (
@@ -14,6 +15,7 @@ from world.combat.factories import (
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _fake_check(success_level):
@@ -127,3 +129,24 @@ class EscalationTickTests(TestCase):
         results = apply_escalation_tick(self.encounter, check_fn=_fake_check(1))
         self.assertEqual(results, [])
         self.assertEqual(self._engagement().escalation_level, 0)
+
+    def test_default_check_arm_uses_perform_check(self):
+        """Default arm (no check_fn) delegates to real perform_check via force_check_outcome."""
+        self.curve.pace_difficulty_base = 10
+        self.curve.pace_difficulty_per_level = 5
+        self.curve.save(update_fields=["pace_difficulty_base", "pace_difficulty_per_level"])
+
+        forced_outcome = CheckOutcomeFactory(name="EscSuccess", success_level=1)
+        with force_check_outcome(forced_outcome) as capture:
+            results = apply_escalation_tick(self.encounter)
+
+        eng = self._engagement()
+        # escalation_level should have stepped to 1
+        self.assertEqual(eng.escalation_level, 1)
+        # control_modifier stepped by control_step_on_success (2) for success_level==1
+        self.assertEqual(eng.control_modifier, self.curve.control_step_on_success)
+        # capture recorded the curve's check_type and computed difficulty (base + per_level*1 = 15)
+        self.assertEqual(capture.check_type, self.curve.pace_check_type)
+        self.assertEqual(capture.target_difficulty, 15)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].escalation_level, 1)

@@ -9,6 +9,8 @@ from world.magic.types.power_ledger import PowerLedger
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -29,6 +31,8 @@ if TYPE_CHECKING:
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
     from world.traits.models import CheckOutcome
+
+    PerformCheckFn = Callable[..., CheckResult]
 
 
 @dataclass(frozen=True)
@@ -325,7 +329,8 @@ class EscalationTickResult:
         intensity_modifier: Engagement intensity modifier after this tick.
         control_modifier: Engagement control modifier after this tick.
         pace_success_level: The pace check outcome's success_level, or None
-            when the check could not run (unseeded chart — degrade gracefully).
+            when the check could not run (unseeded chart — degrade gracefully)
+            or when capped=True (no check is rolled at the ceiling).
         capped: True when max_escalation_level stopped the ramp this tick.
     """
 
