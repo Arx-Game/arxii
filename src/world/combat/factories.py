@@ -789,3 +789,78 @@ def wire_flee_config():
         )
 
     return config
+
+
+# Sentinel parameter value resolved by the flows pipeline to the live event
+# payload at dispatch time (FlowExecution variable_mapping seeds "payload";
+# "@payload" is the @variable reference). Mirrors world.magic.factories.
+_PAYLOAD_PARAM = "@payload"
+
+
+def _build_escalation_spike_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
+
+    The step calls ``relationship_spike_handler`` with the event payload.
+    Shared by both escalation spike TriggerDefinitions (#872).
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_relationship_spike")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.combat.escalation.relationship_spike_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class EscalationSpikeOnIncapacitatedTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CHARACTER_INCAPACITATED escalation spike (#872).
+
+    Installed on encounter rooms by ``install_escalation_room_triggers``; calls
+    the relationship spike handler so bonded co-combatants surge in intensity.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_incapacitated"
+    event_name = "character_incapacitated"
+    flow_definition = factory.LazyFunction(_build_escalation_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CHARACTER_KILLED escalation spike (#872)."""
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_killed"
+    event_name = "character_killed"
+    flow_definition = factory.LazyFunction(_build_escalation_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+def wire_escalation_content() -> None:
+    """Seed the escalation spike trigger definitions (idempotent).
+
+    Creates (get_or_create):
+    - "escalation_relationship_spike" FlowDefinition (one CALL_SERVICE_FUNCTION
+      step -> world.combat.escalation.relationship_spike_handler)
+    - "escalation_spike_on_incapacitated" TriggerDefinition
+    - "escalation_spike_on_killed" TriggerDefinition
+
+    Doubles as integration-test setup and staff seed content. Safe to call
+    multiple times — does not create duplicates.
+    """
+    EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
+    EscalationSpikeOnKilledTriggerDefinitionFactory()

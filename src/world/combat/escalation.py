@@ -10,7 +10,7 @@ cast pipeline — this module only writes engagement process modifiers.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
 
@@ -20,6 +20,8 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.combat.models import CombatEncounter, EscalationCurve
     from world.combat.types import PerformCheckFn
 
@@ -154,9 +156,7 @@ def install_escalation_room_triggers(encounter: CombatEncounter) -> None:
         trigger_def = TriggerDefinition.objects.filter(name=name).first()
         if trigger_def is None:
             continue
-        trigger, created = Trigger.objects.get_or_create(
-            obj=room, trigger_definition=trigger_def
-        )
+        trigger, created = Trigger.objects.get_or_create(obj=room, trigger_definition=trigger_def)
         if created:
             handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
             if handler is not None:
@@ -194,8 +194,77 @@ def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
     trigger_pks = [t.pk for t in triggers]
     Trigger.objects.filter(pk__in=trigger_pks).delete()
     # Invalidate the in-memory TriggerHandler cache so dispatch stops seeing
-    # the deleted rows (same sequence as soul_tether's install/remove paths).
+    # the deleted rows (same sequence as soul_tether's install path).
     handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
     if handler is not None:
         for pk in trigger_pks:
             handler.on_trigger_removed(pk)
+
+
+def apply_relationship_escalation_spike(
+    *,
+    fallen_character: ObjectDB,  # noqa: OBJECTDB_PARAM — payload carries ObjectDB
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM — emit location is the room ObjectDB
+) -> None:
+    """Spike intensity for bonded co-combatants when a character falls (#872).
+
+    Processes every live escalating encounter in ``room`` (zero matches is a
+    clean no-op — e.g. a deferred CHARACTER_KILLED firing after completion).
+    Control does NOT keep pace with a spike: grief is pure pressure.
+    """
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    fallen_sheet = getattr(fallen_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if fallen_sheet is None:
+        return
+
+    encounters = CombatEncounter.objects.filter(
+        room=room,
+        escalation_curve__isnull=False,
+    ).exclude(status=EncounterStatus.COMPLETED)
+
+    for encounter in encounters:
+        curve = encounter.escalation_curve
+        participants = (
+            CombatParticipant.objects.filter(
+                encounter=encounter,
+                status=ParticipantStatus.ACTIVE,
+            )
+            .exclude(character_sheet=fallen_sheet)
+            .select_related("character_sheet__character")
+        )
+        for participant in participants:
+            qualifies = CharacterRelationship.objects.filter(
+                source=participant.character_sheet,
+                target=fallen_sheet,
+                is_active=True,
+                is_pending=False,
+                track_progress__track__fuels_escalation_spikes=True,
+                track_progress__developed_points__gte=curve.spike_minimum_track_points,
+            ).exists()
+            if not qualifies:
+                continue
+            engagement = CharacterEngagement.objects.filter(
+                character=participant.character_sheet.character,
+                engagement_type=EngagementType.COMBAT,
+            ).first()
+            if engagement is None:
+                continue
+            engagement.intensity_modifier += curve.spike_intensity_amount
+            engagement.save(update_fields=["intensity_modifier"])
+
+
+def relationship_spike_handler(*, payload: Any) -> None:
+    """Flow-callable subscriber for CHARACTER_INCAPACITATED / CHARACTER_KILLED.
+
+    Seeded TriggerDefinitions (``wire_escalation_content``) dispatch here via
+    a CALL_SERVICE_FUNCTION step with the event payload.
+    """
+    character = payload.character
+    room = character.location
+    if room is None:
+        return
+    apply_relationship_escalation_spike(fallen_character=character, room=room)
