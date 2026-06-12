@@ -15,25 +15,17 @@ Covers:
 
 from __future__ import annotations
 
-from django.contrib.contenttypes.models import ContentType
-from evennia.objects.models import ObjectDB
 from rest_framework.test import APITestCase
 
-from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import CharacterClassFactory, PathFactory
-from world.classes.models import CharacterClassLevel, PathStage
-from world.conditions.factories import (
-    ConditionInstanceFactory,
-    ConditionStageFactory,
-    ConditionTemplateFactory,
-)
-from world.magic.audere import AUDERE_CONDITION_NAME, SOULFRAY_CONDITION_NAME
-from world.magic.audere_majora import AudereMajoraThreshold, PendingAudereMajoraOffer
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
+from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.audere_majora import PendingAudereMajoraOffer
 from world.magic.exceptions import AudereMajoraOfferNotFoundError
 from world.magic.factories import IntensityTierFactory, wire_audere_power_multipliers
-from world.mechanics.constants import EngagementType
-from world.mechanics.engagement import CharacterEngagement
-from world.progression.models import CharacterPathHistory, PathIntent
+from world.magic.tests.majora_fixtures import build_crossing_world
+from world.progression.models import PathIntent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 _PENDING_URL = "/api/magic/audere-majora/pending/"
@@ -70,89 +62,17 @@ def _build_owned_crossing_fixture(  # noqa: PLR0913 — fixture requires all nam
 
     Returns (character, sheet, threshold, prospect_path, puissant_path, offer).
     """
-    # Intensity tier: reuse or create
-    if intensity_tier is None:
-        intensity_tier = IntensityTierFactory(
-            name=f"Major_api_{boundary_level}{suffix}", threshold=boundary_level * 2 + 10
-        )
-    # Soulfray condition
-    if soulfray_template is None:
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
-    if soulfray_stage is None:
-        ConditionStageFactory(
-            condition=soulfray_template,
-            stage_order=1,
-            name=f"Fraying_api_{boundary_level}{suffix}",
-        )
-        ConditionStageFactory(
-            condition=soulfray_template,
-            stage_order=2,
-            name=f"Tearing_api_{boundary_level}{suffix}",
-        )
-        soulfray_stage = ConditionStageFactory(
-            condition=soulfray_template,
-            stage_order=3,
-            name=f"Ripping_api_{boundary_level}{suffix}",
-        )
-
-    threshold = AudereMajoraThreshold.objects.create(
-        boundary_level=boundary_level,
-        target_stage=PathStage.PUISSANT,
-        minimum_intensity_tier=intensity_tier,
-        minimum_warp_stage=soulfray_stage,
-        requires_active_audere=True,
+    character, sheet, threshold, prospect_path, puissant_path, offer = build_crossing_world(
+        boundary_level,
+        f"_api{suffix}",
+        intensity_tier=intensity_tier,
+        soulfray_template=soulfray_template,
+        soulfray_stage=soulfray_stage,
+        fired_intensity=boundary_level * 2 + 15,  # > intensity_tier.threshold
         vision_text=f"[VISION PLACEHOLDER {boundary_level}{suffix}]",
         manifestation_text=f"[MANIFESTATION {boundary_level}{suffix}]",
+        intensity_tier_threshold=boundary_level * 2 + 10,
     )
-
-    prospect_path = PathFactory(
-        name=f"Prospect_api_{boundary_level}{suffix}", stage=PathStage.PROSPECT
-    )
-    puissant_path = PathFactory(
-        name=f"Puissant_api_{boundary_level}{suffix}", stage=PathStage.PUISSANT
-    )
-    puissant_path.parent_paths.add(prospect_path)
-
-    character = ObjectDB.objects.create(db_key=f"api_cx_char_{boundary_level}{suffix}")
-    sheet = CharacterSheetFactory(character=character)
-
-    char_class = CharacterClassFactory(name=f"Mage_api_{boundary_level}{suffix}")
-    CharacterClassLevel.objects.create(
-        character=character,
-        character_class=char_class,
-        level=boundary_level,
-        is_primary=True,
-    )
-    sheet.invalidate_class_level_cache()
-
-    CharacterPathHistory.objects.create(character=character, path=prospect_path)
-
-    ConditionInstanceFactory(
-        target=character,
-        condition=soulfray_template,
-        current_stage=soulfray_stage,
-    )
-
-    audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME, has_progression=False)
-    ConditionInstanceFactory(target=character, condition=audere_template, current_stage=None)
-
-    obj_ct = ContentType.objects.get_for_model(ObjectDB)
-    CharacterEngagement.objects.create(
-        character=character,
-        engagement_type=EngagementType.CHALLENGE,
-        source_content_type=obj_ct,
-        source_id=character.pk,
-    )
-
-    offer = PendingAudereMajoraOffer.objects.create(
-        character_sheet=sheet,
-        threshold=threshold,
-        fired_intensity=boundary_level * 2 + 15,  # > intensity_tier.threshold
-        soulfray_stage_order=soulfray_stage.stage_order,
-    )
-
     _wire_tenure_to_sheet(tenure, sheet)
     return character, sheet, threshold, prospect_path, puissant_path, offer
 

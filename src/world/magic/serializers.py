@@ -2060,7 +2060,26 @@ class StageAdvanceBonusResultSerializer(serializers.Serializer):
 _ERR_NO_PENDING_AUDERE = "No pending Audere offer found."
 
 
-class PendingAudereOfferSerializer(serializers.ModelSerializer):
+class _PendingOfferCharacterMixin:
+    """Shared ``get_character_name`` and ``get_advisory_text`` for pending offer serializers.
+
+    Both ``PendingAudereOfferSerializer`` and ``PendingAudereMajoraOfferSerializer``
+    expose identical character-name and advisory-text methods.  This mixin
+    centralises those two methods to eliminate the duplication.
+    """
+
+    def get_character_name(self, obj: object) -> str:
+        """IC display name via the primary persona."""
+        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
+
+    def get_advisory_text(self, obj: object) -> str:
+        """Live corruption advisory; empty string when no stage-3+ corruption."""
+        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+
+        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
+
+
+class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.ModelSerializer):
     """Player-facing view of a pending Audere offer (#873). Read-only.
 
     advisory_text is computed live (never stored) so the corruption
@@ -2089,16 +2108,6 @@ class PendingAudereOfferSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
-
-    def get_character_name(self, obj: object) -> str:
-        """IC display name via the primary persona."""
-        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
-
-    def get_advisory_text(self, obj: object) -> str:
-        """Live corruption advisory; empty string when no stage-3+ corruption."""
-        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
-
-        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
 
     def _threshold(self) -> "AudereThreshold | None":
         """Memoize the global threshold config once per serializer instance.
@@ -2187,7 +2196,7 @@ class EligiblePathSerializer(serializers.Serializer):
     description = serializers.CharField()
 
 
-class PendingAudereMajoraOfferSerializer(serializers.ModelSerializer):
+class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializers.ModelSerializer):
     """Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
 
     advisory_text is computed live so the corruption warning is always current.
@@ -2225,20 +2234,9 @@ class PendingAudereMajoraOfferSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_character_name(self, obj: object) -> str:
-        """IC display name via the primary persona."""
-        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
-
     def get_target_stage_display(self, obj: object) -> str:
         """Human-readable label for the target PathStage."""
         return obj.threshold.get_target_stage_display()  # type: ignore[union-attr]
-
-    def get_advisory_text(self, obj: object) -> str:
-        """Live corruption advisory; empty string when no stage-3+ corruption."""
-        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
-
-        character = obj.character_sheet.character  # type: ignore[union-attr]
-        return corruption_advisory_for_character(character)
 
     def get_risk_text(self, obj: object) -> str:  # noqa: ARG002
         """Fixed risk copy (approved verbatim)."""

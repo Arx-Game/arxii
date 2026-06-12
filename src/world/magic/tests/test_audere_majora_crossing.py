@@ -2,28 +2,17 @@
 
 import contextlib
 
-from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import CharacterClassFactory, PathFactory
+from world.classes.factories import PathFactory
 from world.classes.models import CharacterClassLevel, PathStage
-from world.conditions.factories import (
-    ConditionInstanceFactory,
-    ConditionStageFactory,
-    ConditionTemplateFactory,
-)
+from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionInstance
-from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    AUDERE_MAJORA_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
-)
+from world.magic.audere import AUDERE_MAJORA_CONDITION_NAME
 from world.magic.audere_majora import (
     AudereMajoraCrossing,
     AudereMajoraCrossingResult,
-    AudereMajoraThreshold,
     PendingAudereMajoraOffer,
     check_audere_majora_eligibility,
     end_audere_majora,
@@ -36,13 +25,12 @@ from world.magic.exceptions import (
     ProtagonismLockedError,
 )
 from world.magic.factories import (
-    IntensityTierFactory,
     ResonanceFactory,
     wire_audere_power_multipliers,
     with_corruption_at_stage,
 )
+from world.magic.tests.majora_fixtures import build_crossing_world
 from world.magic.types import AlterationGateError
-from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.progression.models import CharacterPathHistory
 from world.scenes.constants import InteractionMode
@@ -67,79 +55,7 @@ def _build_crossing_character(boundary_level: int = 5, suffix: str = ""):
     Returns (character, sheet, threshold, prospect_path, puissant_path, offer).
     The Audere Majora ConditionTemplate is created by wire_audere_power_multipliers().
     """
-    # Intensity tier: threshold=10; runtime_intensity=20 passes the gate.
-    intensity_tier = IntensityTierFactory(
-        name=f"Major_crossing_{boundary_level}{suffix}", threshold=10, control_modifier=0
-    )
-
-    soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
-    ConditionStageFactory(
-        condition=soulfray_template, stage_order=1, name=f"Fraying_cx_{boundary_level}{suffix}"
-    )
-    ConditionStageFactory(
-        condition=soulfray_template, stage_order=2, name=f"Tearing_cx_{boundary_level}{suffix}"
-    )
-    soulfray_stage = ConditionStageFactory(
-        condition=soulfray_template, stage_order=3, name=f"Ripping_cx_{boundary_level}{suffix}"
-    )
-
-    threshold = AudereMajoraThreshold.objects.create(
-        boundary_level=boundary_level,
-        target_stage=PathStage.PUISSANT,
-        minimum_intensity_tier=intensity_tier,
-        minimum_warp_stage=soulfray_stage,
-        requires_active_audere=True,
-        vision_text="[PLACEHOLDER VISION]",
-        manifestation_text="[PLACEHOLDER MANIFESTATION]",
-    )
-
-    prospect_path = PathFactory(
-        name=f"Prospect_cx_{boundary_level}{suffix}", stage=PathStage.PROSPECT
-    )
-    puissant_path = PathFactory(
-        name=f"Puissant_cx_{boundary_level}{suffix}", stage=PathStage.PUISSANT
-    )
-    puissant_path.parent_paths.add(prospect_path)
-
-    character = ObjectDB.objects.create(db_key=f"cx_char_{boundary_level}{suffix}")
-    sheet = CharacterSheetFactory(character=character)
-
-    char_class = CharacterClassFactory(name=f"Mage_cx_{boundary_level}{suffix}")
-    CharacterClassLevel.objects.create(
-        character=character,
-        character_class=char_class,
-        level=boundary_level,
-        is_primary=True,
-    )
-    sheet.invalidate_class_level_cache()
-
-    CharacterPathHistory.objects.create(character=character, path=prospect_path)
-
-    ConditionInstanceFactory(
-        target=character,
-        condition=soulfray_template,
-        current_stage=soulfray_stage,
-    )
-
-    audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME, has_progression=False)
-    ConditionInstanceFactory(target=character, condition=audere_template, current_stage=None)
-
-    obj_ct = ContentType.objects.get_for_model(ObjectDB)
-    CharacterEngagement.objects.create(
-        character=character,
-        engagement_type=EngagementType.CHALLENGE,
-        source_content_type=obj_ct,
-        source_id=character.pk,
-    )
-
-    offer = PendingAudereMajoraOffer.objects.create(
-        character_sheet=sheet,
-        threshold=threshold,
-        fired_intensity=20,
-        soulfray_stage_order=soulfray_stage.stage_order,
-    )
-
-    return character, sheet, threshold, prospect_path, puissant_path, offer
+    return build_crossing_world(boundary_level, f"_cx{suffix}")
 
 
 # ---------------------------------------------------------------------------
