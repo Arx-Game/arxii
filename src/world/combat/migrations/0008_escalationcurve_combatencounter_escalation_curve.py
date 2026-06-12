@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("checks", "0007_consequence_theater"),
-        ("combat", "0006_fleetiermodifier_combatroundaction_maneuver_and_more"),
+        ("combat", "0007_combatencounter_completed_at_combatencounter_outcome_and_more"),
     ]
 
     operations = [
