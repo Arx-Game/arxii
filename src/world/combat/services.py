@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
-    from world.scenes.models import Persona
+    from world.scenes.models import Interaction, Persona
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -40,6 +40,7 @@ from flows.events.payloads import (
     CharacterKilledPayload,
     DamageAppliedPayload,
     DamagePreApplyPayload,
+    EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
@@ -58,6 +59,7 @@ from world.combat.constants import (
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
     CombatManeuver,
+    EncounterOutcome,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -78,6 +80,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     FleeConfig,
     FleeTierModifier,
@@ -2724,6 +2727,236 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     return all_opponents_down or all_pcs_down
 
 
+def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
+    """Classify a completing encounter (#876 spec §1).
+
+    1. No ACTIVE opponents → VICTORY.
+    2. No ACTIVE participants and at least one FLED → FLED.
+    3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
+    """
+    any_active_opponents = CombatOpponent.objects.filter(
+        encounter=encounter, status=OpponentStatus.ACTIVE
+    ).exists()
+    if not any_active_opponents:
+        return EncounterOutcome.VICTORY
+
+    statuses = set(
+        CombatParticipant.objects.filter(encounter=encounter).values_list("status", flat=True)
+    )
+    no_active = ParticipantStatus.ACTIVE not in statuses
+    if no_active and ParticipantStatus.FLED in statuses:
+        return EncounterOutcome.FLED
+    return EncounterOutcome.DEFEAT
+
+
+def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome) -> None:
+    """Single completion seam for round resolution and the GM end endpoint (#876).
+
+    Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
+    that interaction, before ephemeral-NPC cleanup) → counters → completion
+    event → cleanup. ABANDONED is administrative closure: skips aftermath and
+    counters but still narrates, emits, and cleans up.
+    """
+    if encounter.status == EncounterStatus.COMPLETED:
+        msg = f"Encounter {encounter.pk} is already completed."
+        raise ValueError(msg)
+
+    encounter.status = EncounterStatus.COMPLETED
+    encounter.outcome = outcome
+    encounter.completed_at = timezone.now()
+    encounter.save(update_fields=["status", "outcome", "completed_at"])
+
+    interaction = _broadcast_encounter_outcome(encounter, outcome)
+
+    if outcome != EncounterOutcome.ABANDONED:
+        _apply_aftermath_rules(encounter, outcome, interaction)
+        _apply_opponent_aftermath_pools(encounter, outcome)
+        _increment_completion_counters(encounter, outcome)
+
+    _emit_encounter_completed(encounter, outcome)
+    cleanup_completed_encounter(encounter)
+
+
+def _broadcast_encounter_outcome(
+    encounter: CombatEncounter, outcome: EncounterOutcome
+) -> Interaction | None:
+    """Assemble side labels and persist+broadcast the ceremonial OUTCOME line."""
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        render_encounter_outcome_narration,
+    )
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
+            "character_sheet__character"
+        )
+    )
+    opponents = list(CombatOpponent.objects.filter(encounter=encounter))
+    narration = render_encounter_outcome_narration(
+        outcome=outcome,
+        active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
+        fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
+        defeated_opponent_labels=[o.name for o in opponents if o.status == OpponentStatus.DEFEATED],
+    )
+    return broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _apply_aftermath_rules(
+    encounter: CombatEncounter,
+    outcome: EncounterOutcome,
+    interaction: Interaction | None,
+) -> None:
+    """Per-PC graded aftermath via the authored (outcome, risk) cell (#876 §3).
+
+    Mirrors _resolve_flee's pipeline: modifiers → select_consequence (theater
+    included) → apply_resolution → record_consequence_outcome anchored to the
+    encounter OUTCOME interaction. Legend, when authored, rides LEGEND_AWARD
+    consequences in the pool — context.participants carries the PC's persona.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    rule = (
+        EncounterAftermathRule.objects.filter(outcome=outcome, risk_level=encounter.risk_level)
+        .select_related("check_type", "consequence_pool")
+        .first()
+    )
+    if rule is None or rule.consequence_pool_id is None:
+        return
+
+    affected_status = (
+        ParticipantStatus.FLED if outcome == EncounterOutcome.FLED else ParticipantStatus.ACTIVE
+    )
+    affected = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter, status=affected_status
+        ).select_related("character_sheet__character")
+    )
+    consequences = resolve_pool_consequences(rule.consequence_pool)
+
+    for participant in affected:
+        sheet = participant.character_sheet
+        character = sheet.character
+        breakdown = collect_check_modifiers(sheet, rule.check_type)
+        pending = select_consequence(
+            character,
+            rule.check_type,
+            rule.base_difficulty,
+            consequences,
+            extra_modifiers=breakdown.total,
+        )
+        try:
+            participants_ctx = [sheet.primary_persona]
+        except Persona.DoesNotExist:
+            participants_ctx = None
+        apply_resolution(
+            pending,
+            ResolutionContext(
+                character=character,
+                scene=encounter.scene,
+                participants=participants_ctx,
+            ),
+        )
+        if interaction is not None:
+            from actions.types import WeightedConsequence  # noqa: PLC0415
+            from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+            selected = pending.selected_consequence
+            if isinstance(selected, WeightedConsequence):
+                selected = selected.consequence
+            record_consequence_outcome(
+                sheet,
+                rule.check_type,
+                rule.consequence_pool,
+                selected if selected.pk is not None else None,
+                breakdown,
+                combat_interaction=interaction,
+                summary=f"encounter aftermath ({EncounterOutcome(outcome).label})",
+            )
+
+
+def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """Fire each DEFEATED opponent's authored aftermath pool on PC victory (#876 §4).
+
+    Deterministic (story-consequence semantics, like beat pools). Context follows
+    the beats GLOBAL idiom: the opponent's ObjectDB when set, else an unsaved
+    stub that is only identity-safe for non-character effects.
+    """
+    if outcome != EncounterOutcome.VICTORY:
+        return
+
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_deterministically,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+    qs = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.DEFEATED,
+        aftermath_pool__isnull=False,
+    ).select_related("aftermath_pool", "objectdb")
+    for opponent in qs:
+        character = opponent.objectdb or ObjectDB()  # unsaved stub — non-character effects only
+        apply_pool_deterministically(
+            pool=opponent.aftermath_pool,
+            context=ResolutionContext(character=character, scene=encounter.scene),
+        )
+
+
+def _increment_completion_counters(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """encounters_won / encounters_lost / encounters_fled aggregates (#876 §7)."""
+    from world.combat.achievement_counters import (  # noqa: PLC0415
+        STAT_KEY_ENCOUNTERS_FLED,
+        STAT_KEY_ENCOUNTERS_LOST,
+        STAT_KEY_ENCOUNTERS_WON,
+        increment_combat_counter,
+    )
+
+    outcome_key = {
+        EncounterOutcome.VICTORY: STAT_KEY_ENCOUNTERS_WON,
+        EncounterOutcome.DEFEAT: STAT_KEY_ENCOUNTERS_LOST,
+    }.get(EncounterOutcome(outcome))
+
+    participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
+        "character_sheet"
+    )
+    for participant in participants:
+        if participant.status == ParticipantStatus.FLED:
+            increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_FLED)
+        elif participant.status == ParticipantStatus.ACTIVE and outcome_key is not None:
+            increment_combat_counter(participant.character_sheet, outcome_key)
+
+
+def _emit_encounter_completed(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
+    """Reactive hook for downstream systems — stories, missions, achievements,
+    Legend (#876 §6). Never XP: combat does not award XP. Skips when no room
+    (emit_event requires a location); mirrors the _emit_death_gate idiom."""
+    room = encounter.room
+    if room is None:
+        logger.debug(
+            "Encounter %s completed with no room; skipping ENCOUNTER_COMPLETED emit.",
+            encounter.pk,
+        )
+        return
+    emit_event(
+        EventName.ENCOUNTER_COMPLETED,
+        EncounterCompletedPayload(
+            encounter=encounter,
+            outcome=str(outcome),
+            scene=encounter.scene,
+            room=room,
+        ),
+        location=room,
+    )
+
+
 def _resolve_declared_challenges(
     encounter: CombatEncounter,
     round_number: int,
@@ -3176,17 +3409,17 @@ def resolve_round(
 
     # --- Check encounter completion ---
     if _check_encounter_completion(encounter):
-        enc.status = EncounterStatus.COMPLETED
         result.encounter_completed = True
-        cleanup_completed_encounter(encounter)
+        enc.round_started_at = None
+        enc.save(update_fields=["round_started_at"])
+        complete_encounter(enc, outcome=_classify_encounter_outcome(encounter))
     else:
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from
         # BETWEEN_ROUNDS to DECLARING for the next round.
         enc.status = EncounterStatus.BETWEEN_ROUNDS
-
-    enc.round_started_at = None
-    enc.save(update_fields=["status", "round_started_at"])
+        enc.round_started_at = None
+        enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()
 
     return result
