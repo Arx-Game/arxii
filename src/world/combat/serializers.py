@@ -366,7 +366,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """
         try:
             engagement = obj.character_sheet.character.engagement
-        except CharacterEngagement.DoesNotExist:
+        except (AttributeError, CharacterEngagement.DoesNotExist):
             return None
         # Queryset deletes null the pk on the cached instance without clearing
         # the reverse accessor; treat a pk-less engagement as gone.
@@ -636,6 +636,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # null = encounter has no curve; tick_narration "" = curve set, no narration authored.
     escalation_curve_name = serializers.CharField(
         source="escalation_curve.name", read_only=True, default=None, allow_null=True
     )

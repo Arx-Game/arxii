@@ -7,6 +7,8 @@ encounter's escalation_curve FK (writable) plus read-only curve metadata
 (name, start_round, tick_narration).
 """
 
+from unittest.mock import PropertyMock, patch
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -18,6 +20,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
     EscalationCurveFactory,
 )
+from world.combat.models import CombatParticipant
 from world.combat.serializers import ParticipantSerializer
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement, end_engagement
@@ -105,6 +108,27 @@ class ParticipantEscalationFieldTests(TestCase):
         self.assertIsNone(data_after["escalation_level"])
         self.assertIsNone(data_after["intensity_modifier"])
         self.assertIsNone(data_after["control_modifier"])
+
+    def test_combat_engagement_returns_none_when_character_sheet_attribute_error(self) -> None:
+        """AttributeError branch in _combat_engagement: if the character_sheet
+        descriptor raises (e.g. a bare or partially-constructed participant), the
+        helper returns None rather than propagating.
+
+        character_sheet is non-nullable at the DB level so we simulate the guard
+        by patching the property on the class for the duration of the call.
+        We test _combat_engagement directly (not the full serializer) to avoid
+        triggering unrelated field handlers that don't share this guard shape.
+        """
+        serializer = ParticipantSerializer()
+        with patch.object(
+            CombatParticipant,
+            "character_sheet",
+            new_callable=PropertyMock,
+            side_effect=AttributeError("no sheet"),
+        ):
+            result = serializer._combat_engagement(self.participant)
+
+        self.assertIsNone(result)
 
 
 class EncounterEscalationCurveFieldTests(TestCase):
