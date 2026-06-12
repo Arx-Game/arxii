@@ -62,3 +62,16 @@ def format_coppers(amount: int) -> str:
     if not parts:
         return "0c"  # noqa: STRING_LITERAL - display literal, not an identifier
     return sign + " ".join(parts)
+
+
+class IncomeStreamKind(models.TextChoices):
+    """Flavors of org income — one machinery, two fictions (#926)."""
+
+    DOMAIN_TAX = "domain_tax", "Domain Tax"
+    CRIME_KICKUP = "crime_kickup", "Crime Kick-up"
+
+
+# Graft never reaches zero — some leak always survives (#923 doctrine).
+GRAFT_FLOOR_PCT = 1
+GRAFT_DEFAULT_PCT = 10
+GRAFT_MAX_PCT = 75
