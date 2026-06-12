@@ -50,8 +50,15 @@ from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 
 # ---------------------------------------------------------------------------
-# Shared fixture helper
+# Shared fixture helpers
 # ---------------------------------------------------------------------------
+
+
+def _accept(offer, path, text: str = "I am the one who stands here."):
+    """Accept a pending Audere Majora offer; returns the AudereMajoraCrossingResult."""
+    return resolve_audere_majora_offer(
+        offer.pk, accept=True, path_id=path.pk, declaration_text=text
+    )
 
 
 def _build_crossing_character(boundary_level: int = 5, suffix: str = ""):
@@ -155,71 +162,36 @@ class CrossingAcceptHappyPathTests(TestCase):
         ) = _build_crossing_character(boundary_level=5, suffix="_happy")
 
     def test_returns_accepted_true_with_correct_levels(self) -> None:
-        result = resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        result = _accept(self.offer, self.puissant_path)
         assert isinstance(result, AudereMajoraCrossingResult)
         assert result.accepted is True
         assert result.level_before == 5
         assert result.level_after == 6
 
     def test_primary_class_level_row_updated(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         ccl = CharacterClassLevel.objects.get(character=self.character)
         assert ccl.level == 6
 
     def test_second_accept_of_same_offer_raises_not_found(self) -> None:
         """Sequential double-accept proxy for the concurrent race: row is gone."""
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         with self.assertRaises(AudereMajoraOfferNotFoundError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.puissant_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.puissant_path)
 
     def test_sheet_current_level_updated(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         self.sheet.invalidate_class_level_cache()
         assert self.sheet.current_level == 6
 
     def test_path_history_row_created(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         assert CharacterPathHistory.objects.filter(
             character=self.character, path=self.puissant_path
         ).exists()
 
     def test_crossing_receipt_fields_correct(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         crossing = AudereMajoraCrossing.objects.get(
             character_sheet=self.sheet, threshold=self.threshold
         )
@@ -230,12 +202,7 @@ class CrossingAcceptHappyPathTests(TestCase):
         assert crossing.declaration_interaction is None
 
     def test_majora_condition_applied(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         assert ConditionInstance.objects.filter(
             target=self.character,
             condition__name=AUDERE_MAJORA_CONDITION_NAME,
@@ -243,12 +210,7 @@ class CrossingAcceptHappyPathTests(TestCase):
 
     def test_offer_row_deleted(self) -> None:
         offer_pk = self.offer.pk
-        resolve_audere_majora_offer(
-            offer_pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         assert not PendingAudereMajoraOffer.objects.filter(pk=offer_pk).exists()
 
 
@@ -274,12 +236,7 @@ class CrossingWithSceneTests(TestCase):
 
     def test_declaration_interaction_created(self) -> None:
         declaration_text = "I am the one who stands here."
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text=declaration_text,
-        )
+        _accept(self.offer, self.puissant_path, declaration_text)
         interaction = Interaction.objects.filter(
             scene=self.scene, mode=InteractionMode.POSE
         ).first()
@@ -287,24 +244,14 @@ class CrossingWithSceneTests(TestCase):
         assert interaction.content == declaration_text
 
     def test_result_declaration_id_matches_interaction(self) -> None:
-        result = resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        result = _accept(self.offer, self.puissant_path)
         interaction = Interaction.objects.filter(
             scene=self.scene, mode=InteractionMode.POSE
         ).first()
         assert result.declaration_interaction_id == interaction.pk
 
     def test_crossing_receipt_scene_and_interaction_set(self) -> None:
-        result = resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        result = _accept(self.offer, self.puissant_path)
         crossing = AudereMajoraCrossing.objects.get(
             character_sheet=self.sheet, threshold=self.threshold
         )
@@ -332,22 +279,12 @@ class CrossingNoSceneTests(TestCase):
         ) = _build_crossing_character(boundary_level=7, suffix="_noscene")
 
     def test_no_declaration_interaction_created(self) -> None:
-        result = resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        result = _accept(self.offer, self.puissant_path)
         assert result.declaration_interaction_id is None
         assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 0
 
     def test_receipt_scene_and_declaration_null(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         crossing = AudereMajoraCrossing.objects.get(
             character_sheet=self.sheet, threshold=self.threshold
         )
@@ -379,42 +316,22 @@ class CrossingIneligiblePathTests(TestCase):
 
     def test_raises_path_error(self) -> None:
         with self.assertRaises(AudereMajoraPathError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.unrelated_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.unrelated_path)
 
     def test_level_unchanged(self) -> None:
         with contextlib.suppress(AudereMajoraPathError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.unrelated_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.unrelated_path)
         ccl = CharacterClassLevel.objects.get(character=self.character)
         assert ccl.level == 8
 
     def test_no_receipt_written(self) -> None:
         with contextlib.suppress(AudereMajoraPathError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.unrelated_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.unrelated_path)
         assert not AudereMajoraCrossing.objects.filter(character_sheet=self.sheet).exists()
 
     def test_offer_still_present(self) -> None:
         with contextlib.suppress(AudereMajoraPathError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.unrelated_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.unrelated_path)
         assert PendingAudereMajoraOffer.objects.filter(pk=self.offer.pk).exists()
 
 
@@ -486,23 +403,13 @@ class CrossingStaleTests(TestCase):
     def test_stale_raises_error(self) -> None:
         CharacterEngagement.objects.filter(character=self.character).delete()
         with self.assertRaises(AudereMajoraOfferStaleError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.puissant_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.puissant_path)
 
     def test_stale_deletes_offer(self) -> None:
         CharacterEngagement.objects.filter(character=self.character).delete()
         offer_pk = self.offer.pk
         with contextlib.suppress(AudereMajoraOfferStaleError):
-            resolve_audere_majora_offer(
-                offer_pk,
-                accept=True,
-                path_id=self.puissant_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.puissant_path)
         assert not PendingAudereMajoraOffer.objects.filter(pk=offer_pk).exists()
 
 
@@ -530,12 +437,7 @@ class CrossingSpendGuardTests(TestCase):
         with_corruption_at_stage(self.sheet, resonance, stage=5)
         self.sheet.__dict__.pop("is_protagonism_locked", None)
         with self.assertRaises(ProtagonismLockedError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.puissant_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.puissant_path)
 
     def test_pending_alterations_raises_error(self) -> None:
         from world.magic.constants import PendingAlterationStatus
@@ -553,12 +455,7 @@ class CrossingSpendGuardTests(TestCase):
             status=PendingAlterationStatus.OPEN,
         )
         with self.assertRaises(AlterationGateError):
-            resolve_audere_majora_offer(
-                self.offer.pk,
-                accept=True,
-                path_id=self.puissant_path.pk,
-                declaration_text="I am the one who stands here.",
-            )
+            _accept(self.offer, self.puissant_path)
 
 
 # ---------------------------------------------------------------------------
@@ -597,12 +494,7 @@ class CrossingReceiptGateTests(TestCase):
         ) = _build_crossing_character(boundary_level=12, suffix="_gate")
 
     def test_crossed_gate_closed(self) -> None:
-        resolve_audere_majora_offer(
-            self.offer.pk,
-            accept=True,
-            path_id=self.puissant_path.pk,
-            declaration_text="I am the one who stands here.",
-        )
+        _accept(self.offer, self.puissant_path)
         # Force level back to 12 to isolate the receipt gate (not the level mismatch).
         ccl = CharacterClassLevel.objects.get(character=self.character)
         ccl.level = 12

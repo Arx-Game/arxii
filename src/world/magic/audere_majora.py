@@ -12,10 +12,10 @@ from world.classes.models import PathStage
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
     _check_soulfray_gate,
+    soulfray_stage_order_snapshot,
 )
 
 
@@ -309,7 +309,6 @@ def maybe_create_audere_majora_offer(
     refreshes from a still-open gate stay silent.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
     threshold = check_audere_majora_eligibility(character, runtime_intensity)
     if threshold is None:
@@ -322,17 +321,7 @@ def maybe_create_audere_majora_offer(
     if sheet is None:
         return None
 
-    soulfray_instance = (
-        ConditionInstance.objects.filter(
-            target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
-        )
-        .select_related("current_stage")
-        .first()
-    )
-    stage_order = 0
-    if soulfray_instance is not None and soulfray_instance.current_stage is not None:
-        stage_order = soulfray_instance.current_stage.stage_order
+    stage_order = soulfray_stage_order_snapshot(character)
 
     offer, created = PendingAudereMajoraOffer.objects.update_or_create(
         character_sheet=sheet,

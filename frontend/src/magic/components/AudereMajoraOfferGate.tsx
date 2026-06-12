@@ -5,9 +5,9 @@
  * id (re-openable from the strip).
  */
 
-import { useEffect, useState } from 'react';
 import { DoorOpen } from 'lucide-react';
 import { usePendingAudereMajoraOffers, useRespondToAudereMajora } from '@/magic/queries';
+import { useAutoOpenOncePerOffer } from '@/magic/hooks';
 import { AudereMajoraOfferDialog } from './AudereMajoraOfferDialog';
 import type { PendingAudereMajoraOffer } from '@/magic/types';
 
@@ -30,16 +30,8 @@ export function AudereMajoraOfferGate({
   const offer: PendingAudereMajoraOffer | null =
     offers.find((o) => o.character_sheet_id === characterSheetId) ?? null;
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [seenOfferId, setSeenOfferId] = useState<number | null>(null);
-
   // Auto-open once per offer id (max ceremony); dismissing leaves the strip.
-  useEffect(() => {
-    if (offer && offer.id !== seenOfferId) {
-      setSeenOfferId(offer.id);
-      setDialogOpen(true);
-    }
-  }, [offer, seenOfferId]);
+  const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer);
 
   if (!offer) return null;
 
