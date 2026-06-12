@@ -47,3 +47,5 @@ class EventName(models.TextChoices):
     APPLY_OUTFIT = "apply_outfit", "Apply Outfit"
     BEFORE_UNDRESS = "before_undress", "Before Undress"
     UNDRESS = "undress", "Undress"
+    # Combat encounter lifecycle (#876)
+    ENCOUNTER_COMPLETED = "encounter_completed", "Encounter Completed"

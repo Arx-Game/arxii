@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from typeclasses.exits import Exit
     from typeclasses.rooms import Room
     from world.combat.models import (
+        CombatEncounter,
         CombatOpponent,
         CombatOpponentAction,
         CombatRoundAction,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     )
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
+    from world.scenes.models import Scene
 
 
 @dataclass
@@ -113,6 +115,17 @@ class CharacterIncapacitatedPayload:
 class CharacterKilledPayload:
     character: Character
     source_event: str | None
+
+
+# ---- Combat encounter lifecycle ----
+
+
+@dataclass(frozen=True)
+class EncounterCompletedPayload:
+    encounter: CombatEncounter
+    outcome: str  # EncounterOutcome value
+    scene: Scene | None
+    room: Room | None
 
 
 # ---- Movement ----
@@ -228,6 +241,7 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "damage_applied": DamageAppliedPayload,
     "character_incapacitated": CharacterIncapacitatedPayload,
     "character_killed": CharacterKilledPayload,
+    "encounter_completed": EncounterCompletedPayload,
     "move_pre_depart": MovePreDepartPayload,
     "moved": MovedPayload,
     "examine_pre": ExaminePrePayload,

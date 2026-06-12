@@ -2285,6 +2285,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description GM: force-end the encounter as ABANDONED (#876). */
+    post: operations['combat_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/flee/': {
     parameters: {
       query?: never;
@@ -12134,7 +12151,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -12234,7 +12251,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -13920,6 +13937,17 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
+      /**
+       * @description Typed result recorded at completion (#876); empty until completed.
+       *
+       *     * `victory` - Victory
+       *     * `defeat` - Defeat
+       *     * `fled` - Fled
+       *     * `abandoned` - Abandoned
+       */
+      readonly outcome: components['schemas']['Outcome88eEnum'];
+      /** Format: date-time */
+      readonly completed_at: string | null;
       round_number?: number;
       risk_level?: components['schemas']['RiskLevelEnum'];
       stakes_level?: components['schemas']['StakesLevelEnum'];
@@ -13989,6 +14017,17 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
+      /**
+       * @description Typed result recorded at completion (#876); empty until completed.
+       *
+       *     * `victory` - Victory
+       *     * `defeat` - Defeat
+       *     * `fled` - Fled
+       *     * `abandoned` - Abandoned
+       */
+      readonly outcome: components['schemas']['Outcome88eEnum'];
+      /** Format: date-time */
+      readonly completed_at: string | null;
       round_number?: number;
       pace_mode?: components['schemas']['PaceModeEnum'];
       /** @description Minutes before auto-resolving in timed mode. */
@@ -16467,11 +16506,14 @@ export interface components {
       id: number;
       name: string;
     };
-    OutcomeDetail: {
-      action_interaction_id: number;
-      effects: components['schemas']['EffectRow'][];
-      power_ledger?: components['schemas']['PowerLedger'] | null;
-    };
+    /**
+     * @description * `victory` - Victory
+     *     * `defeat` - Defeat
+     *     * `fled` - Fled
+     *     * `abandoned` - Abandoned
+     * @enum {string}
+     */
+    Outcome88eEnum: 'victory' | 'defeat' | 'fled' | 'abandoned';
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success
@@ -16480,7 +16522,12 @@ export interface components {
      *     * `pending_gm_review` - Pending GM review
      * @enum {string}
      */
-    OutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    OutcomeD50Enum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    OutcomeDetail: {
+      action_interaction_id: number;
+      effects: components['schemas']['EffectRow'][];
+      power_ledger?: components['schemas']['PowerLedger'] | null;
+    };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
       readonly id: number;
@@ -18079,7 +18126,7 @@ export interface components {
        *     * `expired` - Expired
        *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeEnum'];
+      outcome?: components['schemas']['OutcomeD50Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description?: string;
@@ -25021,6 +25068,32 @@ export interface operations {
     };
   };
   combat_declare_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_end_create: {
     parameters: {
       query?: never;
       header?: never;

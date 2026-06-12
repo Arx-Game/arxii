@@ -41,6 +41,9 @@ STAT_KEY_OPPONENTS_DEFEATED = "combat.opponents_defeated"
 STAT_KEY_KNOCKOUTS_DEALT = "combat.knockouts_dealt"
 STAT_KEY_KILLSHOTS = "combat.killshots"
 STAT_KEY_TIMES_KOD = "combat.times_kod"
+STAT_KEY_ENCOUNTERS_WON = "combat.encounters_won"
+STAT_KEY_ENCOUNTERS_LOST = "combat.encounters_lost"
+STAT_KEY_ENCOUNTERS_FLED = "combat.encounters_fled"
 
 _STAT_KEY_DISPLAY: dict[str, tuple[str, str]] = {
     STAT_KEY_DAMAGE_DEALT: (
@@ -66,6 +69,18 @@ _STAT_KEY_DISPLAY: dict[str, tuple[str, str]] = {
     STAT_KEY_TIMES_KOD: (
         "Times Knocked Out",
         "Number of times you have been knocked out in combat.",
+    ),
+    STAT_KEY_ENCOUNTERS_WON: (
+        "Encounters Won",
+        "Combat encounters that ended in victory while you still stood.",
+    ),
+    STAT_KEY_ENCOUNTERS_LOST: (
+        "Encounters Lost",
+        "Combat encounters that ended in defeat.",
+    ),
+    STAT_KEY_ENCOUNTERS_FLED: (
+        "Encounters Fled",
+        "Combat encounters you escaped before the end.",
     ),
 }
 

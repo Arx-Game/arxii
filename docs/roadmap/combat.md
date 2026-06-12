@@ -202,8 +202,18 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   defend/buff/debuff/combo-opening effects — #874
 - **NPC tier mechanics** — `OpponentTier` enum exists but Swarm has no count-based
   handling and Hero Killer has no narrative escape state — #875
-- **Encounter aftermath** — completion only flips a status flag; no outcome record,
-  pool-routed aftermath, or pose-log narration — #876
+- ~~**Encounter aftermath**~~ **DONE (#876):** completion runs through a single
+  `complete_encounter` seam: a typed `EncounterOutcome`
+  (victory/defeat/fled/abandoned, classified at completion) + `completed_at` on
+  the encounter; per-PC aftermath via authored `EncounterAftermathRule` cells
+  keyed (outcome, risk_level) with check_type + base_difficulty + pool, resolved
+  through the flee idiom (`select_consequence` → `apply_resolution` →
+  `record_consequence_outcome` anchored to a ceremonial Narrator OUTCOME line in
+  the pose log); per-opponent `aftermath_pool` FK fired deterministically for
+  DEFEATED opponents on victory; `ENCOUNTER_COMPLETED` reactive event (the
+  Legend/loot/story hook — combat never awards XP); `combat.encounters_won/
+  lost/fled` counters; GM `POST /end/` endpoint (sole ABANDONED producer);
+  outcome banner + GM end control in the combat panel
 - ~~**Flee is an auto-succeed stub**~~ **DONE (#878):** flee resolves as a graded
   check at round resolution (`_resolve_flee`): authored difficulty via the
   `FleeConfig` singleton + per-`OpponentTier` `FleeTierModifier` rows (Hero Killer
@@ -369,7 +379,7 @@ The old model stored incapacitation and dying as enum values in `CharacterVitals
 - **Combat eligibility rewired** — `declare_action` raises if `can_act` is False. `_get_combat_participants_who_can_act` filters to participants where can_act is True. `_check_encounter_completion` uses can_act (not status) to determine whether all PCs are down.
 
 **Known follow-ups:**
-- **Consequence-pool reconciliation** — knockout/wound/death resolution is reconciled onto the pool pipeline in Phase 9 (#560/#561). The `consequence_pool` FK on `CombatOpponent` / the C-tier pool plumbing for encounter outcomes remains future work.
+- **Consequence-pool reconciliation** — knockout/wound/death resolution is reconciled onto the pool pipeline in Phase 9 (#560/#561). The deferred pool plumbing for encounter outcomes shipped in #876 as `CombatOpponent.aftermath_pool` + `EncounterAftermathRule`.
 - **Frontend status surface** — the `derive_character_status` wire label is a placeholder. #521 built the vitals sheet panel (VitalsPanel + `GET /api/vitals/<id>/`, surfacing health/fatigue/status); the richer condition-aware status surface (showing Unconscious / Bleeding-Out / other conditions to the player) remains tracked in #522.
 
 **Phase 9 (complete):** Reconcile survivability consequences onto the consequence-pool pipeline (#560, #561)

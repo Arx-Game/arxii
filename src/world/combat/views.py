@@ -18,7 +18,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ClashStatus, ParticipantStatus
+from world.combat.constants import ClashStatus, EncounterStatus, ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
 from world.combat.models import (
     Clash,
@@ -54,6 +54,7 @@ from world.combat.services import (
     declare_action,
     declare_cover,
     declare_flee,
+    end_encounter,
     join_encounter,
     resolve_round,
     revert_combo_upgrade,
@@ -75,6 +76,7 @@ _ERR_CHARACTER_NOT_YOURS = "You do not currently play that character."
 _ERR_ADD_PARTICIPANT = "Failed to add participant."
 _ERR_DECLARE_FAILED = "Failed to declare action."
 _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
+_ERR_ALREADY_COMPLETED = "Encounter is already completed."
 _ERR_COMBO_UPGRADE = "Cannot upgrade to the requested combo."
 
 
@@ -308,6 +310,30 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter.is_paused = not encounter.is_paused
         encounter.save(update_fields=["is_paused"])
         # save() updates the identity map — no re-fetch needed
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def end(self, request: Request, pk: int | None = None) -> Response:
+        """GM: force-end the encounter as ABANDONED (#876)."""
+        encounter = self.get_object()
+        if encounter.status == EncounterStatus.COMPLETED:
+            return Response(
+                {"detail": _ERR_ALREADY_COMPLETED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            end_encounter(encounter)
+        except ValueError:
+            # Concurrent double-end: the seam's atomic guard fired after our
+            # status read. Re-check so an unrelated ValueError from the seam's
+            # tail isn't misreported as already-completed.
+            encounter.refresh_from_db()
+            if encounter.status != EncounterStatus.COMPLETED:
+                raise
+            return Response(
+                {"detail": _ERR_ALREADY_COMPLETED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return self._serialize_encounter(request, encounter)
 
     # --- Player Actions ---

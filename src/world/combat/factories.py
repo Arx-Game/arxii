@@ -9,11 +9,13 @@ from world.combat.constants import (
     ClashActionSlot,
     ClashFlavor,
     ComboLearningMethod,
+    EncounterOutcome,
     EncounterType,
     LockPcRole,
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    RiskLevel,
     TargetingMode,
     TargetSelection,
 )
@@ -32,6 +34,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterAftermathRule,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -392,6 +395,19 @@ class ClashContributionFactory(factory_django.DjangoModelFactory):
     anima_committed = 10
     check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     progress_delta = 1
+
+
+class EncounterAftermathRuleFactory(factory_django.DjangoModelFactory):
+    """Factory for EncounterAftermathRule (#876)."""
+
+    class Meta:
+        model = EncounterAftermathRule
+
+    outcome = EncounterOutcome.DEFEAT
+    risk_level = RiskLevel.MODERATE
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    base_difficulty = 25
+    consequence_pool = None
 
 
 # =============================================================================

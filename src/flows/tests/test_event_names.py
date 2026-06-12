@@ -42,5 +42,6 @@ class EventNameTests(TestCase):
             "undress",
             "soul_tether_formed",
             "soul_tether_dissolved",
+            "encounter_completed",
         }
         self.assertEqual(set(EventName.values), expected)

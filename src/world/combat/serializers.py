@@ -537,6 +537,8 @@ class EncounterListSerializer(serializers.ModelSerializer):
             "scene",
             "encounter_type",
             "status",
+            "outcome",
+            "completed_at",
             "round_number",
             "pace_mode",
             "pace_timer_minutes",
@@ -544,6 +546,10 @@ class EncounterListSerializer(serializers.ModelSerializer):
             "participant_count",
             "opponent_count",
         ]
+        extra_kwargs = {
+            "outcome": {"read_only": True},
+            "completed_at": {"read_only": True},
+        }
 
     def get_participant_count(self, obj: CombatEncounter) -> int:
         """Return participant count, preferring cached list."""
@@ -585,6 +591,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "scene",
             "encounter_type",
             "status",
+            "outcome",
+            "completed_at",
             "round_number",
             "risk_level",
             "stakes_level",
@@ -600,6 +608,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_gm",
             "clashes",
         ]
+        extra_kwargs = {
+            "outcome": {"read_only": True},
+            "completed_at": {"read_only": True},
+        }
 
     def to_representation(self, instance: CombatEncounter) -> dict[str, Any]:
         """Inject is_gm into context before nested serializers run.
