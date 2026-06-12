@@ -35,6 +35,7 @@ from world.combat.models import (
     ComboLearning,
     ComboSlot,
     EncounterAftermathRule,
+    EscalationCurve,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -659,6 +660,37 @@ def wire_flee_modifier_target():
         target_check_type=wire_flee_check_type(),
         is_active=True,
     )
+
+
+class EscalationCurveFactory(factory_django.DjangoModelFactory):
+    """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
+
+    class Meta:
+        model = EscalationCurve
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Escalation Curve {n}")
+    start_round = 2
+    intensity_step = 1
+    pace_difficulty_base = 0
+    pace_difficulty_per_level = 1
+    control_step_on_success = 1
+    control_step_on_partial = 0
+    control_step_on_botch = -1
+    spike_intensity_amount = 2
+    spike_minimum_track_points = 1
+
+    @factory.lazy_attribute
+    def pace_check_type(self) -> object:
+        from world.checks.models import CheckCategory, CheckType
+
+        category, _ = CheckCategory.objects.get_or_create(name="Combat")
+        check, _ = CheckType.objects.get_or_create(
+            name="Escalation Pace",
+            category=category,
+            defaults={"description": "Keep control in pace with rising intensity."},
+        )
+        return check
 
 
 def wire_flee_config():
