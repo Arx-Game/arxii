@@ -67,8 +67,7 @@ export function AudereMajoraOfferDialog({
           <AlertDialogDescription className="text-base">
             Standing at level{' '}
             <span className="font-semibold text-amber-400">{offer.boundary_level}</span>, crossing
-            into{' '}
-            <span className="font-semibold text-amber-400">{offer.target_stage_display}</span>.
+            into <span className="font-semibold text-amber-400">{offer.target_stage_display}</span>.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -107,7 +106,9 @@ export function AudereMajoraOfferDialog({
                 <div className="space-y-0.5">
                   <div className="font-semibold">
                     {path.name}{' '}
-                    <span className="font-normal text-muted-foreground">— {path.stage_display}</span>
+                    <span className="font-normal text-muted-foreground">
+                      — {path.stage_display}
+                    </span>
                   </div>
                   {path.description ? (
                     <div className="text-muted-foreground">{path.description}</div>

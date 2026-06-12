@@ -12,10 +12,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { AudereMajoraOfferGate } from '../components/AudereMajoraOfferGate';
-import type {
-  PaginatedPendingAudereMajoraOfferList,
-  PendingAudereMajoraOffer,
-} from '../types';
+import type { PaginatedPendingAudereMajoraOfferList, PendingAudereMajoraOffer } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mock the api transport — real hooks run against these.
@@ -301,9 +298,7 @@ describe('AudereMajoraOfferGate — auto-open once per offer id', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 
     // New offer id must auto-open.
-    vi.mocked(api.getPendingAudereMajoraOffers).mockResolvedValue(
-      paginated([{ ...OFFER, id: 8 }])
-    );
+    vi.mocked(api.getPendingAudereMajoraOffers).mockResolvedValue(paginated([{ ...OFFER, id: 8 }]));
     await act(async () => {
       await client.refetchQueries();
     });

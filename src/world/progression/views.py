@@ -402,7 +402,8 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if character is None:
             return None
-        return getattr(character, "sheet_data", None)
+        # Reverse OneToOne may be absent for sheet-less characters.
+        return getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
 
     def list(self, request: Request) -> Response:
         """GET — return current intent or {"intent": null}."""

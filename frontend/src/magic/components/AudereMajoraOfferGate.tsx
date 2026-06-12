@@ -63,7 +63,12 @@ export function AudereMajoraOfferGate({
         }}
         onAccept={(pathId, declarationText) => {
           respond.mutate(
-            { offer_id: offer.id, accept: true, path_id: pathId, declaration_text: declarationText },
+            {
+              offer_id: offer.id,
+              accept: true,
+              path_id: pathId,
+              declaration_text: declarationText,
+            },
             { onSuccess: () => setDialogOpen(false) }
           );
         }}
