@@ -90,7 +90,8 @@ class ReactionWindowKind(models.TextChoices):
     Each kind registers a ReactionKindConfig (choices provider + handlers)
     via world.scenes.reaction_services.register_reaction_kind — usually from
     the owning app's AppConfig.ready(). Future consumers (spread-assist,
-    fashion, kudos/pose-voting) add values here with their handlers.
+    fashion) add values here with their handlers.
     """
 
     ENTRANCE = "entrance", "Make an Entrance"
+    KUDOS = "kudos", "Kudos"
