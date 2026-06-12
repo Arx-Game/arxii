@@ -839,9 +839,12 @@ export async function respondToAudereMajora(
  * GET /api/progression/path-intent/
  *
  * Returns the caller's current path intent (or null if not set).
+ * Resolves the character via the X-Character-ID request header.
  */
-export async function getPathIntent(): Promise<PathIntentResponse> {
-  const res = await apiFetch(PATH_INTENT_URL);
+export async function getPathIntent(characterId: number): Promise<PathIntentResponse> {
+  const res = await apiFetch(PATH_INTENT_URL, {
+    headers: { 'X-Character-ID': String(characterId) },
+  });
   if (!res.ok) throw new Error('Failed to load path intent');
   return res.json() as Promise<PathIntentResponse>;
 }
@@ -850,11 +853,15 @@ export async function getPathIntent(): Promise<PathIntentResponse> {
  * PUT /api/progression/path-intent/
  *
  * Declare or overwrite the caller's path intent.
+ * Resolves the character via the X-Character-ID request header.
  */
-export async function putPathIntent(pathId: number): Promise<PathIntentResponse> {
+export async function putPathIntent(
+  characterId: number,
+  pathId: number
+): Promise<PathIntentResponse> {
   const res = await apiFetch(PATH_INTENT_URL, {
     method: 'PUT',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), 'X-Character-ID': String(characterId) },
     body: JSON.stringify({ path_id: pathId }),
   });
   if (!res.ok) {
@@ -867,9 +874,13 @@ export async function putPathIntent(pathId: number): Promise<PathIntentResponse>
  * DELETE /api/progression/path-intent/
  *
  * Clear the caller's path intent. Returns 204 with no body.
+ * Resolves the character via the X-Character-ID request header.
  */
-export async function deletePathIntent(): Promise<void> {
-  const res = await apiFetch(PATH_INTENT_URL, { method: 'DELETE' });
+export async function deletePathIntent(characterId: number): Promise<void> {
+  const res = await apiFetch(PATH_INTENT_URL, {
+    method: 'DELETE',
+    headers: { 'X-Character-ID': String(characterId) },
+  });
   if (!res.ok) {
     await parseErrorDetail(res, 'Failed to clear path intent');
   }

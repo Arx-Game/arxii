@@ -1,14 +1,20 @@
+// Not mounted yet: awaits the first X-Character-ID header consumer surface (#543 follow-up).
+
 /**
  * PathIntentCard — shows the character's current declared path intent and
- * offers a button to clear it. Used on the character sheet page when an
- * obvious composition point is available.
+ * offers a button to clear it. Requires a characterId prop so the API call
+ * sends the X-Character-ID header the backend uses to identify the character.
  */
 
 import { usePathIntent, useClearPathIntent } from '@/magic/queries';
 import { Button } from '@/components/ui/button';
 
-export function PathIntentCard() {
-  const { data, isLoading } = usePathIntent();
+interface PathIntentCardProps {
+  characterId: number;
+}
+
+export function PathIntentCard({ characterId }: PathIntentCardProps) {
+  const { data, isLoading } = usePathIntent(characterId);
   const clear = useClearPathIntent();
 
   if (isLoading) return null;
@@ -28,7 +34,7 @@ export function PathIntentCard() {
           size="sm"
           className="h-6 px-2 py-0 text-xs"
           disabled={clear.isPending}
-          onClick={() => clear.mutate()}
+          onClick={() => clear.mutate(characterId)}
           data-testid="path-intent-clear"
         >
           Clear

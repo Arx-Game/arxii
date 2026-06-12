@@ -239,7 +239,7 @@ describe('useRespondToAudereMajora', () => {
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['magic', 'path-intent'],
-    });
+    }); // prefix-invalidates all characterId variants
   });
 });
 
@@ -252,10 +252,10 @@ describe('usePathIntent', () => {
     vi.clearAllMocks();
   });
 
-  it('fetches the path intent', async () => {
+  it('fetches the path intent for the given characterId', async () => {
     vi.mocked(api.getPathIntent).mockResolvedValue(PATH_INTENT_FIXTURE);
 
-    const { result } = renderHook(() => usePathIntent(), {
+    const { result } = renderHook(() => usePathIntent(42), {
       wrapper: createWrapper(),
     });
 
@@ -264,13 +264,22 @@ describe('usePathIntent', () => {
     });
 
     expect(result.current.data?.intent?.intended_path.name).toBe('Path of Fire');
-    expect(api.getPathIntent).toHaveBeenCalledTimes(1);
+    expect(api.getPathIntent).toHaveBeenCalledWith(42);
+  });
+
+  it('is disabled when characterId is 0', () => {
+    const { result } = renderHook(() => usePathIntent(0), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.getPathIntent).not.toHaveBeenCalled();
   });
 
   it('returns null intent when none is declared', async () => {
     vi.mocked(api.getPathIntent).mockResolvedValue({ intent: null });
 
-    const { result } = renderHook(() => usePathIntent(), {
+    const { result } = renderHook(() => usePathIntent(42), {
       wrapper: createWrapper(),
     });
 
@@ -291,7 +300,7 @@ describe('useDeclarePathIntent', () => {
     vi.clearAllMocks();
   });
 
-  it('calls api.putPathIntent with the given path id', async () => {
+  it('calls api.putPathIntent with the given characterId and pathId', async () => {
     vi.mocked(api.putPathIntent).mockResolvedValue(PATH_INTENT_FIXTURE);
 
     const { result } = renderHook(() => useDeclarePathIntent(), {
@@ -299,13 +308,13 @@ describe('useDeclarePathIntent', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync(1);
+      await result.current.mutateAsync({ characterId: 42, pathId: 1 });
     });
 
-    expect(api.putPathIntent).toHaveBeenCalledWith(1);
+    expect(api.putPathIntent).toHaveBeenCalledWith(42, 1);
   });
 
-  it('invalidates pathIntent on success', async () => {
+  it('invalidates pathIntent(characterId) on success', async () => {
     vi.mocked(api.putPathIntent).mockResolvedValue(PATH_INTENT_FIXTURE);
 
     const { wrapper, client } = createWrapperWithClient();
@@ -314,12 +323,12 @@ describe('useDeclarePathIntent', () => {
     const { result } = renderHook(() => useDeclarePathIntent(), { wrapper });
 
     await act(async () => {
-      await result.current.mutateAsync(1);
+      await result.current.mutateAsync({ characterId: 42, pathId: 1 });
     });
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ['magic', 'path-intent'],
+        queryKey: ['magic', 'path-intent', 42],
       });
     });
   });
@@ -334,7 +343,7 @@ describe('useClearPathIntent', () => {
     vi.clearAllMocks();
   });
 
-  it('calls api.deletePathIntent', async () => {
+  it('calls api.deletePathIntent with the given characterId', async () => {
     vi.mocked(api.deletePathIntent).mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useClearPathIntent(), {
@@ -342,13 +351,13 @@ describe('useClearPathIntent', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync(42);
     });
 
-    expect(api.deletePathIntent).toHaveBeenCalledTimes(1);
+    expect(api.deletePathIntent).toHaveBeenCalledWith(42);
   });
 
-  it('invalidates pathIntent on success', async () => {
+  it('invalidates pathIntent(characterId) on success', async () => {
     vi.mocked(api.deletePathIntent).mockResolvedValue(undefined);
 
     const { wrapper, client } = createWrapperWithClient();
@@ -357,12 +366,12 @@ describe('useClearPathIntent', () => {
     const { result } = renderHook(() => useClearPathIntent(), { wrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync(42);
     });
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ['magic', 'path-intent'],
+        queryKey: ['magic', 'path-intent', 42],
       });
     });
   });
@@ -377,7 +386,7 @@ describe('magicKeys — Audere Majora + PathIntent keys', () => {
     expect(magicKeys.audereMajoraPending()).toEqual(['magic', 'audere-majora', 'pending']);
   });
 
-  it('pathIntent() equals [magic, path-intent]', () => {
-    expect(magicKeys.pathIntent()).toEqual(['magic', 'path-intent']);
+  it('pathIntent(id) equals [magic, path-intent, id]', () => {
+    expect(magicKeys.pathIntent(7)).toEqual(['magic', 'path-intent', 7]);
   });
 });

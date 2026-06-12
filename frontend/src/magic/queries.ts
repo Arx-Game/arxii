@@ -76,7 +76,7 @@ export const magicKeys = {
 
   audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
 
-  pathIntent: () => [...magicKeys.all, 'path-intent'] as const,
+  pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -660,7 +660,8 @@ export function useRespondToAudereMajora() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.audereMajoraPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.auderePending() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.pathIntent() }).catch(() => {});
+      // Prefix-invalidate all pathIntent keys (any characterId).
+      qc.invalidateQueries({ queryKey: [...magicKeys.all, 'path-intent'] }).catch(() => {});
     },
   });
 }
@@ -670,13 +671,15 @@ export function useRespondToAudereMajora() {
 // ---------------------------------------------------------------------------
 
 /**
- * Current path intent for the calling character.
+ * Current path intent for the given character.
  * Returns `{ intent: null }` when none is declared.
+ * Disabled when characterId ≤ 0.
  */
-export function usePathIntent() {
+export function usePathIntent(characterId: number) {
   return useQuery({
-    queryKey: magicKeys.pathIntent(),
-    queryFn: () => api.getPathIntent(),
+    queryKey: magicKeys.pathIntent(characterId),
+    queryFn: () => api.getPathIntent(characterId),
+    enabled: characterId > 0,
   });
 }
 
@@ -684,9 +687,12 @@ export function usePathIntent() {
 export function useDeclarePathIntent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (pathId: number) => api.putPathIntent(pathId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.pathIntent() }).catch(() => {});
+    mutationFn: ({ characterId, pathId }: { characterId: number; pathId: number }) =>
+      api.putPathIntent(characterId, pathId),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: magicKeys.pathIntent(variables.characterId) }).catch(
+        () => {}
+      );
     },
   });
 }
@@ -695,9 +701,9 @@ export function useDeclarePathIntent() {
 export function useClearPathIntent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.deletePathIntent(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.pathIntent() }).catch(() => {});
+    mutationFn: (characterId: number) => api.deletePathIntent(characterId),
+    onSuccess: (_data, characterId) => {
+      qc.invalidateQueries({ queryKey: magicKeys.pathIntent(characterId) }).catch(() => {});
     },
   });
 }
