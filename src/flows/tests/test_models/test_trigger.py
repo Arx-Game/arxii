@@ -126,3 +126,12 @@ class TestTrigger(TestCase):
         ):
             self.trigger.additional_filter_condition = {"missing": "value"}
             assert not self.trigger.should_trigger_for_event(event)
+
+
+class SystemInstalledTriggerTests(TestCase):
+    """A Trigger with no source_condition (system-installed) is valid and fires."""
+
+    def test_trigger_without_source_condition_saves(self):
+        td = TriggerDefinitionFactory(event_name="test_event")
+        trigger = TriggerFactory(trigger_definition=td, source_condition=None)
+        self.assertIsNone(trigger.source_condition)
