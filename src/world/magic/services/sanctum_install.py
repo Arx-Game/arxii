@@ -104,6 +104,9 @@ DISSOLUTION_RECOVERY_SUCCESS = Decimal("0.50")
 DISSOLUTION_RECOVERY_FAILURE = Decimal("0.10")
 DISSOLUTION_RECOVERY_BOTCH = Decimal("0.0")
 
+SANCTIFICATION_CRIT_BONUS_IMBUE = 5
+"""Bonus initial Homecoming imbue on a crit Sanctification. TUNING PLACEHOLDER."""
+
 
 # ---------------------------------------------------------------------------
 # Return shapes
@@ -112,12 +115,19 @@ DISSOLUTION_RECOVERY_BOTCH = Decimal("0.0")
 
 @dataclass(frozen=True)
 class SanctificationResult:
-    """Returned by perform_sanctification."""
+    """Returned by perform_sanctification.
 
-    sanctum_id: int
+    On a failed or botched check, ``fizzled=True`` and ``sanctum_id=None`` —
+    no state change occurred. On success or crit, ``fizzled=False`` and
+    ``sanctum_id`` is the new SanctumDetails pk.
+    """
+
+    sanctum_id: int | None
     owner_mode: str
     resonance_type_id: int
     founder_character_sheet_id: int
+    success_level: int
+    fizzled: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,6 +230,32 @@ def perform_sanctification(
         )
         raise SanctificationFounderHasPersonalSanctumError(msg)
 
+    # Roll the ritual check BEFORE creating any rows. Fizzle on fail/botch.
+    from world.magic.seeds_sanctum import (  # noqa: PLC0415
+        SANCTIFICATION_COVENANT_RITUAL_NAME,
+        SANCTIFICATION_PERSONAL_RITUAL_NAME,
+    )
+    from world.magic.services.ritual_checks import (  # noqa: PLC0415
+        OutcomeTier,
+        perform_ritual_check,
+    )
+
+    ritual_name = (
+        SANCTIFICATION_PERSONAL_RITUAL_NAME
+        if owner_mode == SanctumOwnerMode.PERSONAL
+        else SANCTIFICATION_COVENANT_RITUAL_NAME
+    )
+    roll = perform_ritual_check(ritual_name, character)  # noqa: OBJECTDB_PARAM
+    if roll.tier in (OutcomeTier.FAIL, OutcomeTier.BOTCH):
+        return SanctificationResult(
+            sanctum_id=None,
+            owner_mode=owner_mode,
+            resonance_type_id=resonance_type.pk,
+            founder_character_sheet_id=founder_sheet.pk,
+            success_level=roll.success_level,
+            fizzled=True,
+        )
+
     from django.db import IntegrityError  # noqa: PLC0415
 
     sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
@@ -244,11 +280,20 @@ def perform_sanctification(
             "UniqueConstraint for a Personal Sanctum."
         )
         raise SanctificationFounderHasPersonalSanctumError(msg) from exc
+
+    if roll.tier is OutcomeTier.CRIT:
+        from world.magic.services.sanctum_lvm import apply_homecoming_gain  # noqa: PLC0415
+        from world.magic.services.sanctum_rituals import _compute_cap  # noqa: PLC0415
+
+        apply_homecoming_gain(details, SANCTIFICATION_CRIT_BONUS_IMBUE, _compute_cap(details))
+
     return SanctificationResult(
         sanctum_id=details.pk,
         owner_mode=details.owner_mode,
         resonance_type_id=details.resonance_type_id,
         founder_character_sheet_id=founder_sheet.pk,
+        success_level=roll.success_level,
+        fizzled=False,
     )
 
 

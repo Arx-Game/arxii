@@ -171,6 +171,23 @@ def _setup_personal_sanctification_room(*, resonance=None, owner_in_room=True):
 
 
 class PerformSanctificationTests(TestCase):
+    """Existing validation-gate tests — patch perform_check to a deterministic SUCCESS."""
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        # Seed the sanctum rituals + check configs so the check can run.
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+        # Patch perform_check to success (level=1) so validation tests exercise
+        # the pre-check gates that fire before the roll.
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_result(success_level=1)
+
+    def tearDown(self):
+        self._check_patcher.stop()
+
     def test_personal_happy_path(self) -> None:
         room_profile, owner, resonance = _setup_personal_sanctification_room()
 
@@ -250,6 +267,18 @@ class PerformSanctificationTests(TestCase):
 
 
 class AbsorbSanctumPoolTests(TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_result(success_level=1)
+
+    def tearDown(self):
+        self._check_patcher.stop()
+
     def _build_sanctum_with_pool(
         self, *, weaver_in_room: bool, pending_weaving: int = 20, pending_owner_bonus: int = 5
     ):
@@ -341,7 +370,11 @@ def _build_dissolution_sanctum(*, leader_is_founder: bool = True):
     """Build a Sanctum with seeded rituals + check configs; place the leader.
 
     Returns (sanctum, leader_persona).
+    Patches perform_check to a deterministic SUCCESS while building the Sanctum
+    so the Sanctification check doesn't need real trait data.
     """
+    from unittest.mock import patch
+
     from evennia_extensions.factories import RoomProfileFactory
     from world.room_features.seeds import ensure_sanctum_kind
     from world.scenes.factories import PersonaFactory
@@ -364,9 +397,11 @@ def _build_dissolution_sanctum(*, leader_is_founder: bool = True):
     character = founder.character_sheet.character
     character.db_location = room_profile.objectdb
     character.save(update_fields=["db_location"])
-    result = perform_sanctification(
-        room_profile, founder, resonance, owner_mode=SanctumOwnerMode.PERSONAL
-    )
+    with patch("world.checks.services.perform_check") as mock_check:
+        mock_check.return_value = _mock_check_result(success_level=1)
+        result = perform_sanctification(
+            room_profile, founder, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+        )
     sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
 
     if leader_is_founder:
@@ -421,3 +456,125 @@ class PerformDissolutionDifficultyTests(TestCase):
 
         with self.assertRaises(RitualCheckConfigMissing):
             perform_dissolution(sanctum, leader)
+
+
+# ---------------------------------------------------------------------------
+# Sanctification — graded check tests
+# ---------------------------------------------------------------------------
+
+
+def _build_sanctification_room_with_seeds():
+    """Build a sanctifiable room with all seeds present + return (room_profile, owner, resonance)."""
+    from evennia_extensions.factories import RoomProfileFactory
+    from world.room_features.seeds import ensure_sanctum_kind
+    from world.scenes.factories import PersonaFactory
+
+    ensure_sanctum_kind()
+    ensure_sanctum_rituals()
+    ensure_magic_check_content()
+
+    resonance = ResonanceFactory()
+    room_profile = RoomProfileFactory()
+    owner = PersonaFactory()
+    from world.locations.factories import LocationOwnershipFactory
+
+    LocationOwnershipFactory(
+        parent_type=LocationParentType.ROOM,
+        area=None,
+        room_profile=room_profile,
+        holder_type=HolderType.PERSONA,
+        holder_persona=owner,
+        holder_organization=None,
+    )
+    character = owner.character_sheet.character
+    character.db_location = room_profile.objectdb
+    character.save(update_fields=["db_location"])
+    return room_profile, owner, resonance
+
+
+class PerformSanctificationGradedCheckTests(TestCase):
+    """Sanctification rolls a graded check; fail/botch → fizzled=True, no rows created."""
+
+    def test_fail_returns_fizzled_and_no_sanctum_created(self) -> None:
+        from unittest.mock import patch
+
+        room_profile, owner, resonance = _build_sanctification_room_with_seeds()
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=0)  # FAIL
+            result = perform_sanctification(
+                room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+            )
+
+        self.assertTrue(result.fizzled)
+        self.assertIsNone(result.sanctum_id)
+        self.assertEqual(result.success_level, 0)
+        # No SanctumDetails or RoomFeatureInstance should have been created
+        self.assertFalse(
+            SanctumDetails.objects.filter(founder_character_sheet=owner.character_sheet).exists()
+        )
+        from world.room_features.models import RoomFeatureInstance
+
+        self.assertFalse(RoomFeatureInstance.objects.filter(room_profile=room_profile).exists())
+
+    def test_botch_returns_fizzled(self) -> None:
+        from unittest.mock import patch
+
+        room_profile, owner, resonance = _build_sanctification_room_with_seeds()
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            result = perform_sanctification(
+                room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+            )
+
+        self.assertTrue(result.fizzled)
+        self.assertIsNone(result.sanctum_id)
+
+    def test_success_creates_sanctum_and_fizzled_false(self) -> None:
+        from unittest.mock import patch
+
+        room_profile, owner, resonance = _build_sanctification_room_with_seeds()
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
+            result = perform_sanctification(
+                room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+            )
+
+        self.assertFalse(result.fizzled)
+        self.assertIsNotNone(result.sanctum_id)
+        self.assertEqual(result.success_level, 1)
+        self.assertTrue(SanctumDetails.objects.filter(pk=result.sanctum_id).exists())
+
+    def test_crit_applies_bonus_homecoming_imbue(self) -> None:
+        from unittest.mock import patch
+
+        from world.magic.services.sanctum_install import SANCTIFICATION_CRIT_BONUS_IMBUE
+        from world.magic.services.sanctum_lvm import sum_homecoming_value
+        from world.magic.services.sanctum_rituals import _compute_cap
+
+        room_profile, owner, resonance = _build_sanctification_room_with_seeds()
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=5)  # CRIT
+            result = perform_sanctification(
+                room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+            )
+
+        self.assertFalse(result.fizzled)
+        sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
+        cap = _compute_cap(sanctum)
+        expected_imbue = min(SANCTIFICATION_CRIT_BONUS_IMBUE, cap)
+        self.assertEqual(sum_homecoming_value(sanctum), expected_imbue)
+
+    def test_missing_config_raises_ritual_check_config_missing(self) -> None:
+        from world.magic.models import RitualCheckConfig
+
+        room_profile, owner, resonance = _build_sanctification_room_with_seeds()
+        RitualCheckConfig.objects.filter(ritual__name=SANCTIFICATION_PERSONAL_RITUAL_NAME).delete()
+
+        with self.assertRaises(RitualCheckConfigMissing):
+            perform_sanctification(
+                room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
+            )

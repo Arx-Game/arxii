@@ -50,7 +50,7 @@ class RitualCheckRoll:
 
 def perform_ritual_check(
     ritual_name: str,
-    character: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
     *,
     founder_standing: bool = True,
 ) -> RitualCheckRoll:
