@@ -16,6 +16,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.currency.constants import (
     GRAFT_DEFAULT_PCT,
     GRAFT_FLOOR_PCT,
@@ -576,3 +577,109 @@ class ContractTerm(SharedMemoryModel):
     def __str__(self) -> str:
         direction = "proposer→counterparty" if self.payer_is_proposer else "counterparty→proposer"
         return f"Term({self.amount}c {direction}{' recurring' if self.recurring else ''})"
+
+
+class Profession(NaturalKeyMixin, SharedMemoryModel):
+    """An on-grid job (#929): a wage rate bought with a locked AP allotment.
+
+    The deliberate texture: a profession reserves the AP you'd otherwise
+    adventure with — wealth buys back your week. Lower-class reference is
+    1 silver (10c) per AP at 40 AP/week ≈ 4g/week; high-end ~10g/week.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    wage_per_ap = models.PositiveIntegerField(
+        help_text="Coppers earned per reserved AP (10 = the lower-class 1s/AP)."
+    )
+    ap_reservation_weekly = models.PositiveSmallIntegerField(
+        default=40,
+        help_text="AP locked out of the pool each week to hold this job.",
+    )
+    chore_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="professions",
+        help_text="Check rolled for active on-grid chore work (up to 2× wages).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CharacterEmployment(SharedMemoryModel):
+    """A character's current job (#929). One active employment at a time."""
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="employments",
+    )
+    profession = models.ForeignKey(
+        Profession,
+        on_delete=models.PROTECT,
+        related_name="employees",
+    )
+    active = models.BooleanField(default=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet"],
+                condition=models.Q(active=True),
+                name="one_active_employment_per_sheet",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Employment({self.character_sheet_id}: {self.profession.name})"
+
+
+class Business(SharedMemoryModel):
+    """A persona-owned managed income venture (#929).
+
+    Modest by design, with NEGATIVE variance — a bad week loses money.
+    Investment raises the level; the top tiers (merchant princesses,
+    hundreds of gold a week) live under constant story threat rather than
+    mechanical safety.
+    """
+
+    owner_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="businesses",
+    )
+    name = models.CharField(max_length=120)
+    invested = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Total coppers sunk into the venture.",
+    )
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "Businesses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner_persona", "name"], name="business_name_unique_per_owner"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Business({self.name}, L{self.level})"
+
+    @property
+    def level(self) -> int:
+        from world.currency.constants import BUSINESS_INVESTMENT_PER_LEVEL  # noqa: PLC0415
+
+        return 1 + self.invested // BUSINESS_INVESTMENT_PER_LEVEL

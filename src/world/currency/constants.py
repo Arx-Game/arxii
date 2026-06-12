@@ -99,3 +99,15 @@ NOTARY_FEE_COPPERS = 1_000
 
 # A notarized obligation defaults after this many consecutive missed cycles.
 CONTRACT_DEFAULT_AFTER_MISSES = 2
+
+
+# Profession chore checks (#929): success_level → wage multiplier (×100 to
+# stay integer; 150 = 1.5×). Up to ~2× the automated rate per the spec.
+CHORE_MULTIPLIER_FAIL = 100
+CHORE_MULTIPLIER_SUCCESS = 150
+CHORE_MULTIPLIER_CRIT = 200
+
+# Businesses (#929): invested coppers per level step, and the per-level
+# weekly base yield. Variance can push a week negative by design.
+BUSINESS_INVESTMENT_PER_LEVEL = 50_000
+BUSINESS_BASE_WEEKLY_PER_LEVEL = 200

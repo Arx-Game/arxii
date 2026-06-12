@@ -15,6 +15,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.currency.constants import (
+    BUSINESS_BASE_WEEKLY_PER_LEVEL,
+    CHORE_MULTIPLIER_CRIT,
+    CHORE_MULTIPLIER_FAIL,
+    CHORE_MULTIPLIER_SUCCESS,
     CONTRACT_DEFAULT_AFTER_MISSES,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
@@ -25,6 +29,8 @@ from world.currency.constants import (
     format_coppers,
 )
 from world.currency.models import (
+    Business,
+    CharacterEmployment,
     CharacterPurse,
     Contract,
     ContractTerm,
@@ -591,3 +597,120 @@ def _update_contract_status(contract: Contract, *, terms: list[ContractTerm], mi
     if not has_recurring and all_oneshots_done:
         contract.status = ContractStatus.COMPLETED
         contract.save(update_fields=["status"])
+
+
+@transaction.atomic
+def run_weekly_employment(employment: CharacterEmployment, *, was_active: bool) -> int:
+    """One week's automated wages for a held job (#929).
+
+    The profession's AP allotment is locked first — spent from the pool
+    exactly like adventuring AP would be, because it IS the AP you'd have
+    adventured with. Wages mint on the AP actually reserved, and ONLY for
+    a week the character was actively played (the activity signal comes
+    from the weekly cron, #932). Returns coppers paid.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    if not employment.active or not was_active:
+        return 0
+
+    pool = ActionPointPool.get_or_create_for_character(employment.character_sheet.character)
+    reserved = min(employment.profession.ap_reservation_weekly, pool.current)
+    if reserved <= 0:
+        return 0
+    if not pool.spend(reserved):  # pragma: no cover - min() guards this
+        return 0
+
+    wages = reserved * employment.profession.wage_per_ap
+    transfer(
+        amount=wages,
+        reason=f"wages: {employment.profession.name}",
+        to_purse=get_or_create_purse(employment.character_sheet),
+    )
+    return wages
+
+
+@transaction.atomic
+def work_chore(employment: CharacterEmployment, *, ap_spent: int) -> int:
+    """Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.
+
+    Rolls the profession's chore check through perform_check — character
+    identity always matters. success_level maps to the wage multiplier
+    (fail 1×, success 1.5×, strong success 2×). Returns coppers paid.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    if not employment.active:
+        msg = "You do not hold that job."
+        raise ValidationError(msg)
+    if ap_spent <= 0:
+        msg = "Chore work needs AP."
+        raise ValidationError(msg)
+
+    pool = ActionPointPool.get_or_create_for_character(employment.character_sheet.character)
+    if not pool.spend(ap_spent):
+        msg = "Not enough AP."
+        raise ValidationError(msg)
+
+    multiplier = CHORE_MULTIPLIER_FAIL
+    if employment.profession.chore_check_type is not None:
+        result = perform_check(
+            employment.character_sheet.character,
+            employment.profession.chore_check_type,
+        )
+        if result.success_level >= 2:  # noqa: PLR2004 - chart success degrees
+            multiplier = CHORE_MULTIPLIER_CRIT
+        elif result.success_level >= 1:
+            multiplier = CHORE_MULTIPLIER_SUCCESS
+
+    wages = ap_spent * employment.profession.wage_per_ap * multiplier // 100
+    if wages > 0:
+        transfer(
+            amount=wages,
+            reason=f"chore wages: {employment.profession.name}",
+            to_purse=get_or_create_purse(employment.character_sheet),
+        )
+    return wages
+
+
+@transaction.atomic
+def invest_in_business(business: Business, *, amount: int) -> Business:
+    """Sink owner money into a venture (#929); investment raises the level."""
+    if amount <= 0:
+        msg = "Investment must be positive."
+        raise ValidationError(msg)
+    transfer(
+        amount=amount,
+        reason=f"investment: {business.name}",
+        from_purse=get_or_create_purse(business.owner_persona.character_sheet),
+    )
+    business.invested += amount
+    business.save(update_fields=["invested"])
+    return business
+
+
+@transaction.atomic
+def run_business_week(business: Business, *, fortune: int) -> int:
+    """One week's business result (#929). ``fortune`` is -100..100.
+
+    The weekly cron supplies fortune (a roll, market events, story).
+    Yield = level × base × (100 + fortune) / 100 − level × base, i.e.
+    fortune IS the profit/loss percentage on the level's base turnover —
+    a bad week (negative fortune) draws real money from the owner's purse.
+    Returns signed coppers (negative = loss taken).
+    """
+    if not business.active:
+        return 0
+    fortune = max(-100, min(100, fortune))
+    base = business.level * BUSINESS_BASE_WEEKLY_PER_LEVEL
+    net = base * fortune // 100
+    purse = get_or_create_purse(business.owner_persona.character_sheet)
+    if net > 0:
+        transfer(amount=net, reason=f"business profit: {business.name}", to_purse=purse)
+    elif net < 0:
+        loss = min(-net, purse.balance)  # can't lose money you don't have
+        if loss > 0:
+            transfer(amount=loss, reason=f"business loss: {business.name}", from_purse=purse)
+        net = -loss
+    return net
