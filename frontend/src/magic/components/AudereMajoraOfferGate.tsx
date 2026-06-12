@@ -19,12 +19,12 @@ interface AudereMajoraOfferGateProps {
 
 export function AudereMajoraOfferGate({
   characterSheetId,
-  characterId: _characterId,
-  encounterId: _encounterId,
+  characterId,
+  encounterId,
 }: AudereMajoraOfferGateProps) {
   // enabled guard: never poll without a resolved character.
   const { data } = usePendingAudereMajoraOffers(characterSheetId > 0);
-  const respond = useRespondToAudereMajora();
+  const respond = useRespondToAudereMajora(characterId, encounterId);
 
   const offers = data?.results ?? [];
   const offer: PendingAudereMajoraOffer | null =

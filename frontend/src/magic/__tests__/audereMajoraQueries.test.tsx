@@ -192,7 +192,7 @@ describe('useRespondToAudereMajora', () => {
   it('passes the exact payload through to api.respondToAudereMajora', async () => {
     vi.mocked(api.respondToAudereMajora).mockResolvedValue(CROSSING_RESULT_FIXTURE);
 
-    const { result } = renderHook(() => useRespondToAudereMajora(), {
+    const { result } = renderHook(() => useRespondToAudereMajora(11, 22), {
       wrapper: createWrapper(),
     });
 
@@ -223,7 +223,7 @@ describe('useRespondToAudereMajora', () => {
     const { wrapper, client } = createWrapperWithClient();
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
 
-    const { result } = renderHook(() => useRespondToAudereMajora(), { wrapper });
+    const { result } = renderHook(() => useRespondToAudereMajora(11, 22), { wrapper });
 
     await act(async () => {
       await result.current.mutateAsync({ offer_id: 7, accept: false });
@@ -240,6 +240,12 @@ describe('useRespondToAudereMajora', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['magic', 'path-intent'],
     }); // prefix-invalidates all characterId variants
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['magic', 'character-anima', 11],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['combat', 'encounter', 22],
+    });
   });
 });
 

@@ -653,7 +653,7 @@ export function usePendingAudereMajoraOffers(enabled: boolean = true) {
  * On success invalidates the majora inbox, the base audere inbox (both poll
  * the combat panel), and the path intent (a crossing may clear or confirm it).
  */
-export function useRespondToAudereMajora() {
+export function useRespondToAudereMajora(characterId: number, encounterId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: AudereMajoraRespondRequest) => api.respondToAudereMajora(body),
@@ -662,6 +662,10 @@ export function useRespondToAudereMajora() {
       qc.invalidateQueries({ queryKey: magicKeys.auderePending() }).catch(() => {});
       // Prefix-invalidate all pathIntent keys (any characterId).
       qc.invalidateQueries({ queryKey: [...magicKeys.all, 'path-intent'] }).catch(() => {});
+      // A crossing changes level, conditions, and combat state — mirror
+      // useRespondToAudere's post-respond refreshes.
+      qc.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
     },
   });
 }
