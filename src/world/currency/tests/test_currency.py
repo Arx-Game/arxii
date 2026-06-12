@@ -291,7 +291,7 @@ class OrgEconomicsTests(TestCase):
 
 
 class DebtTests(TestCase):
-    """Debt instruments, auto-service, the stasis default rule (#927)."""
+    """Debt as withholding at the income source (#927, per Apostate's model)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -312,6 +312,23 @@ class DebtTests(TestCase):
         defaults.update(kwargs)
         return extend_loan(**defaults)
 
+    def _drain_treasury(self):
+        from world.currency.models import OrganizationTreasury
+
+        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
+        OrganizationTreasury.flush_instance_cache()
+
+    def _stream(self, gross=1000):
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import get_or_create_economics
+
+        economics = get_or_create_economics(self.debtor)
+        economics.graft_pct = 10
+        economics.save()
+        return OrgIncomeStream.objects.create(
+            organization=self.debtor, name="Land taxes", kind="domain_tax", gross_amount=gross
+        )
+
     def test_fiat_loan_mints_principal_to_debtor(self) -> None:
         from world.currency.services import get_or_create_treasury
 
@@ -321,67 +338,84 @@ class DebtTests(TestCase):
         assert treasury.balance == 100_000
         assert debt.monthly_interest == 500  # 0.5% of 100k
 
-    def test_auto_service_pays_interest_first(self) -> None:
-        from world.currency.services import get_or_create_treasury, service_debts
+    def test_interest_accrues_to_arrears_not_treasury(self) -> None:
+        from world.currency.services import accrue_monthly_interest, get_or_create_treasury
+
+        debt = self._loan()
+        accrued = accrue_monthly_interest(self.debtor)
+
+        debt.refresh_from_db()
+        assert accrued == 500
+        assert debt.arrears == 500
+        treasury = get_or_create_treasury(self.debtor)
+        treasury.refresh_from_db()
+        assert treasury.balance == 100_000  # no money moved at accrual
+
+    def test_income_withholds_debt_service_at_source(self) -> None:
+        from world.currency.services import (
+            accrue_monthly_interest,
+            get_or_create_treasury,
+            process_income_stream,
+        )
 
         self._loan()
-        transfers = service_debts(self.debtor)
-        assert len(transfers) == 1
-        assert transfers[0].amount == 500
+        self._drain_treasury()
+        accrue_monthly_interest(self.debtor)
+        stream = self._stream(gross=1000)
+
+        process_income_stream(stream)  # net 900 after 10% graft
+
+        debtor_treasury = get_or_create_treasury(self.debtor)
+        debtor_treasury.refresh_from_db()
         creditor_treasury = get_or_create_treasury(self.blighton)
         creditor_treasury.refresh_from_db()
-        assert creditor_treasury.balance == 500
+        assert creditor_treasury.balance == 500  # arrears paid first, at source
+        assert debtor_treasury.balance == 400  # what reaches the books
 
-    def test_funds_short_under_auto_service_never_defaults(self) -> None:
-        from world.currency.models import OrganizationTreasury
-        from world.currency.services import service_debts
+    def test_overleveraged_income_bottoms_at_zero_never_seizes(self) -> None:
+        from world.currency.models import DebtInstrument
+        from world.currency.services import (
+            accrue_monthly_interest,
+            get_or_create_treasury,
+            process_income_stream,
+        )
+
+        self._loan(principal=10_000_000)  # monthly interest 50_000
+        self._drain_treasury()
+        accrue_monthly_interest(self.debtor)
+        stream = self._stream(gross=1000)
+
+        process_income_stream(stream)  # net 900, all withheld
+
+        debtor_treasury = get_or_create_treasury(self.debtor)
+        debtor_treasury.refresh_from_db()
+        assert debtor_treasury.balance == 0  # zero spendable income…
+        debt = DebtInstrument.objects.get(debtor_organization=self.debtor)
+        assert debt.arrears == 49_100  # …arrears persist, nothing seized
+        assert debt.in_default is False  # and nothing defaults offscreen
+
+    def test_diverting_skips_withholding_and_arrears_grow(self) -> None:
+        from world.currency.services import (
+            accrue_monthly_interest,
+            get_or_create_treasury,
+            process_income_stream,
+        )
 
         debt = self._loan()
-        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
-        OrganizationTreasury.flush_instance_cache()
-
-        for _ in range(3):
-            service_debts(self.debtor)
-
-        debt.refresh_from_db()
-        assert debt.consecutive_missed == 3
-        assert debt.in_default is False  # no offscreen default
-
-    def test_divert_decision_plus_two_misses_defaults(self) -> None:
-        from world.currency.models import OrganizationTreasury
-        from world.currency.services import service_debts
-
-        debt = self._loan()
-        debt.auto_service = False
+        debt.diverting = True
         debt.save()
-        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
-        OrganizationTreasury.flush_instance_cache()
+        self._drain_treasury()
+        accrue_monthly_interest(self.debtor)
+        stream = self._stream(gross=1000)
 
-        service_debts(self.debtor)
+        process_income_stream(stream)
+
+        debtor_treasury = get_or_create_treasury(self.debtor)
+        debtor_treasury.refresh_from_db()
+        assert debtor_treasury.balance == 900  # the cheat: full income arrives
         debt.refresh_from_db()
-        assert debt.in_default is False  # one miss is not default
-
-        service_debts(self.debtor)
-        debt.refresh_from_db()
-        assert debt.in_default is True  # active divert + 2 consecutive misses
-
-    def test_successful_payment_resets_miss_counter(self) -> None:
-        from world.currency.models import OrganizationTreasury
-        from world.currency.services import service_debts, transfer
-
-        debt = self._loan()
-        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
-        OrganizationTreasury.flush_instance_cache()
-        service_debts(self.debtor)
-        debt.refresh_from_db()
-        assert debt.consecutive_missed == 1
-
-        from world.currency.services import get_or_create_treasury
-
-        transfer(amount=10_000, reason="seed", to_treasury=get_or_create_treasury(self.debtor))
-        service_debts(self.debtor)
-        debt.refresh_from_db()
-        assert debt.consecutive_missed == 0
+        assert debt.arrears == 500  # the exposure: arrears untouched
+        assert debt.in_default is False  # consequences are story, not bookkeeping
 
     def test_repay_principal_retires_debt(self) -> None:
         from django.core.exceptions import ValidationError as DjangoValidationError

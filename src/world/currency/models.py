@@ -368,14 +368,15 @@ class ContributionRecord(SharedMemoryModel):
 class DebtInstrument(SharedMemoryModel):
     """A standing debt on an org treasury (#927).
 
-    Interest accrues monthly (basis points; 50 = the 0.5%/mo reference).
-    The stasis principle governs servicing: in absentia the books run
-    themselves (auto_service pays interest first, before upkeep/wages), and
-    **default can only fire on an active decision to divert** — turning
-    auto_service off is that decision. A funds-short month under
-    auto-service records a miss but never defaults anyone offscreen.
-    Two consecutive misses while diverting = default (named-asset cession
-    and political exposure are story content keyed off ``in_default``).
+    Interest accrues monthly into ``arrears`` (basis points; 50 = the
+    0.5%/mo reference). Servicing is **withholding at the income source**:
+    every income payout pays down arrears before money reaches the books —
+    honest debtors never manage debt, they just see smaller incomes, and
+    over-leverage bottoms out at zero spendable income, never offscreen
+    loss. The only road to consequences is the cheat: ``diverting`` routes
+    income past the withholding (full money arrives, arrears balloon,
+    exposure accrues). Getting caught is story content — staff/story sets
+    ``in_default``; nothing mechanical ever flips it on its own.
     """
 
     debtor_organization = models.ForeignKey(
@@ -394,16 +395,21 @@ class DebtInstrument(SharedMemoryModel):
         default=50,
         help_text="Monthly interest in basis points (50 = 0.5%/month).",
     )
-    auto_service = models.BooleanField(
-        default=True,
+    arrears = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Accrued unpaid interest, withheld from incomes at source.",
+    )
+    diverting = models.BooleanField(
+        default=False,
         help_text=(
-            "Books run themselves: pay interest automatically, first in "
-            "priority. Turning this off is the active divert decision that "
-            "makes default possible."
+            "The cheat: route income past the withholding. An active IC "
+            "decision with discovery consequences — never a bookkeeping state."
         ),
     )
-    consecutive_missed = models.PositiveSmallIntegerField(default=0)
-    in_default = models.BooleanField(default=False)
+    in_default = models.BooleanField(
+        default=False,
+        help_text="Set by story/staff when a divert is CAUGHT — never automatic.",
+    )
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

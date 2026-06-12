@@ -247,6 +247,9 @@ def process_income_stream(
             to_treasury=treasury,
         )
 
+    # Costs come off before the money is "yours" (#927): debt service
+    # withholds at the source, then any defaulted-contract liens (#928).
+    _withhold_debt_service(stream, treasury, net)
     _enforce_garnishments(stream, treasury, net)
 
     declared = net if declared_amount is None else declared_amount
@@ -353,9 +356,6 @@ def treat_servants(
     return economics
 
 
-DEFAULT_AFTER_MISSES = 2
-
-
 @transaction.atomic
 def extend_loan(
     *,
@@ -385,48 +385,55 @@ def extend_loan(
     )
 
 
-@transaction.atomic
-def service_debts(organization: Organization) -> list[CurrencyTransfer]:
-    """Run one month's interest servicing for an org's active debts (#927).
+def accrue_monthly_interest(organization: Organization) -> int:
+    """One month's interest lands in arrears (#927). Returns total accrued.
 
-    Interest pays FIRST in the in-absentia priority order (interest →
-    upkeep → wages). Per the stasis principle: a funds-short month under
-    auto_service records a miss but cannot default anyone offscreen;
-    default needs the active divert decision (auto_service=False) plus
-    DEFAULT_AFTER_MISSES consecutive misses.
+    No money moves here — arrears are withheld from incomes at the source
+    by ``process_income_stream``. Run by the monthly cron (#932).
     """
-    treasury = get_or_create_treasury(organization)
-    transfers: list[CurrencyTransfer] = []
-    for debt in DebtInstrument.objects.filter(
-        debtor_organization=organization, active=True, in_default=False
-    ):
+    total = 0
+    for debt in DebtInstrument.objects.filter(debtor_organization=organization, active=True):
         interest = debt.monthly_interest
-        treasury.refresh_from_db()
-        paid = False
-        if debt.auto_service and interest > 0 and treasury.balance >= interest:
-            transfers.append(
-                transfer(
-                    amount=interest,
-                    reason=f"loan interest: {debt.creditor_organization.name}",
-                    from_treasury=treasury,
-                    to_treasury=get_or_create_treasury(debt.creditor_organization),
-                )
-            )
-            paid = True
-
-        if paid or interest == 0:
-            if debt.consecutive_missed:
-                debt.consecutive_missed = 0
-                debt.save(update_fields=["consecutive_missed"])
+        if interest <= 0:
             continue
+        debt.arrears += interest
+        debt.save(update_fields=["arrears"])
+        total += interest
+    return total
 
-        debt.consecutive_missed += 1
-        update_fields = ["consecutive_missed"]
-        if not debt.auto_service and debt.consecutive_missed >= DEFAULT_AFTER_MISSES:
-            debt.in_default = True
-            update_fields.append("in_default")
-        debt.save(update_fields=update_fields)
-    return transfers
+
+def _withhold_debt_service(
+    stream: OrgIncomeStream, treasury: OrganizationTreasury, available: int
+) -> int:
+    """Pay down arrears at the income source (#927). Returns coppers withheld.
+
+    Oldest debt first; capped at the income available — over-leverage
+    bottoms out at zero spendable income, never seizure. Diverting debts
+    are skipped: that money reaches the books whole, the arrears keep
+    growing, and discovery is the player-facing risk loop.
+    """
+    withheld = 0
+    debts = DebtInstrument.objects.filter(
+        debtor_organization=stream.organization,
+        active=True,
+        diverting=False,
+        arrears__gt=0,
+    ).order_by("created_at")
+    for debt in debts:
+        if available <= 0:
+            break
+        payment = min(debt.arrears, available)
+        transfer(
+            amount=payment,
+            reason=f"debt service: {debt.creditor_organization.name}",
+            from_treasury=treasury,
+            to_treasury=get_or_create_treasury(debt.creditor_organization),
+        )
+        debt.arrears -= payment
+        debt.save(update_fields=["arrears"])
+        available -= payment
+        withheld += payment
+    return withheld
 
 
 @transaction.atomic
