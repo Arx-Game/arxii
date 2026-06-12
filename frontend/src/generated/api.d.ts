@@ -9430,8 +9430,34 @@ export interface paths {
      *
      *     Reads ride the interaction feed (windows serialize inline on their
      *     event); all eligibility/validation lives in ``react_to_window``.
+     *     ``react-to-interaction`` (#911) opens a lazy kind's window on first
+     *     reaction — kudos-style kinds need no pre-existing window row.
      */
     post: operations['reaction_windows_react_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/reaction-windows/react-to-interaction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Action-only viewset: POST /reaction-windows/{pk}/react/.
+     *
+     *     Reads ride the interaction feed (windows serialize inline on their
+     *     event); all eligibility/validation lives in ``react_to_window``.
+     *     ``react-to-interaction`` (#911) opens a lazy kind's window on first
+     *     reaction — kudos-style kinds need no pre-existing window row.
+     */
+    post: operations['reaction_windows_react_to_interaction_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -35614,6 +35640,29 @@ export interface operations {
         /** @description A unique integer value identifying this reaction window. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WindowReactInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WindowReactInput'];
+        };
+      };
+    };
+  };
+  reaction_windows_react_to_interaction_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody: {

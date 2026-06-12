@@ -91,6 +91,19 @@ class BatchApDailyRegenTests(TestCase):
         pool.refresh_from_db()
         self.assertEqual(pool.current, 200)
 
+    def test_daily_regen_stamps_timestamp(self) -> None:
+        """Regenerated pools get last_daily_regen stamped (admin display)."""
+        from world.action_points.factories import ActionPointPoolFactory
+
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        old_timestamp = pool.last_daily_regen
+
+        batch_ap_daily_regen()
+
+        pool.refresh_from_db()
+        self.assertEqual(pool.current, 105)
+        self.assertGreater(pool.last_daily_regen, old_timestamp)
+
     def test_regen_with_positive_modifier(self) -> None:
         """Positive modifier increases regen amount in batch."""
         from world.action_points.factories import ActionPointPoolFactory

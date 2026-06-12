@@ -468,105 +468,6 @@ class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
         assert pool.current == 300
 
 
-class ActionPointPoolApplyDailyRegenTests(ActionPointPoolTestCase):
-    """Tests for ActionPointPool.apply_daily_regen method."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Set up test data."""
-        cls.character = CharacterFactory()
-
-    def test_apply_daily_regen_adds_ap(self):
-        """apply_daily_regen adds configured daily amount."""
-        ActionPointConfigFactory(daily_regen=10, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-        old_timestamp = pool.last_daily_regen
-
-        added = pool.apply_daily_regen()
-
-        assert added == 10
-        pool.refresh_from_db()
-        assert pool.current == 110
-        assert pool.last_daily_regen > old_timestamp
-
-    def test_apply_daily_regen_capped_at_maximum(self):
-        """apply_daily_regen caps at maximum."""
-        ActionPointConfigFactory(daily_regen=10, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=195, maximum=200)
-
-        added = pool.apply_daily_regen()
-
-        assert added == 5
-        pool.refresh_from_db()
-        assert pool.current == 200
-
-    def test_apply_daily_regen_at_maximum(self):
-        """apply_daily_regen adds nothing when at maximum but still updates timestamp."""
-        ActionPointConfigFactory(daily_regen=10, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
-        old_timestamp = pool.last_daily_regen
-
-        added = pool.apply_daily_regen()
-
-        assert added == 0
-        pool.refresh_from_db()
-        assert pool.current == 200
-        assert pool.last_daily_regen > old_timestamp
-
-    def test_apply_daily_regen_uses_fallback(self):
-        """apply_daily_regen uses fallback when no active config."""
-        # No active config, fallback is 5
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-
-        added = pool.apply_daily_regen()
-
-        assert added == 5
-        pool.refresh_from_db()
-        assert pool.current == 105
-
-
-class ActionPointPoolApplyWeeklyRegenTests(ActionPointPoolTestCase):
-    """Tests for ActionPointPool.apply_weekly_regen method."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Set up test data."""
-        cls.character = CharacterFactory()
-
-    def test_apply_weekly_regen_adds_ap(self):
-        """apply_weekly_regen adds configured weekly amount."""
-        ActionPointConfigFactory(weekly_regen=100, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
-
-        added = pool.apply_weekly_regen()
-
-        assert added == 100
-        pool.refresh_from_db()
-        assert pool.current == 150
-
-    def test_apply_weekly_regen_capped_at_maximum(self):
-        """apply_weekly_regen caps at maximum."""
-        ActionPointConfigFactory(weekly_regen=100, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=150, maximum=200)
-
-        added = pool.apply_weekly_regen()
-
-        assert added == 50
-        pool.refresh_from_db()
-        assert pool.current == 200
-
-    def test_apply_weekly_regen_uses_fallback(self):
-        """apply_weekly_regen uses fallback when no active config."""
-        # No active config, fallback is 100
-        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
-
-        added = pool.apply_weekly_regen()
-
-        assert added == 100
-        pool.refresh_from_db()
-        assert pool.current == 150
-
-
 class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     """Tests for AP modifier integration with the mechanics system."""
 
@@ -612,28 +513,11 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         assert pool._get_ap_modifier("ap_daily_regen") == 0
 
     def test_positive_daily_modifier(self) -> None:
-        """Positive modifier increases daily regen."""
+        """Positive modifier is reflected in _get_ap_modifier totals."""
         self._create_ap_modifier(self.daily_target, 3)
-        ActionPointConfigFactory(daily_regen=5, is_active=True)
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
 
-        added = pool.apply_daily_regen()
-
-        assert added == 8  # 5 base + 3 modifier
-        pool.refresh_from_db()
-        assert pool.current == 108
-
-    def test_negative_daily_modifier_floors_at_zero(self) -> None:
-        """Negative modifier can reduce regen to 0 but not below."""
-        self._create_ap_modifier(self.daily_target, -10)
-        ActionPointConfigFactory(daily_regen=5, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-
-        added = pool.apply_daily_regen()
-
-        assert added == 0  # max(0, 5 + -10) = 0
-        pool.refresh_from_db()
-        assert pool.current == 100
+        assert pool._get_ap_modifier("ap_daily_regen") == 3
 
     def test_maximum_modifier_increases_effective_max(self) -> None:
         """AP maximum modifier increases effective maximum."""
@@ -645,27 +529,11 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         assert effective_max == 300  # 200 base + 100 modifier
 
     def test_weekly_modifier_applied(self) -> None:
-        """Weekly regen applies modifier from distinctions."""
+        """Weekly modifier is reflected in _get_ap_modifier totals."""
         self._create_ap_modifier(self.weekly_target, 20)
-        ActionPointConfigFactory(weekly_regen=100, is_active=True)
         pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
 
-        added = pool.apply_weekly_regen()
-
-        assert added == 120  # 100 base + 20 modifier
-        pool.refresh_from_db()
-        assert pool.current == 170
-
-    def test_daily_regen_uses_base_rate_without_modifiers(self) -> None:
-        """Daily regen uses base rate when no modifiers exist."""
-        ActionPointConfigFactory(daily_regen=5, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-
-        added = pool.apply_daily_regen()
-
-        assert added == 5
-        pool.refresh_from_db()
-        assert pool.current == 105
+        assert pool._get_ap_modifier("ap_weekly_regen") == 20
 
     def test_effective_maximum_minimum_is_one(self) -> None:
         """Effective maximum floors at 1 even with large negative modifier."""
@@ -676,17 +544,12 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
         assert effective_max == 1
 
-    def test_regen_without_sheet_uses_base(self) -> None:
-        """Characters without a CharacterSheet regenerate at base rate."""
-        ActionPointConfigFactory(daily_regen=5, is_active=True)
+    def test_modifier_without_sheet_is_zero(self) -> None:
+        """Characters without a CharacterSheet have no modifiers (base rate)."""
         character_no_sheet = CharacterFactory()
         pool = ActionPointPoolFactory(character=character_no_sheet, current=100, maximum=200)
 
-        added = pool.apply_daily_regen()
-
-        assert added == 5
-        pool.refresh_from_db()
-        assert pool.current == 105
+        assert pool._get_ap_modifier("ap_daily_regen") == 0
 
     def test_unknown_target_returns_zero(self) -> None:
         """Unknown modifier target name returns 0."""

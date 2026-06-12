@@ -28,3 +28,20 @@ class Prerequisite:
         context: dict | None = None,
     ) -> tuple[bool, str]:
         raise NotImplementedError
+
+
+@dataclass
+class StaffOnlyPrerequisite(Prerequisite):
+    """The actor's account must be staff (GM tooling gate)."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+        return False, "Staff only."
