@@ -189,6 +189,12 @@ def option_is_locally_live(
             instance.anchor_room_id is not None
             and current_room_profile_id == instance.anchor_room_id
         )
+    if node.location_mode == NodeLocationMode.INSTANCE:
+        # #886: live only inside the room this run spawned; nowhere before.
+        return (
+            instance.spawned_room_id is not None
+            and current_room_profile_id == instance.spawned_room_id
+        )
     # NodeLocationMode.ROOMS
     return any(room.pk == current_room_profile_id for room in node.locations.all())
 
@@ -367,6 +373,43 @@ def _route_next_node(route: MissionOptionRoute) -> MissionNode | None:
     return route.target_node
 
 
+def _spawn_mission_instance_room(
+    instance: MissionInstance, option: MissionOption, character: ObjectDB
+) -> None:
+    """Spawn (once per run) the instanced room and move the actor in (#886).
+
+    Idempotent: a run that already spawned re-enters the same room — the
+    doorway works twice without minting a second interior. Wires the
+    EXISTING instances lifecycle; no parallel machinery.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.instances.services import spawn_instanced_room  # noqa: PLC0415
+
+    if instance.spawned_room_id is not None:
+        room = instance.spawned_room.objectdb
+    else:
+        room = spawn_instanced_room(
+            name=option.instance_name or instance.template.name,
+            description=option.instance_description,
+            owner=character.sheet_data,
+            return_location=character.location,
+            source_key=f"mission:{instance.pk}",
+        )
+        profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        instance.spawned_room = profile
+        instance.save(update_fields=["spawned_room"])
+    character.move_to(room, quiet=True)
+
+
+def _teardown_spawned_room(instance: MissionInstance) -> None:
+    """Complete the run's instanced room, if one was spawned (#886)."""
+    from world.instances.services import complete_instanced_room  # noqa: PLC0415
+
+    if instance.spawned_room_id is None:
+        return
+    complete_instanced_room(instance.spawned_room.objectdb)
+
+
 def _finish_terminal(instance: MissionInstance) -> None:
     """Mark the run complete (terminal route reached).
 
@@ -383,6 +426,7 @@ def _finish_terminal(instance: MissionInstance) -> None:
     instance.completed_at = timezone.now()
     instance.current_node = None
     instance.save()
+    _teardown_spawned_room(instance)
     on_mission_complete_for_beat(instance)
 
 
@@ -426,6 +470,9 @@ def resolve_option(  # noqa: PLR0913
     M1: writes ``current_node`` but never reads a stale cached one.
     """
     character = actor.character
+
+    if option.spawns_instance:
+        _spawn_mission_instance_room(instance, option, character)
 
     if option.option_kind == OptionKind.BRANCH:
         return _resolve_branch(instance, node, option, character, advance=advance)
