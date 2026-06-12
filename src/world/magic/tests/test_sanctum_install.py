@@ -464,7 +464,7 @@ class PerformDissolutionDifficultyTests(TestCase):
 
 
 def _build_sanctification_room_with_seeds():
-    """Build a sanctifiable room with all seeds present + return (room_profile, owner, resonance)."""
+    """Build a sanctifiable room with seeds present; return (room_profile, owner, resonance)."""
     from evennia_extensions.factories import RoomProfileFactory
     from world.room_features.seeds import ensure_sanctum_kind
     from world.scenes.factories import PersonaFactory

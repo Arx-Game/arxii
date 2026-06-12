@@ -512,13 +512,13 @@ class HomecomingGradedCheckTests(TestCase):
     def test_crit_multiplies_gain_by_1_25(self) -> None:
         from unittest.mock import patch
 
+        from world.magic.services.ritual_checks import OutcomeTier
         from world.magic.services.sanctum_rituals import (
             HOMECOMING_GAIN_MULTIPLIERS,
             HomecomingResult,
         )
-        from world.magic.services.ritual_checks import OutcomeTier
 
-        sanctum, owner, resonance = _setup_graded_homecoming(balance=1000)
+        sanctum, owner, _resonance = _setup_graded_homecoming(balance=1000)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
@@ -533,8 +533,8 @@ class HomecomingGradedCheckTests(TestCase):
     def test_botch_multiplies_gain_by_0_25(self) -> None:
         from unittest.mock import patch
 
-        from world.magic.services.sanctum_rituals import HOMECOMING_GAIN_MULTIPLIERS
         from world.magic.services.ritual_checks import OutcomeTier
+        from world.magic.services.sanctum_rituals import HOMECOMING_GAIN_MULTIPLIERS
 
         sanctum, owner, resonance = _setup_graded_homecoming(balance=1000)
 
@@ -554,7 +554,7 @@ class HomecomingGradedCheckTests(TestCase):
     def test_success_multiplies_gain_by_1_00(self) -> None:
         from unittest.mock import patch
 
-        sanctum, owner, resonance = _setup_graded_homecoming(balance=1000)
+        sanctum, owner, _resonance = _setup_graded_homecoming(balance=1000)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
@@ -586,7 +586,7 @@ class PurgingGradedCheckTests(TestCase):
         """Default 0.5 retention − 0.30 botch modifier = 0.20 effective retention."""
         from unittest.mock import patch
 
-        sanctum, owner, old_resonance, new_resonance = _setup_graded_purging(balance=500)
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
@@ -602,7 +602,7 @@ class PurgingGradedCheckTests(TestCase):
         """Default 0.5 + 0.25 crit modifier = 0.75 effective retention."""
         from unittest.mock import patch
 
-        sanctum, owner, old_resonance, new_resonance = _setup_graded_purging(balance=500)
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
@@ -617,7 +617,7 @@ class PurgingGradedCheckTests(TestCase):
         """SUCCESS modifier is 0.00 — default retention is used unchanged."""
         from unittest.mock import patch
 
-        sanctum, owner, old_resonance, new_resonance = _setup_graded_purging(balance=500)
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS

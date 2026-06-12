@@ -245,7 +245,7 @@ def perform_sanctification(
         if owner_mode == SanctumOwnerMode.PERSONAL
         else SANCTIFICATION_COVENANT_RITUAL_NAME
     )
-    roll = perform_ritual_check(ritual_name, character)  # noqa: OBJECTDB_PARAM
+    roll = perform_ritual_check(ritual_name, character)
     if roll.tier in (OutcomeTier.FAIL, OutcomeTier.BOTCH):
         return SanctificationResult(
             sanctum_id=None,

@@ -246,7 +246,7 @@ def perform_homecoming_ritual(
 
     roll = perform_ritual_check(
         HOMECOMING_RITUAL_NAME,
-        leader_persona.character_sheet.character,  # noqa: OBJECTDB_PARAM
+        leader_persona.character_sheet.character,
     )
     base_gain = resonance_sacrificed // HOMECOMING_EFFICIENCY
     gain = int(Decimal(base_gain) * HOMECOMING_GAIN_MULTIPLIERS[roll.tier])
@@ -309,7 +309,7 @@ def perform_purging_ritual(  # noqa: PLR0913
 
     roll = perform_ritual_check(
         PURGING_RITUAL_NAME,
-        leader_persona.character_sheet.character,  # noqa: OBJECTDB_PARAM
+        leader_persona.character_sheet.character,
     )
     effective_retention = min(
         Decimal("1.0"),
