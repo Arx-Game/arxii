@@ -50,12 +50,16 @@ class ReactionKindConfig:
     ``ValidationError`` to reject the reaction (the row rolls back).
     ``on_settle`` (optional) runs once at scene close.
     ``public``: reactions render with attribution; hidden kinds tally only.
+    ``lazy_open``: the window may be opened on-demand by the first reactor
+    (kudos-style any-pose kinds); explicit-only kinds (entrance) stay False
+    so arbitrary interactions can't grow their windows.
     """
 
     choices_for: Callable[[ReactionWindow], list[ReactionChoice]]
     on_reaction: Callable[[ReactionWindow, WindowReaction], None]
     on_settle: Callable[[ReactionWindow], None] | None = None
     public: bool = True
+    lazy_open: bool = False
 
 
 _KIND_REGISTRY: dict[str, ReactionKindConfig] = {}
@@ -147,6 +151,36 @@ def react_to_window(
         msg = "You have already reacted to this."
         raise ValidationError(msg) from exc
     return reaction
+
+
+def react_to_interaction(
+    *,
+    interaction: Interaction,
+    kind: str,
+    reactor_persona: Persona,
+    choice: str,
+) -> WindowReaction:
+    """Open (idempotently) a lazy kind's window on ``interaction`` and react.
+
+    Only kinds registered with ``lazy_open=True`` may be opened this way —
+    explicit-only kinds (entrance) raise. The open + reaction run atomically
+    so a rejected reaction never leaves a stray empty window behind.
+    """
+    config = get_reaction_kind(kind)
+    if not config.lazy_open:
+        msg = "That kind of moment can't be started from a reaction."
+        raise ValidationError(msg)
+    if interaction.scene is None:
+        msg = "Reactions need a scene."
+        raise ValidationError(msg)
+
+    with transaction.atomic():
+        window = open_reaction_window(interaction=interaction, kind=kind)
+        return react_to_window(
+            window=window,
+            reactor_persona=reactor_persona,
+            choice=choice,
+        )
 
 
 def settle_windows_for_scene(scene: Scene) -> int:

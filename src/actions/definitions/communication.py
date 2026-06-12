@@ -9,6 +9,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
+from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
@@ -186,6 +187,71 @@ class EmitAction(Action):
             mode=InteractionMode.EMIT,
             target_personas=target_personas,
             place=place,
+        )
+
+        return ActionResult(success=True)
+
+
+@dataclass
+class PemitAction(Action):
+    """Staff-only private narrative emit to an explicit receiver list (#906).
+
+    The Arx 1 "pemit": GM narration delivered only to the listed characters.
+    Rides the receiver-scoped EMIT path — the persisted interaction carries
+    receiver rows, so the feed shows it only to those receivers (and the
+    scene log never shows more than the room heard). Works inside scenes
+    (record_interaction resolves the active scene from the room) and at
+    room level outside scenes (persists scene-less), per the #906 ruling.
+    """
+
+    key: str = "pemit"
+    name: str = "Private Emit"
+    icon: str = "scroll"
+    category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.AREA
+
+    intent_event: str | None = "before_pemit"
+    result_event: str | None = "pemit"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [StaffOnlyPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+        # run() does not evaluate prerequisites; enforce the gate here too.
+        if not is_staff_observer(actor):
+            return ActionResult(success=False, message="Staff only.")
+
+        text = kwargs.get("text", "")
+        receivers: list[ObjectDB] = kwargs.get("receivers", [])
+        if not text:
+            return ActionResult(success=False, message="Pemit what?")
+        if not receivers:
+            return ActionResult(success=False, message="Pemit to whom?")
+
+        receiver_personas = _characters_to_active_personas(receivers)
+        if receiver_personas is None:
+            return ActionResult(success=False, message="No valid receivers found.")
+
+        sdm = context.scene_data if context else SceneDataManager()
+
+        # Direct delivery to each receiver only — never the whole room.
+        for receiver in receivers:
+            receiver_state = sdm.initialize_state_for_object(receiver)
+            send_message(receiver_state, text)
+
+        record_interaction(
+            character=actor,
+            content=text,
+            mode=InteractionMode.EMIT,
+            receivers=receiver_personas,
         )
 
         return ActionResult(success=True)
