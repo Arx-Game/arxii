@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
+import { AudereMajoraOfferGate } from '@/magic/components/AudereMajoraOfferGate';
 import { useAvailableActions, useCombatEncounter, useConsequenceOutcomes } from './queries';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
@@ -148,6 +149,13 @@ export function CombatTurnPanel({
       {/* 0. Audere offer gate — the most dramatic prompt in combat (#873).
           Renders null unless a pending offer exists for this character. */}
       <AudereOfferGate
+        characterSheetId={characterSheetId}
+        characterId={characterId}
+        encounterId={encounterId}
+      />
+      {/* 0b. Audere Majora crossing offer gate (#543).
+          Renders null unless a pending crossing offer exists for this character. */}
+      <AudereMajoraOfferGate
         characterSheetId={characterSheetId}
         characterId={characterId}
         encounterId={encounterId}

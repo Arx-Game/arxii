@@ -1416,6 +1416,42 @@ class StageAdvanceRespondView(APIView):
         return Response(out.data, status=status.HTTP_200_OK)
 
 
+# =============================================================================
+# Audere / Audere Majora shared helpers (#873, #543)
+# =============================================================================
+
+
+def _account_scoped_offer_queryset(model, user, *select_related: str):
+    """Return a queryset of offer rows scoped to the authenticated user's active tenures.
+
+    Shared by ``PendingAudereOfferViewSet`` and ``PendingAudereMajoraOfferViewSet``;
+    both models use the same FK path to the account and the same ordering/distinct.
+    ``select_related`` is passed through so each ViewSet can add its own
+    model-specific related fields on top of the common ``character_sheet`` select.
+    """
+    return (
+        model.objects.filter(
+            character_sheet__roster_entry__tenures__player_data__account=user,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+        )
+        .select_related(*select_related)
+        .order_by("-created_at")
+        .distinct()
+    )
+
+
+def _dispatch_respond(request: Request, serializer_cls, result_serializer_cls) -> Response:
+    """Validate ownership via ``serializer_cls``, dispatch the service, and return the result.
+
+    Shared by ``AudereRespondView`` and ``AudereMajoraRespondView``; both follow the
+    same validate → save → serialize pattern with different serializer pairs.
+    """
+    serializer = serializer_cls(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    result = serializer.save()
+    return Response(result_serializer_cls(result).data, status=status.HTTP_200_OK)
+
+
 class PendingAudereOfferViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only inbox of pending Audere offers (#873).
 
@@ -1436,15 +1472,8 @@ class PendingAudereOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
 
-        user = self.request.user
-        return (
-            PendingAudereOffer.objects.filter(
-                character_sheet__roster_entry__tenures__player_data__account=user,
-                character_sheet__roster_entry__tenures__end_date__isnull=True,
-            )
-            .select_related("character_sheet")
-            .order_by("-created_at")
-            .distinct()
+        return _account_scoped_offer_queryset(
+            PendingAudereOffer, self.request.user, "character_sheet"
         )
 
 
@@ -1463,15 +1492,56 @@ class AudereRespondView(APIView):
             AudereRespondSerializer,
         )
 
-        serializer = AudereRespondSerializer(
-            data=request.data,
-            context={"request": request},
+        return _dispatch_respond(request, AudereRespondSerializer, AudereOfferResultSerializer)
+
+
+# =============================================================================
+# Audere Majora REST surface (#543)
+# =============================================================================
+
+
+class PendingAudereMajoraOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+
+    GET /api/magic/audere-majora/pending/
+    GET /api/magic/audere-majora/pending/{id}/
+
+    Scoped to the authenticated user's character sheets (active tenures).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import PendingAudereMajoraOfferSerializer  # noqa: PLC0415
+
+        return PendingAudereMajoraOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
+
+        return _account_scoped_offer_queryset(
+            PendingAudereMajoraOffer, self.request.user, "threshold", "character_sheet"
         )
-        serializer.is_valid(raise_exception=True)
-        result = serializer.save()
-        return Response(
-            AudereOfferResultSerializer(result).data,
-            status=status.HTTP_200_OK,
+
+
+class AudereMajoraRespondView(APIView):
+    """Accept or decline a pending Audere Majora (Crossing) offer (#543).
+
+    POST /api/magic/audere-majora/respond/  {offer_id, accept, path_id, declaration_text}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate ownership + dispatch resolve_audere_majora_offer; return the result."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            AudereMajoraCrossingResultSerializer,
+            AudereMajoraRespondSerializer,
+        )
+
+        return _dispatch_respond(
+            request, AudereMajoraRespondSerializer, AudereMajoraCrossingResultSerializer
         )
 
 

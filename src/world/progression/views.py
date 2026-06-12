@@ -21,6 +21,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from web.api.mixins import CharacterContextMixin
+from world.character_sheets.models import CharacterSheet
 from world.game_clock.week_services import get_current_game_week
 from world.journals.models import JournalEntry
 from world.progression.constants import VoteTargetType
@@ -29,6 +31,7 @@ from world.progression.models import (
     KudosClaimCategory,
     KudosPointsData,
     KudosTransaction,
+    PathIntent,
     RandomSceneTarget,
     WeeklyVote,
     WeeklyVoteBudget,
@@ -38,6 +41,8 @@ from world.progression.serializers import (
     AccountProgressionSerializer,
     CastVoteResponseSerializer,
     CastVoteSerializer,
+    PathIntentDeclareSerializer,
+    PathIntentSerializer,
     RandomSceneTargetSerializer,
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
@@ -374,3 +379,71 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         RandomSceneTarget.flush_instance_cache()
         serializer = RandomSceneTargetSerializer(updated_target)
         return Response(serializer.data)
+
+
+# --- PathIntent view ---
+
+
+class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
+    """Single-resource endpoint for a character's declared path intent.
+
+    GET  path-intent/ — current intent or {"intent": null}
+    PUT  path-intent/ — declare/replace intent; body: {"path_id": <int>}
+    DELETE path-intent/ — clear intent (idempotent, 204)
+
+    Ownership enforced via CharacterContextMixin: the X-Character-ID header
+    must refer to a character in the requesting account's available roster.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_sheet(self, request: Request) -> CharacterSheet | None:
+        """Resolve the CharacterSheet for the requesting character, or None."""
+        character = self._get_character(request)
+        if character is None:
+            return None
+        # Reverse OneToOne may be absent for sheet-less characters.
+        return getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+
+    def list(self, request: Request) -> Response:
+        """GET — return current intent or {"intent": null}."""
+        sheet = self._get_sheet(request)
+        if sheet is None:
+            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            intent = PathIntent.objects.select_related("intended_path").get(character_sheet=sheet)
+        except PathIntent.DoesNotExist:
+            return Response({"intent": None})
+
+        return Response({"intent": PathIntentSerializer(intent).data})
+
+    def update(self, request: Request, pk: Any = None) -> Response:
+        """PUT — declare or replace the intent for this character."""
+        sheet = self._get_sheet(request)
+        if sheet is None:
+            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PathIntentDeclareSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        path = serializer.validated_path
+
+        intent, _ = PathIntent.objects.update_or_create(
+            character_sheet=sheet,
+            defaults={"intended_path": path},
+        )
+        PathIntent.flush_instance_cache()
+        intent_data = PathIntentSerializer(
+            PathIntent.objects.select_related("intended_path").get(pk=intent.pk)
+        ).data
+        return Response({"intent": intent_data})
+
+    def destroy(self, request: Request, pk: Any = None) -> Response:
+        """DELETE — clear the intent (idempotent)."""
+        sheet = self._get_sheet(request)
+        if sheet is None:
+            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+
+        PathIntent.objects.filter(character_sheet=sheet).delete()
+        PathIntent.flush_instance_cache()
+        return Response(status=status.HTTP_204_NO_CONTENT)
