@@ -731,3 +731,51 @@ class BusinessTests(TestCase):
 
         net = run_business_week(self.business, fortune=100)
         assert net == 600  # level 3 × 200 × 100%
+
+
+class WeeklyEconomyTests(TestCase):
+    """The Sunday-rollover economy pass (#932)."""
+
+    def test_rollover_runs_all_phases(self) -> None:
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import extend_loan, run_weekly_economy
+        from world.societies.factories import OrganizationFactory
+
+        org = OrganizationFactory()
+        blighton = OrganizationFactory()
+        extend_loan(creditor=blighton, debtor=org, principal=100_000, fiat=True)
+        OrgIncomeStream.objects.create(
+            organization=org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+
+        counts = run_weekly_economy()
+
+        assert counts["interest"] == 1
+        assert counts["income"] == 1
+        from world.currency.models import DebtInstrument
+
+        debt = DebtInstrument.objects.get(debtor_organization=org)
+        # weekly fraction (500 // 4 = 125) accrued, then withheld from income
+        assert debt.arrears == 0  # income (900 net) covered the 125
+        from world.currency.services import get_or_create_treasury
+
+        creditor_treasury = get_or_create_treasury(blighton)
+        creditor_treasury.refresh_from_db()
+        assert creditor_treasury.balance == 125
+
+    def test_wages_skip_inactive_players(self) -> None:
+        from world.currency.models import CharacterEmployment, Profession
+        from world.currency.services import get_or_create_purse, run_weekly_economy
+
+        persona = PersonaFactory()
+        profession = Profession.objects.create(
+            name="Clerk", wage_per_ap=10, ap_reservation_weekly=10
+        )
+        CharacterEmployment.objects.create(
+            character_sheet=persona.character_sheet, profession=profession
+        )
+        # No account on the character → never "actively played" → no wages.
+        run_weekly_economy()
+        purse = get_or_create_purse(persona.character_sheet)
+        purse.refresh_from_db()
+        assert purse.balance == 0

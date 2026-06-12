@@ -1,6 +1,6 @@
 """Tests for the game clock task registry."""
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -172,3 +172,74 @@ class RunDueTasksTests(TestCase):
         record = ScheduledTaskRecord.objects.get(task_key="ic_update")
         self.assertIsNotNone(record.last_ic_run_at)
         self.assertEqual(record.last_ic_run_at, ic_now)
+
+
+class AnchoredWeeklyDueTests(TestCase):
+    """Sunday-midnight-EST anchored rollover (#932)."""
+
+    def _task(self):
+        from datetime import timedelta
+
+        from world.game_clock.task_registry import CronDefinition
+
+        return CronDefinition(
+            task_key="anchored_test",
+            callable=lambda: None,
+            interval=timedelta(days=7),
+            anchor_weekday=0,  # Monday (= Sunday midnight EST in UTC terms)
+            anchor_hour_utc=5,
+        )
+
+    def test_first_sight_baselines_without_firing(self) -> None:
+        from datetime import datetime
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.game_clock.task_registry import _is_task_due
+
+        record = ScheduledTaskRecord.objects.create(task_key="anchored_test")
+        now = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)  # Wednesday
+        assert _is_task_due(record, self._task(), now=now, ic_now=None) is False
+        record.refresh_from_db()
+        assert record.last_run_at is not None  # baseline stamped
+
+    def test_due_after_anchor_passes(self) -> None:
+        from datetime import datetime
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.game_clock.task_registry import _is_task_due
+
+        # Last ran Saturday; now it's Monday 06:00 UTC — the anchor passed.
+        record = ScheduledTaskRecord.objects.create(
+            task_key="anchored_test",
+            last_run_at=datetime(2026, 6, 13, 12, 0, tzinfo=UTC),  # Saturday
+        )
+        now = datetime(2026, 6, 15, 6, 0, tzinfo=UTC)  # Monday after 05:00
+        assert _is_task_due(record, self._task(), now=now, ic_now=None) is True
+
+    def test_not_due_again_same_week(self) -> None:
+        from datetime import datetime
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.game_clock.task_registry import _is_task_due
+
+        # Ran at Monday 05:30; Wednesday is still the same anchor window.
+        record = ScheduledTaskRecord.objects.create(
+            task_key="anchored_test",
+            last_run_at=datetime(2026, 6, 15, 5, 30, tzinfo=UTC),
+        )
+        now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)  # Wednesday
+        assert _is_task_due(record, self._task(), now=now, ic_now=None) is False
+
+    def test_not_due_before_anchor_hour(self) -> None:
+        from datetime import datetime
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.game_clock.task_registry import _is_task_due
+
+        # Monday 04:00 UTC — before the 05:00 anchor; last ran Friday.
+        record = ScheduledTaskRecord.objects.create(
+            task_key="anchored_test",
+            last_run_at=datetime(2026, 6, 12, 12, 0, tzinfo=UTC),  # Friday
+        )
+        now = datetime(2026, 6, 15, 4, 0, tzinfo=UTC)
+        assert _is_task_due(record, self._task(), now=now, ic_now=None) is False

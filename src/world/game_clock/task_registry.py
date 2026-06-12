@@ -27,6 +27,11 @@ class CronDefinition:
     interval: timedelta
     frequency_type: FrequencyType = FrequencyType.REAL
     description: str = ""
+    # Optional weekly anchor (#932): when set, the task is due once the most
+    # recent anchor moment (weekday at anchor_hour_utc) has passed since the
+    # last run — instead of the rolling interval. 0=Monday … 6=Sunday.
+    anchor_weekday: int | None = None
+    anchor_hour_utc: int = 0
 
 
 # Module-level registry populated once at server startup via register_all_tasks().
@@ -89,6 +94,8 @@ def _is_task_due(
     ic_now: datetime | None,
 ) -> bool:
     """Check whether a task is due to run."""
+    if task_def.anchor_weekday is not None:
+        return _is_anchored_weekly_due(record, task_def, now=now)
     if task_def.frequency_type == FrequencyType.REAL:
         if record.last_run_at is None:
             return True
@@ -100,3 +107,30 @@ def _is_task_due(
     if record.last_ic_run_at is None:
         return True
     return (ic_now - record.last_ic_run_at) >= task_def.interval
+
+
+def _is_anchored_weekly_due(
+    record: ScheduledTaskRecord,
+    task_def: CronDefinition,
+    *,
+    now: datetime,
+) -> bool:
+    """Due once per weekly anchor (#932 — the Arx 1 Sunday-rollover feel).
+
+    The anchor moment is ``anchor_weekday`` at ``anchor_hour_utc``. The task
+    is due when the most recent anchor moment has passed and the last run
+    predates it (first run fires on the next anchor — no surprise rollover
+    the moment the task ships).
+    """
+    days_since_anchor = (now.weekday() - task_def.anchor_weekday) % 7
+    last_anchor = (now - timedelta(days=days_since_anchor)).replace(
+        hour=task_def.anchor_hour_utc, minute=0, second=0, microsecond=0
+    )
+    if last_anchor > now:
+        last_anchor -= timedelta(days=7)
+    if record.last_run_at is None:
+        # Stamp a baseline so the first fire happens at the NEXT anchor.
+        record.last_run_at = now
+        record.save(update_fields=["last_run_at"])
+        return False
+    return record.last_run_at < last_anchor
