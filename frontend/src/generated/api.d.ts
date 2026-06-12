@@ -13631,9 +13631,10 @@ export interface components {
      * @description * `pose` - Pose (whole room)
      *     * `whisper` - Whisper (target only)
      *     * `table_talk` - Table talk (your place)
+     *     * `mutter` - Mutter (partial echo)
      * @enum {string}
      */
-    DeliveryEnum: 'pose' | 'whisper' | 'table_talk';
+    DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
     /**
      * @description * `trivial` - Trivial
      *     * `easy` - Easy
@@ -15013,11 +15014,12 @@ export interface components {
        *     * `emit` - Emit
        *     * `say` - Say
        *     * `whisper` - Whisper
+       *     * `mutter` - Mutter
        *     * `shout` - Shout
        *     * `action` - Action
        *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['ModeFb0Enum'];
+      mode?: components['schemas']['Mode8baEnum'];
       /** Format: date-time */
       readonly timestamp: string;
     };
@@ -15032,11 +15034,12 @@ export interface components {
        *     * `emit` - Emit
        *     * `say` - Say
        *     * `whisper` - Whisper
+       *     * `mutter` - Mutter
        *     * `shout` - Shout
        *     * `action` - Action
        *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['ModeFb0Enum'];
+      mode?: components['schemas']['Mode8baEnum'];
     };
     /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
     InteractionActionLink: {
@@ -15071,11 +15074,12 @@ export interface components {
        *     * `emit` - Emit
        *     * `say` - Say
        *     * `whisper` - Whisper
+       *     * `mutter` - Mutter
        *     * `shout` - Shout
        *     * `action` - Action
        *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['ModeFb0Enum'];
+      mode?: components['schemas']['Mode8baEnum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -15139,11 +15143,12 @@ export interface components {
        *     * `emit` - Emit
        *     * `say` - Say
        *     * `whisper` - Whisper
+       *     * `mutter` - Mutter
        *     * `shout` - Shout
        *     * `action` - Action
        *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['ModeFb0Enum'];
+      mode?: components['schemas']['Mode8baEnum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -15188,11 +15193,12 @@ export interface components {
        *     * `emit` - Emit
        *     * `say` - Say
        *     * `whisper` - Whisper
+       *     * `mutter` - Mutter
        *     * `shout` - Shout
        *     * `action` - Action
        *     * `outcome` - Outcome
        */
-      mode?: components['schemas']['ModeFb0Enum'];
+      mode?: components['schemas']['Mode8baEnum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -16060,12 +16066,13 @@ export interface components {
      *     * `emit` - Emit
      *     * `say` - Say
      *     * `whisper` - Whisper
+     *     * `mutter` - Mutter
      *     * `shout` - Shout
      *     * `action` - Action
      *     * `outcome` - Outcome
      * @enum {string}
      */
-    ModeFb0Enum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action' | 'outcome';
+    Mode8baEnum: 'pose' | 'emit' | 'say' | 'whisper' | 'mutter' | 'shout' | 'action' | 'outcome';
     ModifierCategory: {
       readonly id: number;
       /** @description Category name (e.g., 'stat', 'magic', 'affinity') */
@@ -20341,6 +20348,7 @@ export interface components {
        *     * `pose` - Pose (whole room)
        *     * `whisper` - Whisper (target only)
        *     * `table_talk` - Table talk (your place)
+       *     * `mutter` - Mutter (partial echo)
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       readonly status: components['schemas']['SceneActionStatusEnum'];
@@ -20391,6 +20399,7 @@ export interface components {
        *     * `pose` - Pose (whole room)
        *     * `whisper` - Whisper (target only)
        *     * `table_talk` - Table talk (your place)
+       *     * `mutter` - Mutter (partial echo)
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       /**
