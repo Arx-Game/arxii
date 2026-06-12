@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.currency.services import deliver_mission_money
 from world.missions.constants import DeedRewardKind, DeedRewardSink, RewardGroupRule
 from world.missions.integrations import beat_stub, crime_watch_stub, money_stub, rumor_stub
 from world.missions.models import MissionDeedRewardLine, MissionRewardQueue
@@ -271,7 +272,14 @@ def _route_line(
         return
 
     if kind == DeedRewardKind.IMMEDIATE and sink == DeedRewardSink.MONEY:
-        money_stub.deliver_money(line)
+        try:
+            sheet = line.recipient.sheet_data
+        except Exception:  # noqa: BLE001 - sheet-less recipient: keep stub fallback
+            sheet = None
+        if sheet is not None:
+            deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=line.ref)
+        else:
+            money_stub.deliver_money(line)
         stub_calls.append(StubCallRecord(sink=sink, line_id=line.pk))
         return
 

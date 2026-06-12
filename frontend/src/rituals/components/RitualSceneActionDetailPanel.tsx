@@ -5,11 +5,11 @@
  * When the caller is the ritual's author, shows an "Edit" button that opens
  * AnimaRitualEditDialog.
  *
- * Backend gap (Phase 9): The RitualSerializer does not yet expose
- * `scene_action_config` (stat/skill/check_type) or `author_account_id`.
+ * Backend gap (Phase 9): The RitualSerializer does not yet fully surface
+ * `check_config` (stat/skill/check_type) display in the UI.
  * The "Performable in scene" badge and edit button are rendered based on
- * execution_kind and author matching, but the check spec (stat/skill/check_type)
- * cannot be displayed until Phase 10 adds those fields to the serializer.
+ * execution_kind and author matching; the check spec (stat/skill/check_type)
+ * display was deferred to a later phase.
  */
 
 import { useState } from 'react';
@@ -82,8 +82,8 @@ export function RitualSceneActionDetailPanel({
 
         {/* Check spec — not yet available until Phase 10 backend update */}
         <p className="mt-2 text-xs text-muted-foreground">
-          Check spec (stat / skill / check type) will be shown once the backend exposes
-          scene_action_config fields.
+          Check spec (stat / skill / check type) will be shown once the frontend wires check_config
+          fields.
         </p>
 
         {/* Narrative prose */}

@@ -3123,6 +3123,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+     *
+     *     No list endpoint: books are reached from an org you belong to, not
+     *     browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+     */
+    get: operations['currency_org_books_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -13412,6 +13434,13 @@ export interface components {
       | 'effort'
       | 'fatigue'
       | 'strain';
+    ContributionRow: {
+      persona_name: string;
+      amount: number;
+      reason: string;
+      /** Format: date-time */
+      created_at: string;
+    };
     /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
     Covenant: {
       readonly id: number;
@@ -13607,6 +13636,14 @@ export interface components {
       /** @description Hex color for UI display (e.g., #FF4400 for fire) */
       readonly color_hex: string;
       readonly icon: string;
+    };
+    DebtRow: {
+      creditor: string;
+      principal: number;
+      arrears: number;
+      interest_bps_monthly: number;
+      diverting: boolean;
+      in_default: boolean;
     };
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
@@ -13956,6 +13993,10 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
+      escalation_curve?: number | null;
+      readonly escalation_curve_name: string | null;
+      readonly escalation_start_round: number | null;
+      readonly escalation_tick_narration: string | null;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -13974,6 +14015,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Lightweight listing serializer for combat encounters. */
     EncounterList: {
@@ -15002,6 +15044,12 @@ export interface components {
       /** @description The minimum tier number that must be reached on this track */
       readonly minimum_tier: number;
     };
+    IncomeStreamRow: {
+      name: string;
+      kind: string;
+      gross_amount: number;
+      active: boolean;
+    };
     /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
     InlineActionInteraction: {
       readonly id: number;
@@ -15383,6 +15431,13 @@ export interface components {
       current_node_flavor: string;
       compass_rooms: string[];
       compass_anywhere: boolean;
+    };
+    LedgerRow: {
+      amount: number;
+      reason: string;
+      direction: string;
+      /** Format: date-time */
+      created_at: string;
     };
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
@@ -16323,6 +16378,12 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    ObligationRow: {
+      name: string;
+      to_organization: string;
+      percent: number;
+      active: boolean;
+    };
     /**
      * @description Staff CRUD for per-(offer, persona) cooldown rows.
      *
@@ -16440,6 +16501,19 @@ export interface components {
      * @enum {string}
      */
     OptionKindEnum: 'branch' | 'check';
+    /** @description The whole books page in one read. */
+    OrgBooks: {
+      organization_id: number;
+      organization_name: string;
+      balance: number;
+      spend_rank_max: number;
+      graft_pct: number;
+      income_streams: components['schemas']['IncomeStreamRow'][];
+      debts: components['schemas']['DebtRow'][];
+      obligations: components['schemas']['ObligationRow'][];
+      contributions: components['schemas']['ContributionRow'][];
+      ledger: components['schemas']['LedgerRow'][];
+    };
     OrganizationSearch: {
       id: number;
       name: string;
@@ -18017,6 +18091,12 @@ export interface components {
        *     ``None`` when there is no primary persona or it has no thumbnail.
        */
       readonly thumbnail_media_url: string | null;
+      /** @description Escalation pressure on this combatant — public dramatic state. */
+      readonly escalation_level: number | null;
+      /** @description Process-derived intensity bonus from the COMBAT engagement. */
+      readonly intensity_modifier: number | null;
+      /** @description Process-derived control bonus from the COMBAT engagement. */
+      readonly control_modifier: number | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -18238,6 +18318,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Full serializer for episode details */
     PatchedEpisodeDetailRequest: {
@@ -18786,14 +18867,14 @@ export interface components {
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     PatchedRitualPatchRequest: {
       name?: string;
       description?: string;
       narrative_prose?: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatchRequest'];
+      check_config?: components['schemas']['RitualCheckConfigPatchRequest'];
     };
     /** @description Full scene representation with personas */
     PatchedSceneDetailRequest: {
@@ -20033,7 +20114,7 @@ export interface components {
      *     Exposes name, description, narrative_prose, dispatch metadata, the
      *     `input_schema` blob the frontend uses to render its perform form,
      *     `author_account_id` for client-side "authored by you" filtering,
-     *     and the nested `scene_action_config` for SCENE_ACTION rituals.
+     *     and the nested `check_config` when present.
      */
     Ritual: {
       readonly id: number;
@@ -20046,8 +20127,8 @@ export interface components {
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
       readonly author_account_id: number | null;
-      /** @description Return nested scene_action_config for SCENE_ACTION rituals, else None. */
-      readonly scene_action_config: {
+      /** @description Return nested check_config when present, else None. */
+      readonly check_config: {
         [key: string]: unknown;
       } | null;
       /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
@@ -20057,47 +20138,47 @@ export interface components {
       readonly max_participants: number | null;
     };
     /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatch: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatchRequest: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     RitualPatch: {
       name: string;
       description: string;
       narrative_prose: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatch'];
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatch: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatchRequest: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
+      check_config?: components['schemas']['RitualCheckConfigPatch'];
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/{id}/accept/.
@@ -25927,6 +26008,41 @@ export interface operations {
         content: {
           'application/json': components['schemas']['CovenantRole'];
         };
+      };
+    };
+  };
+  currency_org_books_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

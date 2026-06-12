@@ -200,6 +200,9 @@ function makeParticipant(
     active_conditions: [],
     thumbnail_url: null,
     thumbnail_media_url: null,
+    escalation_level: null,
+    intensity_modifier: null,
+    control_modifier: null,
   };
 }
 

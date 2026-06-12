@@ -4317,6 +4317,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantRole'
           description: ''
+  /api/currency/org-books/{id}/:
+    get:
+      operationId: currency_org_books_retrieve
+      description: |-
+        Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+
+        No list endpoint: books are reached from an org you belong to, not
+        browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgBooks'
+          description: ''
+        '403':
+          description: Not a member of the organization.
+        '404':
+          description: No such organization.
   /api/distinctions/categories/:
     get:
       operationId: distinctions_categories_list
@@ -23622,6 +23651,23 @@ components:
         * `effort` - Effort
         * `fatigue` - Fatigue
         * `strain` - Strain
+    ContributionRow:
+      type: object
+      properties:
+        persona_name:
+          type: string
+        amount:
+          type: integer
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - created_at
+      - persona_name
+      - reason
     Covenant:
       type: object
       description: Read-only serializer for Covenant identity, type, level, and lifecycle
@@ -24028,6 +24074,28 @@ components:
       - icon
       - id
       - name
+    DebtRow:
+      type: object
+      properties:
+        creditor:
+          type: string
+        principal:
+          type: integer
+        arrears:
+          type: integer
+        interest_bps_monthly:
+          type: integer
+        diverting:
+          type: boolean
+        in_default:
+          type: boolean
+      required:
+      - arrears
+      - creditor
+      - diverting
+      - in_default
+      - interest_bps_monthly
+      - principal
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -24813,11 +24881,29 @@ components:
             Falls back to a direct filter for callers that don't use the viewset
             (e.g. unit tests that call the serializer directly).
           readOnly: true
+        escalation_curve:
+          type: integer
+          nullable: true
+        escalation_curve_name:
+          type: string
+          readOnly: true
+          nullable: true
+        escalation_start_round:
+          type: integer
+          readOnly: true
+          nullable: true
+        escalation_tick_narration:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - clashes
       - completed_at
       - created_at
       - current_round_actions
+      - escalation_curve_name
+      - escalation_start_round
+      - escalation_tick_narration
       - id
       - is_gm
       - is_participant
@@ -24857,6 +24943,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     EncounterList:
       type: object
       description: Lightweight listing serializer for combat encounters.
@@ -27018,6 +27107,22 @@ components:
       - minimum_tier
       - track
       - track_name
+    IncomeStreamRow:
+      type: object
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+        gross_amount:
+          type: integer
+        active:
+          type: boolean
+      required:
+      - active
+      - gross_amount
+      - kind
+      - name
     InlineActionInteraction:
       type: object
       description: Minimal serializer for an ACTION-mode Interaction embedded in an
@@ -27884,6 +27989,23 @@ components:
       - status
       - summary
       - template_name
+    LedgerRow:
+      type: object
+      properties:
+        amount:
+          type: integer
+        reason:
+          type: string
+        direction:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - created_at
+      - direction
+      - reason
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -29664,6 +29786,22 @@ components:
     NullEnum:
       enum:
       - null
+    ObligationRow:
+      type: object
+      properties:
+        name:
+          type: string
+        to_organization:
+          type: string
+        percent:
+          type: integer
+        active:
+          type: boolean
+      required:
+      - active
+      - name
+      - percent
+      - to_organization
     OfferCooldown:
       type: object
       description: |-
@@ -29869,6 +30007,51 @@ components:
       description: |-
         * `branch` - Branch
         * `check` - Check
+    OrgBooks:
+      type: object
+      description: The whole books page in one read.
+      properties:
+        organization_id:
+          type: integer
+        organization_name:
+          type: string
+        balance:
+          type: integer
+        spend_rank_max:
+          type: integer
+        graft_pct:
+          type: integer
+        income_streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomeStreamRow'
+        debts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebtRow'
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObligationRow'
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionRow'
+        ledger:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerRow'
+      required:
+      - balance
+      - contributions
+      - debts
+      - graft_pct
+      - income_streams
+      - ledger
+      - obligations
+      - organization_id
+      - organization_name
+      - spend_rank_max
     OrganizationSearch:
       type: object
       properties:
@@ -32390,15 +32573,33 @@ components:
 
             ``None`` when there is no primary persona or it has no thumbnail.
           readOnly: true
+        escalation_level:
+          type: integer
+          nullable: true
+          description: Escalation pressure on this combatant — public dramatic state.
+          readOnly: true
+        intensity_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived intensity bonus from the COMBAT engagement.
+          readOnly: true
+        control_modifier:
+          type: integer
+          nullable: true
+          description: Process-derived control bonus from the COMBAT engagement.
+          readOnly: true
       required:
       - active_conditions
       - available_strain
       - character_name
       - character_sheet_id
       - character_status
+      - control_modifier
+      - escalation_level
       - fatigue
       - health
       - id
+      - intensity_modifier
       - max_health
       - thumbnail_media_url
       - thumbnail_url
@@ -32779,6 +32980,9 @@ components:
           format: date-time
           nullable: true
           description: When the current declaration phase began.
+        escalation_curve:
+          type: integer
+          nullable: true
     PatchedEpisodeDetailRequest:
       type: object
       description: Full serializer for episode details
@@ -33696,8 +33900,8 @@ components:
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -33709,8 +33913,8 @@ components:
         narrative_prose:
           type: string
           minLength: 1
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatchRequest'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatchRequest'
     PatchedSceneDetailRequest:
       type: object
       description: Full scene representation with personas
@@ -36195,7 +36399,7 @@ components:
         Exposes name, description, narrative_prose, dispatch metadata, the
         `input_schema` blob the frontend uses to render its perform form,
         `author_account_id` for client-side "authored by you" filtering,
-        and the nested `scene_action_config` for SCENE_ACTION rituals.
+        and the nested `check_config` when present.
       properties:
         id:
           type: integer
@@ -36229,12 +36433,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        scene_action_config:
+        check_config:
           type: object
           additionalProperties: {}
           nullable: true
-          description: Return nested scene_action_config for SCENE_ACTION rituals,
-            else None.
+          description: Return nested check_config when present, else None.
           readOnly: true
         client_hosted:
           type: boolean
@@ -36255,6 +36458,7 @@ components:
           nullable: true
       required:
       - author_account_id
+      - check_config
       - client_hosted
       - description
       - execution_kind
@@ -36267,15 +36471,64 @@ components:
       - name
       - narrative_prose
       - participation_rule
-      - scene_action_config
+    RitualCheckConfigPatch:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
+    RitualCheckConfigPatchRequest:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
     RitualPatch:
       type: object
       description: |-
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -36284,62 +36537,12 @@ components:
           type: string
         narrative_prose:
           type: string
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatch'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatch'
       required:
       - description
       - name
       - narrative_prose
-    RitualSceneActionConfigPatch:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
-    RitualSceneActionConfigPatchRequest:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
     RitualSessionAccept:
       type: object
       description: |-

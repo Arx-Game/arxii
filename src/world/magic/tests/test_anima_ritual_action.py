@@ -20,8 +20,8 @@ from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
@@ -69,13 +69,13 @@ def _make_pending_resolution(outcome_row: object) -> PendingActionResolution:
 
 
 def _make_scene_action_ritual():
-    """Create a SCENE_ACTION Ritual + RitualSceneActionConfig sidecar."""
+    """Create a SCENE_ACTION Ritual + RitualCheckConfig."""
     ritual = RitualFactory(
         execution_kind=RitualExecutionKind.SCENE_ACTION,
         service_function_path="",
         flow=None,
     )
-    RitualSceneActionConfigFactory(ritual=ritual)
+    RitualCheckConfigFactory(ritual=ritual)
     return ritual
 
 

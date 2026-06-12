@@ -65,6 +65,12 @@ from world.room_features.factories import (
 from world.scenes.factories import PersonaFactory
 
 
+def _mock_check_result(success_level: int):
+    """Lightweight fake CheckResult compatible with RitualCheckRoll construction."""
+    outcome = type("O", (), {"success_level": success_level})()
+    return type("CR", (), {"outcome": outcome})()
+
+
 def _personal_sanctum(*, resonance=None, level: int = 1) -> tuple[SanctumDetails, object]:
     """Build a PERSONAL Sanctum + its room/owner. Returns (sanctum, owner_persona)."""
     resonance = resonance or ResonanceFactory()
@@ -138,6 +144,22 @@ class LVMHelpersTests(TestCase):
 
 
 class HomecomingRitualTests(TestCase):
+    """Existing Homecoming tests — patched to a deterministic SUCCESS so assertions are stable."""
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        from world.magic.seeds_checks import ensure_magic_check_content
+
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS × 1.0
+
+    def tearDown(self):
+        self._check_patcher.stop()
+
     def test_owner_can_perform_and_grow_resonance(self) -> None:
         resonance = ResonanceFactory()
         sanctum, owner = _personal_sanctum(resonance=resonance)
@@ -154,10 +176,11 @@ class HomecomingRitualTests(TestCase):
             narrative_text="A first consecration.",
         )
         self.assertIsInstance(result, HomecomingResult)
-        # 500 sacrificed at the 100:1 efficiency ratio yields 5 imbued.
+        # 500 sacrificed at 100:1 efficiency = 5 base; SUCCESS × 1.0 = 5 applied.
         self.assertEqual(result.base_resonance_added, 5)
         self.assertEqual(result.overflow_escrowed, 0)
         self.assertEqual(result.new_homecoming_sum, 5)
+        self.assertEqual(result.success_level, 1)
         cr = CharacterResonance.objects.get(
             character_sheet=owner.character_sheet, resonance=resonance
         )
@@ -188,6 +211,22 @@ class HomecomingRitualTests(TestCase):
 
 
 class PurgingRitualTests(TestCase):
+    """Existing Purging tests — patched to a deterministic SUCCESS so assertions are stable."""
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        from world.magic.seeds_checks import ensure_magic_check_content
+
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS: modifier = 0.0
+
+    def tearDown(self):
+        self._check_patcher.stop()
+
     def test_purging_changes_resonance_and_drains_rows(self) -> None:
         old_resonance = ResonanceFactory()
         new_resonance = ResonanceFactory()
@@ -208,8 +247,10 @@ class PurgingRitualTests(TestCase):
         )
 
         self.assertEqual(result.new_resonance_id, new_resonance.pk)
-        # 100 × DEFAULT_PURGING_RETENTION (0.5) = 50
+        # SUCCESS modifier = 0.0 → effective retention = 0.5 + 0.0 = 0.5
+        # 100 × 0.5 = 50
         self.assertEqual(result.sum_after_drain, 50)
+        self.assertEqual(result.success_level, 1)
         sanctum.refresh_from_db()
         self.assertEqual(sanctum.resonance_type_id, new_resonance.pk)
         row = LocationValueModifier.objects.get(source=homecoming_source_tag(sanctum))
@@ -419,3 +460,182 @@ class SeedsTests(TestCase):
         p1 = ensure_purging_ritual()
         p2 = ensure_purging_ritual()
         self.assertEqual(p1.pk, p2.pk)
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by graded-check tests
+# ---------------------------------------------------------------------------
+
+
+def _setup_graded_homecoming(*, balance: int = 1000):
+    """Build seeded sanctum + leader ready for perform_homecoming_ritual."""
+    from world.magic.seeds_checks import ensure_magic_check_content
+
+    ensure_sanctum_rituals()
+    ensure_magic_check_content()
+    resonance = ResonanceFactory()
+    sanctum, owner = _personal_sanctum(resonance=resonance)
+    CharacterResonanceFactory(
+        character_sheet=owner.character_sheet,
+        resonance=resonance,
+        balance=balance,
+    )
+    return sanctum, owner, resonance
+
+
+def _setup_graded_purging(*, balance: int = 1000):
+    """Build seeded sanctum with 100 homecoming imbue + leader ready for purging."""
+    from world.magic.seeds_checks import ensure_magic_check_content
+
+    ensure_sanctum_rituals()
+    ensure_magic_check_content()
+    old_resonance = ResonanceFactory()
+    new_resonance = ResonanceFactory()
+    sanctum, owner = _personal_sanctum(resonance=old_resonance)
+    apply_homecoming_gain(sanctum, gain=100, cap=200)
+    CharacterResonanceFactory(
+        character_sheet=owner.character_sheet,
+        resonance=old_resonance,
+        balance=balance,
+    )
+    return sanctum, owner, old_resonance, new_resonance
+
+
+# ---------------------------------------------------------------------------
+# Homecoming graded-check tests
+# ---------------------------------------------------------------------------
+
+
+class HomecomingGradedCheckTests(TestCase):
+    """Homecoming applies HOMECOMING_GAIN_MULTIPLIERS to the base gain."""
+
+    def test_crit_multiplies_gain_by_1_25(self) -> None:
+        from unittest.mock import patch
+
+        from world.magic.services.ritual_checks import OutcomeTier
+        from world.magic.services.sanctum_rituals import (
+            HOMECOMING_GAIN_MULTIPLIERS,
+            HomecomingResult,
+        )
+
+        sanctum, owner, _resonance = _setup_graded_homecoming(balance=1000)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
+
+        self.assertIsInstance(result, HomecomingResult)
+        # base = 500 // 100 = 5; crit × 1.25 = 6
+        expected_gain = int(Decimal(5) * HOMECOMING_GAIN_MULTIPLIERS[OutcomeTier.CRIT])
+        self.assertEqual(result.base_resonance_added, expected_gain)
+        self.assertEqual(result.success_level, 3)
+
+    def test_botch_multiplies_gain_by_0_25(self) -> None:
+        from unittest.mock import patch
+
+        from world.magic.services.ritual_checks import OutcomeTier
+        from world.magic.services.sanctum_rituals import HOMECOMING_GAIN_MULTIPLIERS
+
+        sanctum, owner, resonance = _setup_graded_homecoming(balance=1000)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
+
+        # base = 5; botch × 0.25 = 1
+        expected_gain = int(Decimal(5) * HOMECOMING_GAIN_MULTIPLIERS[OutcomeTier.BOTCH])
+        self.assertEqual(result.base_resonance_added, expected_gain)
+        # Botch: resonance is still spent in full (drama — the sacrifice is wasted)
+        cr = CharacterResonance.objects.get(
+            character_sheet=owner.character_sheet, resonance=resonance
+        )
+        self.assertEqual(cr.balance, 500)  # 1000 − 500 sacrificed regardless of tier
+
+    def test_success_multiplies_gain_by_1_00(self) -> None:
+        from unittest.mock import patch
+
+        sanctum, owner, _resonance = _setup_graded_homecoming(balance=1000)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
+            result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
+
+        # base = 5; success × 1.0 = 5
+        self.assertEqual(result.base_resonance_added, 5)
+
+    def test_missing_config_raises(self) -> None:
+        from world.magic.exceptions import RitualCheckConfigMissing
+        from world.magic.models import RitualCheckConfig
+
+        sanctum, owner, _resonance = _setup_graded_homecoming()
+        RitualCheckConfig.objects.filter(ritual__name=HOMECOMING_RITUAL_NAME).delete()
+
+        with self.assertRaises(RitualCheckConfigMissing):
+            perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=100)
+
+
+# ---------------------------------------------------------------------------
+# Purging graded-check tests
+# ---------------------------------------------------------------------------
+
+
+class PurgingGradedCheckTests(TestCase):
+    """Purging applies PURGING_RETENTION_MODIFIERS to the effective retention."""
+
+    def test_botch_reduces_retention_to_0_20(self) -> None:
+        """Default 0.5 retention − 0.30 botch modifier = 0.20 effective retention."""
+        from unittest.mock import patch
+
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            result = perform_purging_ritual(
+                sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
+            )
+
+        # 100 × 0.20 = 20 retained
+        self.assertEqual(result.sum_after_drain, 20)
+        self.assertEqual(result.success_level, -3)
+
+    def test_crit_increases_retention_to_0_75(self) -> None:
+        """Default 0.5 + 0.25 crit modifier = 0.75 effective retention."""
+        from unittest.mock import patch
+
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            result = perform_purging_ritual(
+                sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
+            )
+
+        # 100 × 0.75 = 75 retained
+        self.assertEqual(result.sum_after_drain, 75)
+
+    def test_success_retention_unchanged_at_default(self) -> None:
+        """SUCCESS modifier is 0.00 — default retention is used unchanged."""
+        from unittest.mock import patch
+
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
+            result = perform_purging_ritual(
+                sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
+            )
+
+        # 100 × 0.5 = 50 retained
+        self.assertEqual(result.sum_after_drain, 50)
+
+    def test_missing_config_raises(self) -> None:
+        from world.magic.exceptions import RitualCheckConfigMissing
+        from world.magic.models import RitualCheckConfig
+
+        sanctum, owner, _old, new_resonance = _setup_graded_purging()
+        RitualCheckConfig.objects.filter(ritual__name=PURGING_RITUAL_NAME).delete()
+
+        with self.assertRaises(RitualCheckConfigMissing):
+            perform_purging_ritual(
+                sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
+            )

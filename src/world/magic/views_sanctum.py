@@ -157,6 +157,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 "overflow_escrowed": result.overflow_escrowed,
                 "new_homecoming_sum": result.new_homecoming_sum,
                 "new_cap": result.new_cap,
+                "success_level": result.success_level,
             }
         )
 
@@ -183,6 +184,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 "new_resonance_id": result.new_resonance_id,
                 "sum_after_drain": result.sum_after_drain,
                 "sacrifice_paid": result.sacrifice_paid,
+                "success_level": result.success_level,
             }
         )
 
@@ -230,9 +232,22 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
             )
         except SanctificationError as exc:
             return _action_error_response(exc)
+        if result.fizzled:
+            return Response(
+                {
+                    "fizzled": True,
+                    "success_level": result.success_level,
+                    "detail": "The ritual failed to take hold; the Sanctum was not created.",
+                },
+                status=status.HTTP_200_OK,
+            )
         sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
         return Response(
-            SanctumDetailsSerializer(sanctum, context={"request": request}).data,
+            {
+                **SanctumDetailsSerializer(sanctum, context={"request": request}).data,
+                "fizzled": False,
+                "success_level": result.success_level,
+            },
             status=status.HTTP_201_CREATED,
         )
 

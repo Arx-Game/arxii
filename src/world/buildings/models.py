@@ -660,8 +660,8 @@ class ProjectTemplate(SharedMemoryModel):
     weekly_upkeep_cost = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Gold cost per real-time week to keep this project's polish "
-            "active. Phase E cron deducts from owner's wallet."
+            "Coppers per real-time week to keep this project's polish "
+            "active. The weekly cron sinks it from the owner's purse (#932)."
         ),
     )
     decay_priority = models.PositiveIntegerField(

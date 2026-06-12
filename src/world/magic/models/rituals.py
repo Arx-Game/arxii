@@ -11,7 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import ParticipationRule, RitualExecutionKind, TargetKind
-from world.magic.models.ritual_scene_action import RitualSceneActionConfig
+from world.magic.models.ritual_check_config import RitualCheckConfig
 
 
 class ImbuingProseTemplate(SharedMemoryModel):
@@ -52,10 +52,10 @@ class Ritual(SharedMemoryModel):
     Spec A §4.3. Each Ritual is dispatched via one of three modes:
     - execution_kind=SERVICE: invokes a registered service function path
     - execution_kind=FLOW: invokes a FlowDefinition
-    - execution_kind=SCENE_ACTION: fires a check defined in RitualSceneActionConfig sidecar
+    - execution_kind=SCENE_ACTION: fires a check defined in RitualCheckConfig sidecar
 
     clean() enforces the legal shape for each mode. The sidecar invariant
-    (SCENE_ACTION requires a RitualSceneActionConfig; others must not have one)
+    (SCENE_ACTION requires a RitualCheckConfig; other kinds may carry one)
     is enforced in clean() only since DB CHECK constraints cannot span tables.
     """
 
@@ -134,9 +134,9 @@ class Ritual(SharedMemoryModel):
                     )
                     | (
                         # SCENE_ACTION: no service path, no flow.
-                        # Sidecar invariant (requires RitualSceneActionConfig) is
-                        # enforced in clean() only — it cannot be expressed cross-table
-                        # in a DB CHECK constraint.
+                        # Sidecar invariant (SCENE_ACTION requires RitualCheckConfig;
+                        # other kinds may carry one) is enforced in clean() only —
+                        # it cannot be expressed cross-table in a DB CHECK constraint.
                         models.Q(execution_kind="SCENE_ACTION")
                         & models.Q(service_function_path="")
                         & models.Q(flow__isnull=True)
@@ -177,29 +177,16 @@ class Ritual(SharedMemoryModel):
                 raise ValidationError({"flow": "SCENE_ACTION rituals must not set flow."})
 
     def _clean_sidecar_invariant(self) -> None:
-        """Enforce the SCENE_ACTION ↔ RitualSceneActionConfig sidecar invariant.
+        """SCENE_ACTION rituals require a RitualCheckConfig; other kinds may carry one.
 
-        Called only when the ritual already has a pk (sidecar query requires a saved row).
-        Cannot be expressed as a DB CHECK constraint since it spans tables.
+        Called only when the ritual already has a pk (config query requires a
+        saved row). Cannot be a DB CHECK constraint since it spans tables.
         """
-        has_sidecar = RitualSceneActionConfig.objects.filter(ritual=self).exists()
-        is_scene_action = self.execution_kind == RitualExecutionKind.SCENE_ACTION
-        if is_scene_action and not has_sidecar:
+        if self.execution_kind != RitualExecutionKind.SCENE_ACTION:
+            return
+        if not RitualCheckConfig.objects.filter(ritual=self).exists():
             raise ValidationError(
-                {
-                    "execution_kind": (
-                        "SCENE_ACTION rituals require a RitualSceneActionConfig sidecar."
-                    )
-                }
-            )
-        if not is_scene_action and has_sidecar:
-            raise ValidationError(
-                {
-                    "execution_kind": (
-                        f"{self.execution_kind} rituals must not have a "
-                        "RitualSceneActionConfig sidecar."
-                    )
-                }
+                {"execution_kind": ("SCENE_ACTION rituals require a RitualCheckConfig.")}
             )
 
     def clean(self) -> None:

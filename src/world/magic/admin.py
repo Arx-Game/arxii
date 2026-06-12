@@ -32,8 +32,8 @@ from world.magic.models import (
     ResonanceGrant,
     Restriction,
     Ritual,
+    RitualCheckConfig,
     RitualComponentRequirement,
-    RitualSceneActionConfig,
     SceneEntryEndorsement,
     SoulfrayConfig,
     Technique,
@@ -485,8 +485,8 @@ class RitualComponentRequirementInline(admin.TabularInline):
     raw_id_fields = ["min_quality_tier"]
 
 
-class RitualSceneActionConfigInline(admin.StackedInline):
-    model = RitualSceneActionConfig
+class RitualCheckConfigInline(admin.StackedInline):
+    model = RitualCheckConfig
     extra = 0
     can_delete = True
     autocomplete_fields = ["stat", "skill", "specialization", "resonance", "check_type"]
@@ -503,7 +503,7 @@ class RitualAdmin(admin.ModelAdmin):
     list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
     search_fields = ["name", "description"]
     autocomplete_fields = ["flow", "site_property"]
-    inlines = [RitualComponentRequirementInline, RitualSceneActionConfigInline]
+    inlines = [RitualComponentRequirementInline, RitualCheckConfigInline]
     # Dispatch fields (execution_kind / service_function_path / flow)
     # determine WHICH code runs when a ritual is performed. Exposing them
     # as editable is an arbitrary-import RCE vector if a staff cookie is

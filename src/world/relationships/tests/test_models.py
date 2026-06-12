@@ -79,6 +79,14 @@ class RelationshipConditionTests(TestCase):
         self.assertIn(condition, modifier.gated_by_conditions.all())
 
 
+class RelationshipTrackTests(TestCase):
+    """Test RelationshipTrack model."""
+
+    def test_fuels_escalation_spikes_default_false(self):
+        track = RelationshipTrackFactory()
+        self.assertFalse(track.fuels_escalation_spikes)
+
+
 class CharacterRelationshipTests(TestCase):
     """Test CharacterRelationship model."""
 

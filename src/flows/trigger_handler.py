@@ -81,7 +81,7 @@ class TriggerHandler:
 
     def _is_active(self, trigger: "Trigger") -> bool:
         """Stage-scoped triggers are active only when the condition is at that stage."""
-        if trigger.source_stage is None:
+        if trigger.source_stage is None or trigger.source_condition is None:
             return True
         current = trigger.source_condition.current_stage
         return current is not None and current.pk == trigger.source_stage.pk

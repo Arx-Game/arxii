@@ -30,14 +30,22 @@ Standing uses lifetime earned, never spendable balance, so spending resonance ne
 weakens the aura. (The old fixed per-10-resonance intensity/control conversion was
 retired by the resonance pivot.)
 
-### Combat Escalation (not yet built — #872)
-In serious boss fights, intensity auto-escalates each round. Characters make control checks to keep control in pace. Relationship events (true love threatened, ally falls) can spike intensity dramatically. Emotional state (anger, desperation) also feeds intensity. This mirrors superhero/fantasy boss fight pacing — things only escalate, never reset.
-
-Escalation is complementary to Strain and Audere: it builds pressure naturally so big
-dramatic moments never happen on round one, and the climax expresses through clashes,
-Soulfray, and — at peak drama — an Audere or Audere Majora offer. Only the
-player-triggered levers (Strain, Audere) exist in code today; the round-over-round
-build and event-driven spikes are #872.
+### Combat Escalation (BUILT — #872)
+In opted-in encounters (authored `EscalationCurve` rows via the
+`CombatEncounter.escalation_curve` FK), intensity auto-escalates each round from
+`curve.start_round` onward: the tick raises each participant's engagement
+`intensity_modifier`, and a graded control pace check (authored check type +
+difficulty fields) decides how much `control_modifier` keeps up. Falling behind
+expresses through the existing cast math — effective anima cost spikes, deficits
+accrue Soulfray, mishap pools fire — and rising runtime intensity walks the
+character to the Audere/Audere Majora gates. Things only escalate, never reset;
+curves authored with `start_round >= 2` keep round one calm. Relationship events
+(ally falls — bonds on `fuels_escalation_spikes` tracks) spike intensity through
+the reactive layer (CHARACTER_INCAPACITATED / CHARACTER_KILLED room triggers);
+control does not keep pace with a spike. See `docs/roadmap/combat.md` (#872
+entry) for the full surface. Remaining design intent not yet built:
+emotional-state intensity feeds and near-death (bonded-partner-threatened)
+spikes.
 
 ### No Healing, Shielding Instead
 Restoration mechanics are counter to the tension-building combat design. Shielding prevents damage without undoing escalation. Healing is absent by design.
@@ -1471,6 +1479,24 @@ accrues via `Interaction.strain_committed` with soulfray accrual (tested in
 `magic/tests/test_non_clash_strain.py`, PR #574); and `StrainConfig` is read in the
 non-clash fatigue path (`fatigue/services.py`). Whether clash-tuned `StrainConfig`
 *values* suit regular casts is an open tuning judgment, not missing code.
+
+---
+
+## Magical check content authoring (#709) — DONE (2026-06-12)
+
+Shipped: three magical skills (`ritualism`/`occult`/`theology` Trait+Skill rows,
+category MAGIC); five composed Magic CheckTypes (Anima Restoration, Sanctum
+Consecration, Sanctum Dissolution, Magical Endurance, endure_hallowed_ground —
+each with stat/skill trait weights + Arcana aspect); `RitualSceneActionConfig`
+generalized to `RitualCheckConfig` (any ritual kind may carry one;
+`non_founder_target_difficulty` added); authored difficulties on config rows for
+all five SERVICE sanctum rituals (hardcoded Dissolution constants deleted; crit
+tier realigned to the canonical −2..+2 CheckOutcome scale); Homecoming/Purging/
+Sanctification now roll graded checks (fizzle / scaled imbue / adjusted
+retention / crit bonus imbue); anima provisioning defaults `check_type` to the
+seeded Anima Restoration row. Seeds live in `world/magic/seeds_checks.py`,
+consumed by `game_content` + `seed_magic_dev()` (integration-test-first; reusable
+as instance seed data). Weights/difficulties are TUNING PLACEHOLDERS for staff.
 
 ---
 

@@ -1304,8 +1304,11 @@ def _get_sineater_thread_level(
 def _perform_rescue_check(sineater_sheet: CharacterSheet) -> Any:
     """Roll a Magical Endurance check for the rescue ritual.
 
-    Uses the canonical 'Magical Endurance' CheckType authored by
-    ``_make_magical_endurance_check_type`` / ``seed_magic_config``.
+    Uses the canonical 'Magical Endurance' CheckType seeded by
+    ``world.magic.seeds_checks.ensure_magic_check_types``.  Raises
+    ``CheckType.DoesNotExist`` loudly when the seed has not run — a
+    genuine misconfiguration that should not be masked.
+
     Difficulty is 0 (the stage itself is the gate; difficulty is implicit
     in the high Strain + Resonance cost).
 
@@ -1315,14 +1318,11 @@ def _perform_rescue_check(sineater_sheet: CharacterSheet) -> Any:
     Returns:
         CheckResult dataclass from perform_check.
     """
-    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.seeds_checks import MAGICAL_ENDURANCE_CHECK_TYPE_NAME  # noqa: PLC0415
 
-    magic_cat, _ = CheckCategory.objects.get_or_create(name="Magic")
-    check_type, _ = CheckType.objects.get_or_create(
-        name="Magical Endurance",
-        defaults={"category": magic_cat},
-    )
+    check_type = CheckType.objects.get(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME)
     return perform_check(
         sineater_sheet.character,
         check_type=check_type,

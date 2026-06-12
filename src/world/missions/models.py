@@ -498,6 +498,27 @@ class MissionOption(SharedMemoryModel):
             "rooms — choosing either resolves the node down that route)."
         ),
     )
+    spawns_instance = models.BooleanField(
+        default=False,
+        help_text=(
+            "Resolving this option spawns the run's instanced room and "
+            "moves the actor inside (#886 — the inn-hallway doorway). Fires "
+            "on ANY resolution outcome, so authors put it on BRANCH-style "
+            "doorway options; once per run (later resolutions re-enter the "
+            "already-spawned room). INSTANCE-mode nodes gate to that room."
+        ),
+    )
+    instance_name = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Spawned room name (falls back to the template name).",
+    )
+    instance_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Spawned room description (authored prose).",
+    )
 
     def _challenge_source_errors(self) -> dict[str, str]:
         """CHALLENGE-sourced options carry a challenge and forbid authored_* fields.
@@ -960,6 +981,18 @@ class MissionInstance(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="Where the run currently sits; null = complete.",
+    )
+    spawned_room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The instanced room this run spawned (#886), if any. INSTANCE-"
+            "mode nodes gate their options to it; torn down at completion "
+            "via complete_instanced_room."
+        ),
     )
     anchor_room = models.ForeignKey(
         "evennia_extensions.RoomProfile",
