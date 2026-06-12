@@ -17,10 +17,11 @@ from django.utils import timezone
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
@@ -2185,6 +2186,42 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
+def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_outcome's fields
+    sheet: CharacterSheet,
+    check_type: CheckType,
+    pool: ConsequencePool,
+    pending: PendingResolution,
+    breakdown: ModifierBreakdown,
+    *,
+    interaction: Interaction | None,
+    summary: str,
+) -> None:
+    """Persist ConsequenceOutcome provenance for a pool-routed combat resolution.
+
+    Mirrors vitals' _record_combat_outcome guard: a sourceless ConsequenceOutcome
+    is forbidden, so skip when no interaction anchor exists (sheet without a
+    PRIMARY persona). Shared by flee and encounter-aftermath resolution.
+    """
+    if interaction is None:
+        return
+
+    from actions.types import WeightedConsequence  # noqa: PLC0415
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+
+    selected = pending.selected_consequence
+    if isinstance(selected, WeightedConsequence):
+        selected = selected.consequence
+    record_consequence_outcome(
+        sheet,
+        check_type,
+        pool,
+        selected if selected.pk is not None else None,
+        breakdown,
+        combat_interaction=interaction,
+        summary=summary,
+    )
+
+
 def _resolve_flee(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -2299,25 +2336,15 @@ def _resolve_flee(
 
     if consequence_applies and config.consequence_pool_id is not None:
         apply_resolution(pending, ResolutionContext(character=character))
-        # Record provenance. Mirrors vitals' _record_combat_outcome guard: a
-        # sourceless ConsequenceOutcome is forbidden, so skip when no
-        # interaction anchor exists (sheet without a PRIMARY persona).
-        if interaction is not None:
-            from actions.types import WeightedConsequence  # noqa: PLC0415
-            from world.checks.services import record_consequence_outcome  # noqa: PLC0415
-
-            selected = pending.selected_consequence
-            if isinstance(selected, WeightedConsequence):
-                selected = selected.consequence
-            record_consequence_outcome(
-                participant.character_sheet,
-                config.check_type,
-                config.consequence_pool,
-                selected if selected.pk is not None else None,
-                breakdown,
-                combat_interaction=interaction,
-                summary="flee attempt",
-            )
+        _record_combat_consequence(
+            participant.character_sheet,
+            config.check_type,
+            config.consequence_pool,
+            pending,
+            breakdown,
+            interaction=interaction,
+            summary="flee attempt",
+        )
 
     narration = render_flee_outcome_narration(
         actor_label=str(participant),
@@ -2749,6 +2776,7 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     return EncounterOutcome.DEFEAT
 
 
+@transaction.atomic
 def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome) -> None:
     """Single completion seam for round resolution and the GM end endpoint (#876).
 
@@ -2756,6 +2784,10 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     that interaction, before ephemeral-NPC cleanup) → counters → completion
     event → cleanup. ABANDONED is administrative closure: skips aftermath and
     counters but still narrates, emits, and cleans up.
+
+    Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
+    flip with the aftermath/cleanup tail skipped — the double-completion guard
+    would otherwise block any retry. Inside resolve_round it is a savepoint.
     """
     if encounter.status == EncounterStatus.COMPLETED:
         msg = f"Encounter {encounter.pk} is already completed."
@@ -2862,22 +2894,15 @@ def _apply_aftermath_rules(
                 participants=participants_ctx,
             ),
         )
-        if interaction is not None:
-            from actions.types import WeightedConsequence  # noqa: PLC0415
-            from world.checks.services import record_consequence_outcome  # noqa: PLC0415
-
-            selected = pending.selected_consequence
-            if isinstance(selected, WeightedConsequence):
-                selected = selected.consequence
-            record_consequence_outcome(
-                sheet,
-                rule.check_type,
-                rule.consequence_pool,
-                selected if selected.pk is not None else None,
-                breakdown,
-                combat_interaction=interaction,
-                summary=f"encounter aftermath ({EncounterOutcome(outcome).label})",
-            )
+        _record_combat_consequence(
+            sheet,
+            rule.check_type,
+            rule.consequence_pool,
+            pending,
+            breakdown,
+            interaction=interaction,
+            summary=f"encounter aftermath ({outcome.label})",
+        )
 
 
 def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
@@ -2922,7 +2947,7 @@ def _increment_completion_counters(encounter: CombatEncounter, outcome: Encounte
     outcome_key = {
         EncounterOutcome.VICTORY: STAT_KEY_ENCOUNTERS_WON,
         EncounterOutcome.DEFEAT: STAT_KEY_ENCOUNTERS_LOST,
-    }.get(EncounterOutcome(outcome))
+    }.get(outcome)
 
     participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
         "character_sheet"
@@ -2935,9 +2960,12 @@ def _increment_completion_counters(encounter: CombatEncounter, outcome: Encounte
 
 
 def _emit_encounter_completed(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
-    """Reactive hook for downstream systems — stories, missions, achievements,
-    Legend (#876 §6). Never XP: combat does not award XP. Skips when no room
-    (emit_event requires a location); mirrors the _emit_death_gate idiom."""
+    """Emit the ENCOUNTER_COMPLETED reactive hook (#876 §6).
+
+    Downstream systems — stories, missions, achievements, Legend — subscribe
+    via triggers. Never XP: combat does not award XP. Skips when no room
+    (emit_event requires a location); mirrors the _emit_death_gate idiom.
+    """
     room = encounter.room
     if room is None:
         logger.debug(
@@ -3412,7 +3440,7 @@ def resolve_round(
         result.encounter_completed = True
         enc.round_started_at = None
         enc.save(update_fields=["round_started_at"])
-        complete_encounter(enc, outcome=_classify_encounter_outcome(encounter))
+        complete_encounter(enc, outcome=_classify_encounter_outcome(enc))
     else:
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from
