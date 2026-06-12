@@ -325,7 +325,11 @@ class CombatEncounterViewSet(ModelViewSet):
             end_encounter(encounter)
         except ValueError:
             # Concurrent double-end: the seam's atomic guard fired after our
-            # status read. Same outcome as the early exit above.
+            # status read. Re-check so an unrelated ValueError from the seam's
+            # tail isn't misreported as already-completed.
+            encounter.refresh_from_db()
+            if encounter.status != EncounterStatus.COMPLETED:
+                raise
             return Response(
                 {"detail": _ERR_ALREADY_COMPLETED},
                 status=status.HTTP_400_BAD_REQUEST,
