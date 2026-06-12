@@ -77,7 +77,8 @@ def perform_ritual_check(
         )
         raise RitualCheckConfigMissing(msg) from exc
 
-    config = getattr(ritual, "check_config", None)
+    # GETATTR_LITERAL noqa: reverse OneToOne may legitimately be absent.
+    config = getattr(ritual, "check_config", None)  # noqa: GETATTR_LITERAL
     if config is None or config.check_type is None:
         msg = (
             f"Ritual {ritual_name!r} has no usable RitualCheckConfig. "

@@ -82,8 +82,8 @@ export function RitualSceneActionDetailPanel({
 
         {/* Check spec — not yet available until Phase 10 backend update */}
         <p className="mt-2 text-xs text-muted-foreground">
-          Check spec (stat / skill / check type) will be shown once the frontend
-          wires check_config fields.
+          Check spec (stat / skill / check type) will be shown once the frontend wires check_config
+          fields.
         </p>
 
         {/* Narrative prose */}
