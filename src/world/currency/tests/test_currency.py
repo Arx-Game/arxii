@@ -779,3 +779,45 @@ class WeeklyEconomyTests(TestCase):
         purse = get_or_create_purse(persona.character_sheet)
         purse.refresh_from_db()
         assert purse.balance == 0
+
+
+class SinkWiringTests(TestCase):
+    """Fame churn and mission money (#932)."""
+
+    def test_fame_display_sinks_money_and_raises_fame(self) -> None:
+        from world.currency.services import (
+            fund_fame_display,
+            get_or_create_purse,
+            transfer,
+        )
+
+        persona = PersonaFactory()
+        purse = get_or_create_purse(persona.character_sheet)
+        transfer(amount=1_000, reason="seed", to_purse=purse)
+        before = persona.fame_points
+
+        points = fund_fame_display(persona, amount=500)
+
+        purse.refresh_from_db()
+        persona.refresh_from_db()
+        assert points == 50
+        assert purse.balance == 500
+        assert persona.fame_points == before + 50
+
+    def test_fame_display_rejects_trivial_spend(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.services import fund_fame_display
+
+        persona = PersonaFactory()
+        with self.assertRaises(DjangoValidationError):
+            fund_fame_display(persona, amount=0)
+
+    def test_mission_money_mints_to_purse(self) -> None:
+        from world.currency.services import deliver_mission_money, get_or_create_purse
+
+        persona = PersonaFactory()
+        deliver_mission_money(recipient_sheet=persona.character_sheet, amount=300, ref="route-7")
+        purse = get_or_create_purse(persona.character_sheet)
+        purse.refresh_from_db()
+        assert purse.balance == 300

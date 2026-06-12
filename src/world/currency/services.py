@@ -822,3 +822,49 @@ def _weekly_business_fortunes() -> int:
         except Exception:
             logger.exception("weekly economy: business %s failed", business.pk)
     return count
+
+
+@transaction.atomic
+def deliver_mission_money(*, recipient_sheet: CharacterSheet, amount: int, ref: str) -> None:
+    """Mission money reward lands in the purse (#932 — replaces the Phase 5b stub).
+
+    A mint (faucet) through the audited ledger; missions are a named
+    faucet in the #923 inventory.
+    """
+    if amount <= 0:
+        return
+    transfer(
+        amount=amount,
+        reason=f"mission reward: {ref}"[:200],
+        to_purse=get_or_create_purse(recipient_sheet),
+    )
+
+
+FAME_COPPERS_PER_POINT = 10
+
+
+@transaction.atomic
+def fund_fame_display(persona: Persona, *, amount: int) -> int:
+    """Spend money maintaining fame against decay (#932 fame churn).
+
+    The classic churn sink: fashion, events, displays — money leaves the
+    world, fame_points rise at FAME_COPPERS_PER_POINT (calibration
+    starting point), and the existing decay crons grind it back down.
+    Returns fame points gained.
+    """
+    from world.societies.renown import set_persona_fame  # noqa: PLC0415
+
+    if amount <= 0:
+        msg = "Spend something to be seen."
+        raise ValidationError(msg)
+    points = amount // FAME_COPPERS_PER_POINT
+    if points <= 0:
+        msg = "Too little to make a splash."
+        raise ValidationError(msg)
+    transfer(
+        amount=amount,
+        reason="fame display",
+        from_purse=get_or_create_purse(persona.character_sheet),
+    )
+    set_persona_fame(persona, persona.fame_points + points)
+    return points
