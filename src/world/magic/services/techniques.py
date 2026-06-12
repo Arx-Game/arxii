@@ -860,6 +860,10 @@ def use_technique(  # noqa: PLR0913
 
     maybe_create_audere_offer(character, stats.intensity)
 
+    from world.magic.audere_majora import maybe_create_audere_majora_offer  # noqa: PLC0415
+
+    maybe_create_audere_majora_offer(character, stats.intensity)
+
     # Step 9: Per-cast corruption accrual (Magic Scope #7)
     _accrue_cast_corruption(sheet=sheet, technique_result=technique_result)
 

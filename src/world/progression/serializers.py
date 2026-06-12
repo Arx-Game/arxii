@@ -4,6 +4,8 @@ Serializers for progression API endpoints.
 
 from rest_framework import serializers
 
+from world.classes.models import Path
+from world.classes.serializers import PathListSerializer
 from world.journals.models import JournalEntry
 from world.progression.constants import VoteTargetType
 from world.progression.models import (
@@ -12,6 +14,7 @@ from world.progression.models import (
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    PathIntent,
     RandomSceneTarget,
     WeeklyVote,
     XPTransaction,
@@ -219,3 +222,39 @@ class RandomSceneTargetSerializer(serializers.ModelSerializer):
             "first_time",
             "rerolled",
         ]
+
+
+# --- PathIntent serializers ---
+
+
+class PathIntentSerializer(serializers.ModelSerializer):
+    """Read serializer for PathIntent."""
+
+    intended_path = PathListSerializer(read_only=True)
+
+    class Meta:
+        model = PathIntent
+        fields = ["id", "intended_path", "declared_at"]
+
+
+class PathIntentDeclareSerializer(serializers.Serializer):
+    """Input serializer for PUT /path-intent/."""
+
+    path_id = serializers.IntegerField()
+
+    def validate_path_id(self, value: int) -> int:
+        try:
+            path = Path.objects.get(pk=value, is_active=True)
+        except Path.DoesNotExist as exc:
+            msg = "Path does not exist or is not active."
+            raise serializers.ValidationError(msg) from exc
+        self._path = path
+        return value
+
+    @property
+    def validated_path(self) -> Path:
+        """Return the resolved Path instance after validation."""
+        if not hasattr(self, "_path"):
+            msg = "Call is_valid() before accessing validated_path."
+            raise AssertionError(msg)
+        return self._path

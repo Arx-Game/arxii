@@ -71,6 +71,9 @@ vi.mock('@/magic/queries', () => ({
   // AudereOfferGate hooks — no pending offers in panel smoke tests.
   usePendingAudereOffers: vi.fn().mockReturnValue({ data: undefined, isLoading: false }),
   useRespondToAudere: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  // AudereMajoraOfferGate hooks — no pending crossing offers in panel smoke tests.
+  usePendingAudereMajoraOffers: vi.fn().mockReturnValue({ data: undefined, isLoading: false }),
+  useRespondToAudereMajora: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
 }));
 
 // Stub PersonaAvatar to avoid color computation in section tests

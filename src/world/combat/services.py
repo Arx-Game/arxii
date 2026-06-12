@@ -2638,27 +2638,42 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         for opp in CombatOpponent.objects.filter(encounter=encounter).select_related("objectdb")
     ]
 
-    # End Audere BEFORE the generic condition sweep (#873): the sweep would
-    # strip the condition without reverting the engagement intensity modifier
-    # or anima-pool expansion — only end_audere reverts those. Also delete any
-    # unanswered pending offers; the gate dies with the encounter.
+    # End Audere and Audere Majora BEFORE the generic condition sweep (#873, #543):
+    # the sweep would strip the condition without reverting the engagement intensity
+    # modifier or anima-pool expansion — only end_audere reverts those. Also delete
+    # any unanswered pending offers; the gate dies with the encounter.
+    #
+    # Note: end_audere reverts intensity modifier + anima-pool expansion;
+    # end_audere_majora only removes the condition (no modifier reversal needed).
+    # The loop preserves this by calling the per-kind end_fn as-is.
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.magic.audere import (  # noqa: PLC0415
         AUDERE_CONDITION_NAME,
+        AUDERE_MAJORA_CONDITION_NAME,
         PendingAudereOffer,
         end_audere,
     )
-
-    audere_target_ids = set(
-        ConditionInstance.objects.filter(
-            target__in=participant_targets,
-            condition__name=AUDERE_CONDITION_NAME,
-        ).values_list("target_id", flat=True)
+    from world.magic.audere_majora import (  # noqa: PLC0415
+        PendingAudereMajoraOffer,
+        end_audere_majora,
     )
-    audere_targets = [t for t in participant_targets if t.pk in audere_target_ids]
-    for target in audere_targets:
-        end_audere(target)
-    PendingAudereOffer.objects.filter(character_sheet__character__in=participant_targets).delete()
+
+    for condition_name, end_fn, pending_offer_model in [
+        (AUDERE_CONDITION_NAME, end_audere, PendingAudereOffer),
+        (AUDERE_MAJORA_CONDITION_NAME, end_audere_majora, PendingAudereMajoraOffer),
+    ]:
+        target_ids = set(
+            ConditionInstance.objects.filter(
+                target__in=participant_targets,
+                condition__name=condition_name,
+            ).values_list("target_id", flat=True)
+        )
+        for target in participant_targets:
+            if target.pk in target_ids:
+                end_fn(target)
+        pending_offer_model.objects.filter(
+            character_sheet__character__in=participant_targets
+        ).delete()
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 

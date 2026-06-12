@@ -2060,7 +2060,26 @@ class StageAdvanceBonusResultSerializer(serializers.Serializer):
 _ERR_NO_PENDING_AUDERE = "No pending Audere offer found."
 
 
-class PendingAudereOfferSerializer(serializers.ModelSerializer):
+class _PendingOfferCharacterMixin:
+    """Shared ``get_character_name`` and ``get_advisory_text`` for pending offer serializers.
+
+    Both ``PendingAudereOfferSerializer`` and ``PendingAudereMajoraOfferSerializer``
+    expose identical character-name and advisory-text methods.  This mixin
+    centralises those two methods to eliminate the duplication.
+    """
+
+    def get_character_name(self, obj: object) -> str:
+        """IC display name via the primary persona."""
+        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
+
+    def get_advisory_text(self, obj: object) -> str:
+        """Live corruption advisory; empty string when no stage-3+ corruption."""
+        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+
+        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
+
+
+class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.ModelSerializer):
     """Player-facing view of a pending Audere offer (#873). Read-only.
 
     advisory_text is computed live (never stored) so the corruption
@@ -2089,16 +2108,6 @@ class PendingAudereOfferSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
-
-    def get_character_name(self, obj: object) -> str:
-        """IC display name via the primary persona."""
-        return obj.character_sheet.display_ic()  # type: ignore[union-attr]
-
-    def get_advisory_text(self, obj: object) -> str:
-        """Live corruption advisory; empty string when no stage-3+ corruption."""
-        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
-
-        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
 
     def _threshold(self) -> "AudereThreshold | None":
         """Memoize the global threshold config once per serializer instance.
@@ -2168,6 +2177,186 @@ class AudereOfferResultSerializer(serializers.Serializer):
     intensity_bonus_applied = serializers.IntegerField()
     anima_pool_expanded_by = serializers.IntegerField()
     advisory_text = serializers.CharField(allow_blank=True)
+
+
+# =============================================================================
+# Audere Majora REST surface (#543)
+# =============================================================================
+
+_ERR_NO_PENDING_AUDERE_MAJORA = "No pending Crossing offer found."
+
+
+class EligiblePathSerializer(serializers.Serializer):
+    """Read serializer for a single eligible crossing path."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    stage = serializers.IntegerField()
+    stage_display = serializers.CharField()
+    description = serializers.CharField()
+
+
+class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializers.ModelSerializer):
+    """Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
+
+    advisory_text is computed live so the corruption warning is always current.
+    eligible_paths is computed per-object and memoized to avoid N+1 queries.
+    """
+
+    character_name = serializers.SerializerMethodField()
+    character_sheet_id = serializers.IntegerField(read_only=True)
+    boundary_level = serializers.IntegerField(source="threshold.boundary_level", read_only=True)
+    target_stage_display = serializers.SerializerMethodField()
+    vision_text = serializers.CharField(source="threshold.vision_text", read_only=True)
+    advisory_text = serializers.SerializerMethodField()
+    risk_text = serializers.SerializerMethodField()
+    eligible_paths = serializers.SerializerMethodField()
+    intended_path_id = serializers.SerializerMethodField()
+
+    class Meta:
+        from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
+
+        model = PendingAudereMajoraOffer
+        fields = [
+            "id",
+            "character_sheet_id",
+            "character_name",
+            "fired_intensity",
+            "soulfray_stage_order",
+            "boundary_level",
+            "target_stage_display",
+            "vision_text",
+            "advisory_text",
+            "risk_text",
+            "eligible_paths",
+            "intended_path_id",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_target_stage_display(self, obj: object) -> str:
+        """Human-readable label for the target PathStage."""
+        return obj.threshold.get_target_stage_display()  # type: ignore[union-attr]
+
+    def get_risk_text(self, obj: object) -> str:  # noqa: ARG002
+        """Fixed risk copy (approved verbatim)."""
+        return "This is permanent. The crossing cannot be undone — and survival is not promised."
+
+    def _eligible_paths_for_obj(self, obj: object) -> list:
+        """Compute eligible paths once per object pk; memoize on serializer instance."""
+        from world.magic.audere_majora import eligible_paths_for_threshold  # noqa: PLC0415
+
+        cache_attr = "_eligible_paths_cache"
+        if not hasattr(self, cache_attr):
+            setattr(self, cache_attr, {})
+        cache: dict = getattr(self, cache_attr)
+        pk = obj.pk  # type: ignore[union-attr]
+        if pk not in cache:
+            cache[pk] = eligible_paths_for_threshold(
+                obj.character_sheet.character,  # type: ignore[union-attr]
+                obj.threshold,  # type: ignore[union-attr]
+            )
+        return cache[pk]
+
+    def get_eligible_paths(self, obj: object) -> list:
+        """Eligible child paths serialized through EligiblePathSerializer."""
+        paths = self._eligible_paths_for_obj(obj)
+        dicts = [
+            {
+                "id": p.pk,
+                "name": p.name,
+                "stage": p.stage,
+                "stage_display": p.get_stage_display(),
+                "description": p.description,
+            }
+            for p in paths
+        ]
+        return EligiblePathSerializer(dicts, many=True).data
+
+    def get_intended_path_id(self, obj: object) -> int | None:
+        """Return the PathIntent's intended_path_id if it is among eligible paths, else None."""
+        intent = getattr(obj.character_sheet, "path_intent", None)  # noqa: GETATTR_LITERAL
+        if intent is None:
+            return None
+        eligible_pks = {p.pk for p in self._eligible_paths_for_obj(obj)}
+        if intent.intended_path_id in eligible_pks:
+            return intent.intended_path_id
+        return None
+
+
+class AudereMajoraRespondSerializer(serializers.Serializer):
+    """Write serializer for the player's Crossing decision. accept=false declines."""
+
+    offer_id = serializers.IntegerField()
+    accept = serializers.BooleanField()
+    path_id = serializers.IntegerField(required=False, allow_null=True)
+    declaration_text = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=4000,
+        trim_whitespace=True,
+        default="",
+    )
+
+    def validate_offer_id(self, value: int):
+        """Resolve + ownership-check via the offer's character sheet."""
+        from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
+
+        try:
+            offer = PendingAudereMajoraOffer.objects.get(pk=value)
+        except PendingAudereMajoraOffer.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_NO_PENDING_AUDERE_MAJORA) from exc
+        request = self.context.get("request")
+        _resolve_account_sheet(offer.character_sheet_id, request)
+        return offer
+
+    def validate(self, attrs: dict) -> dict:
+        """When accepting, path_id is required and declaration_text must be non-blank."""
+        accept = attrs.get("accept", False)
+        if accept:
+            if attrs.get("path_id") is None:
+                raise serializers.ValidationError({"path_id": "Choose the path you will become."})
+            declaration = attrs.get("declaration_text", "")
+            if not declaration.strip():
+                raise serializers.ValidationError(
+                    {"declaration_text": "Speak — the declaration cannot be empty."}
+                )
+        return attrs
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to resolve_audere_majora_offer; surface typed errors as 400."""
+        from world.magic.audere_majora import resolve_audere_majora_offer  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            AudereMajoraOfferError,
+            ProtagonismLockedError,
+        )
+        from world.magic.types import AlterationGateError  # noqa: PLC0415
+
+        offer = validated_data["offer_id"]
+        try:
+            return resolve_audere_majora_offer(
+                offer.pk,
+                accept=validated_data["accept"],
+                path_id=validated_data.get("path_id"),
+                declaration_text=validated_data.get("declaration_text", ""),
+            )
+        except ProtagonismLockedError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except AlterationGateError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except AudereMajoraOfferError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class AudereMajoraCrossingResultSerializer(serializers.Serializer):
+    """Read serializer for AudereMajoraCrossingResult dataclass."""
+
+    accepted = serializers.BooleanField()
+    level_before = serializers.IntegerField()
+    level_after = serializers.IntegerField()
+    chosen_path_name = serializers.CharField(allow_blank=True)
+    advisory_text = serializers.CharField(allow_blank=True)
+    declaration_interaction_id = serializers.IntegerField(allow_null=True)
 
 
 class CrossXPLockSerializer(serializers.Serializer):

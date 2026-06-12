@@ -8442,6 +8442,79 @@ paths:
                 items:
                   $ref: '#/components/schemas/ThreadApplicability'
           description: ''
+  /api/magic/audere-majora/pending/:
+    get:
+      operationId: magic_audere_majora_pending_list
+      description: |-
+        Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+
+        GET /api/magic/audere-majora/pending/
+        GET /api/magic/audere-majora/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPendingAudereMajoraOfferList'
+          description: ''
+  /api/magic/audere-majora/pending/{id}/:
+    get:
+      operationId: magic_audere_majora_pending_retrieve
+      description: |-
+        Read-only inbox of pending Audere Majora (Crossing) offers (#543).
+
+        GET /api/magic/audere-majora/pending/
+        GET /api/magic/audere-majora/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingAudereMajoraOffer'
+          description: ''
+  /api/magic/audere-majora/respond/:
+    post:
+      operationId: magic_audere_majora_respond_create
+      description: Validate ownership + dispatch resolve_audere_majora_offer; return
+        the result.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/magic/audere/pending/:
     get:
       operationId: magic_audere_pending_list
@@ -15866,6 +15939,37 @@ paths:
       - cookieAuth: []
       responses:
         '200':
+          description: No response body
+  /api/progression/path-intent/:
+    get:
+      operationId: progression_path_intent_retrieve
+      description: 'GET — return current intent or {"intent": null}.'
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    put:
+      operationId: progression_path_intent_update
+      description: PUT — declare or replace the intent for this character.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: progression_path_intent_destroy
+      description: DELETE — clear the intent (idempotent).
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
           description: No response body
   /api/progression/random-scenes/:
     get:
@@ -31228,6 +31332,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PendingAlteration'
+    PaginatedPendingAudereMajoraOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAudereMajoraOffer'
     PaginatedPendingAudereOfferList:
       type: object
       required:
@@ -34062,6 +34189,79 @@ components:
         * `open` - Open
         * `resolved` - Resolved
         * `staff_cleared` - Staff Cleared
+    PendingAudereMajoraOffer:
+      type: object
+      description: |-
+        Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
+
+        advisory_text is computed live so the corruption warning is always current.
+        eligible_paths is computed per-object and memoized to avoid N+1 queries.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet_id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          description: IC display name via the primary persona.
+          readOnly: true
+        fired_intensity:
+          type: integer
+          readOnly: true
+          description: Runtime intensity of the cast that opened the gate.
+        soulfray_stage_order:
+          type: integer
+          readOnly: true
+          description: Soulfray stage order at fire time (display snapshot).
+        boundary_level:
+          type: integer
+          readOnly: true
+        target_stage_display:
+          type: string
+          description: Human-readable label for the target PathStage.
+          readOnly: true
+        vision_text:
+          type: string
+          readOnly: true
+        advisory_text:
+          type: string
+          description: Live corruption advisory; empty string when no stage-3+ corruption.
+          readOnly: true
+        risk_text:
+          type: string
+          description: Fixed risk copy (approved verbatim).
+          readOnly: true
+        eligible_paths:
+          type: array
+          items: {}
+          description: Eligible child paths serialized through EligiblePathSerializer.
+          readOnly: true
+        intended_path_id:
+          type: integer
+          nullable: true
+          description: Return the PathIntent's intended_path_id if it is among eligible
+            paths, else None.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - advisory_text
+      - boundary_level
+      - character_name
+      - character_sheet_id
+      - created_at
+      - eligible_paths
+      - fired_intensity
+      - id
+      - intended_path_id
+      - risk_text
+      - soulfray_stage_order
+      - target_stage_display
+      - vision_text
     PendingAudereOffer:
       type: object
       description: |-

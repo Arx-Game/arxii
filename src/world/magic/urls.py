@@ -12,6 +12,7 @@ from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
     ApplicablePullsView,
+    AudereMajoraRespondView,
     AudereRespondView,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
@@ -21,6 +22,7 @@ from world.magic.views import (
     FacetViewSet,
     GiftViewSet,
     PendingAlterationViewSet,
+    PendingAudereMajoraOfferViewSet,
     PendingAudereOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
@@ -241,6 +243,22 @@ urlpatterns = [
         "audere/respond/",
         AudereRespondView.as_view(),
         name="audere-respond",
+    ),
+    # #543 — Audere Majora (Crossing) offer inbox + respond
+    path(
+        "audere-majora/pending/",
+        PendingAudereMajoraOfferViewSet.as_view({"get": "list"}),
+        name="audere-majora-pending-list",
+    ),
+    path(
+        "audere-majora/pending/<int:pk>/",
+        PendingAudereMajoraOfferViewSet.as_view({"get": "retrieve"}),
+        name="audere-majora-pending-detail",
+    ),
+    path(
+        "audere-majora/respond/",
+        AudereMajoraRespondView.as_view(),
+        name="audere-majora-respond",
     ),
     *router.urls,
 ]
