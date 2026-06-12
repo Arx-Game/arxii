@@ -169,3 +169,47 @@ def get_goal_bonuses_breakdown(
         )
 
     return breakdown
+
+
+# Per-cron-day application budget (#940): base 1, raised by distinctions via
+# the goal_points/applications_per_day modifier target.
+DEFAULT_APPLICATIONS_PER_DAY = 1
+APPLICATIONS_PER_DAY_TARGET = "applications_per_day"
+
+
+def get_daily_application_budget(character: "CharacterSheet") -> int:
+    """How many goal applications this character gets per cron day."""
+    modifiers = CharacterModifier.objects.filter(
+        character=character,
+        target__category__name=GOAL_POINTS_CATEGORY_NAME,
+        target__name=APPLICATIONS_PER_DAY_TARGET,
+    )
+    return DEFAULT_APPLICATIONS_PER_DAY + sum(m.value for m in modifiers)
+
+
+def apply_goal(goal: CharacterGoal, *, context: str = "") -> int:
+    """Owner-claimed goal application (#940): spend one daily use, get the bonus.
+
+    The owner decides the goal applies; the system only enforces the
+    per-cron-day budget (1 + distinction modifiers). Returns the bonus for
+    the caller to feed into ``perform_check``'s ``extra_modifiers``.
+    The "cron day" boundary is the server date — adequate until the #932
+    scheduler grows an authoritative day tick.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.goals.models import GoalApplication  # noqa: PLC0415
+
+    sheet = goal.character.sheet_data
+    used_today = GoalApplication.objects.filter(
+        goal__character=goal.character,
+        created_at__date=timezone.now().date(),
+    ).count()
+    if used_today >= get_daily_application_budget(sheet):
+        msg = "You have already drawn on your goals today."
+        raise ValidationError(msg)
+
+    bonus = get_goal_bonus(sheet, goal.domain)
+    GoalApplication.objects.create(goal=goal, bonus_granted=bonus, context=context)
+    return bonus
