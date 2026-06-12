@@ -145,6 +145,7 @@ class ActionRegistryTests(TestCase):
             "say",
             "pose",
             "whisper",
+            "pemit",
             "get",
             "drop",
             "give",
