@@ -74,6 +74,8 @@ class OrgBooksApiTests(TestCase):
         assert data["obligations"][0]["percent"] == 20
         assert data["contributions"][0]["amount"] == 200
         assert any(row["direction"] == "in" for row in data["ledger"])
+        for section in ("income_streams", "debts", "obligations", "contributions", "ledger"):
+            assert all(isinstance(row["id"], int) for row in data[section])
 
     def test_non_member_denied(self) -> None:
         with mock.patch("world.currency.views._viewer_persona", return_value=self.outsider):
@@ -94,3 +96,30 @@ class OrgBooksApiTests(TestCase):
         self.client.force_authenticate(user=None)
         response = self._get()
         assert response.status_code in (401, 403)
+
+    def test_list_is_viewer_shelf(self) -> None:
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+        )
+
+        second_org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.member, organization=second_org, rank=1)
+        # An org the viewer does NOT belong to must never appear on the shelf.
+        OrganizationFactory()
+
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            response = self.client.get("/api/currency/org-books/")
+
+        assert response.status_code == 200
+        rows = response.json()
+        assert [row["organization_id"] for row in rows] == [second_org.pk, self.org.pk]
+        assert rows[0]["rank"] == 1
+        assert rows[0]["organization_name"] == second_org.name
+        assert rows[0]["rank_title"] == second_org.get_rank_title(1)
+
+    def test_list_without_persona_is_empty(self) -> None:
+        with mock.patch("world.currency.views._viewer_persona", return_value=None):
+            response = self.client.get("/api/currency/org-books/")
+        assert response.status_code == 200
+        assert response.json() == []
