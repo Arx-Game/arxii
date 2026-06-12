@@ -6,10 +6,10 @@ Flow per RL week:
    active project instances and tries to deduct upkeep.
 2. For each building: sum the ``weekly_upkeep_cost`` over all of its
    active (polish > 0) instances. Try to deduct that total from the
-   owner's body wallet (``CurrencyBalance.gold``) all-or-nothing.
+   owner's purse (``CharacterPurse``, coppers — #925 ledger) all-or-nothing.
 3. On success: reset every instance's ``consecutive_missed_upkeep`` to 0
    and stamp ``last_upkeep_paid_at`` on each.
-4. On miss (insufficient gold OR no owner OR no wallet): apply one tick
+4. On miss (insufficient coppers OR no owner): apply one tick
    of decay to the lowest-priority active instance via
    ``apply_one_decay_tick``.
 5. When a decay tick drains an instance's polish to 0 in every
@@ -58,22 +58,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _resolve_owner_wallet(building: Building):
-    """Walk ``building.owner_persona → character_sheet → character → currency_balance``.
+def _resolve_owner_purse(building: Building):
+    """The owner's CharacterPurse (#925 ledger), or None with no owner.
 
-    Returns the CurrencyBalance row, or None when the building has no
-    owner or the body has never had a wallet created. Persona / sheet /
-    character relations are non-null at the DB level, so we only guard
-    the two breaking links: missing owner, and the optional wallet row.
+    Re-pointed from the legacy items.CurrencyBalance wallet during #932 —
+    upkeep now flows through the audited currency ledger as a sink.
     """
-    from world.items.models import CurrencyBalance  # noqa: PLC0415
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
 
     if building.owner_persona is None:
         return None
-    try:
-        return building.owner_persona.character_sheet.character.currency_balance
-    except CurrencyBalance.DoesNotExist:
-        return None
+    return get_or_create_purse(building.owner_persona.character_sheet)
 
 
 def _building_active_instances(building: Building):
@@ -207,10 +202,12 @@ def apply_weekly_upkeep_for_building(building: Building) -> bool:
         # No active instances → nothing to upkeep, nothing to decay.
         return True
 
-    wallet = _resolve_owner_wallet(building)
-    if wallet is not None and wallet.gold >= total:
-        wallet.gold = wallet.gold - total
-        wallet.save(update_fields=["gold"])
+    purse = _resolve_owner_purse(building)
+    if purse is not None and purse.balance >= total:
+        from world.currency.services import transfer  # noqa: PLC0415
+
+        # Upkeep leaves the world: a pure sink through the audited ledger.
+        transfer(amount=total, reason=f"upkeep: building {building.pk}", from_purse=purse)
         _reset_building_upkeep_counters(building)
         return True
 

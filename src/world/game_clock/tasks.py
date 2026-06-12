@@ -49,6 +49,7 @@ def weekly_rollover_task() -> None:
         ("journal weekly reset", batch_journal_weekly_reset),
         ("relationship weekly reset", batch_relationship_weekly_reset),
         ("AP weekly regen", batch_ap_weekly_regen),
+        ("weekly economy", _run_weekly_economy),
     ]
 
     for name, processor in processors:
@@ -57,6 +58,12 @@ def weekly_rollover_task() -> None:
             logger.info("Weekly rollover: %s complete", name)
         except Exception:
             logger.exception("Weekly rollover: %s failed", name)
+
+
+def _run_weekly_economy() -> None:
+    from world.currency.services import run_weekly_economy
+
+    run_weekly_economy()
 
 
 def _run_vote_processing() -> None:
@@ -479,6 +486,10 @@ def register_all_tasks() -> None:
             task_key="weekly_rollover",
             callable=weekly_rollover_task,
             interval=timedelta(days=7),
+            # Sunday midnight EST (= Monday 05:00 UTC) — the Arx 1 rollover
+            # moment, per Apostate's #932 ruling. EST fixed (no DST shift).
+            anchor_weekday=0,
+            anchor_hour_utc=5,
             description="Weekly rollover: advance GameWeek and process all weekly systems.",
         )
     )

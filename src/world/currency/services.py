@@ -8,6 +8,8 @@ as sinks or transfers). Atomic, row-locked, audited.
 
 from __future__ import annotations
 
+from datetime import timedelta
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -15,7 +17,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.currency.constants import (
+    ACTIVE_WEEK_LOGIN_DAYS,
     BUSINESS_BASE_WEEKLY_PER_LEVEL,
+    BUSINESS_FORTUNE_MAX,
+    BUSINESS_FORTUNE_MIN,
     CHORE_MULTIPLIER_CRIT,
     CHORE_MULTIPLIER_FAIL,
     CHORE_MULTIPLIER_SUCCESS,
@@ -44,6 +49,8 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -721,3 +728,144 @@ def run_business_week(business: Business, *, fortune: int) -> int:
             transfer(amount=loss, reason=f"business loss: {business.name}", from_purse=purse)
         net = -loss
     return net
+
+
+def run_weekly_economy() -> dict[str, int]:
+    """The Sunday-rollover economy pass (#932). Returns per-phase counts.
+
+    Order matters: interest accrues into arrears FIRST so this week's
+    income withholding services this week's interest; then income streams
+    flow (graft → debt withholding → garnishment → declaration); then
+    notarized contracts settle; then employment wages pay for
+    actively-played weeks; then businesses roll their fortune. Each phase
+    isolates failures per row — one broken org never wedges the rollover.
+    """
+    return {
+        "interest": _weekly_interest_accrual(),
+        "income": _weekly_income_streams(),
+        "contracts": _weekly_contract_settlement(),
+        "wages": _weekly_wages(),
+        "businesses": _weekly_business_fortunes(),
+    }
+
+
+def _weekly_interest_accrual() -> int:
+    """Weekly fraction of the monthly reference rate lands in arrears."""
+    count = 0
+    for debt in DebtInstrument.objects.filter(active=True):
+        try:
+            weekly = debt.monthly_interest // 4
+            if weekly > 0:
+                debt.arrears += weekly
+                debt.save(update_fields=["arrears"])
+                count += 1
+        except Exception:
+            logger.exception("weekly economy: interest accrual failed for debt %s", debt.pk)
+    return count
+
+
+def _weekly_income_streams() -> int:
+    count = 0
+    for stream in OrgIncomeStream.objects.filter(active=True).select_related("organization"):
+        try:
+            process_income_stream(stream)
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: income stream %s failed", stream.pk)
+    return count
+
+
+def _weekly_contract_settlement() -> int:
+    count = 0
+    for contract in Contract.objects.filter(
+        status=ContractStatus.ACTIVE, formality=ContractFormality.NOTARIZED
+    ):
+        try:
+            settle_contract_cycle(contract)
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: contract %s settlement failed", contract.pk)
+    return count
+
+
+def _weekly_wages() -> int:
+    from django.utils import timezone as dj_timezone  # noqa: PLC0415
+
+    count = 0
+    cutoff = dj_timezone.now() - timedelta(days=ACTIVE_WEEK_LOGIN_DAYS)
+    for employment in CharacterEmployment.objects.filter(active=True).select_related(
+        "character_sheet", "profession"
+    ):
+        try:
+            account = employment.character_sheet.character.db_account
+            was_active = bool(
+                account is not None
+                and account.last_login is not None
+                and account.last_login >= cutoff
+            )
+            run_weekly_employment(employment, was_active=was_active)
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: wages failed for employment %s", employment.pk)
+    return count
+
+
+def _weekly_business_fortunes() -> int:
+    import random  # noqa: PLC0415
+
+    rng = random.SystemRandom()
+    count = 0
+    for business in Business.objects.filter(active=True).select_related("owner_persona"):
+        try:
+            fortune = rng.randint(BUSINESS_FORTUNE_MIN, BUSINESS_FORTUNE_MAX)
+            run_business_week(business, fortune=fortune)
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: business %s failed", business.pk)
+    return count
+
+
+@transaction.atomic
+def deliver_mission_money(*, recipient_sheet: CharacterSheet, amount: int, ref: str) -> None:
+    """Mission money reward lands in the purse (#932 — replaces the Phase 5b stub).
+
+    A mint (faucet) through the audited ledger; missions are a named
+    faucet in the #923 inventory.
+    """
+    if amount <= 0:
+        return
+    transfer(
+        amount=amount,
+        reason=f"mission reward: {ref}"[:200],
+        to_purse=get_or_create_purse(recipient_sheet),
+    )
+
+
+FAME_COPPERS_PER_POINT = 10
+
+
+@transaction.atomic
+def fund_fame_display(persona: Persona, *, amount: int) -> int:
+    """Spend money maintaining fame against decay (#932 fame churn).
+
+    The classic churn sink: fashion, events, displays — money leaves the
+    world, fame_points rise at FAME_COPPERS_PER_POINT (calibration
+    starting point), and the existing decay crons grind it back down.
+    Returns fame points gained.
+    """
+    from world.societies.renown import set_persona_fame  # noqa: PLC0415
+
+    if amount <= 0:
+        msg = "Spend something to be seen."
+        raise ValidationError(msg)
+    points = amount // FAME_COPPERS_PER_POINT
+    if points <= 0:
+        msg = "Too little to make a splash."
+        raise ValidationError(msg)
+    transfer(
+        amount=amount,
+        reason="fame display",
+        from_purse=get_or_create_purse(persona.character_sheet),
+    )
+    set_persona_fame(persona, persona.fame_points + points)
+    return points
