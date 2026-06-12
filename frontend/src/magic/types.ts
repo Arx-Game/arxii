@@ -415,6 +415,80 @@ export interface AudereOfferResult {
   advisory_text: string;
 }
 
+// ---------------------------------------------------------------------------
+// Audere Majora (Crossing offer), #543
+// ---------------------------------------------------------------------------
+
+/** One eligible crossing path returned by GET /api/magic/audere-majora/pending/. */
+export interface EligiblePath {
+  id: number;
+  name: string;
+  stage: number;
+  stage_display: string;
+  description: string;
+}
+
+/**
+ * A pending Audere Majora crossing offer.
+ * Returned (paginated) by GET /api/magic/audere-majora/pending/.
+ */
+export interface PendingAudereMajoraOffer {
+  id: number;
+  character_sheet_id: number;
+  character_name: string;
+  fired_intensity: number;
+  soulfray_stage_order: number;
+  boundary_level: number;
+  target_stage_display: string;
+  vision_text: string;
+  advisory_text: string;
+  risk_text: string;
+  eligible_paths: EligiblePath[];
+  intended_path_id: number | null;
+  created_at: string;
+}
+
+/** Paginated wrapper for PendingAudereMajoraOffer list. */
+export interface PaginatedPendingAudereMajoraOfferList {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PendingAudereMajoraOffer[];
+}
+
+/** Body for POST /api/magic/audere-majora/respond/. accept=false declines. */
+export interface AudereMajoraRespondRequest {
+  offer_id: number;
+  accept: boolean;
+  path_id?: number | null;
+  declaration_text?: string;
+}
+
+/**
+ * Response from audere-majora/respond/ (AudereMajoraCrossingResultSerializer —
+ * plain Serializer, not in generated schema).
+ */
+export interface AudereMajoraCrossingResult {
+  accepted: boolean;
+  level_before: number;
+  level_after: number;
+  chosen_path_name: string;
+  advisory_text: string;
+  declaration_interaction_id: number;
+}
+
+/** A declared path intent as returned by GET /api/progression/path-intent/. */
+export interface PathIntentDetail {
+  id: number;
+  intended_path: EligiblePath & Record<string, unknown>;
+  declared_at: string;
+}
+
+/** Response shape for GET /api/progression/path-intent/. */
+export interface PathIntentResponse {
+  intent: PathIntentDetail | null;
+}
+
 /**
  * tier_caps is a SerializerMethodField, so the generated schema leaves it as
  * `{ [key: string]: unknown }`. Shape source of truth:

@@ -23,6 +23,8 @@ import type {
   ApplicablePullsRequest,
   AudereOfferResult,
   AudereRespondRequest,
+  AudereMajoraCrossingResult,
+  AudereMajoraRespondRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -31,10 +33,12 @@ import type {
   ImbueResponse,
   PaginatedPendingAlterationList,
   PaginatedPendingAudereOfferList,
+  PaginatedPendingAudereMajoraOfferList,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
   PaginatedTeachingOfferList,
   PaginatedThreadList,
+  PathIntentResponse,
   PatchThreadRequest,
   PendingStageAdvanceOffer,
   PullCommitRequest,
@@ -100,6 +104,8 @@ const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
+const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
+const PATH_INTENT_URL = '/api/progression/path-intent/';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -787,6 +793,86 @@ export async function respondToAudere(body: AudereRespondRequest): Promise<Auder
   }
 
   return res.json() as Promise<AudereOfferResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Audere Majora (Crossing offer), #543
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/audere-majora/pending/
+ *
+ * Account-scoped inbox: pending Audere Majora crossing offers for the caller's characters.
+ */
+export async function getPendingAudereMajoraOffers(): Promise<PaginatedPendingAudereMajoraOfferList> {
+  const res = await apiFetch(`${AUDERE_MAJORA_URL}/pending/`);
+  if (!res.ok) throw new Error('Failed to load pending Audere Majora offers');
+  return res.json() as Promise<PaginatedPendingAudereMajoraOfferList>;
+}
+
+/**
+ * POST /api/magic/audere-majora/respond/
+ *
+ * Accept (with path + declaration) or decline a pending Audere Majora crossing offer.
+ */
+export async function respondToAudereMajora(
+  body: AudereMajoraRespondRequest
+): Promise<AudereMajoraCrossingResult> {
+  const res = await apiFetch(`${AUDERE_MAJORA_URL}/respond/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to respond to Audere Majora crossing offer');
+  }
+
+  return res.json() as Promise<AudereMajoraCrossingResult>;
+}
+
+// ---------------------------------------------------------------------------
+// PathIntent, #543
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/progression/path-intent/
+ *
+ * Returns the caller's current path intent (or null if not set).
+ */
+export async function getPathIntent(): Promise<PathIntentResponse> {
+  const res = await apiFetch(PATH_INTENT_URL);
+  if (!res.ok) throw new Error('Failed to load path intent');
+  return res.json() as Promise<PathIntentResponse>;
+}
+
+/**
+ * PUT /api/progression/path-intent/
+ *
+ * Declare or overwrite the caller's path intent.
+ */
+export async function putPathIntent(pathId: number): Promise<PathIntentResponse> {
+  const res = await apiFetch(PATH_INTENT_URL, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ path_id: pathId }),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to declare path intent');
+  }
+  return res.json() as Promise<PathIntentResponse>;
+}
+
+/**
+ * DELETE /api/progression/path-intent/
+ *
+ * Clear the caller's path intent. Returns 204 with no body.
+ */
+export async function deletePathIntent(): Promise<void> {
+  const res = await apiFetch(PATH_INTENT_URL, { method: 'DELETE' });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to clear path intent');
+  }
 }
 
 // ---------------------------------------------------------------------------
