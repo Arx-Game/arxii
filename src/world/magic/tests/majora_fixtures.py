@@ -30,7 +30,7 @@ from world.mechanics.engagement import CharacterEngagement
 from world.progression.models import CharacterPathHistory
 
 
-def build_majora_world(
+def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by design
     boundary_level: int,
     suffix: str,
     *,
@@ -156,7 +156,7 @@ def build_majora_world(
     return character, sheet, threshold, prospect_path, puissant_path, soulfray_stage
 
 
-def build_crossing_world(
+def build_crossing_world(  # noqa: PLR0913 — fixture knobs are keyword-only by design
     boundary_level: int,
     suffix: str,
     *,
