@@ -130,3 +130,72 @@ def apply_escalation_tick(
         )
 
     return results
+
+
+ESCALATION_SPIKE_TRIGGER_NAMES = (
+    "escalation_spike_on_incapacitated",
+    "escalation_spike_on_killed",
+)
+
+
+def install_escalation_room_triggers(encounter: CombatEncounter) -> None:
+    """Idempotently install the spike triggers on the encounter's room.
+
+    Runs every escalating begin_declaration_phase (covers mid-encounter curve
+    assignment). No-ops when the seeded TriggerDefinitions are absent (content
+    not wired in this deployment) or the encounter has no room.
+    """
+    from flows.models import Trigger, TriggerDefinition  # noqa: PLC0415
+
+    room = encounter.room
+    if room is None:
+        return
+    for name in ESCALATION_SPIKE_TRIGGER_NAMES:
+        trigger_def = TriggerDefinition.objects.filter(name=name).first()
+        if trigger_def is None:
+            continue
+        trigger, created = Trigger.objects.get_or_create(
+            obj=room, trigger_definition=trigger_def
+        )
+        if created:
+            handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+            if handler is not None:
+                handler.on_trigger_added(trigger)
+
+
+def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
+    """Remove the room spike triggers unless another live escalating encounter
+    shares the room.
+
+    Called from ``cleanup_completed_encounter``, which ``resolve_round`` invokes
+    *before* persisting ``status=COMPLETED`` — the ``exclude(pk=...)`` keeps the
+    encounter being cleaned from blocking its own removal; other encounters'
+    statuses are already persisted and therefore accurate.
+    """
+    from flows.models import Trigger, TriggerDefinition  # noqa: PLC0415
+    from world.combat.constants import EncounterStatus  # noqa: PLC0415
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+
+    room = encounter.room
+    if room is None:
+        return
+    shares_room = (
+        CombatEncounter.objects.filter(room=room, escalation_curve__isnull=False)
+        .exclude(pk=encounter.pk)
+        .exclude(status=EncounterStatus.COMPLETED)
+        .exists()
+    )
+    if shares_room:
+        return
+    defs = TriggerDefinition.objects.filter(name__in=ESCALATION_SPIKE_TRIGGER_NAMES)
+    triggers = list(Trigger.objects.filter(obj=room, trigger_definition__in=defs))
+    if not triggers:
+        return
+    trigger_pks = [t.pk for t in triggers]
+    Trigger.objects.filter(pk__in=trigger_pks).delete()
+    # Invalidate the in-memory TriggerHandler cache so dispatch stops seeing
+    # the deleted rows (same sequence as soul_tether's install/remove paths).
+    handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    if handler is not None:
+        for pk in trigger_pks:
+            handler.on_trigger_removed(pk)

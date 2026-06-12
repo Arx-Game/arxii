@@ -1040,6 +1040,16 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
         if opp.objectdb is not None:
             process_round_start(opp.objectdb)
 
+    # --- Escalation tick (#872): opted-in encounters build pressure each round ---
+    from world.combat.escalation import (  # noqa: PLC0415
+        apply_escalation_tick,
+        install_escalation_room_triggers,
+    )
+
+    if enc.escalation_curve is not None:
+        install_escalation_room_triggers(enc)
+        apply_escalation_tick(enc)
+
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
     # the old rows. recompute_max_health_with_threads runs per affected
@@ -2762,6 +2772,12 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     for target in participant_targets:
         end_engagement(target, EngagementType.COMBAT, source=encounter)
+
+    # Escalation room-trigger teardown (#872): drop the spike triggers unless
+    # another live escalating encounter still shares the room.
+    from world.combat.escalation import remove_escalation_room_triggers  # noqa: PLC0415
+
+    remove_escalation_room_triggers(encounter)
 
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
