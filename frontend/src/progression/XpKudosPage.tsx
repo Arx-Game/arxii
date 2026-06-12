@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import type { KudosClaimCategory, KudosTransaction, XPTransaction } from './types';
+import { PathIntentCard } from '@/magic/components/PathIntentCard';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString(undefined, {
@@ -363,6 +364,10 @@ export function XpKudosPage() {
             )
           }
         />
+      </div>
+
+      <div className="mb-6">
+        <PathIntentCard />
       </div>
 
       <Card>
