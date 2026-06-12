@@ -36,6 +36,7 @@ from world.magic.models import SanctumDetails, SanctumOwnerMode
 if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.magic.models import Resonance
+    from world.magic.services.ritual_checks import OutcomeTier
     from world.scenes.models import Persona
 
 
@@ -80,13 +81,6 @@ class DissolutionLeaderNotPresentError(DissolutionError):
     user_message = "You must be physically in the Sanctum's room to attempt Dissolution."
 
 
-class DissolutionCheckTypeMissingError(DissolutionError):
-    user_message = (
-        "Dissolution check is not yet authored. Contact staff (#709 — magical-check "
-        "content authoring)."
-    )
-
-
 class AbsorbError(ValueError):
     user_message: str = "Cannot absorb from this Sanctum."
 
@@ -104,30 +98,14 @@ class AbsorbNothingPendingError(AbsorbError):
 # ---------------------------------------------------------------------------
 
 
-SANCTUM_DISSOLUTION_CHECK_TYPE_NAME = "Sanctum Dissolution"
-"""Name of the CheckType seeded in Phase 4.1d (PLACEHOLDER content; real
-authoring in #709)."""
-
-
-SANCTUM_DISSOLUTION_BASE_DIFFICULTY = 20
-"""Target difficulty for founder-led Dissolution. PLACEHOLDER tuning."""
-
-
-SANCTUM_DISSOLUTION_NON_FOUNDER_MULTIPLIER = Decimal("2.0")
-"""Difficulty multiplier when the leader is not the founder. PLACEHOLDER."""
-
-
-# Outcome tier thresholds (CheckOutcome.success_level). Plan 4 §F.
-# success_level scale: -10 worst → +10 best.
+# Outcome-tier recovery fractions (via ritual_checks.outcome_tier). TUNING PLACEHOLDERS.
 DISSOLUTION_RECOVERY_CRIT_SUCCESS = Decimal("0.80")
 DISSOLUTION_RECOVERY_SUCCESS = Decimal("0.50")
 DISSOLUTION_RECOVERY_FAILURE = Decimal("0.10")
 DISSOLUTION_RECOVERY_BOTCH = Decimal("0.0")
-DISSOLUTION_SUCCESS_LEVEL_CRIT = 7
-DISSOLUTION_SUCCESS_LEVEL_SUCCESS = 1
-DISSOLUTION_SUCCESS_LEVEL_FAIL = -3
-# success_level <= DISSOLUTION_SUCCESS_LEVEL_FAIL but > BOTCH_THRESHOLD → FAILURE
-# success_level <= BOTCH_THRESHOLD → BOTCH
+
+SANCTIFICATION_CRIT_BONUS_IMBUE = 5
+"""Bonus initial Homecoming imbue on a crit Sanctification. TUNING PLACEHOLDER."""
 
 
 # ---------------------------------------------------------------------------
@@ -137,22 +115,28 @@ DISSOLUTION_SUCCESS_LEVEL_FAIL = -3
 
 @dataclass(frozen=True)
 class SanctificationResult:
-    """Returned by perform_sanctification."""
+    """Returned by perform_sanctification.
 
-    sanctum_id: int
+    On a failed or botched check, ``fizzled=True`` and ``sanctum_id=None`` —
+    no state change occurred. On success or crit, ``fizzled=False`` and
+    ``sanctum_id`` is the new SanctumDetails pk.
+    """
+
+    sanctum_id: int | None
     owner_mode: str
     resonance_type_id: int
     founder_character_sheet_id: int
+    success_level: int
+    fizzled: bool = False
 
 
 @dataclass(frozen=True)
 class DissolutionResult:
     """Returned by perform_dissolution.
 
-    ``is_botch`` reports the outcome tier; the actual consequence content
-    (status effects, magical mishaps) is deferred to #709 alongside the
-    rest of the magical-check authoring. Callers wanting to surface
-    "something bad happened" can read this flag; nothing is applied yet.
+    ``is_botch`` is True when the outcome tier is BOTCH (success_level ≤ −2).
+    Callers wanting to surface "something bad happened" can read this flag;
+    consequence content (status effects, magical mishaps) is future work.
     """
 
     sanctum_id: int
@@ -246,6 +230,32 @@ def perform_sanctification(
         )
         raise SanctificationFounderHasPersonalSanctumError(msg)
 
+    # Roll the ritual check BEFORE creating any rows. Fizzle on fail/botch.
+    from world.magic.seeds_sanctum import (  # noqa: PLC0415
+        SANCTIFICATION_COVENANT_RITUAL_NAME,
+        SANCTIFICATION_PERSONAL_RITUAL_NAME,
+    )
+    from world.magic.services.ritual_checks import (  # noqa: PLC0415
+        OutcomeTier,
+        perform_ritual_check,
+    )
+
+    ritual_name = (
+        SANCTIFICATION_PERSONAL_RITUAL_NAME
+        if owner_mode == SanctumOwnerMode.PERSONAL
+        else SANCTIFICATION_COVENANT_RITUAL_NAME
+    )
+    roll = perform_ritual_check(ritual_name, character)
+    if roll.tier in (OutcomeTier.FAIL, OutcomeTier.BOTCH):
+        return SanctificationResult(
+            sanctum_id=None,
+            owner_mode=owner_mode,
+            resonance_type_id=resonance_type.pk,
+            founder_character_sheet_id=founder_sheet.pk,
+            success_level=roll.success_level,
+            fizzled=True,
+        )
+
     from django.db import IntegrityError  # noqa: PLC0415
 
     sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
@@ -270,11 +280,20 @@ def perform_sanctification(
             "UniqueConstraint for a Personal Sanctum."
         )
         raise SanctificationFounderHasPersonalSanctumError(msg) from exc
+
+    if roll.tier is OutcomeTier.CRIT:
+        from world.magic.services.sanctum_lvm import apply_homecoming_gain  # noqa: PLC0415
+        from world.magic.services.sanctum_rituals import _compute_cap  # noqa: PLC0415
+
+        apply_homecoming_gain(details, SANCTIFICATION_CRIT_BONUS_IMBUE, _compute_cap(details))
+
     return SanctificationResult(
         sanctum_id=details.pk,
         owner_mode=details.owner_mode,
         resonance_type_id=details.resonance_type_id,
         founder_character_sheet_id=founder_sheet.pk,
+        success_level=roll.success_level,
+        fizzled=False,
     )
 
 
@@ -320,21 +339,23 @@ def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mo
 def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> DissolutionResult:
     """Tear down the Sanctum with a tiered magical check.
 
-    Same Ritual of Dissolution row regardless of founder/non-founder.
-    Difficulty is multiplied by ``SANCTUM_DISSOLUTION_NON_FOUNDER_MULTIPLIER``
-    if the leader is not the founder. Outcome tier determines recovery
+    Difficulty is authored on the Ritual's RitualCheckConfig. Non-founder
+    actors roll against ``non_founder_target_difficulty`` when set.
+    Outcome tier (CRIT / SUCCESS / FAIL / BOTCH) determines the recovery
     fraction (see DISSOLUTION_RECOVERY_* constants).
     """
-    from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.seeds_sanctum import DISSOLUTION_RITUAL_NAME  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.services.ritual_checks import (  # noqa: PLC0415
+        OutcomeTier,
+        perform_ritual_check,
+    )
     from world.magic.services.sanctum_lvm import sum_homecoming_value  # noqa: PLC0415
 
     # Physical-presence gate — the witch is performing a ritual IN the
     # Sanctum's room. Mirrors absorb_sanctum_pool. Anyone with access
-    # can attempt; founder vs non-founder difficulty differential (and
-    # #708 tightening for covenant-role gates) lives below in the check
-    # difficulty multiplier, not as a hard authorization gate.
+    # can attempt; founder vs non-founder difficulty differential lives
+    # in the authored RitualCheckConfig, not as a hard authorization gate.
     sanctum_room = sanctum.feature_instance.room_profile.objectdb
     character = leader_persona.character_sheet.character
     if character.db_location_id != sanctum_room.pk:
@@ -344,31 +365,18 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         )
         raise DissolutionLeaderNotPresentError(msg)
 
-    check_type = CheckType.objects.filter(name=SANCTUM_DISSOLUTION_CHECK_TYPE_NAME).first()
-    if check_type is None:
-        msg = (
-            f"CheckType {SANCTUM_DISSOLUTION_CHECK_TYPE_NAME!r} not seeded. "
-            "Run world.magic.seeds_sanctum.ensure_sanctum_dissolution_check_type()."
-        )
-        raise DissolutionCheckTypeMissingError(msg)
-
     is_founder = sanctum.founder_character_sheet_id == leader_persona.character_sheet_id
-    difficulty = SANCTUM_DISSOLUTION_BASE_DIFFICULTY
-    if not is_founder:
-        difficulty = int(Decimal(difficulty) * SANCTUM_DISSOLUTION_NON_FOUNDER_MULTIPLIER)
-
-    check_result = perform_check(
+    roll = perform_ritual_check(
+        DISSOLUTION_RITUAL_NAME,
         leader_persona.character_sheet.character,
-        check_type=check_type,
-        target_difficulty=difficulty,
+        founder_standing=is_founder,
     )
-    outcome = check_result.outcome
-    success_level = outcome.success_level
-    recovery_fraction = _dissolution_recovery_fraction(success_level)
+    success_level = roll.success_level
+    recovery_fraction = _dissolution_recovery_fraction(roll.tier)
+    is_botch = roll.tier is OutcomeTier.BOTCH
 
     reservoir_before = sum_homecoming_value(sanctum)
     recovered_amount = int(Decimal(reservoir_before) * recovery_fraction)
-    is_botch = success_level <= DISSOLUTION_SUCCESS_LEVEL_FAIL and recovery_fraction == 0
 
     # Tear down: threads, LVM rows, instance + details (cascade).
     _retire_sanctum_threads(sanctum)
@@ -397,13 +405,15 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     )
 
 
-def _dissolution_recovery_fraction(success_level: int) -> Decimal:
-    """Map check outcome success_level to recovery fraction."""
-    if success_level >= DISSOLUTION_SUCCESS_LEVEL_CRIT:
+def _dissolution_recovery_fraction(tier: OutcomeTier) -> Decimal:
+    """Map check outcome tier to recovery fraction."""
+    from world.magic.services.ritual_checks import OutcomeTier  # noqa: PLC0415
+
+    if tier is OutcomeTier.CRIT:
         return DISSOLUTION_RECOVERY_CRIT_SUCCESS
-    if success_level >= DISSOLUTION_SUCCESS_LEVEL_SUCCESS:
+    if tier is OutcomeTier.SUCCESS:
         return DISSOLUTION_RECOVERY_SUCCESS
-    if success_level > DISSOLUTION_SUCCESS_LEVEL_FAIL:
+    if tier is OutcomeTier.FAIL:
         return DISSOLUTION_RECOVERY_FAILURE
     return DISSOLUTION_RECOVERY_BOTCH
 

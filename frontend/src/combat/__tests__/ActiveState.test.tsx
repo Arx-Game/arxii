@@ -67,6 +67,9 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     // Runtime sends "" until completion; the generated enum omits the blank.
     outcome: '' as EncounterDetail['outcome'],
     completed_at: null,
+    escalation_curve_name: null,
+    escalation_start_round: null,
+    escalation_tick_narration: null,
   };
 }
 

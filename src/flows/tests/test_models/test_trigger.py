@@ -126,3 +126,37 @@ class TestTrigger(TestCase):
         ):
             self.trigger.additional_filter_condition = {"missing": "value"}
             assert not self.trigger.should_trigger_for_event(event)
+
+
+class TestSystemInstalledTrigger(TestCase):
+    """A Trigger with no source_condition (system-installed) is valid and fires."""
+
+    def setUp(self):
+        from flows.trigger_handler import TriggerHandler
+
+        self.handler = TriggerHandler(owner=None)
+
+    def test_trigger_without_source_condition_saves(self):
+        td = TriggerDefinitionFactory(event_name="test_event")
+        trigger = TriggerFactory(trigger_definition=td, source_condition=None)
+        self.assertIsNone(trigger.source_condition)
+
+    def test_system_installed_trigger_is_active(self):
+        """_is_active returns True for a trigger with no source_condition."""
+        from unittest.mock import MagicMock
+
+        trigger = MagicMock()
+        trigger.source_stage = None
+        trigger.source_condition = None
+        self.assertTrue(self.handler._is_active(trigger))
+
+    def test_source_stage_set_source_condition_none_does_not_raise(self):
+        """_is_active does not raise when source_stage is set but source_condition is None."""
+        from unittest.mock import MagicMock
+
+        trigger = MagicMock()
+        trigger.source_stage = MagicMock()  # non-None stage
+        trigger.source_condition = None
+        # Must not raise; the guard should return True (system-installed triggers are always active)
+        result = self.handler._is_active(trigger)
+        self.assertTrue(result)

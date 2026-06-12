@@ -1411,12 +1411,17 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
         assert ritual is not None, "Expected a SCENE_ACTION Ritual authored by the player account"
         assert "RitualKTest" in ritual.name
 
-    def test_finalize_creates_ritual_sidecar(self) -> None:
-        """finalize_character creates RitualSceneActionConfig for the player anima ritual."""
+    def test_finalize_creates_ritual_check_config(self) -> None:
+        """finalize_character creates RitualCheckConfig with the seeded default check_type."""
         from world.magic.constants import RitualExecutionKind
-        from world.magic.models.ritual_scene_action import RitualSceneActionConfig
+        from world.magic.models.ritual_check_config import RitualCheckConfig
         from world.magic.models.rituals import Ritual
+        from world.magic.seeds_checks import (
+            ANIMA_RESTORATION_CHECK_TYPE_NAME,
+            ensure_magic_check_types,
+        )
 
+        ensure_magic_check_types()
         draft = self._create_complete_draft()
         finalize_character(draft, add_to_roster=True)
 
@@ -1425,9 +1430,12 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         ).first()
         assert ritual is not None
-        assert RitualSceneActionConfig.objects.filter(ritual=ritual).exists(), (
-            "Expected a RitualSceneActionConfig sidecar for the player anima ritual"
+        config = RitualCheckConfig.objects.filter(ritual=ritual).first()
+        assert config is not None, "Expected a RitualCheckConfig for the player anima ritual"
+        assert config.check_type is not None, (
+            "Provisioning should default check_type to the seeded Anima Restoration row"
         )
+        assert config.check_type.name == ANIMA_RESTORATION_CHECK_TYPE_NAME
 
     def test_finalize_creates_ritual_knowledge_row(self) -> None:
         """finalize_character creates CharacterRitualKnowledge for the player anima ritual."""

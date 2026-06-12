@@ -1,31 +1,32 @@
-"""RitualSceneActionConfig: sidecar model for SCENE_ACTION rituals.
+"""RitualCheckConfig: per-Ritual authored check specification.
 
-Holds the check specification a player's anima ritual fires when invoked.
-Exists iff the parent Ritual.execution_kind is SCENE_ACTION.
+Holds the check a ritual rolls when performed. SCENE_ACTION rituals
+(player anima rituals) require one; other kinds (e.g. SERVICE sanctum
+rituals) may carry one to source their CheckType and authored difficulty.
 """
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
-class RitualSceneActionConfig(SharedMemoryModel):
-    """Per-Ritual configuration for SCENE_ACTION dispatch.
+class RitualCheckConfig(SharedMemoryModel):
+    """Per-Ritual check configuration.
 
-    Holds the check spec a player's anima ritual fires when invoked. Exists
-    iff the parent Ritual.execution_kind is SCENE_ACTION. The 1:1 relationship
-    is enforced by the OneToOneField. The invariant that SCENE_ACTION rituals
-    must have a sidecar (and non-SCENE_ACTION rituals must not) is enforced
-    in Ritual.clean().
+    The 1:1 relationship is enforced by the OneToOneField. The invariant
+    that SCENE_ACTION rituals must have a config (other kinds may) is
+    enforced in Ritual.clean().
 
     FK paths mirror CharacterAnimaRitual: stat/skill → traits.Trait /
     skills.Skill, specialization → skills.Specialization,
-    check_type → checks.CheckType.
+    check_type → checks.CheckType. For SERVICE rituals, stat/skill are
+    narrative/authoring hints — the roll's mechanics come entirely from
+    check_type composition + the authored difficulty.
     """
 
     ritual = models.OneToOneField(
         "magic.Ritual",
         on_delete=models.CASCADE,
-        related_name="scene_action_config",
+        related_name="check_config",
     )
     stat = models.ForeignKey(
         "traits.Trait",
@@ -68,10 +69,18 @@ class RitualSceneActionConfig(SharedMemoryModel):
         default=3,
         help_text="Target difficulty for the check.",
     )
+    non_founder_target_difficulty = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Authored difficulty when the actor lacks founder standing for the "
+            "target (e.g. a non-founder dissolving a Sanctum). NULL = no distinction."
+        ),
+    )
 
     class Meta:
-        verbose_name = "Ritual Scene Action Config"
-        verbose_name_plural = "Ritual Scene Action Configs"
+        verbose_name = "Ritual Check Config"
+        verbose_name_plural = "Ritual Check Configs"
 
     def __str__(self) -> str:
-        return f"SceneActionConfig for {self.ritual_id}"
+        return f"CheckConfig for {self.ritual_id}"

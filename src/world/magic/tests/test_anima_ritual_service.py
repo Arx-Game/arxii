@@ -6,7 +6,7 @@ and ConditionTemplate rows are created in setUp because they are singletons
 queried with .first() / .get(name=...).
 
 The per-character ritual is now a Ritual(execution_kind=SCENE_ACTION) +
-RitualSceneActionConfig. Tests create the full pair via factories and attach
+RitualCheckConfig. Tests create the full pair via factories and attach
 the Ritual to the character's account via author_account.
 """
 
@@ -29,8 +29,8 @@ from world.magic.exceptions import (
 )
 from world.magic.factories import (
     CharacterAnimaFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
@@ -69,7 +69,7 @@ def _make_ritual_for_sheet(sheet):
         flow=None,
         author_account=character.db_account,
     )
-    RitualSceneActionConfigFactory(ritual=ritual)
+    RitualCheckConfigFactory(ritual=ritual)
     return ritual
 
 
@@ -513,3 +513,17 @@ class AnimaRitualBudgetGuardTests(TestCase):
         self.assertEqual(result.severity_reduced, 0)
         self.assertEqual(result.anima_recovered, 3)
         mock_scene.assert_called()
+
+
+class NullCheckTypeGuardTests(TestCase):
+    """#709: a config with NULL check_type raises NoRitualConfigured, not a crash."""
+
+    def test_perform_raises_when_check_type_missing(self):
+        sheet = CharacterSheetFactory()
+        ritual = _make_ritual_for_sheet(sheet)
+        config = ritual.check_config
+        config.check_type = None
+        config.save(update_fields=["check_type"])
+        scene = SceneFactory()
+        with self.assertRaises(NoRitualConfigured):
+            perform_anima_ritual(sheet, scene)

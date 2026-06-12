@@ -111,3 +111,14 @@ CHORE_MULTIPLIER_CRIT = 200
 # weekly base yield. Variance can push a week negative by design.
 BUSINESS_INVESTMENT_PER_LEVEL = 50_000
 BUSINESS_BASE_WEEKLY_PER_LEVEL = 200
+
+
+# Weekly business fortune range (#932): the percentage swing run_business_week
+# receives at rollover. Skewed positive but genuinely negative-capable —
+# a bad week loses real money by design. Calibration starting points.
+BUSINESS_FORTUNE_MIN = -40
+BUSINESS_FORTUNE_MAX = 60
+
+# Wages pay only for actively-played weeks (#929/#932): a login within this
+# many days of the rollover counts as active.
+ACTIVE_WEEK_LOGIN_DAYS = 8

@@ -5,9 +5,9 @@
  *
  * Backend gap (Phase 9): RitualViewSet is ReadOnlyModelViewSet — PATCH returns
  * 405 until the backend is updated to accept partial updates. The RitualSerializer
- * also does not expose scene_action_config fields (stat, skill, check_type, etc.)
- * so those fields cannot be pre-populated from server data until Phase 10 adds
- * them. The form still submits FK ids for these fields via AnimaRitualPatchBody.
+ * does expose check_config fields (stat, skill, check_type, etc.) but pre-population
+ * from server data was deferred. The form still submits FK ids for these fields via
+ * AnimaRitualPatchBody.
  *
  * Stat/Skill/CheckType pickers are plain number inputs for now — dedicated FK
  * picker components do not yet exist for these model types. Flag for follow-up.

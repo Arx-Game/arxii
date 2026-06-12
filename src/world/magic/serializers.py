@@ -850,10 +850,10 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 
-class RitualSceneActionConfigSerializer(serializers.ModelSerializer):
-    """Nested read-only serializer for RitualSceneActionConfig sidecars.
+class RitualCheckConfigSerializer(serializers.ModelSerializer):
+    """Nested read-only serializer for RitualCheckConfig.
 
-    Exposes the check specification for SCENE_ACTION rituals so the frontend
+    Exposes the check specification for rituals so the frontend
     detail panel can display stat/skill/check_type information.
     """
 
@@ -865,11 +865,11 @@ class RitualSceneActionConfigSerializer(serializers.ModelSerializer):
     check_type_name = serializers.SerializerMethodField()
 
     class Meta:
-        from world.magic.models.ritual_scene_action import (  # noqa: PLC0415
-            RitualSceneActionConfig,
+        from world.magic.models.ritual_check_config import (  # noqa: PLC0415
+            RitualCheckConfig,
         )
 
-        model = RitualSceneActionConfig
+        model = RitualCheckConfig
         fields = [
             "id",
             "stat",
@@ -881,6 +881,7 @@ class RitualSceneActionConfigSerializer(serializers.ModelSerializer):
             "check_type_id",
             "check_type_name",
             "target_difficulty",
+            "non_founder_target_difficulty",
         ]
         read_only_fields = fields
 
@@ -897,13 +898,13 @@ class RitualSerializer(serializers.ModelSerializer):
     Exposes name, description, narrative_prose, dispatch metadata, the
     `input_schema` blob the frontend uses to render its perform form,
     `author_account_id` for client-side "authored by you" filtering,
-    and the nested `scene_action_config` for SCENE_ACTION rituals.
+    and the nested `check_config` when present.
     """
 
     author_account_id = serializers.PrimaryKeyRelatedField(
         source="author_account", read_only=True, allow_null=True
     )
-    scene_action_config = serializers.SerializerMethodField()
+    check_config = serializers.SerializerMethodField()
 
     class Meta:
         model = Ritual
@@ -917,7 +918,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "execution_kind",
             "input_schema",
             "author_account_id",
-            "scene_action_config",
+            "check_config",
             "client_hosted",
             "participation_rule",
             "min_participants",
@@ -925,21 +926,17 @@ class RitualSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_scene_action_config(self, obj: Ritual) -> dict | None:
-        """Return nested scene_action_config for SCENE_ACTION rituals, else None."""
-        from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-
-        if obj.execution_kind != RitualExecutionKind.SCENE_ACTION:
-            return None
+    def get_check_config(self, obj: Ritual) -> dict | None:
+        """Return nested check_config when present, else None."""
         try:
-            config = obj.scene_action_config
+            config = obj.check_config
         except Exception:  # noqa: BLE001
             return None
-        return RitualSceneActionConfigSerializer(config).data
+        return RitualCheckConfigSerializer(config).data
 
 
-class RitualSceneActionConfigPatchSerializer(serializers.Serializer):
-    """Write serializer for the nested scene_action_config on a PATCH.
+class RitualCheckConfigPatchSerializer(serializers.Serializer):
+    """Write serializer for the nested check_config on a PATCH.
 
     Only fields that players can meaningfully update are included.
     All are optional (partial update semantics). FK fields accept integer PKs
@@ -1013,25 +1010,23 @@ class RitualPatchSerializer(serializers.ModelSerializer):
     """Write serializer for partial PATCH of player-authored Rituals.
 
     Handles top-level Ritual fields (name, description, narrative_prose) and
-    optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-    rituals silently ignore scene_action_config if supplied.
+    optional nested ``check_config`` when the ritual has one. Rituals without a
+    config silently ignore check_config if supplied.
     """
 
-    scene_action_config = RitualSceneActionConfigPatchSerializer(required=False)
+    check_config = RitualCheckConfigPatchSerializer(required=False)
 
     class Meta:
         model = Ritual
-        fields = ["name", "description", "narrative_prose", "scene_action_config"]
+        fields = ["name", "description", "narrative_prose", "check_config"]
 
     def update(self, instance: Ritual, validated_data: dict) -> Ritual:
-        """Update top-level fields then optionally update the sidecar."""
-        from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-
-        config_data = validated_data.pop("scene_action_config", None)
+        """Update top-level fields then optionally update the check config."""
+        config_data = validated_data.pop("check_config", None)
         ritual = super().update(instance, validated_data)
-        if config_data and instance.execution_kind == RitualExecutionKind.SCENE_ACTION:
+        if config_data:
             try:
-                config = instance.scene_action_config
+                config = instance.check_config
             except Exception:  # noqa: BLE001
                 return ritual
             for field, value in config_data.items():
