@@ -171,3 +171,35 @@ class GoalInstance(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.goal} instance at {self.created_at}"
+
+
+class GoalApplication(SharedMemoryModel):
+    """One owner-claimed use of a goal on a check (#940).
+
+    Per Apostate's ruling: the goal OWNER decides whether their goal
+    applies — the limiter is frequency, not alignment policing. Scarcity
+    (one application per cron day by default, more via distinctions) makes
+    the claimed context flavor. This row is the budget ledger.
+    """
+
+    goal = models.ForeignKey(
+        CharacterGoal,
+        on_delete=models.CASCADE,
+        related_name="applications",
+    )
+    bonus_granted = models.PositiveIntegerField(
+        help_text="The goal bonus that was fed into the check's extra_modifiers."
+    )
+    context = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="The owner's claimed framing (flavor by design).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"GoalApplication({self.goal_id}: +{self.bonus_granted})"

@@ -399,3 +399,77 @@ class GetGoalBonusesBreakdownTest(TestCase):
         assert breakdown["Needs"].base_points == 10
         assert breakdown["Needs"].percent_modifier == 50
         assert breakdown["Needs"].final_bonus == 15
+
+
+class ApplyGoalTests(TestCase):
+    """Owner-claimed goal application with a per-cron-day budget (#940)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character_sheet = CharacterSheetFactory()
+        cls.character = cls.character_sheet.character
+        cls.domain = GoalDomainFactory(name="vengeance")
+        cls.goal = CharacterGoalFactory(character=cls.character, domain=cls.domain, points=10)
+
+    def test_apply_returns_bonus_and_records(self):
+        from world.goals.models import GoalApplication
+        from world.goals.services import apply_goal
+
+        bonus = apply_goal(self.goal, context="Facing the man who burned Duskshire")
+
+        assert bonus == 10
+        application = GoalApplication.objects.get()
+        assert application.bonus_granted == 10
+        assert application.goal == self.goal
+
+    def test_second_application_same_day_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        from world.goals.services import apply_goal
+
+        apply_goal(self.goal)
+        with self.assertRaises(ValidationError):
+            apply_goal(self.goal)
+
+    def test_budget_is_per_character_across_goals(self):
+        from django.core.exceptions import ValidationError
+
+        from world.goals.services import apply_goal
+
+        other_domain = GoalDomainFactory(name="legacy")
+        other_goal = CharacterGoalFactory(character=self.character, domain=other_domain, points=5)
+        apply_goal(self.goal)
+        with self.assertRaises(ValidationError):
+            apply_goal(other_goal)  # one budget per character, not per goal
+
+    def test_distinction_raises_budget(self):
+        from world.goals.services import (
+            APPLICATIONS_PER_DAY_TARGET,
+            apply_goal,
+            get_daily_application_budget,
+        )
+        from world.mechanics.constants import GOAL_POINTS_CATEGORY_NAME
+        from world.mechanics.models import CharacterModifier, ModifierSource
+
+        category, _ = ModifierCategory.objects.get_or_create(name=GOAL_POINTS_CATEGORY_NAME)
+        target, _ = ModifierTarget.objects.get_or_create(
+            name=APPLICATIONS_PER_DAY_TARGET, category=category
+        )
+        dist_category = DistinctionCategory.objects.create(name="Driven")
+        distinction = Distinction.objects.create(name="Relentless", category=dist_category)
+        effect = DistinctionEffect.objects.create(
+            distinction=distinction, target=target, value_per_rank=1
+        )
+        char_dist = CharacterDistinction.objects.create(
+            character=self.character, distinction=distinction
+        )
+        source = ModifierSource.objects.create(
+            distinction_effect=effect, character_distinction=char_dist
+        )
+        CharacterModifier.objects.create(
+            character=self.character_sheet, target=target, value=1, source=source
+        )
+
+        assert get_daily_application_budget(self.character_sheet) == 2
+        apply_goal(self.goal)
+        apply_goal(self.goal)  # second use allowed by the distinction
