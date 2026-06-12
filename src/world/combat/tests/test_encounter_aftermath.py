@@ -24,3 +24,30 @@ class EncounterAftermathRuleTests(TestCase):
             EncounterAftermathRuleFactory(
                 outcome=EncounterOutcome.DEFEAT, risk_level=RiskLevel.LETHAL
             )
+
+
+class RenderEncounterOutcomeNarrationTests(TestCase):
+    def test_victory_names_victors_and_defeated(self) -> None:
+        from world.combat.interaction_services import render_encounter_outcome_narration
+
+        narration = render_encounter_outcome_narration(
+            outcome=EncounterOutcome.VICTORY,
+            active_labels=["Alaric", "Bryn"],
+            fled_labels=[],
+            defeated_opponent_labels=["Gravewight"],
+        )
+        self.assertIn("victory", narration.lower())
+        self.assertIn("Alaric and Bryn", narration)
+        self.assertIn("Gravewight", narration)
+
+    def test_fled_outcome_names_the_scattered(self) -> None:
+        from world.combat.interaction_services import render_encounter_outcome_narration
+
+        narration = render_encounter_outcome_narration(
+            outcome=EncounterOutcome.FLED,
+            active_labels=[],
+            fled_labels=["Alaric"],
+            defeated_opponent_labels=[],
+        )
+        self.assertIn("Alaric", narration)
+        self.assertIn("fled", narration.lower())
