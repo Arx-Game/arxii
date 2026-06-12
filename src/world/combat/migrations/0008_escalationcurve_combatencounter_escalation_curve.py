@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("checks", "0007_consequence_theater"),
         ("combat", "0007_combatencounter_completed_at_combatencounter_outcome_and_more"),

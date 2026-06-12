@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("conditions", "0007_conditioncapabilityeffect_scales_with_severity_and_more"),
         ("flows", "0002_alter_triggerdefinition_event_name"),

@@ -106,18 +106,14 @@ class EngagementLifecycleWiringTests(TestCase):
 
         participant.refresh_from_db()
         self.assertEqual(participant.status, ParticipantStatus.FLED)
-        self.assertFalse(
-            CharacterEngagement.objects.filter(character=sheet.character).exists()
-        )
+        self.assertFalse(CharacterEngagement.objects.filter(character=sheet.character).exists())
 
     def test_remove_participant_deletes_engagement(self):
         begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
         remove_participant(self.participant)
         self.participant.refresh_from_db()
         self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
-        self.assertFalse(
-            CharacterEngagement.objects.filter(character=self.character).exists()
-        )
+        self.assertFalse(CharacterEngagement.objects.filter(character=self.character).exists())
 
     def test_flee_failure_preserves_engagement(self):
         # A failed flee (success_level < FLEE_PARTIAL_SUCCESS_LEVEL) leaves
@@ -144,9 +140,7 @@ class EngagementLifecycleWiringTests(TestCase):
 
         participant.refresh_from_db()
         self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
-        self.assertTrue(
-            CharacterEngagement.objects.filter(character=sheet.character).exists()
-        )
+        self.assertTrue(CharacterEngagement.objects.filter(character=sheet.character).exists())
 
 
 class EscalationRoundWiringTests(TestCase):
