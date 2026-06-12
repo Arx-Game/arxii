@@ -288,3 +288,116 @@ class OrgEconomicsTests(TestCase):
         )
         with self.assertRaises(DjangoValidationError):
             process_income_stream(stream)
+
+
+class DebtTests(TestCase):
+    """Debt instruments, auto-service, the stasis default rule (#927)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.societies.factories import OrganizationFactory
+
+        cls.debtor = OrganizationFactory()
+        cls.blighton = OrganizationFactory()
+
+    def _loan(self, **kwargs):
+        from world.currency.services import extend_loan
+
+        defaults = {
+            "creditor": self.blighton,
+            "debtor": self.debtor,
+            "principal": 100_000,
+            "fiat": True,
+        }
+        defaults.update(kwargs)
+        return extend_loan(**defaults)
+
+    def test_fiat_loan_mints_principal_to_debtor(self) -> None:
+        from world.currency.services import get_or_create_treasury
+
+        debt = self._loan()
+        treasury = get_or_create_treasury(self.debtor)
+        treasury.refresh_from_db()
+        assert treasury.balance == 100_000
+        assert debt.monthly_interest == 500  # 0.5% of 100k
+
+    def test_auto_service_pays_interest_first(self) -> None:
+        from world.currency.services import get_or_create_treasury, service_debts
+
+        self._loan()
+        transfers = service_debts(self.debtor)
+        assert len(transfers) == 1
+        assert transfers[0].amount == 500
+        creditor_treasury = get_or_create_treasury(self.blighton)
+        creditor_treasury.refresh_from_db()
+        assert creditor_treasury.balance == 500
+
+    def test_funds_short_under_auto_service_never_defaults(self) -> None:
+        from world.currency.models import OrganizationTreasury
+        from world.currency.services import service_debts
+
+        debt = self._loan()
+        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
+        OrganizationTreasury.flush_instance_cache()
+
+        for _ in range(3):
+            service_debts(self.debtor)
+
+        debt.refresh_from_db()
+        assert debt.consecutive_missed == 3
+        assert debt.in_default is False  # no offscreen default
+
+    def test_divert_decision_plus_two_misses_defaults(self) -> None:
+        from world.currency.models import OrganizationTreasury
+        from world.currency.services import service_debts
+
+        debt = self._loan()
+        debt.auto_service = False
+        debt.save()
+        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
+        OrganizationTreasury.flush_instance_cache()
+
+        service_debts(self.debtor)
+        debt.refresh_from_db()
+        assert debt.in_default is False  # one miss is not default
+
+        service_debts(self.debtor)
+        debt.refresh_from_db()
+        assert debt.in_default is True  # active divert + 2 consecutive misses
+
+    def test_successful_payment_resets_miss_counter(self) -> None:
+        from world.currency.models import OrganizationTreasury
+        from world.currency.services import service_debts, transfer
+
+        debt = self._loan()
+        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
+        OrganizationTreasury.flush_instance_cache()
+        service_debts(self.debtor)
+        debt.refresh_from_db()
+        assert debt.consecutive_missed == 1
+
+        from world.currency.services import get_or_create_treasury
+
+        transfer(amount=10_000, reason="seed", to_treasury=get_or_create_treasury(self.debtor))
+        service_debts(self.debtor)
+        debt.refresh_from_db()
+        assert debt.consecutive_missed == 0
+
+    def test_repay_principal_retires_debt(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.services import repay_principal
+
+        debt = self._loan()  # debtor holds the 100k principal
+        repay_principal(debt, 40_000)
+        debt.refresh_from_db()
+        assert debt.principal == 60_000
+        assert debt.active is True
+
+        repay_principal(debt, 60_000)
+        debt.refresh_from_db()
+        assert debt.principal == 0
+        assert debt.active is False
+
+        with self.assertRaises(DjangoValidationError):
+            repay_principal(debt, 1)

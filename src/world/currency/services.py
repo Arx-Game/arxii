@@ -24,6 +24,7 @@ from world.currency.models import (
     ContributionRecord,
     CurrencyInstrumentDetails,
     CurrencyTransfer,
+    DebtInstrument,
     IncomeDeclaration,
     OrganizationTreasury,
     OrgEconomicsProfile,
@@ -335,3 +336,100 @@ def treat_servants(
     economics.graft_pct = max(GRAFT_FLOOR_PCT, economics.graft_pct - graft_reduction)
     economics.save(update_fields=["graft_pct"])
     return economics
+
+
+DEFAULT_AFTER_MISSES = 2
+
+
+@transaction.atomic
+def extend_loan(
+    *,
+    creditor: Organization,
+    debtor: Organization,
+    principal: int,
+    interest_bps_monthly: int = 50,
+    fiat: bool = False,
+) -> DebtInstrument:
+    """Create a loan: principal moves creditor→debtor, instrument records it (#927).
+
+    ``fiat`` mints the principal instead of drawing the creditor's treasury —
+    for NPC moneylenders whose books exist only as fiction (Blighton's vaults
+    are not a player-visible balance).
+    """
+    transfer(
+        amount=principal,
+        reason=f"loan principal: {creditor.name}",
+        from_treasury=None if fiat else get_or_create_treasury(creditor),
+        to_treasury=get_or_create_treasury(debtor),
+    )
+    return DebtInstrument.objects.create(
+        debtor_organization=debtor,
+        creditor_organization=creditor,
+        principal=principal,
+        interest_bps_monthly=interest_bps_monthly,
+    )
+
+
+@transaction.atomic
+def service_debts(organization: Organization) -> list[CurrencyTransfer]:
+    """Run one month's interest servicing for an org's active debts (#927).
+
+    Interest pays FIRST in the in-absentia priority order (interest →
+    upkeep → wages). Per the stasis principle: a funds-short month under
+    auto_service records a miss but cannot default anyone offscreen;
+    default needs the active divert decision (auto_service=False) plus
+    DEFAULT_AFTER_MISSES consecutive misses.
+    """
+    treasury = get_or_create_treasury(organization)
+    transfers: list[CurrencyTransfer] = []
+    for debt in DebtInstrument.objects.filter(
+        debtor_organization=organization, active=True, in_default=False
+    ):
+        interest = debt.monthly_interest
+        treasury.refresh_from_db()
+        paid = False
+        if debt.auto_service and interest > 0 and treasury.balance >= interest:
+            transfers.append(
+                transfer(
+                    amount=interest,
+                    reason=f"loan interest: {debt.creditor_organization.name}",
+                    from_treasury=treasury,
+                    to_treasury=get_or_create_treasury(debt.creditor_organization),
+                )
+            )
+            paid = True
+
+        if paid or interest == 0:
+            if debt.consecutive_missed:
+                debt.consecutive_missed = 0
+                debt.save(update_fields=["consecutive_missed"])
+            continue
+
+        debt.consecutive_missed += 1
+        update_fields = ["consecutive_missed"]
+        if not debt.auto_service and debt.consecutive_missed >= DEFAULT_AFTER_MISSES:
+            debt.in_default = True
+            update_fields.append("in_default")
+        debt.save(update_fields=update_fields)
+    return transfers
+
+
+@transaction.atomic
+def repay_principal(debt: DebtInstrument, amount: int) -> CurrencyTransfer:
+    """Pay down (or off) a debt's principal, treasury→treasury (#927)."""
+    if amount <= 0 or amount > debt.principal:
+        msg = "Repayment must be positive and at most the outstanding principal."
+        raise ValidationError(msg)
+    row = transfer(
+        amount=amount,
+        reason=f"loan repayment: {debt.creditor_organization.name}",
+        from_treasury=get_or_create_treasury(debt.debtor_organization),
+        to_treasury=get_or_create_treasury(debt.creditor_organization),
+    )
+    debt.principal -= amount
+    update_fields = ["principal"]
+    if debt.principal == 0:
+        debt.active = False
+        update_fields.append("active")
+    debt.save(update_fields=update_fields)
+    return row
