@@ -460,6 +460,11 @@ def _route_delivery(
     if delivery == ActionDelivery.WHISPER:
         explicit = list(action_request.delivery_receivers.all())
         return InteractionMode.WHISPER, None, explicit or receivers
+    if delivery == ActionDelivery.MUTTER:
+        # #905: the full result is receiver-scoped like a whisper; the
+        # public fragment is emitted by _create_result_interaction.
+        explicit = list(action_request.delivery_receivers.all())
+        return InteractionMode.MUTTER, None, explicit or receivers
     if delivery == ActionDelivery.TABLE_TALK:
         place = _current_place_for(action_request.initiator_persona)
         if place is not None:
@@ -533,7 +538,7 @@ def _create_result_interaction(
 
     mode, place, interaction_receivers = _route_delivery(action_request, receivers)
 
-    return create_interaction(
+    interaction = create_interaction(
         persona=action_request.initiator_persona,
         content=content,
         mode=mode,
@@ -543,6 +548,18 @@ def _create_result_interaction(
         target_personas=target_personas,
         strain_committed=strain_committed,
     )
+    if mode == InteractionMode.MUTTER:
+        # #905: the room heard a fragment — and the fragment is public
+        # BECAUSE it is what the room heard (#900 invariant).
+        from world.scenes.interaction_services import mutter_fragment  # noqa: PLC0415
+
+        create_interaction(
+            persona=action_request.initiator_persona,
+            content=mutter_fragment(content),
+            mode=InteractionMode.MUTTER,
+            scene=action_request.scene,
+        )
+    return interaction
 
 
 def create_and_resolve_area_action(  # noqa: PLR0913

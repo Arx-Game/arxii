@@ -24142,11 +24142,13 @@ components:
       - pose
       - whisper
       - table_talk
+      - mutter
       type: string
       description: |-
         * `pose` - Pose (whole room)
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
+        * `mutter` - Mutter (partial echo)
     DifficultyChoiceEnum:
       enum:
       - trivial
@@ -27134,7 +27136,7 @@ components:
           description: The actual written text of the interaction
         mode:
           allOf:
-          - $ref: '#/components/schemas/ModeFb0Enum'
+          - $ref: '#/components/schemas/Mode8baEnum'
           description: |-
             The type of IC interaction
 
@@ -27142,6 +27144,7 @@ components:
             * `emit` - Emit
             * `say` - Say
             * `whisper` - Whisper
+            * `mutter` - Mutter
             * `shout` - Shout
             * `action` - Action
             * `outcome` - Outcome
@@ -27164,7 +27167,7 @@ components:
           description: The actual written text of the interaction
         mode:
           allOf:
-          - $ref: '#/components/schemas/ModeFb0Enum'
+          - $ref: '#/components/schemas/Mode8baEnum'
           description: |-
             The type of IC interaction
 
@@ -27172,6 +27175,7 @@ components:
             * `emit` - Emit
             * `say` - Say
             * `whisper` - Whisper
+            * `mutter` - Mutter
             * `shout` - Shout
             * `action` - Action
             * `outcome` - Outcome
@@ -27241,7 +27245,7 @@ components:
           description: The actual written text of the interaction
         mode:
           allOf:
-          - $ref: '#/components/schemas/ModeFb0Enum'
+          - $ref: '#/components/schemas/Mode8baEnum'
           description: |-
             The type of IC interaction
 
@@ -27249,6 +27253,7 @@ components:
             * `emit` - Emit
             * `say` - Say
             * `whisper` - Whisper
+            * `mutter` - Mutter
             * `shout` - Shout
             * `action` - Action
             * `outcome` - Outcome
@@ -27392,7 +27397,7 @@ components:
           description: The actual written text of the interaction
         mode:
           allOf:
-          - $ref: '#/components/schemas/ModeFb0Enum'
+          - $ref: '#/components/schemas/Mode8baEnum'
           description: |-
             The type of IC interaction
 
@@ -27400,6 +27405,7 @@ components:
             * `emit` - Emit
             * `say` - Say
             * `whisper` - Whisper
+            * `mutter` - Mutter
             * `shout` - Shout
             * `action` - Action
             * `outcome` - Outcome
@@ -27495,7 +27501,7 @@ components:
           description: The actual written text of the interaction
         mode:
           allOf:
-          - $ref: '#/components/schemas/ModeFb0Enum'
+          - $ref: '#/components/schemas/Mode8baEnum'
           description: |-
             The type of IC interaction
 
@@ -27503,6 +27509,7 @@ components:
             * `emit` - Emit
             * `say` - Say
             * `whisper` - Whisper
+            * `mutter` - Mutter
             * `shout` - Shout
             * `action` - Action
             * `outcome` - Outcome
@@ -29231,12 +29238,13 @@ components:
       description: |-
         * `open` - Open
         * `restricted` - Restricted
-    ModeFb0Enum:
+    Mode8baEnum:
       enum:
       - pose
       - emit
       - say
       - whisper
+      - mutter
       - shout
       - action
       - outcome
@@ -29246,6 +29254,7 @@ components:
         * `emit` - Emit
         * `say` - Say
         * `whisper` - Whisper
+        * `mutter` - Mutter
         * `shout` - Shout
         * `action` - Action
         * `outcome` - Outcome
@@ -37050,6 +37059,7 @@ components:
             * `pose` - Pose (whole room)
             * `whisper` - Whisper (target only)
             * `table_talk` - Table talk (your place)
+            * `mutter` - Mutter (partial echo)
           oneOf:
           - $ref: '#/components/schemas/DeliveryEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -37152,6 +37162,7 @@ components:
             * `pose` - Pose (whole room)
             * `whisper` - Whisper (target only)
             * `table_talk` - Table talk (your place)
+            * `mutter` - Mutter (partial echo)
           oneOf:
           - $ref: '#/components/schemas/DeliveryEnum'
           - $ref: '#/components/schemas/BlankEnum'

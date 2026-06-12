@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from actions.base import Action
 from actions.definitions.communication import (
+    MutterAction,
     PemitAction,
     PoseAction,
     SayAction,
@@ -35,6 +36,7 @@ _ALL_ACTIONS: list[Action] = [
     SayAction(),
     PoseAction(),
     WhisperAction(),
+    MutterAction(),
     PemitAction(),
     GetAction(),
     DropAction(),
