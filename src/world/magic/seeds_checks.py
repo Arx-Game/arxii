@@ -18,6 +18,15 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from world.magic.constants import ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME
+from world.magic.seeds_sanctum import (
+    DISSOLUTION_RITUAL_NAME,
+    HOMECOMING_RITUAL_NAME,
+    PURGING_RITUAL_NAME,
+    SANCTIFICATION_COVENANT_RITUAL_NAME,
+    SANCTIFICATION_PERSONAL_RITUAL_NAME,
+)
+
 if TYPE_CHECKING:
     from world.checks.models import CheckCategory, CheckType
     from world.magic.models.ritual_check_config import RitualCheckConfig
@@ -28,7 +37,6 @@ ANIMA_RESTORATION_CHECK_TYPE_NAME = "Anima Restoration"
 SANCTUM_CONSECRATION_CHECK_TYPE_NAME = "Sanctum Consecration"
 SANCTUM_DISSOLUTION_CHECK_TYPE_NAME = "Sanctum Dissolution"
 MAGICAL_ENDURANCE_CHECK_TYPE_NAME = "Magical Endurance"
-ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME = "endure_hallowed_ground"
 ARCANA_ASPECT_NAME = "Arcana"
 
 # (name, description, display_order)
@@ -67,21 +75,22 @@ _MAGIC_CHECK_TYPES = [
     ),
 ]
 
-# (check_type_name, trait_name, is_stat, weight)
+# (check_type_name, trait_name, weight)
+# stat-ness is derived from trait_name in _STAT_CATEGORIES
 _MAGIC_TRAIT_WEIGHTS = [
-    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "willpower", True, "1.00"),
-    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "ritualism", False, "1.00"),
-    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "theology", False, "0.50"),
-    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "presence", True, "1.00"),
-    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "theology", False, "1.00"),
-    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "ritualism", False, "0.50"),
-    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "willpower", True, "1.00"),
-    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "occult", False, "1.00"),
-    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "ritualism", False, "0.50"),
-    (MAGICAL_ENDURANCE_CHECK_TYPE_NAME, "stability", True, "1.00"),
-    (MAGICAL_ENDURANCE_CHECK_TYPE_NAME, "occult", False, "0.50"),
-    (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "willpower", True, "1.00"),
-    (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "theology", False, "0.50"),
+    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "willpower", "1.00"),
+    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "ritualism", "1.00"),
+    (ANIMA_RESTORATION_CHECK_TYPE_NAME, "theology", "0.50"),
+    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "presence", "1.00"),
+    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "theology", "1.00"),
+    (SANCTUM_CONSECRATION_CHECK_TYPE_NAME, "ritualism", "0.50"),
+    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "willpower", "1.00"),
+    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "occult", "1.00"),
+    (SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, "ritualism", "0.50"),
+    (MAGICAL_ENDURANCE_CHECK_TYPE_NAME, "stability", "1.00"),
+    (MAGICAL_ENDURANCE_CHECK_TYPE_NAME, "occult", "0.50"),
+    (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "willpower", "1.00"),
+    (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "theology", "0.50"),
 ]
 
 # Stat trait defaults used only when the stat row doesn't exist yet.
@@ -94,16 +103,16 @@ _STAT_CATEGORIES: dict[str, str] = {
 
 # (ritual_name, check_type_name, target_difficulty, non_founder_target_difficulty)
 _RITUAL_CHECK_CONFIGS = [
-    ("Ritual of Homecoming", SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 10, None),
-    ("Ritual of Purging", SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 15, None),
-    ("Ritual of Thine Own Sanctum", SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 12, None),
+    (HOMECOMING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 10, None),
+    (PURGING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 15, None),
+    (SANCTIFICATION_PERSONAL_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 12, None),
     (
-        "Ritual of Blood Covenant Sanctification",
+        SANCTIFICATION_COVENANT_RITUAL_NAME,
         SANCTUM_CONSECRATION_CHECK_TYPE_NAME,
         12,
         None,
     ),
-    ("Ritual of Dissolution", SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, 20, 40),
+    (DISSOLUTION_RITUAL_NAME, SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, 20, 40),
 ]
 
 
@@ -116,11 +125,13 @@ class MagicCheckContentResult:
     configs: dict[str, RitualCheckConfig]
 
 
-def _upgrade_placeholder_description(obj, description: str) -> None:
+def _upgrade_placeholder_description(obj: CheckCategory | CheckType, description: str) -> None:
     """One-time content upgrade: only rewrite blank or PLACEHOLDER descriptions.
 
-    Staff edits survive re-runs; the Plan 4 placeholder rows gain real
-    content exactly once (#946 — loaddata can't update idmapper rows).
+    A BLANK description is treated as unseeded and will be re-filled on every run.
+    Only a non-blank, non-PLACEHOLDER-prefixed description is treated as a staff
+    edit and preserved. Staff edits survive re-runs; the Plan 4 placeholder rows
+    gain real content exactly once (#946 — loaddata can't update idmapper rows).
     """
     if not obj.description or obj.description.startswith("PLACEHOLDER"):
         obj.description = description
@@ -200,8 +211,8 @@ def ensure_magic_check_types() -> dict[str, CheckType]:
         _upgrade_placeholder_description(check_type, description)
         check_types[name] = check_type
 
-    for ct_name, trait_name, is_stat, weight in _MAGIC_TRAIT_WEIGHTS:
-        if is_stat:
+    for ct_name, trait_name, weight in _MAGIC_TRAIT_WEIGHTS:
+        if trait_name in _STAT_CATEGORIES:
             trait, _ = Trait.objects.get_or_create(
                 name=trait_name,
                 defaults={
@@ -228,11 +239,17 @@ def ensure_magic_check_types() -> dict[str, CheckType]:
     return check_types
 
 
-def ensure_ritual_check_configs() -> dict[str, RitualCheckConfig]:
+def ensure_ritual_check_configs(
+    check_types: dict[str, CheckType] | None = None,
+) -> dict[str, RitualCheckConfig]:
     """Seed RitualCheckConfig rows for the five SERVICE sanctum rituals.
 
     Requires ensure_sanctum_rituals() to have run (the Ritual rows must
     exist) — raises Ritual.DoesNotExist otherwise.
+
+    When check_types is None, calls ensure_magic_check_types() internally
+    to satisfy its own contract. Pass check_types explicitly (from the umbrella
+    caller) to avoid a redundant second run.
     """
     from world.magic.models import Ritual  # noqa: PLC0415
     from world.magic.models.ritual_check_config import (  # noqa: PLC0415
@@ -241,7 +258,8 @@ def ensure_ritual_check_configs() -> dict[str, RitualCheckConfig]:
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    check_types = ensure_magic_check_types()
+    if check_types is None:
+        check_types = ensure_magic_check_types()
     willpower = Trait.objects.get(name="willpower", trait_type=TraitType.STAT)
     ritualism = Skill.objects.get(trait__name="ritualism")
 
@@ -266,5 +284,5 @@ def ensure_magic_check_content() -> MagicCheckContentResult:
     """Umbrella: skills + check types + ritual configs. Safe to call repeatedly."""
     skills = ensure_magic_skills()
     check_types = ensure_magic_check_types()
-    configs = ensure_ritual_check_configs()
+    configs = ensure_ritual_check_configs(check_types=check_types)
     return MagicCheckContentResult(skills=skills, check_types=check_types, configs=configs)

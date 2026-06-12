@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
 from world.classes.models import Aspect
+from world.magic.models import Ritual
 from world.magic.seeds_checks import (
     ANIMA_RESTORATION_CHECK_TYPE_NAME,
     MAGIC_CHECK_CATEGORY_NAME,
@@ -19,7 +20,7 @@ from world.magic.seeds_sanctum import (
     ensure_sanctum_rituals,
 )
 from world.skills.models import Skill
-from world.traits.models import Trait, TraitType
+from world.traits.models import Trait, TraitCategory, TraitType
 
 
 class EnsureMagicSkillsTests(TestCase):
@@ -30,6 +31,7 @@ class EnsureMagicSkillsTests(TestCase):
             self.assertIsInstance(skill, Skill)
             self.assertEqual(skill.trait.name, name)
             self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
+            self.assertEqual(skill.trait.category, TraitCategory.MAGIC)
 
     def test_idempotent(self):
         first = ensure_magic_skills()
@@ -49,7 +51,8 @@ class EnsureMagicCheckTypesTests(TestCase):
         arcana = Aspect.objects.get(name="Arcana")
         for ct in check_types.values():
             self.assertEqual(ct.category_id, category.pk)
-            self.assertTrue(CheckTypeAspect.objects.filter(check_type=ct, aspect=arcana).exists())
+            cta = CheckTypeAspect.objects.get(check_type=ct, aspect=arcana)
+            self.assertEqual(cta.weight, Decimal("1.00"))
             self.assertGreaterEqual(CheckTypeTrait.objects.filter(check_type=ct).count(), 2)
 
     def test_dissolution_composition(self):
@@ -100,6 +103,8 @@ class EnsureRitualCheckConfigsTests(TestCase):
         self.assertEqual(dissolution.target_difficulty, 20)
         self.assertEqual(dissolution.non_founder_target_difficulty, 40)
         self.assertEqual(dissolution.check_type.name, "Sanctum Dissolution")
+        self.assertEqual(dissolution.stat.name, "willpower")
+        self.assertEqual(dissolution.skill.trait.name, "ritualism")
 
     def test_idempotent_and_preserves_tuning(self):
         ensure_sanctum_rituals()
@@ -109,6 +114,11 @@ class EnsureRitualCheckConfigsTests(TestCase):
         dissolution.save(update_fields=["target_difficulty"])
         configs = ensure_ritual_check_configs()
         self.assertEqual(configs[DISSOLUTION_RITUAL_NAME].target_difficulty, 99)
+
+    def test_raises_if_rituals_not_seeded(self):
+        # ensure_sanctum_rituals() intentionally not called; Ritual rows absent.
+        with self.assertRaises(Ritual.DoesNotExist):
+            ensure_ritual_check_configs()
 
 
 class EnsureMagicCheckContentTests(TestCase):
