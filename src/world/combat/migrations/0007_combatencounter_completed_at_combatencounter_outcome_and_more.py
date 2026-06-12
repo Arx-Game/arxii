@@ -111,6 +111,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
+                "ordering": ["outcome", "risk_level"],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("outcome", "risk_level"),

@@ -1289,6 +1289,7 @@ class EncounterAftermathRule(SharedMemoryModel):
     )
 
     class Meta:
+        ordering = ["outcome", "risk_level"]
         constraints = [
             models.UniqueConstraint(
                 fields=["outcome", "risk_level"],
