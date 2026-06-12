@@ -8,6 +8,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     EncounterAftermathRuleFactory,
 )
+from world.combat.interaction_services import render_encounter_outcome_narration
 
 
 class EncounterOutcomeFieldTests(TestCase):
@@ -28,8 +29,6 @@ class EncounterAftermathRuleTests(TestCase):
 
 class RenderEncounterOutcomeNarrationTests(TestCase):
     def test_victory_names_victors_and_defeated(self) -> None:
-        from world.combat.interaction_services import render_encounter_outcome_narration
-
         narration = render_encounter_outcome_narration(
             outcome=EncounterOutcome.VICTORY,
             active_labels=["Alaric", "Bryn"],
@@ -41,8 +40,6 @@ class RenderEncounterOutcomeNarrationTests(TestCase):
         self.assertIn("Gravewight", narration)
 
     def test_fled_outcome_names_the_scattered(self) -> None:
-        from world.combat.interaction_services import render_encounter_outcome_narration
-
         narration = render_encounter_outcome_narration(
             outcome=EncounterOutcome.FLED,
             active_labels=[],
@@ -51,3 +48,13 @@ class RenderEncounterOutcomeNarrationTests(TestCase):
         )
         self.assertIn("Alaric", narration)
         self.assertIn("fled", narration.lower())
+
+    def test_defeat_names_the_fallen(self) -> None:
+        narration = render_encounter_outcome_narration(
+            outcome=EncounterOutcome.DEFEAT,
+            active_labels=["Alaric", "Bryn"],
+            fled_labels=["Cael"],
+            defeated_opponent_labels=[],
+        )
+        self.assertIn("Alaric and Bryn can fight no longer", narration)
+        self.assertIn("Cael fled the field", narration)

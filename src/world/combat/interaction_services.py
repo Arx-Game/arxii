@@ -326,6 +326,7 @@ _ENCOUNTER_OUTCOME_HEADLINES: dict[str, str] = {
 
 
 def _join_labels(labels: list[str]) -> str:
+    """Format labels as a natural-language series: "A", "A and B", "A, B and C"."""
     if len(labels) <= 1:
         return labels[0] if labels else ""
     return ", ".join(labels[:-1]) + " and " + labels[-1]
@@ -339,6 +340,7 @@ def render_encounter_outcome_narration(
     defeated_opponent_labels: list[str],
 ) -> str:
     """Ceremonial encounter-level OUTCOME line (#876)."""
+    # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
     if outcome == "victory":
         if defeated_opponent_labels:
