@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.constants import ClashResolution
+from world.combat.constants import ClashResolution, EncounterOutcome
 from world.magic.narration import power_outcome_clause
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
@@ -342,12 +342,12 @@ def render_encounter_outcome_narration(
     """Ceremonial encounter-level OUTCOME line (#876)."""
     # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
-    if outcome == "victory":
+    if outcome == EncounterOutcome.VICTORY:
         if defeated_opponent_labels:
             clauses.append(f"{_join_labels(defeated_opponent_labels)} will trouble no one further.")
         if active_labels:
             clauses.append(f"{_join_labels(active_labels)} stand victorious.")
-    elif outcome == "defeat" and active_labels:
+    elif outcome == EncounterOutcome.DEFEAT and active_labels:
         clauses.append(f"{_join_labels(active_labels)} can fight no longer.")
     if fled_labels:
         clauses.append(f"{_join_labels(fled_labels)} fled the field.")
