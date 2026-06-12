@@ -76,6 +76,7 @@ _ERR_CHARACTER_NOT_YOURS = "You do not currently play that character."
 _ERR_ADD_PARTICIPANT = "Failed to add participant."
 _ERR_DECLARE_FAILED = "Failed to declare action."
 _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
+_ERR_ALREADY_COMPLETED = "Encounter is already completed."
 _ERR_COMBO_UPGRADE = "Cannot upgrade to the requested combo."
 
 
@@ -317,10 +318,18 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         if encounter.status == EncounterStatus.COMPLETED:
             return Response(
-                {"detail": "Encounter is already completed."},
+                {"detail": _ERR_ALREADY_COMPLETED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        end_encounter(encounter)
+        try:
+            end_encounter(encounter)
+        except ValueError:
+            # Concurrent double-end: the seam's atomic guard fired after our
+            # status read. Same outcome as the early exit above.
+            return Response(
+                {"detail": _ERR_ALREADY_COMPLETED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return self._serialize_encounter(request, encounter)
 
     # --- Player Actions ---
