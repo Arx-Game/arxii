@@ -20,7 +20,7 @@ from world.combat.factories import (
 )
 from world.combat.serializers import ParticipantSerializer
 from world.mechanics.constants import EngagementType
-from world.mechanics.services import begin_engagement
+from world.mechanics.services import begin_engagement, end_engagement
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
@@ -75,6 +75,36 @@ class ParticipantEscalationFieldTests(TestCase):
         self.assertIsNone(data["escalation_level"])
         self.assertIsNone(data["intensity_modifier"])
         self.assertIsNone(data["control_modifier"])
+
+    def test_escalation_fields_null_after_end_engagement(self) -> None:
+        """Stale reverse-cache guard: queryset delete nulls pk without clearing the
+        accessor; _combat_engagement must return None rather than a dead instance."""
+        engagement = begin_engagement(
+            self.sheet.character,
+            EngagementType.COMBAT,
+            source=self.encounter,
+        )
+        engagement.escalation_level = 2
+        engagement.intensity_modifier = 1
+        engagement.control_modifier = 1
+        engagement.save()
+
+        # Confirm fields are present while engaged.
+        data_before = ParticipantSerializer(self.participant).data
+        self.assertEqual(data_before["escalation_level"], 2)
+
+        # end_engagement deletes via queryset; the reverse cache on the identity-
+        # mapped ObjectDB instance is not cleared, but pk is nulled on the cached obj.
+        end_engagement(
+            self.sheet.character,
+            EngagementType.COMBAT,
+            source=self.encounter,
+        )
+
+        data_after = ParticipantSerializer(self.participant).data
+        self.assertIsNone(data_after["escalation_level"])
+        self.assertIsNone(data_after["intensity_modifier"])
+        self.assertIsNone(data_after["control_modifier"])
 
 
 class EncounterEscalationCurveFieldTests(TestCase):

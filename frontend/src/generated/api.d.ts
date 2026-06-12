@@ -13993,9 +13993,9 @@ export interface components {
         [key: string]: unknown;
       }[];
       escalation_curve?: number | null;
-      readonly escalation_curve_name: string;
-      readonly escalation_start_round: number;
-      readonly escalation_tick_narration: string;
+      readonly escalation_curve_name: string | null;
+      readonly escalation_start_round: number | null;
+      readonly escalation_tick_narration: string | null;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {

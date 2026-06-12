@@ -24885,12 +24885,15 @@ components:
         escalation_curve_name:
           type: string
           readOnly: true
+          nullable: true
         escalation_start_round:
           type: integer
           readOnly: true
+          nullable: true
         escalation_tick_narration:
           type: string
           readOnly: true
+          nullable: true
       required:
       - clashes
       - completed_at

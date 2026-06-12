@@ -368,6 +368,10 @@ class ParticipantSerializer(serializers.ModelSerializer):
             engagement = obj.character_sheet.character.engagement
         except CharacterEngagement.DoesNotExist:
             return None
+        # Queryset deletes null the pk on the cached instance without clearing
+        # the reverse accessor; treat a pk-less engagement as gone.
+        if engagement.pk is None:
+            return None
         if engagement.engagement_type != EngagementType.COMBAT:
             return None
         return engagement
@@ -633,13 +637,13 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     escalation_curve_name = serializers.CharField(
-        source="escalation_curve.name", read_only=True, default=None
+        source="escalation_curve.name", read_only=True, default=None, allow_null=True
     )
     escalation_start_round = serializers.IntegerField(
-        source="escalation_curve.start_round", read_only=True, default=None
+        source="escalation_curve.start_round", read_only=True, default=None, allow_null=True
     )
     escalation_tick_narration = serializers.CharField(
-        source="escalation_curve.tick_narration", read_only=True, default=None
+        source="escalation_curve.tick_narration", read_only=True, default=None, allow_null=True
     )
 
     class Meta:
