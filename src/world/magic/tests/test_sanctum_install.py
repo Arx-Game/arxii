@@ -56,29 +56,36 @@ from world.room_features.models import RoomFeatureInstance
 class DissolutionRecoveryMathTests(TestCase):
     """Outcome-tier → recovery-fraction mapping is testable in isolation.
 
-    Canonical tiers (from ritual_checks.outcome_tier): crit ≥2, success ≥1,
-    fail >−2, botch ≤−2.
+    _dissolution_recovery_fraction now takes OutcomeTier directly.
     """
 
     def test_crit_success_returns_80(self) -> None:
-        # Canonical crit threshold is 2 (not the old constant 7).
-        self.assertEqual(_dissolution_recovery_fraction(2), DISSOLUTION_RECOVERY_CRIT_SUCCESS)
-        self.assertEqual(_dissolution_recovery_fraction(10), DISSOLUTION_RECOVERY_CRIT_SUCCESS)
+        from world.magic.services.ritual_checks import OutcomeTier
+
+        self.assertEqual(
+            _dissolution_recovery_fraction(OutcomeTier.CRIT), DISSOLUTION_RECOVERY_CRIT_SUCCESS
+        )
 
     def test_success_returns_50(self) -> None:
-        # success = ≥1 but <2 on the canonical scale.
-        self.assertEqual(_dissolution_recovery_fraction(1), DISSOLUTION_RECOVERY_SUCCESS)
+        from world.magic.services.ritual_checks import OutcomeTier
+
+        self.assertEqual(
+            _dissolution_recovery_fraction(OutcomeTier.SUCCESS), DISSOLUTION_RECOVERY_SUCCESS
+        )
 
     def test_failure_returns_10(self) -> None:
-        # 0 and −1 are FAIL (>−2); −2 is BOTCH (≤−2).
-        self.assertEqual(_dissolution_recovery_fraction(0), DISSOLUTION_RECOVERY_FAILURE)
-        self.assertEqual(_dissolution_recovery_fraction(-1), DISSOLUTION_RECOVERY_FAILURE)
+        from world.magic.services.ritual_checks import OutcomeTier
+
+        self.assertEqual(
+            _dissolution_recovery_fraction(OutcomeTier.FAIL), DISSOLUTION_RECOVERY_FAILURE
+        )
 
     def test_botch_returns_0(self) -> None:
-        # −2 is the BOTCH boundary (≤−2 → botch).
-        self.assertEqual(_dissolution_recovery_fraction(-2), DISSOLUTION_RECOVERY_BOTCH)
-        self.assertEqual(_dissolution_recovery_fraction(-3), DISSOLUTION_RECOVERY_BOTCH)
-        self.assertEqual(_dissolution_recovery_fraction(-10), DISSOLUTION_RECOVERY_BOTCH)
+        from world.magic.services.ritual_checks import OutcomeTier
+
+        self.assertEqual(
+            _dissolution_recovery_fraction(OutcomeTier.BOTCH), DISSOLUTION_RECOVERY_BOTCH
+        )
 
 
 class RitualSeedTests(TestCase):
@@ -373,13 +380,14 @@ def _build_dissolution_sanctum(*, leader_is_founder: bool = True):
     return sanctum, leader
 
 
+def _mock_check_result(success_level: int = 1):
+    """Build a lightweight fake CheckResult for patching perform_check."""
+    outcome = type("O", (), {"success_level": success_level})()
+    return type("CR", (), {"outcome": outcome})()
+
+
 class PerformDissolutionDifficultyTests(TestCase):
     """Dissolution uses authored RitualCheckConfig difficulty."""
-
-    def _mock_check_result(self, success_level: int = 1):
-        """Build a lightweight fake CheckResult for patching."""
-        outcome = type("O", (), {"success_level": success_level})()
-        return type("CR", (), {"outcome": outcome})()
 
     def test_founder_rolls_difficulty_20(self) -> None:
         from unittest.mock import patch
@@ -389,7 +397,7 @@ class PerformDissolutionDifficultyTests(TestCase):
         # perform_check is lazily imported inside perform_ritual_check; patch
         # the canonical module path where it lives.
         with patch("world.checks.services.perform_check") as mock_check:
-            mock_check.return_value = self._mock_check_result(success_level=1)
+            mock_check.return_value = _mock_check_result(success_level=1)
             perform_dissolution(sanctum, leader)
             _args, kwargs = mock_check.call_args
             self.assertEqual(kwargs["target_difficulty"], 20)
@@ -400,7 +408,7 @@ class PerformDissolutionDifficultyTests(TestCase):
         sanctum, leader = _build_dissolution_sanctum(leader_is_founder=False)
 
         with patch("world.checks.services.perform_check") as mock_check:
-            mock_check.return_value = self._mock_check_result(success_level=1)
+            mock_check.return_value = _mock_check_result(success_level=1)
             perform_dissolution(sanctum, leader)
             _args, kwargs = mock_check.call_args
             self.assertEqual(kwargs["target_difficulty"], 40)

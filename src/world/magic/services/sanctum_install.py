@@ -36,6 +36,7 @@ from world.magic.models import SanctumDetails, SanctumOwnerMode
 if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.magic.models import Resonance
+    from world.magic.services.ritual_checks import OutcomeTier
     from world.scenes.models import Persona
 
 
@@ -302,7 +303,6 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.magic.services.ritual_checks import (  # noqa: PLC0415
         OutcomeTier,
-        outcome_tier,
         perform_ritual_check,
     )
     from world.magic.services.sanctum_lvm import sum_homecoming_value  # noqa: PLC0415
@@ -321,14 +321,14 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         raise DissolutionLeaderNotPresentError(msg)
 
     is_founder = sanctum.founder_character_sheet_id == leader_persona.character_sheet_id
-    check_result = perform_ritual_check(
+    roll = perform_ritual_check(
         DISSOLUTION_RITUAL_NAME,
         leader_persona.character_sheet.character,
         founder_standing=is_founder,
     )
-    success_level = int(check_result.outcome.success_level)
-    recovery_fraction = _dissolution_recovery_fraction(success_level)
-    is_botch = outcome_tier(success_level) is OutcomeTier.BOTCH
+    success_level = roll.success_level
+    recovery_fraction = _dissolution_recovery_fraction(roll.tier)
+    is_botch = roll.tier is OutcomeTier.BOTCH
 
     reservoir_before = sum_homecoming_value(sanctum)
     recovered_amount = int(Decimal(reservoir_before) * recovery_fraction)
@@ -360,11 +360,10 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     )
 
 
-def _dissolution_recovery_fraction(success_level: int) -> Decimal:
-    """Map check outcome success_level to recovery fraction (canonical tiers)."""
-    from world.magic.services.ritual_checks import OutcomeTier, outcome_tier  # noqa: PLC0415
+def _dissolution_recovery_fraction(tier: OutcomeTier) -> Decimal:
+    """Map check outcome tier to recovery fraction."""
+    from world.magic.services.ritual_checks import OutcomeTier  # noqa: PLC0415
 
-    tier = outcome_tier(success_level)
     if tier is OutcomeTier.CRIT:
         return DISSOLUTION_RECOVERY_CRIT_SUCCESS
     if tier is OutcomeTier.SUCCESS:
