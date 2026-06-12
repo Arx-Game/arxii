@@ -125,7 +125,7 @@ class EncounterCompletedPayload:
     encounter: CombatEncounter
     outcome: str  # EncounterOutcome value
     scene: Scene | None
-    room: ObjectDB | None
+    room: Room | None
 
 
 # ---- Movement ----
