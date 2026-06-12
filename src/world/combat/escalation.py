@@ -211,6 +211,11 @@ def apply_relationship_escalation_spike(
     Processes every live escalating encounter in ``room`` (zero matches is a
     clean no-op — e.g. a deferred CHARACTER_KILLED firing after completion).
     Control does NOT keep pace with a spike: grief is pure pressure.
+    Qualification is one-directional by design: the survivor's own track
+    points toward the fallen drive their spike, not the reverse direction.
+    A survivor only spikes for the encounter their engagement is sourced to
+    (same guard as ``apply_escalation_tick``), so co-located escalating
+    encounters cannot double-dip a single fall.
     """
     from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
@@ -225,6 +230,7 @@ def apply_relationship_escalation_spike(
         room=room,
         escalation_curve__isnull=False,
     ).exclude(status=EncounterStatus.COMPLETED)
+    encounter_ct = ContentType.objects.get_for_model(CombatEncounter)
 
     for encounter in encounters:
         curve = encounter.escalation_curve
@@ -247,9 +253,14 @@ def apply_relationship_escalation_spike(
             ).exists()
             if not qualifies:
                 continue
+            # Mirror apply_escalation_tick's guard: only the engagement
+            # sourced to THIS encounter spikes, so a survivor active in two
+            # co-located escalating encounters is spiked once, not per row.
             engagement = CharacterEngagement.objects.filter(
                 character=participant.character_sheet.character,
                 engagement_type=EngagementType.COMBAT,
+                source_content_type=encounter_ct,
+                source_id=encounter.pk,
             ).first()
             if engagement is None:
                 continue

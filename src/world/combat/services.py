@@ -1546,7 +1546,8 @@ def apply_damage_to_participant(  # noqa: PLR0913
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
     - DAMAGE_APPLIED (post-save, frozen)
-    - CHARACTER_INCAPACITATED (if knockout_eligible)
+    - CHARACTER_INCAPACITATED (only on the transition into the knockout band,
+      and only when the death gate does not also fire — death supersedes)
     - CHARACTER_KILLED (if death_eligible or force_death)
     """
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
@@ -1598,16 +1599,24 @@ def apply_damage_to_participant(  # noqa: PLR0913
         resistance = character.conditions.resistance_modifier(damage_type)
         effective_damage = max(0, effective_damage - resistance)
 
+    health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
 
     if vitals.max_health > 0:
         health_pct = max(0.0, health_after / vitals.max_health)
+        health_before_pct = max(0.0, health_before / vitals.max_health)
     else:
         health_pct = 0.0
+        health_before_pct = 0.0
 
     knockout_eligible = (
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD
+    )
+    # Same band test applied to pre-hit health — used only to latch the
+    # CHARACTER_INCAPACITATED emit to the transition into the band.
+    was_in_knockout_band = (
+        health_before_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_before > DEATH_HEALTH_THRESHOLD
     )
     death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
     permanent_wound_eligible = effective_damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
@@ -1640,7 +1649,13 @@ def apply_damage_to_participant(  # noqa: PLR0913
         )
 
         # --- Incapacitation / death gates ---
-        if knockout_eligible:
+        # CHARACTER_INCAPACITATED marks the dramatic beat (the fall), not
+        # per-hit at-risk status: it fires only on the transition INTO the
+        # knockout band, and never alongside the death gate — one narrative
+        # beat, one event. knockout_eligible itself stays per-hit for the
+        # survivability-check pipeline (process_damage_consequences).
+        will_emit_death_gate = death_eligible or force_death
+        if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
             emit_event(
                 EventName.CHARACTER_INCAPACITATED,
                 CharacterIncapacitatedPayload(
@@ -1650,7 +1665,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
                 location=room,
             )
 
-        if death_eligible or force_death:
+        if will_emit_death_gate:
             _emit_death_gate(character, room)
 
     return ParticipantDamageResult(

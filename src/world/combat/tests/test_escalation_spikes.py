@@ -23,6 +23,7 @@ from world.combat.factories import (
     EscalationCurveFactory,
     wire_escalation_content,
 )
+from world.combat.services import apply_damage_to_participant
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
@@ -31,6 +32,7 @@ from world.relationships.factories import (
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
 )
+from world.vitals.models import CharacterVitals
 
 
 class EscalationSpikeTests(TestCase):
@@ -133,6 +135,79 @@ class EscalationSpikeTests(TestCase):
         )
 
         self.assertEqual(self._intensity(self.char_a), 0)
+
+    def _reset_vitals(self, sheet, *, health=100, max_health=100):
+        """Ensure the sheet has CharacterVitals at a known health level."""
+        vitals, _ = CharacterVitals.objects.get_or_create(
+            character_sheet=sheet,
+            defaults={"health": health, "max_health": max_health},
+        )
+        vitals.health = health
+        vitals.max_health = max_health
+        vitals.save()
+        return vitals
+
+    def test_no_double_spike_on_repeat_hits_while_down(self):
+        """Repeat hits inside the knockout band emit no further beats.
+
+        The transition latch in apply_damage_to_participant fires
+        CHARACTER_INCAPACITATED only when the hit moves the target INTO the
+        knockout band — a second hit that keeps them there stays silent, so
+        the bonded survivor spikes exactly once.
+        """
+        self._bond(self.sheet_a, self.sheet_b)
+        self._reset_vitals(self.sheet_b)
+
+        # 100 -> 15 (15% <= 20% band, above death): transition, emits.
+        apply_damage_to_participant(self.participant_b, 85)
+        # 15 -> 10: already in the band, no re-emit.
+        apply_damage_to_participant(self.participant_b, 5)
+
+        self.assertEqual(self._intensity(self.char_a), self.curve.spike_intensity_amount)
+
+    def test_force_death_emits_single_beat(self):
+        """A knockout-band hit with force_death emits only CHARACTER_KILLED.
+
+        Death supersedes incapacitation: one narrative beat, one event — the
+        bonded survivor spikes once (via the killed event), not twice.
+        """
+        self._bond(self.sheet_a, self.sheet_b)
+        self._reset_vitals(self.sheet_b)
+
+        # 100 -> 15 is knockout-band-eligible, but force_death fires the
+        # death gate instead; the incapacitated emit is skipped.
+        apply_damage_to_participant(self.participant_b, 85, force_death=True)
+
+        self.assertEqual(self._intensity(self.char_a), self.curve.spike_intensity_amount)
+
+    def test_no_double_dip_across_co_located_encounters(self):
+        """A survivor in two co-located escalating encounters spikes once.
+
+        The engagement-source guard ties the spike to the encounter the
+        survivor's COMBAT engagement is sourced to (encounter 1); the second
+        encounter's participant row does not double-dip.
+        """
+        self._bond(self.sheet_a, self.sheet_b)
+        other_curve = EscalationCurveFactory(
+            spike_intensity_amount=7,
+            spike_minimum_track_points=10,
+        )
+        other_encounter = CombatEncounterFactory(
+            room=self.encounter.room,
+            escalation_curve=other_curve,
+        )
+        CombatParticipantFactory(
+            encounter=other_encounter,
+            character_sheet=self.sheet_a,
+            status=ParticipantStatus.ACTIVE,
+        )
+        install_escalation_room_triggers(other_encounter)
+
+        self._emit_fall(self.char_b)
+
+        # Encounter 1's curve amount exactly once — not 3+7 (both encounters)
+        # and not 7 (the wrong encounter's curve).
+        self.assertEqual(self._intensity(self.char_a), self.curve.spike_intensity_amount)
 
     def test_handler_noop_when_character_has_no_location(self):
         sheet = CharacterSheetFactory()
