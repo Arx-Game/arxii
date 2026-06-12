@@ -235,6 +235,33 @@ export function useFleeMutation(encounterId: number) {
 }
 
 // ---------------------------------------------------------------------------
+// End encounter mutation hook (GM only)
+// ---------------------------------------------------------------------------
+
+/**
+ * End the encounter early (GM only), recording the "abandoned" outcome (#876).
+ * POST /api/combat/{encounterId}/end/
+ *
+ * Invalidates the encounter detail key and the scene's encounter list on
+ * success — the list feeds useEncounterForScene's active-encounter selection,
+ * which must stop returning this encounter once it completes.
+ */
+export function useEndEncounter(encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.postEndEncounter(encounterId),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      if (typeof data.scene === 'number') {
+        qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(
+          () => {}
+        );
+      }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Cover mutation hook
 // ---------------------------------------------------------------------------
 

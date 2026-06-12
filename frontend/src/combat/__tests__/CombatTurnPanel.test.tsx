@@ -37,6 +37,7 @@ vi.mock('@/combat/queries', () => ({
     isLoading: false,
     isError: false,
   }),
+  useEndEncounter: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -134,6 +135,9 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     current_round_actions: [],
     clashes: [],
     created_at: '2026-05-24T00:00:00Z',
+    // Runtime sends "" until completion; the generated enum omits the blank.
+    outcome: '' as EncounterDetail['outcome'],
+    completed_at: null,
     ...overrides,
   };
   mockedUseCombatEncounter.mockReturnValue({
@@ -187,6 +191,10 @@ beforeEach(() => {
   });
   (combatQueries.useDispatchPlayerAction as ReturnType<typeof vi.fn>).mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+  });
+  (combatQueries.useEndEncounter as ReturnType<typeof vi.fn>).mockReturnValue({
+    mutate: vi.fn(),
     isPending: false,
   });
 });
@@ -367,5 +375,51 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
     toggles.forEach((toggle) => {
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
     });
+  });
+});
+
+describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
+  it('renders the outcome banner in place of live sections when completed', () => {
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      completed_at: '2026-06-12T00:00:00Z',
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent('Victory');
+    // Live sections are replaced by the banner.
+    expect(screen.queryByTestId('your-turn-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('round-flow-section')).not.toBeInTheDocument();
+  });
+
+  it('does not render the banner while the encounter is active', () => {
+    mockEncounter({ status: 'declaring' });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Victory')).not.toBeInTheDocument();
+    expect(screen.getByTestId('round-flow-section')).toBeInTheDocument();
+  });
+
+  it('falls back to Abandoned for a completed encounter with an empty outcome', () => {
+    mockEncounter({
+      status: 'completed',
+      outcome: '' as EncounterDetail['outcome'],
+      completed_at: '2026-06-12T00:00:00Z',
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Abandoned');
   });
 });

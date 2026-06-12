@@ -18,9 +18,26 @@
  * TODO(round-flow): add "current" chip state when backend exposes active actor.
  *
  * Phase 8, Task 8.5 — unified-combat-ui plan.
+ * GM end-encounter control (#876): when the viewer is the scene GM and the
+ * encounter is still live, an "End Encounter" button (AlertDialog-confirmed)
+ * calls POST /api/combat/{id}/end/ via useEndEncounter.
  */
 
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { useEndEncounter } from '../queries';
 import type { EncounterDetail, Participant, RoundAction } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -98,6 +115,18 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
   const actedCount = participants.filter((p) => actedSet.has(p.id)).length;
   const totalCount = participants.length;
 
+  // GM end-encounter control (#876).
+  const endEncounter = useEndEncounter(encounter.id);
+  const showEndControl = encounter.is_gm && encounter.status !== 'completed';
+
+  function handleEndEncounter() {
+    endEncounter.mutate(undefined, {
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to end encounter.');
+      },
+    });
+  }
+
   return (
     <div className="rounded-md border border-border bg-card" data-testid="round-flow-section">
       {/* Section header */}
@@ -154,6 +183,41 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
             <p className="text-xs text-muted-foreground" data-testid="round-flow-empty">
               No participants yet.
             </p>
+          )}
+
+          {/* GM end-encounter control (#876) — confirm before the curtain falls. */}
+          {showEndControl && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  disabled={endEncounter.isPending}
+                  data-testid="end-encounter-trigger"
+                >
+                  {endEncounter.isPending ? 'Ending…' : 'End Encounter'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>End this encounter?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The encounter is marked completed and the Narrator records the outcome in the
+                    scene log. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleEndEncounter}
+                    data-testid="end-encounter-confirm"
+                  >
+                    End Encounter
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       )}
