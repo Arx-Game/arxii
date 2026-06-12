@@ -813,10 +813,11 @@ def _weekly_wages() -> int:
 def _weekly_business_fortunes() -> int:
     import random  # noqa: PLC0415
 
+    rng = random.SystemRandom()
     count = 0
     for business in Business.objects.filter(active=True).select_related("owner_persona"):
         try:
-            fortune = random.randint(BUSINESS_FORTUNE_MIN, BUSINESS_FORTUNE_MAX)  # noqa: S311
+            fortune = rng.randint(BUSINESS_FORTUNE_MIN, BUSINESS_FORTUNE_MAX)
             run_business_week(business, fortune=fortune)
             count += 1
         except Exception:
