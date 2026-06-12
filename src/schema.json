@@ -33849,8 +33849,8 @@ components:
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -33862,8 +33862,8 @@ components:
         narrative_prose:
           type: string
           minLength: 1
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatchRequest'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatchRequest'
     PatchedSceneDetailRequest:
       type: object
       description: Full scene representation with personas
@@ -36348,7 +36348,7 @@ components:
         Exposes name, description, narrative_prose, dispatch metadata, the
         `input_schema` blob the frontend uses to render its perform form,
         `author_account_id` for client-side "authored by you" filtering,
-        and the nested `scene_action_config` for SCENE_ACTION rituals.
+        and the nested `check_config` when present.
       properties:
         id:
           type: integer
@@ -36382,12 +36382,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        scene_action_config:
+        check_config:
           type: object
           additionalProperties: {}
           nullable: true
-          description: Return nested scene_action_config for SCENE_ACTION rituals,
-            else None.
+          description: Return nested check_config when present, else None.
           readOnly: true
         client_hosted:
           type: boolean
@@ -36408,6 +36407,7 @@ components:
           nullable: true
       required:
       - author_account_id
+      - check_config
       - client_hosted
       - description
       - execution_kind
@@ -36420,15 +36420,64 @@ components:
       - name
       - narrative_prose
       - participation_rule
-      - scene_action_config
+    RitualCheckConfigPatch:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
+    RitualCheckConfigPatchRequest:
+      type: object
+      description: |-
+        Write serializer for the nested check_config on a PATCH.
+
+        Only fields that players can meaningfully update are included.
+        All are optional (partial update semantics). FK fields accept integer PKs
+        and are resolved to model instances in validate().
+      properties:
+        stat_id:
+          type: integer
+        skill_id:
+          type: integer
+        specialization_id:
+          type: integer
+          nullable: true
+        resonance_id:
+          type: integer
+          nullable: true
+        check_type_id:
+          type: integer
+          nullable: true
+        target_difficulty:
+          type: integer
+          minimum: 1
     RitualPatch:
       type: object
       description: |-
         Write serializer for partial PATCH of player-authored Rituals.
 
         Handles top-level Ritual fields (name, description, narrative_prose) and
-        optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-        rituals silently ignore scene_action_config if supplied.
+        optional nested ``check_config`` when the ritual has one. Rituals without a
+        config silently ignore check_config if supplied.
       properties:
         name:
           type: string
@@ -36437,62 +36486,12 @@ components:
           type: string
         narrative_prose:
           type: string
-        scene_action_config:
-          $ref: '#/components/schemas/RitualSceneActionConfigPatch'
+        check_config:
+          $ref: '#/components/schemas/RitualCheckConfigPatch'
       required:
       - description
       - name
       - narrative_prose
-    RitualSceneActionConfigPatch:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
-    RitualSceneActionConfigPatchRequest:
-      type: object
-      description: |-
-        Write serializer for the nested scene_action_config on a PATCH.
-
-        Only fields that players can meaningfully update are included.
-        All are optional (partial update semantics). FK fields accept integer PKs
-        and are resolved to model instances in validate().
-      properties:
-        stat_id:
-          type: integer
-        skill_id:
-          type: integer
-        specialization_id:
-          type: integer
-          nullable: true
-        resonance_id:
-          type: integer
-          nullable: true
-        check_type_id:
-          type: integer
-          nullable: true
-        target_difficulty:
-          type: integer
-          minimum: 1
     RitualSessionAccept:
       type: object
       description: |-

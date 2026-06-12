@@ -37,8 +37,8 @@ from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     AnimaConfigFactory,
     CharacterAnimaFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
     SoulfrayContentFactory,
     wire_soulfray_aftermath,
@@ -112,7 +112,7 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
             flow=None,
             author_account=_account,
         )
-        RitualSceneActionConfigFactory(ritual=_ritual)
+        RitualCheckConfigFactory(ritual=_ritual)
         target_anima = CharacterAnimaFactory(
             character=target_sheet.character,
             current=0,

@@ -58,8 +58,8 @@ from world.magic.models import (
     Resonance,
     Restriction,
     Ritual,
+    RitualCheckConfig,
     RitualComponentRequirement,
-    RitualSceneActionConfig,
     SoulfrayConfig,
     Technique,
     TechniqueAppliedCondition,
@@ -810,15 +810,15 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     min_quality_tier = None
 
 
-class RitualSceneActionConfigFactory(factory.django.DjangoModelFactory):
-    """Factory for RitualSceneActionConfig sidecar.
+class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualCheckConfig.
 
-    Requires a SCENE_ACTION ritual. The stat/skill/check_type mirrors the
-    CharacterAnimaRitual factory pattern.
+    Requires a SCENE_ACTION ritual by default. The stat/skill/check_type mirrors the
+    CharacterAnimaRitual factory pattern. Other ritual kinds may also use this factory.
     """
 
     class Meta:
-        model = RitualSceneActionConfig
+        model = RitualCheckConfig
 
     ritual = factory.SubFactory(
         RitualFactory,
@@ -838,7 +838,7 @@ class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
     """Factory for AnimaRitualPerformance records.
 
     The ritual FK points to Ritual (execution_kind=SCENE_ACTION).
-    Use RitualSceneActionConfigFactory(ritual=...) to build the full pair.
+    Use RitualCheckConfigFactory(ritual=...) to build the full pair.
     """
 
     class Meta:

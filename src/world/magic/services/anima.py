@@ -76,13 +76,13 @@ def perform_anima_ritual(
             author_account=character_sheet.character.db_account,
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         )
-        .select_related("scene_action_config")
+        .select_related("check_config")
         .first()
     )
-    if ritual is None or not hasattr(ritual, "scene_action_config"):
+    if ritual is None or not hasattr(ritual, "check_config"):
         raise NoRitualConfigured
 
-    config = ritual.scene_action_config
+    config = ritual.check_config
     character = character_sheet.character
 
     if CharacterEngagement.objects.filter(character=character).exists():
@@ -219,7 +219,7 @@ def provision_player_anima_ritual(
     """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
-    from world.magic.models.ritual_scene_action import RitualSceneActionConfig  # noqa: PLC0415
+    from world.magic.models.ritual_check_config import RitualCheckConfig  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
     from world.skills.models import CharacterSkillValue, Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
@@ -267,8 +267,8 @@ def provision_player_anima_ritual(
         author_account=account,
     )
 
-    # 4. Create the sidecar (stat + skill; check_type/resonance left null for player to set).
-    RitualSceneActionConfig.objects.create(
+    # 4. Create the config (stat + skill; check_type/resonance left null for player to set).
+    RitualCheckConfig.objects.create(
         ritual=ritual,
         stat=stat_trait,
         skill=skill,

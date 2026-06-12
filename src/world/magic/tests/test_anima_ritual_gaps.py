@@ -1,7 +1,7 @@
 """Tests for three backend gaps in the Anima Ritual UI feature.
 
 Gap 1: anima_recovery field in EnhancedSceneActionResultSerializer
-Gap 2: author_account_id + scene_action_config in RitualSerializer
+Gap 2: author_account_id + check_config in RitualSerializer
 Gap 3: PATCH support on RitualViewSet
 """
 
@@ -25,8 +25,8 @@ from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.serializers import RitualSerializer
@@ -71,13 +71,13 @@ def _make_pending_resolution(outcome_row: object) -> PendingActionResolution:
 
 
 def _make_scene_action_ritual():
-    """Create a SCENE_ACTION Ritual + RitualSceneActionConfig sidecar."""
+    """Create a SCENE_ACTION Ritual + RitualCheckConfig."""
     ritual = RitualFactory(
         execution_kind=RitualExecutionKind.SCENE_ACTION,
         service_function_path="",
         flow=None,
     )
-    RitualSceneActionConfigFactory(ritual=ritual)
+    RitualCheckConfigFactory(ritual=ritual)
     return ritual
 
 
@@ -236,12 +236,12 @@ class AnimaRecoverySerializerFieldTests(TestCase):
 
 
 # =============================================================================
-# Gap 2: author_account_id + scene_action_config in RitualSerializer
+# Gap 2: author_account_id + check_config in RitualSerializer
 # =============================================================================
 
 
 class RitualSerializerFieldTests(TestCase):
-    """Gap 2: author_account_id and scene_action_config exposed in RitualSerializer."""
+    """Gap 2: author_account_id and check_config exposed in RitualSerializer."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -257,20 +257,20 @@ class RitualSerializerFieldTests(TestCase):
             flow=None,
             author_account=cls.account,
         )
-        cls.config = RitualSceneActionConfigFactory(ritual=cls.scene_action_ritual)
+        cls.config = RitualCheckConfigFactory(ritual=cls.scene_action_ritual)
         cls.staff_ritual = RitualFactory(
             author_account=None,  # staff-authored
         )
 
-    def test_service_ritual_has_null_scene_action_config(self) -> None:
-        """SERVICE rituals return null for scene_action_config."""
+    def test_service_ritual_has_null_check_config(self) -> None:
+        """SERVICE rituals without a config return null for check_config."""
         data = RitualSerializer(self.service_ritual).data
-        self.assertIsNone(data["scene_action_config"])
+        self.assertIsNone(data["check_config"])
 
     def test_scene_action_ritual_has_nested_config(self) -> None:
-        """SCENE_ACTION rituals return a nested scene_action_config object."""
+        """SCENE_ACTION rituals return a nested check_config object."""
         data = RitualSerializer(self.scene_action_ritual).data
-        config = data["scene_action_config"]
+        config = data["check_config"]
         self.assertIsNotNone(config)
         self.assertIn("id", config)
         self.assertIn("stat", config)
@@ -323,7 +323,7 @@ class RitualViewSetPatchTests(APITestCase):
             author_account=cls.author_account,
             name="Scene Ritual",
         )
-        cls.scene_config = RitualSceneActionConfigFactory(ritual=cls.scene_ritual)
+        cls.scene_config = RitualCheckConfigFactory(ritual=cls.scene_ritual)
 
     def _patch_url(self, pk: int) -> str:
         return reverse("magic:ritual-detail", kwargs={"pk": pk})
@@ -370,12 +370,12 @@ class RitualViewSetPatchTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_patch_nested_scene_action_config_target_difficulty(self) -> None:
-        """Author can PATCH the nested scene_action_config target_difficulty."""
+    def test_patch_nested_check_config_target_difficulty(self) -> None:
+        """Author can PATCH the nested check_config target_difficulty."""
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.patch(
             self._patch_url(self.scene_ritual.pk),
-            {"scene_action_config": {"target_difficulty": 5}},
+            {"check_config": {"target_difficulty": 5}},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
@@ -383,13 +383,13 @@ class RitualViewSetPatchTests(APITestCase):
         self.assertEqual(self.scene_config.target_difficulty, 5)
 
     def test_get_returns_author_account_id_and_config(self) -> None:
-        """GET on a SCENE_ACTION ritual includes author_account_id and scene_action_config."""
+        """GET on a SCENE_ACTION ritual includes author_account_id and check_config."""
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.get(self._patch_url(self.scene_ritual.pk))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         data = resp.json()
         self.assertEqual(data["author_account_id"], self.author_account.pk)
-        self.assertIsNotNone(data["scene_action_config"])
+        self.assertIsNotNone(data["check_config"])
 
     def test_delete_not_allowed(self) -> None:
         """DELETE is not allowed (http_method_names excludes delete)."""

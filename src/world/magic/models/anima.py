@@ -3,7 +3,7 @@
 CharacterAnima tracks a character's magical energy resource.
 AnimaRitualPerformance is the historical record of ritual performances.
 The personalized recovery ritual is now modelled as a Ritual row with
-execution_kind=SCENE_ACTION and a RitualSceneActionConfig sidecar.
+execution_kind=SCENE_ACTION and a RitualCheckConfig sidecar.
 """
 
 from django.core.exceptions import ValidationError

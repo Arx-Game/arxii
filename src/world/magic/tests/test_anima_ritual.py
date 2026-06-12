@@ -1,7 +1,7 @@
 """Tests for AnimaRitualPerformance model and related factories.
 
 The per-character anima ritual is now modelled as a Ritual row with
-execution_kind=SCENE_ACTION and a RitualSceneActionConfig sidecar.
+execution_kind=SCENE_ACTION and a RitualCheckConfig sidecar.
 CharacterAnimaRitual has been deleted.
 """
 
@@ -13,17 +13,17 @@ from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     AnimaRitualPerformanceFactory,
     ResonanceFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
 )
-from world.magic.models import AnimaRitualPerformance, Ritual, RitualSceneActionConfig
+from world.magic.models import AnimaRitualPerformance, Ritual, RitualCheckConfig
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.traits.factories import TraitFactory
 from world.traits.models import TraitType
 
 
-class RitualSceneActionConfigModelTests(TestCase):
-    """Tests for the RitualSceneActionConfig model (replaces CharacterAnimaRitual tests)."""
+class RitualCheckConfigModelTests(TestCase):
+    """Tests for the RitualCheckConfig model (replaces CharacterAnimaRitual tests)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -37,9 +37,9 @@ class RitualSceneActionConfigModelTests(TestCase):
             flow=None,
         )
 
-    def test_scene_action_config_creation(self):
-        """Test creation of a RitualSceneActionConfig with all fields."""
-        config = RitualSceneActionConfig.objects.create(
+    def test_check_config_creation(self):
+        """Test creation of a RitualCheckConfig with all fields."""
+        config = RitualCheckConfig.objects.create(
             ritual=self.ritual,
             stat=self.stat,
             skill=self.skill,
@@ -53,10 +53,10 @@ class RitualSceneActionConfigModelTests(TestCase):
         self.assertEqual(config.check_type, self.check_type)
         self.assertIsNone(config.specialization)
 
-    def test_scene_action_config_specialization_optional(self):
-        """Test that specialization is optional on RitualSceneActionConfig."""
+    def test_check_config_specialization_optional(self):
+        """Test that specialization is optional on RitualCheckConfig."""
         specialization = SpecializationFactory(parent_skill=self.skill)
-        config = RitualSceneActionConfig.objects.create(
+        config = RitualCheckConfig.objects.create(
             ritual=RitualFactory(
                 execution_kind=RitualExecutionKind.SCENE_ACTION,
                 service_function_path="",
@@ -87,7 +87,7 @@ class AnimaRitualPerformanceModelTests(TestCase):
             service_function_path="",
             flow=None,
         )
-        RitualSceneActionConfigFactory(ritual=cls.ritual)
+        RitualCheckConfigFactory(ritual=cls.ritual)
 
     def test_performance_creation(self):
         """Test creation of a ritual performance with all fields."""

@@ -1411,10 +1411,10 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
         assert ritual is not None, "Expected a SCENE_ACTION Ritual authored by the player account"
         assert "RitualKTest" in ritual.name
 
-    def test_finalize_creates_ritual_sidecar(self) -> None:
-        """finalize_character creates RitualSceneActionConfig for the player anima ritual."""
+    def test_finalize_creates_ritual_check_config(self) -> None:
+        """finalize_character creates RitualCheckConfig for the player anima ritual."""
         from world.magic.constants import RitualExecutionKind
-        from world.magic.models.ritual_scene_action import RitualSceneActionConfig
+        from world.magic.models.ritual_check_config import RitualCheckConfig
         from world.magic.models.rituals import Ritual
 
         draft = self._create_complete_draft()
@@ -1425,8 +1425,8 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         ).first()
         assert ritual is not None
-        assert RitualSceneActionConfig.objects.filter(ritual=ritual).exists(), (
-            "Expected a RitualSceneActionConfig sidecar for the player anima ritual"
+        assert RitualCheckConfig.objects.filter(ritual=ritual).exists(), (
+            "Expected a RitualCheckConfig for the player anima ritual"
         )
 
     def test_finalize_creates_ritual_knowledge_row(self) -> None:

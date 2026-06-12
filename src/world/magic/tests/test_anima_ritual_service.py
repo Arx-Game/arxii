@@ -6,7 +6,7 @@ and ConditionTemplate rows are created in setUp because they are singletons
 queried with .first() / .get(name=...).
 
 The per-character ritual is now a Ritual(execution_kind=SCENE_ACTION) +
-RitualSceneActionConfig. Tests create the full pair via factories and attach
+RitualCheckConfig. Tests create the full pair via factories and attach
 the Ritual to the character's account via author_account.
 """
 
@@ -29,8 +29,8 @@ from world.magic.exceptions import (
 )
 from world.magic.factories import (
     CharacterAnimaFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
@@ -69,7 +69,7 @@ def _make_ritual_for_sheet(sheet):
         flow=None,
         author_account=character.db_account,
     )
-    RitualSceneActionConfigFactory(ritual=ritual)
+    RitualCheckConfigFactory(ritual=ritual)
     return ritual
 
 

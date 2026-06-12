@@ -54,8 +54,8 @@ from world.magic.factories import (
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
     ResonanceFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
 )
@@ -998,7 +998,7 @@ class TestMagicSectionFull(TestCase):
             author_account=cls.player.account,
             description="Meditate with a blade in hand.",
         )
-        RitualSceneActionConfigFactory(
+        RitualCheckConfigFactory(
             ritual=cls.ritual,
             stat=cls.stat_willpower,
             skill=cls.melee_skill,
@@ -1804,7 +1804,7 @@ class TestCharacterSheetQueryCount(TestCase):
             flow=None,
             author_account=cls.player.account,
         )
-        RitualSceneActionConfigFactory(
+        RitualCheckConfigFactory(
             ritual=qc_ritual,
             stat=stat_will,
             skill=ritual_skill,
@@ -1999,7 +1999,7 @@ class TestPrefetchCompleteness(TestCase):
             flow=None,
             author_account=cls.player.account,
         )
-        RitualSceneActionConfigFactory(
+        RitualCheckConfigFactory(
             ritual=pf_ritual,
             stat=stat_will,
             skill=ritual_skill,
