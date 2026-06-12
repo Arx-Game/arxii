@@ -46,6 +46,9 @@ function makeParticipant(id: number, name: string): Participant {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    escalation_level: null,
+    intensity_modifier: null,
+    control_modifier: null,
   };
 }
 
@@ -69,6 +72,9 @@ function makeEncounter(
     // Runtime sends "" until completion; the generated enum omits the blank.
     outcome: '' as EncounterDetail['outcome'],
     completed_at: null,
+    escalation_curve_name: null,
+    escalation_start_round: null,
+    escalation_tick_narration: null,
     ...overrides,
   };
 }
@@ -170,6 +176,30 @@ describe('RoundFlow', () => {
 
     expect(screen.queryByTestId('initiative-chip-1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('round-flow-summary')).not.toBeInTheDocument();
+  });
+
+  it('renders escalation strip when the encounter escalates', () => {
+    const participant = { ...makeParticipant(1, 'Aria'), escalation_level: 2 };
+    const encounter = {
+      ...makeEncounter([participant], [], 3),
+      escalation_curve_name: 'Boss Ramp',
+      escalation_tick_narration: 'The air itself begins to burn.',
+    };
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent('Escalation II');
+    expect(screen.getByTestId('escalation-strip')).toHaveTextContent(
+      'The air itself begins to burn.'
+    );
+  });
+
+  it('hides escalation strip for non-escalating encounters', () => {
+    const encounter = makeEncounter([makeParticipant(1, 'A')], [], 1);
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('escalation-strip')).not.toBeInTheDocument();
   });
 });
 

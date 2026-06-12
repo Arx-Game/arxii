@@ -106,6 +106,14 @@ class CombatEncounter(SharedMemoryModel):
     )
     is_paused = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    escalation_curve = models.ForeignKey(
+        "combat.EscalationCurve",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="encounters",
+        help_text="Authored escalation ramp; null = this encounter does not escalate (#872).",
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":
@@ -1734,3 +1742,81 @@ class EncounterRiskAcknowledgement(SharedMemoryModel):
             f"{self.character_sheet_id} acknowledged {self.acknowledged_risk_level} "
             f"in encounter {self.encounter_id}"
         )
+
+
+# =============================================================================
+# Escalation Curve authored model (Task 3, #872)
+# =============================================================================
+
+
+class EscalationCurve(SharedMemoryModel):
+    """Authored escalation ramp for opted-in encounters (#872).
+
+    Referenced by ``CombatEncounter.escalation_curve``; null FK = the
+    encounter does not escalate. Multiple curves are the authoring knob
+    (boss fight vs. skirmish), so this is authored rows, not a singleton.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    start_round = models.PositiveIntegerField(
+        default=2,
+        help_text="First round the escalation tick fires (>=2 keeps round one calm).",
+    )
+    intensity_step = models.PositiveIntegerField(
+        default=1,
+        help_text="Intensity modifier added to each participant's engagement per tick.",
+    )
+    pace_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="escalation_curves",
+        help_text="Check rolled each tick to keep control in pace with intensity.",
+    )
+    pace_difficulty_base = models.PositiveIntegerField(
+        default=0,
+        help_text="Base difficulty of the pace check.",
+    )
+    pace_difficulty_per_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Difficulty added per accumulated escalation level.",
+    )
+    control_step_on_success = models.PositiveIntegerField(
+        default=1,
+        help_text="Control modifier gained on a pace-check success (success_level >= 1).",
+    )
+    control_step_on_partial = models.PositiveIntegerField(
+        default=0,
+        help_text="Control modifier gained on a partial success (success_level == 0).",
+    )
+    control_step_on_botch = models.IntegerField(
+        default=-1,
+        help_text="Control modifier change on a botch (success_level <= -2); author negative.",
+    )
+    max_escalation_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Tick stops raising pressure past this level. 0 = uncapped.",
+    )
+    spike_intensity_amount = models.PositiveIntegerField(
+        default=2,
+        help_text="Intensity spike applied to bonded co-combatants when an ally falls.",
+    )
+    spike_minimum_track_points = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Minimum developed_points on a spike-fueling relationship track "
+            "for the bond to qualify."
+        ),
+    )
+    tick_narration = models.TextField(
+        blank=True,
+        help_text="Narrative line surfaced to the combat panel on each tick.",
+    )
+
+    class Meta:
+        verbose_name = "Escalation Curve"
+        verbose_name_plural = "Escalation Curves"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name

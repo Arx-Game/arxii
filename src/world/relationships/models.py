@@ -102,6 +102,13 @@ class RelationshipTrack(SharedMemoryModel):
         default=0,
         help_text="Order for display purposes (lower values appear first)",
     )
+    fuels_escalation_spikes = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether bonds on this track qualify for combat escalation intensity "
+            "spikes when the bonded character falls (#872)."
+        ),
+    )
 
     class Meta:
         ordering = ["display_order", "name"]

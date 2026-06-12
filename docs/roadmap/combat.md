@@ -190,8 +190,34 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 
 **Design-intent gaps with no phase yet (audited 2026-06-09, tracked):**
 
-- **Combat escalation engine** — intensity building across rounds toward a climax
-  (complementary to Strain/Audere; climax expression is clashes, Soulfray, Audere) — #872
+- ~~**Combat escalation engine**~~ **DONE (#872):** intensity builds across rounds
+  toward a climax via authored `EscalationCurve` rows (nullable
+  `CombatEncounter.escalation_curve` FK; null = no escalation). Each escalating
+  round, `begin_declaration_phase` ticks every ACTIVE participant's combat
+  `CharacterEngagement`: `escalation_level += 1`,
+  `intensity_modifier += curve.intensity_step`, and a graded control pace check
+  (authored `pace_check_type` + difficulty fields, banded on
+  `CheckOutcome.success_level`) decides how much `control_modifier` keeps up.
+  Failure is lag-only — the widening deficit expresses through the existing
+  per-cast pipeline (anima-cost spikes → Soulfray → `select_mishap_pool` →
+  Audere gates); no parallel resolution path. Combat now **owns the engagement
+  lifecycle**: `add_participant`/`join_encounter`/`begin_declaration_phase`
+  create COMBAT engagements (mechanics' `begin_engagement`), flee/removal/
+  cleanup delete them (`end_engagement`) — this also opened the Audere
+  engagement gate in production and removed the unengaged +10 social-safety
+  control bonus inside combat. Relationship spikes ride the reactive layer:
+  seeded `escalation_spike_on_incapacitated`/`_on_killed` TriggerDefinitions
+  (`wire_escalation_content()` in combat factories) install on the encounter
+  room and spike bonded survivors' intensity
+  (`RelationshipTrack.fuels_escalation_spikes` + per-curve point gate);
+  CHARACTER_INCAPACITATED now emits on the band *transition* only (one beat,
+  no per-hit re-emission; force_death emits the death event alone). API:
+  escalation fields on participant + encounter detail serializers (curve is
+  GM-writable); frontend renders an escalation strip in RoundFlow. Integration
+  test `test_escalation_integration.py` proves the build-to-climax arc
+  (rounds escalate → costs spike → Soulfray mounts → `PendingAudereOffer`
+  fires). Deferred: near-death (not just fallen) spikes, scene-EMIT tick
+  narration, risk-level→default-curve GM tooling.
 - **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
   `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
   endpoints (`/api/magic/audere/`) and the combat-panel ceremony dialog (auto-opens on

@@ -56,6 +56,7 @@ from world.combat.services import (
     declare_flee,
     end_encounter,
     join_encounter,
+    remove_participant,
     resolve_round,
     revert_combo_upgrade,
     run_combo_detection,
@@ -273,8 +274,7 @@ class CombatEncounterViewSet(ModelViewSet):
             pk=participant_id,
             encounter=encounter,
         )
-        participant.status = ParticipantStatus.REMOVED
-        participant.save(update_fields=["status"])
+        remove_participant(participant)
         # Remove from cached list (prefetch only loads ACTIVE)
         encounter.participants_cached = [
             p for p in encounter.participants_cached if p.pk != participant.pk

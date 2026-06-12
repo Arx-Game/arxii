@@ -13992,6 +13992,10 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
+      escalation_curve?: number | null;
+      readonly escalation_curve_name: string | null;
+      readonly escalation_start_round: number | null;
+      readonly escalation_tick_narration: string | null;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -14010,6 +14014,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Lightweight listing serializer for combat encounters. */
     EncounterList: {
@@ -18079,6 +18084,12 @@ export interface components {
        *     ``None`` when there is no primary persona or it has no thumbnail.
        */
       readonly thumbnail_media_url: string | null;
+      /** @description Escalation pressure on this combatant — public dramatic state. */
+      readonly escalation_level: number | null;
+      /** @description Process-derived intensity bonus from the COMBAT engagement. */
+      readonly intensity_modifier: number | null;
+      /** @description Process-derived control bonus from the COMBAT engagement. */
+      readonly control_modifier: number | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -18300,6 +18311,7 @@ export interface components {
        * @description When the current declaration phase began.
        */
       round_started_at?: string | null;
+      escalation_curve?: number | null;
     };
     /** @description Full serializer for episode details */
     PatchedEpisodeDetailRequest: {

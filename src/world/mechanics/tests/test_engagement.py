@@ -46,3 +46,73 @@ class TestCharacterEngagement(TestCase):
         result = str(engagement)
         self.assertIn(str(engagement.character), result)
         self.assertIn("Combat", result)
+
+
+class EngagementLifecycleServiceTests(TestCase):
+    """Service-layer tests for begin_engagement and end_engagement lifecycle."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.character = create_object("typeclasses.characters.Character", key="Engager")
+        self.room = create_object("typeclasses.rooms.Room", key="eng-room", nohome=True)
+
+    def test_begin_engagement_creates_combat_row(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.engagement import CharacterEngagement
+        from world.mechanics.services import begin_engagement
+
+        eng = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
+        self.assertEqual(eng.source, self.room)
+        self.assertEqual(CharacterEngagement.objects.filter(character=self.character).count(), 1)
+
+    def test_begin_engagement_preserves_existing_noncombat_row(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.factories import CharacterEngagementFactory
+        from world.mechanics.services import begin_engagement
+
+        existing = CharacterEngagementFactory(
+            character=self.character, engagement_type=EngagementType.CHALLENGE
+        )
+        eng = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        self.assertEqual(eng.pk, existing.pk)
+        self.assertEqual(eng.engagement_type, EngagementType.CHALLENGE)
+
+    def test_begin_engagement_idempotent_for_same_source(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.services import begin_engagement
+
+        first = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        second = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        self.assertEqual(first.pk, second.pk)
+
+    def test_end_engagement_deletes_only_matching_source(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.engagement import CharacterEngagement
+        from world.mechanics.services import begin_engagement, end_engagement
+
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        end_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        self.assertFalse(CharacterEngagement.objects.filter(character=self.character).exists())
+
+    def test_end_engagement_noop_for_other_source(self):
+        from evennia import create_object
+
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.engagement import CharacterEngagement
+        from world.mechanics.services import begin_engagement, end_engagement
+
+        other = create_object("typeclasses.rooms.Room", key="other-room", nohome=True)
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        end_engagement(self.character, EngagementType.COMBAT, source=other)
+        self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())
+
+    def test_end_engagement_noop_for_other_type(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.engagement import CharacterEngagement
+        from world.mechanics.services import begin_engagement, end_engagement
+
+        begin_engagement(self.character, EngagementType.CHALLENGE, source=self.room)
+        end_engagement(self.character, EngagementType.COMBAT, source=self.room)
+        self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())
