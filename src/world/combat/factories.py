@@ -667,13 +667,12 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = EscalationCurve
-        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Escalation Curve {n}")
     start_round = 2
     intensity_step = 1
     pace_difficulty_base = 0
-    pace_difficulty_per_level = 1
+    pace_difficulty_per_level = 0
     control_step_on_success = 1
     control_step_on_partial = 0
     control_step_on_botch = -1

@@ -1819,4 +1819,4 @@ class EscalationCurve(SharedMemoryModel):
         ordering = ["name"]
 
     def __str__(self) -> str:
-        return f"EscalationCurve({self.name})"
+        return self.name
