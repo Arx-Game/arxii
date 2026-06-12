@@ -167,6 +167,9 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 - **Fixtures are NOT in version control** (gitignored via `**/fixtures/*.json`).
   Never `git add -f` a fixture; don't write management commands to seed data — use
   Django's fixture system. Seed data is managed separately (admin, shared storage, docs).
+  **`loaddata` inserts; it does NOT update idmapper rows** — for re-seeding edited
+  data use an upsert path (`load_entries` / `update_or_create`); see
+  `docs/evennia-quirks.md` (#946).
 
 ## Testing
 
