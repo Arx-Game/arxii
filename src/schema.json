@@ -4317,6 +4317,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantRole'
           description: ''
+  /api/currency/org-books/{id}/:
+    get:
+      operationId: currency_org_books_retrieve
+      description: |-
+        Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+
+        No list endpoint: books are reached from an org you belong to, not
+        browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgBooks'
+          description: ''
+        '403':
+          description: Not a member of the organization.
+        '404':
+          description: No such organization.
   /api/distinctions/categories/:
     get:
       operationId: distinctions_categories_list
@@ -23622,6 +23651,23 @@ components:
         * `effort` - Effort
         * `fatigue` - Fatigue
         * `strain` - Strain
+    ContributionRow:
+      type: object
+      properties:
+        persona_name:
+          type: string
+        amount:
+          type: integer
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - created_at
+      - persona_name
+      - reason
     Covenant:
       type: object
       description: Read-only serializer for Covenant identity, type, level, and lifecycle
@@ -24028,6 +24074,28 @@ components:
       - icon
       - id
       - name
+    DebtRow:
+      type: object
+      properties:
+        creditor:
+          type: string
+        principal:
+          type: integer
+        arrears:
+          type: integer
+        interest_bps_monthly:
+          type: integer
+        diverting:
+          type: boolean
+        in_default:
+          type: boolean
+      required:
+      - arrears
+      - creditor
+      - diverting
+      - in_default
+      - interest_bps_monthly
+      - principal
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -27016,6 +27084,22 @@ components:
       - minimum_tier
       - track
       - track_name
+    IncomeStreamRow:
+      type: object
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+        gross_amount:
+          type: integer
+        active:
+          type: boolean
+      required:
+      - active
+      - gross_amount
+      - kind
+      - name
     InlineActionInteraction:
       type: object
       description: Minimal serializer for an ACTION-mode Interaction embedded in an
@@ -27877,6 +27961,23 @@ components:
       - status
       - summary
       - template_name
+    LedgerRow:
+      type: object
+      properties:
+        amount:
+          type: integer
+        reason:
+          type: string
+        direction:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - created_at
+      - direction
+      - reason
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -29655,6 +29756,22 @@ components:
     NullEnum:
       enum:
       - null
+    ObligationRow:
+      type: object
+      properties:
+        name:
+          type: string
+        to_organization:
+          type: string
+        percent:
+          type: integer
+        active:
+          type: boolean
+      required:
+      - active
+      - name
+      - percent
+      - to_organization
     OfferCooldown:
       type: object
       description: |-
@@ -29860,6 +29977,51 @@ components:
       description: |-
         * `branch` - Branch
         * `check` - Check
+    OrgBooks:
+      type: object
+      description: The whole books page in one read.
+      properties:
+        organization_id:
+          type: integer
+        organization_name:
+          type: string
+        balance:
+          type: integer
+        spend_rank_max:
+          type: integer
+        graft_pct:
+          type: integer
+        income_streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomeStreamRow'
+        debts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebtRow'
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObligationRow'
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionRow'
+        ledger:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerRow'
+      required:
+      - balance
+      - contributions
+      - debts
+      - graft_pct
+      - income_streams
+      - ledger
+      - obligations
+      - organization_id
+      - organization_name
+      - spend_rank_max
     OrganizationSearch:
       type: object
       properties:
