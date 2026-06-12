@@ -58,7 +58,12 @@ class ParticipantPortraitQueryCountTests(TestCase):
         self.assertEqual(len(participants), 3)
 
         serializer = ParticipantSerializer(participants, many=True)
-        with self.assertNumQueries(0):
+        # 3 queries: one reverse-OneToOne CharacterEngagement resolution per
+        # character (#872 escalation fields). The descriptor caches the result
+        # (even the no-row case) on the identity-mapped ObjectDB, so the warm
+        # API path pays zero — see EncounterRetrieveQueryCountTests. Portraits
+        # themselves remain query-free from the prefetch.
+        with self.assertNumQueries(3):
             data = serializer.data
 
         self.assertTrue(
