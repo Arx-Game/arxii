@@ -49,6 +49,8 @@ class TestCharacterEngagement(TestCase):
 
 
 class EngagementLifecycleServiceTests(TestCase):
+    """Service-layer tests for begin_engagement and end_engagement lifecycle."""
+
     def setUp(self):
         from evennia import create_object
 
@@ -104,4 +106,13 @@ class EngagementLifecycleServiceTests(TestCase):
         other = create_object("typeclasses.rooms.Room", key="other-room", nohome=True)
         begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
         end_engagement(self.character, EngagementType.COMBAT, source=other)
+        self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())
+
+    def test_end_engagement_noop_for_other_type(self):
+        from world.mechanics.constants import EngagementType
+        from world.mechanics.engagement import CharacterEngagement
+        from world.mechanics.services import begin_engagement, end_engagement
+
+        begin_engagement(self.character, EngagementType.CHALLENGE, source=self.room)
+        end_engagement(self.character, EngagementType.COMBAT, source=self.room)
         self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())

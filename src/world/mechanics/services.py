@@ -915,21 +915,22 @@ def begin_engagement(
     Looks up by character only (the OneToOne makes any narrower get_or_create
     raise IntegrityError). An existing engagement of ANY type is returned
     unchanged — a character already in stakes (challenge/mission) is not
-    re-engaged by combat.
+    re-engaged by combat. ``source`` must be a saved Django model instance
+    (it must have a valid ``.pk``).
     """
     from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
 
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
-    existing = CharacterEngagement.objects.filter(character=character).first()
-    if existing is not None:
-        return existing
-    return CharacterEngagement.objects.create(
+    engagement, _ = CharacterEngagement.objects.get_or_create(
         character=character,
-        engagement_type=engagement_type,
-        source_content_type=ContentType.objects.get_for_model(type(source)),
-        source_id=source.pk,
+        defaults={
+            "engagement_type": engagement_type,
+            "source_content_type": ContentType.objects.get_for_model(source),
+            "source_id": source.pk,
+        },
     )
+    return engagement
 
 
 def end_engagement(
@@ -950,6 +951,6 @@ def end_engagement(
     CharacterEngagement.objects.filter(
         character=character,
         engagement_type=engagement_type,
-        source_content_type=ContentType.objects.get_for_model(type(source)),
+        source_content_type=ContentType.objects.get_for_model(source),
         source_id=source.pk,
     ).delete()
