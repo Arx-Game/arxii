@@ -25,8 +25,10 @@ export const combatKeys = {
 
   combos: (encounterId: number) => [...combatKeys.all, 'combos', encounterId] as const,
 
+  availableActionsAll: () => [...combatKeys.all, 'available-actions'] as const,
+
   availableActions: (characterId: number) =>
-    [...combatKeys.all, 'available-actions', characterId] as const,
+    [...combatKeys.availableActionsAll(), characterId] as const,
 
   outcomeDetails: (ids: number[]) => [...combatKeys.all, 'outcome-details', ids] as const,
 
@@ -252,6 +254,8 @@ export function useEndEncounter(encounterId: number) {
     mutationFn: () => api.postEndEncounter(encounterId),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      // Terminal event: every character's action list for this fight is now stale.
+      qc.invalidateQueries({ queryKey: combatKeys.availableActionsAll() }).catch(() => {});
       if (typeof data.scene === 'number') {
         qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(
           () => {}

@@ -211,6 +211,7 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleEndEncounter}
+                    disabled={endEncounter.isPending}
                     data-testid="end-encounter-confirm"
                   >
                     End Encounter
