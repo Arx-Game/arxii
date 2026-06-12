@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from world.combat.factories import EscalationCurveFactory
-from world.combat.models import CombatEncounter, EscalationCurve
+from world.combat.models import CombatEncounter
 
 
 class EscalationCurveModelTests(TestCase):
