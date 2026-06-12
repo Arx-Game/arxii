@@ -2237,7 +2237,8 @@ class PendingAudereMajoraOfferSerializer(serializers.ModelSerializer):
         """Live corruption advisory; empty string when no stage-3+ corruption."""
         from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
 
-        return corruption_advisory_for_character(obj.character_sheet.character)  # type: ignore[union-attr]
+        character = obj.character_sheet.character  # type: ignore[union-attr]
+        return corruption_advisory_for_character(character)
 
     def get_risk_text(self, obj: object) -> str:  # noqa: ARG002
         """Fixed risk copy (approved verbatim)."""
@@ -2315,7 +2316,7 @@ class AudereMajoraRespondSerializer(serializers.Serializer):
         """When accepting, path_id is required and declaration_text must be non-blank."""
         accept = attrs.get("accept", False)
         if accept:
-            if not attrs.get("path_id"):
+            if attrs.get("path_id") is None:
                 raise serializers.ValidationError({"path_id": "Choose the path you will become."})
             declaration = attrs.get("declaration_text", "")
             if not declaration.strip():
