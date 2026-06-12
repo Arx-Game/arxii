@@ -308,3 +308,30 @@ class PreparedClashContribution:
     technique: Technique
     strain_commitment: int
     npc_attack_affinity: Affinity | None
+
+
+# ---------------------------------------------------------------------------
+# Escalation engine types (#872, Task 5)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EscalationTickResult:
+    """Result of one participant's escalation tick.
+
+    Fields:
+        participant: The CombatParticipant ticked.
+        escalation_level: The engagement's level after this tick.
+        intensity_modifier: Engagement intensity modifier after this tick.
+        control_modifier: Engagement control modifier after this tick.
+        pace_success_level: The pace check outcome's success_level, or None
+            when the check could not run (unseeded chart — degrade gracefully).
+        capped: True when max_escalation_level stopped the ramp this tick.
+    """
+
+    participant: CombatParticipant
+    escalation_level: int
+    intensity_modifier: int
+    control_modifier: int
+    pace_success_level: int | None
+    capped: bool
