@@ -1871,3 +1871,13 @@ class SeedResonanceEnvironmentConfigTests(TestCase):
 
         cfg = ResonanceEnvironmentConfig.objects.get()
         self.assertEqual(cfg.pk, 1)
+
+
+class SeedMagicDevMagicChecksTests(TestCase):
+    """#709: seed_magic_dev includes the magical check content."""
+
+    def test_seed_magic_dev_includes_magic_check_content(self):
+        result = seed_magic_dev()
+        self.assertEqual(len(result.magic_checks.check_types), 5)
+        self.assertEqual(len(result.magic_checks.skills), 3)
+        self.assertEqual(len(result.magic_checks.configs), 5)

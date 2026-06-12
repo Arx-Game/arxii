@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from world.magic.seeds_checks import MagicCheckContentResult
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -106,6 +108,15 @@ class AlterationContentResult:
 
 class MagicContent:
     """Creates techniques and ActionEnhancement records for social action integration tests."""
+
+    @staticmethod
+    def seed_magic_checks() -> MagicCheckContentResult:
+        """Seed #709 magical check content (skills + CheckTypes + ritual configs)."""
+        from world.magic.seeds_checks import ensure_magic_check_content  # noqa: PLC0415
+        from world.magic.seeds_sanctum import ensure_sanctum_rituals  # noqa: PLC0415
+
+        ensure_sanctum_rituals()
+        return ensure_magic_check_content()
 
     @staticmethod
     def create_all() -> MagicContentResult:
@@ -2232,6 +2243,7 @@ class MagicDevSeedResult:
     facet_thread_unlock: FacetThreadUnlockResult
     penetration: PenetrationContestResult
     flee: FleeSeedResult
+    magic_checks: MagicCheckContentResult
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2331,6 +2343,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     seed_starter_magic_story()
     penetration = seed_penetration_contest()
     flee = seed_flee_check()
+    magic_checks = MagicContent.seed_magic_checks()
 
     return MagicDevSeedResult(
         config=config,
@@ -2341,4 +2354,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         facet_thread_unlock=facet_thread_unlock,
         penetration=penetration,
         flee=flee,
+        magic_checks=magic_checks,
     )
