@@ -7,8 +7,8 @@ Sanctification, Dissolution) wired to the dispatch paths in
 live in code, called via ``get_or_create``.  NOT a committed fixture.
 
 CheckType / CheckCategory authoring lives in ``world.magic.seeds_checks``
-(#709); call ``ensure_sanctum_rituals()`` after the Ritual rows exist so
-``seeds_checks.ensure_ritual_check_configs()`` can bind them.
+(#709); ``ensure_sanctum_rituals()`` creates the Ritual rows first, then calls
+``seeds_checks.ensure_ritual_check_configs()`` to bind their check configs.
 """
 
 from __future__ import annotations

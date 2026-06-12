@@ -1925,10 +1925,11 @@ def wire_soul_tether_content() -> object:
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.
     """
+    from dataclasses import dataclass
+
     from world.magic.seeds_checks import ensure_magic_check_types
 
     ensure_magic_check_types()
-    from dataclasses import dataclass
 
     @dataclass(frozen=True)
     class SoulTetherContent:
