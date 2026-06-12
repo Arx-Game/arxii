@@ -712,6 +712,22 @@ def resolve_combat_technique(
     return _build_combat_result(technique_use_result, resolver)
 
 
+def _ensure_combat_engagement(participant: CombatParticipant) -> None:
+    """Ensure the participant's character holds an engagement (combat-owned, #872).
+
+    Existing non-combat engagements are preserved (begin_engagement contract);
+    such participants do not tick or spike this encounter.
+    """
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import begin_engagement  # noqa: PLC0415
+
+    begin_engagement(
+        participant.character_sheet.character,
+        EngagementType.COMBAT,
+        source=participant.encounter,
+    )
+
+
 def add_participant(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -727,11 +743,13 @@ def add_participant(
         from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
         covenant_role = precedence_role_for_combat(character_sheet)
-    return CombatParticipant.objects.create(
+    participant = CombatParticipant.objects.create(
         encounter=encounter,
         character_sheet=character_sheet,
         covenant_role=covenant_role,
     )
+    _ensure_combat_engagement(participant)
+    return participant
 
 
 def acknowledge_encounter_risk(
@@ -787,6 +805,7 @@ def join_encounter(
         covenant_role=covenant_role,
         status=ParticipantStatus.ACTIVE,
     )
+    _ensure_combat_engagement(participant)
     acknowledge_encounter_risk(encounter, character_sheet)
     return participant
 
@@ -994,6 +1013,9 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     ).select_related("character_sheet__character")
     for p in active_participants_start:
         process_round_start(p.character_sheet.character)
+        # Backfill the combat-owned engagement (#872) for participants added
+        # outside the service entry points (e.g. factories, legacy rows).
+        _ensure_combat_engagement(p)
 
     active_opponents_start = CombatOpponent.objects.filter(
         encounter=enc,
@@ -2314,6 +2336,16 @@ def _resolve_flee(
         participant.status = ParticipantStatus.FLED
         participant.save(update_fields=["status"])
 
+        # Combat-owned engagement teardown on successful flee (#872).
+        from world.mechanics.constants import EngagementType  # noqa: PLC0415
+        from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+        end_engagement(
+            participant.character_sheet.character,
+            EngagementType.COMBAT,
+            source=participant.encounter,
+        )
+
     # ACTION-mode Interaction anchor + live broadcast (mirrors the tail of
     # _resolve_pc_action).
     from world.combat.interaction_services import (  # noqa: PLC0415
@@ -2706,6 +2738,15 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         ).delete()
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
+
+    # Combat-owned engagement teardown (#872): deleting the engagement discards
+    # the transient escalation process modifiers. Must run AFTER end_audere
+    # (which subtracts its own bonus from the row first — see comment above).
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+    for target in participant_targets:
+        end_engagement(target, EngagementType.COMBAT, source=encounter)
 
     qs = CombatOpponent.objects.filter(
         encounter=encounter,

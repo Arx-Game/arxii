@@ -275,6 +275,16 @@ class CombatEncounterViewSet(ModelViewSet):
         )
         participant.status = ParticipantStatus.REMOVED
         participant.save(update_fields=["status"])
+
+        # Combat-owned engagement teardown on removal (#872).
+        from world.mechanics.constants import EngagementType  # noqa: PLC0415
+        from world.mechanics.services import end_engagement  # noqa: PLC0415
+
+        end_engagement(
+            participant.character_sheet.character,
+            EngagementType.COMBAT,
+            source=encounter,
+        )
         # Remove from cached list (prefetch only loads ACTIVE)
         encounter.participants_cached = [
             p for p in encounter.participants_cached if p.pk != participant.pk
