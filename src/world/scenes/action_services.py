@@ -194,7 +194,7 @@ def create_action_request(  # noqa: PLR0913
 
 
 def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
-    """Build snapshot field kwargs from a Ritual + RitualSceneActionConfig row.
+    """Build snapshot field kwargs from a Ritual + RitualCheckConfig row.
 
     Args:
         ritual_id: PK of the Ritual (execution_kind=SCENE_ACTION) to snapshot.
@@ -208,14 +208,14 @@ def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
 
     ritual = Ritual.objects.select_related(
-        "scene_action_config__stat",
-        "scene_action_config__skill",
-        "scene_action_config__specialization",
-        "scene_action_config__resonance",
-        "scene_action_config__check_type",
+        "check_config__stat",
+        "check_config__skill",
+        "check_config__specialization",
+        "check_config__resonance",
+        "check_config__check_type",
     ).get(id=ritual_id)
 
-    config = ritual.scene_action_config
+    config = ritual.check_config
 
     return {
         "snapshot_ritual": ritual,

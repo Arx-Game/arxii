@@ -326,9 +326,9 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=Ritual.objects.filter(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         ).select_related(
-            "scene_action_config__stat",
-            "scene_action_config__skill",
-            "scene_action_config__resonance",
+            "check_config__stat",
+            "check_config__skill",
+            "check_config__resonance",
         ),
         to_attr="cached_scene_action_rituals",
     ),
@@ -431,7 +431,7 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
 
     ritual = rituals[0]
     try:
-        config = ritual.scene_action_config
+        config = ritual.check_config
     except Exception:  # noqa: BLE001
         return None
 

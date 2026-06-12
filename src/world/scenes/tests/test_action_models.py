@@ -7,8 +7,8 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import RitualExecutionKind, TargetKind
 from world.magic.factories import (
     ResonanceFactory,
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
     TechniqueFactory,
     ThreadFactory,
 )
@@ -120,7 +120,7 @@ class TestSceneActionRequest(TestCase):
             service_function_path="",
             flow=None,
         )
-        config = RitualSceneActionConfigFactory(ritual=ritual)
+        config = RitualCheckConfigFactory(ritual=ritual)
         request = SceneActionRequestFactory(
             scene=self.scene,
             initiator_persona=self.initiator,

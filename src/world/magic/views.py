@@ -876,7 +876,7 @@ class RitualViewSet(viewsets.ModelViewSet):
     (rituals are not deleted via API — staff can remove from admin).
     """
 
-    queryset = Ritual.objects.select_related("scene_action_config").order_by("name")
+    queryset = Ritual.objects.select_related("check_config").order_by("name")
     permission_classes = [IsAuthenticated, IsRitualAuthorOrStaff]
     pagination_class = StandardResultsSetPagination
     http_method_names = ["get", "patch", "head", "options"]

@@ -180,10 +180,12 @@ class TestSeedMagicConfigIdempotency(TestCase):
         self.assertEqual(counts["audere_threshold"], 1)
         self.assertEqual(counts["intensity_tiers"], 3)
         self.assertEqual(counts["mishap_pool_tiers"], 1)
-        # Guard against orphan CheckType/CheckCategory rows leaking on re-run
+        # Guard against orphan CheckType/CheckCategory rows leaking on re-run.
+        # seed_magic_config() now delegates to ensure_magic_check_types() which
+        # seeds the five Magic CheckTypes (#709); count updated from 1 → 5.
         self.assertEqual(
             counts["check_types"],
-            1,
+            5,
             "seed_magic_config() must not create extra CheckType rows on second call",
         )
         self.assertEqual(
@@ -1869,3 +1871,13 @@ class SeedResonanceEnvironmentConfigTests(TestCase):
 
         cfg = ResonanceEnvironmentConfig.objects.get()
         self.assertEqual(cfg.pk, 1)
+
+
+class SeedMagicDevMagicChecksTests(TestCase):
+    """#709: seed_magic_dev includes the magical check content."""
+
+    def test_seed_magic_dev_includes_magic_check_content(self):
+        result = seed_magic_dev()
+        self.assertEqual(len(result.magic_checks.check_types), 5)
+        self.assertEqual(len(result.magic_checks.skills), 3)
+        self.assertEqual(len(result.magic_checks.configs), 5)

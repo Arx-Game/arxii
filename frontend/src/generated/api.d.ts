@@ -18860,14 +18860,14 @@ export interface components {
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     PatchedRitualPatchRequest: {
       name?: string;
       description?: string;
       narrative_prose?: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatchRequest'];
+      check_config?: components['schemas']['RitualCheckConfigPatchRequest'];
     };
     /** @description Full scene representation with personas */
     PatchedSceneDetailRequest: {
@@ -20107,7 +20107,7 @@ export interface components {
      *     Exposes name, description, narrative_prose, dispatch metadata, the
      *     `input_schema` blob the frontend uses to render its perform form,
      *     `author_account_id` for client-side "authored by you" filtering,
-     *     and the nested `scene_action_config` for SCENE_ACTION rituals.
+     *     and the nested `check_config` when present.
      */
     Ritual: {
       readonly id: number;
@@ -20120,8 +20120,8 @@ export interface components {
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
       readonly author_account_id: number | null;
-      /** @description Return nested scene_action_config for SCENE_ACTION rituals, else None. */
-      readonly scene_action_config: {
+      /** @description Return nested check_config when present, else None. */
+      readonly check_config: {
         [key: string]: unknown;
       } | null;
       /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
@@ -20131,47 +20131,47 @@ export interface components {
       readonly max_participants: number | null;
     };
     /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatch: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
+     * @description Write serializer for the nested check_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualCheckConfigPatchRequest: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
-     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
-     *     rituals silently ignore scene_action_config if supplied.
+     *     optional nested ``check_config`` when the ritual has one. Rituals without a
+     *     config silently ignore check_config if supplied.
      */
     RitualPatch: {
       name: string;
       description: string;
       narrative_prose: string;
-      scene_action_config?: components['schemas']['RitualSceneActionConfigPatch'];
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatch: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
-    };
-    /**
-     * @description Write serializer for the nested scene_action_config on a PATCH.
-     *
-     *     Only fields that players can meaningfully update are included.
-     *     All are optional (partial update semantics). FK fields accept integer PKs
-     *     and are resolved to model instances in validate().
-     */
-    RitualSceneActionConfigPatchRequest: {
-      stat_id?: number;
-      skill_id?: number;
-      specialization_id?: number | null;
-      resonance_id?: number | null;
-      check_type_id?: number | null;
-      target_difficulty?: number;
+      check_config?: components['schemas']['RitualCheckConfigPatch'];
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/{id}/accept/.

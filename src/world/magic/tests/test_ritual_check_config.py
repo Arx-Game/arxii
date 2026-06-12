@@ -1,4 +1,4 @@
-"""Tests for RitualSceneActionConfig sidecar model."""
+"""Tests for RitualCheckConfig model."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -7,8 +7,8 @@ from django.test import TestCase
 from evennia_extensions.factories import AccountFactory
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
+    RitualCheckConfigFactory,
     RitualFactory,
-    RitualSceneActionConfigFactory,
 )
 from world.magic.models import Ritual
 
@@ -56,8 +56,8 @@ class RitualAuthorAccountTests(TestCase):
         self.assertNotEqual(account_pk, None)
 
 
-class RitualSceneActionConfigCreateTests(TestCase):
-    """Tests for creating RitualSceneActionConfig records."""
+class RitualCheckConfigCreateTests(TestCase):
+    """Tests for creating RitualCheckConfig records."""
 
     def test_create_config_for_scene_action_ritual(self):
         ritual = RitualFactory(
@@ -65,11 +65,11 @@ class RitualSceneActionConfigCreateTests(TestCase):
             service_function_path="",
             flow=None,
         )
-        config = RitualSceneActionConfigFactory(ritual=ritual)
-        self.assertEqual(ritual.scene_action_config, config)
+        config = RitualCheckConfigFactory(ritual=ritual)
+        self.assertEqual(ritual.check_config, config)
 
     def test_create_config_via_factory(self):
-        config = RitualSceneActionConfigFactory()
+        config = RitualCheckConfigFactory()
         self.assertIsNotNone(config.pk)
         self.assertEqual(config.ritual.execution_kind, RitualExecutionKind.SCENE_ACTION)
         self.assertIsNotNone(config.stat)
@@ -78,68 +78,74 @@ class RitualSceneActionConfigCreateTests(TestCase):
         self.assertEqual(config.target_difficulty, 3)
 
     def test_config_optional_fields_default_null(self):
-        config = RitualSceneActionConfigFactory()
+        config = RitualCheckConfigFactory()
         self.assertIsNone(config.specialization)
         self.assertIsNone(config.resonance)
+        self.assertIsNone(config.non_founder_target_difficulty)
 
     def test_one_to_one_constraint(self):
-        """A ritual can only have one scene action config."""
+        """A ritual can only have one check config."""
         ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
             service_function_path="",
             flow=None,
         )
-        RitualSceneActionConfigFactory(ritual=ritual)
+        RitualCheckConfigFactory(ritual=ritual)
         with self.assertRaises(IntegrityError):
-            RitualSceneActionConfigFactory(ritual=ritual)
+            RitualCheckConfigFactory(ritual=ritual)
 
     def test_config_str(self):
-        config = RitualSceneActionConfigFactory()
+        config = RitualCheckConfigFactory()
         self.assertIn(str(config.ritual_id), str(config))
 
+    def test_non_founder_target_difficulty_can_be_set(self):
+        """non_founder_target_difficulty is settable and stored."""
+        config = RitualCheckConfigFactory(non_founder_target_difficulty=5)
+        self.assertEqual(config.non_founder_target_difficulty, 5)
 
-class RitualSceneActionCleanTests(TestCase):
-    """Tests for sidecar invariant in Ritual.clean()."""
-
-    def test_scene_action_ritual_requires_sidecar(self):
-        """SCENE_ACTION ritual without sidecar fails clean()."""
-        ritual = RitualFactory(
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-            service_function_path="",
-            flow=None,
-        )
-        # Ritual is saved but has no sidecar; clean() should fail.
-        with self.assertRaises(ValidationError) as ctx:
-            ritual.clean()
-        self.assertIn("execution_kind", ctx.exception.message_dict)
-
-    def test_service_ritual_must_not_have_sidecar(self):
-        """SERVICE ritual with a sidecar fails clean()."""
+    def test_service_ritual_may_carry_config(self):
+        """SERVICE rituals are now permitted to carry a RitualCheckConfig."""
         ritual = RitualFactory(execution_kind=RitualExecutionKind.SERVICE)
-        RitualSceneActionConfigFactory(ritual=ritual)
-        ritual.refresh_from_db()
-        with self.assertRaises(ValidationError) as ctx:
-            ritual.clean()
-        self.assertIn("execution_kind", ctx.exception.message_dict)
-
-    def test_scene_action_ritual_with_sidecar_passes_clean(self):
-        """SCENE_ACTION ritual with sidecar passes clean()."""
-        ritual = RitualFactory(
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-            service_function_path="",
-            flow=None,
-        )
-        RitualSceneActionConfigFactory(ritual=ritual)
+        config = RitualCheckConfigFactory(ritual=ritual)
+        self.assertIsNotNone(config.pk)
+        # clean() must not raise for a SERVICE ritual with a config.
         ritual.refresh_from_db()
         ritual.clean()  # no raise
 
-    def test_new_unsaved_ritual_skips_sidecar_check(self):
-        """clean() on an unsaved ritual skips the sidecar DB check (no pk yet)."""
+
+class RitualCheckConfigCleanTests(TestCase):
+    """Tests for config invariant in Ritual.clean()."""
+
+    def test_scene_action_ritual_requires_config(self):
+        """SCENE_ACTION ritual without config fails clean()."""
+        ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        # Ritual is saved but has no config; clean() should fail.
+        with self.assertRaises(ValidationError) as ctx:
+            ritual.clean()
+        self.assertIn("execution_kind", ctx.exception.message_dict)
+
+    def test_scene_action_ritual_with_config_passes_clean(self):
+        """SCENE_ACTION ritual with config passes clean()."""
+        ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        RitualCheckConfigFactory(ritual=ritual)
+        ritual.refresh_from_db()
+        ritual.clean()  # no raise
+
+    def test_new_unsaved_ritual_skips_config_check(self):
+        """clean() on an unsaved ritual skips the config DB check (no pk yet)."""
         ritual = Ritual(
             name="Unsaved Scene Action",
             description="test",
             narrative_prose="test",
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         )
-        # Should not raise; pk is None so sidecar check is skipped.
+        # Should not raise; pk is None so config check is skipped.
         ritual.clean()
