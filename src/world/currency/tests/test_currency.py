@@ -401,3 +401,170 @@ class DebtTests(TestCase):
 
         with self.assertRaises(DjangoValidationError):
             repay_principal(debt, 1)
+
+
+class ContractTests(TestCase):
+    """Consent-gated contracts, settlement, defaults, garnishment (#928)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.societies.factories import OrganizationFactory
+
+        cls.org = OrganizationFactory()
+        cls.notary = OrganizationFactory()
+        cls.payee = PersonaFactory()
+
+    def _contract(self, **kwargs):
+        from world.currency.models import Contract
+
+        defaults = {
+            "proposer_organization": self.org,
+            "counterparty_persona": self.payee,
+            "title": "Stipend",
+            "terms": "100c per cycle, garnish on default",
+            "formality": "notarized",
+            "notary_organization": self.notary,
+        }
+        defaults.update(kwargs)
+        return Contract.objects.create(**defaults)
+
+    def _fund_org(self, amount):
+        from world.currency.services import get_or_create_treasury, transfer
+
+        treasury = get_or_create_treasury(self.org)
+        transfer(amount=amount, reason="seed", to_treasury=treasury)
+        return treasury
+
+    def test_signing_is_consent_and_charges_notary_fee(self) -> None:
+        from world.currency.constants import NOTARY_FEE_COPPERS
+        from world.currency.services import sign_contract
+
+        treasury = self._fund_org(5_000)
+        contract = self._contract()
+        sign_contract(contract)
+
+        contract.refresh_from_db()
+        treasury.refresh_from_db()
+        assert contract.status == "active"
+        assert contract.signed_at is not None
+        assert treasury.balance == 5_000 - NOTARY_FEE_COPPERS
+
+    def test_notarized_requires_notary(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.services import sign_contract
+
+        self._fund_org(5_000)
+        contract = self._contract(notary_organization=None)
+        with self.assertRaises(DjangoValidationError):
+            sign_contract(contract)
+
+    def test_handshake_signs_free_but_never_settles(self) -> None:
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from world.currency.services import settle_contract_cycle, sign_contract
+
+        contract = self._contract(formality="handshake", notary_organization=None)
+        sign_contract(contract)
+        contract.refresh_from_db()
+        assert contract.status == "active"
+        with self.assertRaises(DjangoValidationError):
+            settle_contract_cycle(contract)
+
+    def test_recurring_settlement_pays_each_cycle(self) -> None:
+        from world.currency.models import ContractTerm
+        from world.currency.services import (
+            get_or_create_purse,
+            settle_contract_cycle,
+            sign_contract,
+        )
+
+        self._fund_org(10_000)
+        contract = self._contract()
+        ContractTerm.objects.create(
+            contract=contract, payer_is_proposer=True, amount=100, recurring=True
+        )
+        sign_contract(contract)
+
+        settle_contract_cycle(contract)
+        settle_contract_cycle(contract)
+
+        purse = get_or_create_purse(self.payee.character_sheet)
+        purse.refresh_from_db()
+        assert purse.balance == 200
+        contract.refresh_from_db()
+        assert contract.status == "active"  # recurring never auto-completes
+
+    def test_oneshot_completes_contract(self) -> None:
+        from world.currency.models import ContractTerm
+        from world.currency.services import settle_contract_cycle, sign_contract
+
+        self._fund_org(10_000)
+        contract = self._contract(title="Ransom payment")
+        ContractTerm.objects.create(
+            contract=contract, payer_is_proposer=True, amount=2_000, recurring=False
+        )
+        sign_contract(contract)
+        settle_contract_cycle(contract)
+
+        contract.refresh_from_db()
+        assert contract.status == "completed"
+
+    def test_two_missed_cycles_default_then_garnishment(self) -> None:
+        from world.currency.models import ContractTerm, OrganizationTreasury, OrgIncomeStream
+        from world.currency.services import (
+            get_or_create_purse,
+            process_income_stream,
+            settle_contract_cycle,
+            sign_contract,
+        )
+
+        self._fund_org(1_000)  # just enough for the notary fee
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        contract = self._contract(garnish_stream=stream, garnish_percent=50)
+        ContractTerm.objects.create(
+            contract=contract, payer_is_proposer=True, amount=5_000, recurring=True
+        )
+        sign_contract(contract)  # spends the 1000 on the fee; org is broke
+
+        settle_contract_cycle(contract)
+        contract.refresh_from_db()
+        assert contract.status == "active"
+        assert contract.consecutive_missed == 1
+
+        settle_contract_cycle(contract)
+        contract.refresh_from_db()
+        assert contract.status == "defaulted"
+
+        # Default activates the agreed lien: half the stream's net diverts.
+        OrganizationTreasury.flush_instance_cache()
+        process_income_stream(stream)  # default graft 10% → net 900
+        purse = get_or_create_purse(self.payee.character_sheet)
+        purse.refresh_from_db()
+        assert purse.balance == 450  # 50% of 900
+
+    def test_garnishment_inert_before_default(self) -> None:
+        from world.currency.models import ContractTerm, OrgIncomeStream
+        from world.currency.services import (
+            get_or_create_purse,
+            process_income_stream,
+            sign_contract,
+        )
+
+        self._fund_org(10_000)
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        contract = self._contract(garnish_stream=stream, garnish_percent=50)
+        ContractTerm.objects.create(
+            contract=contract, payer_is_proposer=True, amount=100, recurring=True
+        )
+        sign_contract(contract)
+
+        process_income_stream(stream)
+
+        purse = get_or_create_purse(self.payee.character_sheet)
+        purse.refresh_from_db()
+        assert purse.balance == 0  # agreed lien, but no default — no enforcement

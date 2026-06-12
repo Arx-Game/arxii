@@ -75,3 +75,27 @@ class IncomeStreamKind(models.TextChoices):
 GRAFT_FLOOR_PCT = 1
 GRAFT_DEFAULT_PCT = 10
 GRAFT_MAX_PCT = 75
+
+
+class ContractFormality(models.TextChoices):
+    """Enforcement tiers (#928): notarized contracts settle; handshakes are RP."""
+
+    HANDSHAKE = "handshake", "Handshake"
+    NOTARIZED = "notarized", "Notarized"
+
+
+class ContractStatus(models.TextChoices):
+    """Lifecycle of a contract (#928)."""
+
+    PROPOSED = "proposed", "Proposed"
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+    DEFAULTED = "defaulted", "Defaulted"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+# Notarization fee (the formality sink), in coppers. Content-tunable later.
+NOTARY_FEE_COPPERS = 1_000
+
+# A notarized obligation defaults after this many consecutive missed cycles.
+CONTRACT_DEFAULT_AFTER_MISSES = 2

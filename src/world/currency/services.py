@@ -12,15 +12,22 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from world.currency.constants import (
+    CONTRACT_DEFAULT_AFTER_MISSES,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
     MINT_FEE_PCT,
+    NOTARY_FEE_COPPERS,
+    ContractFormality,
+    ContractStatus,
     format_coppers,
 )
 from world.currency.models import (
     CharacterPurse,
+    Contract,
+    ContractTerm,
     ContributionRecord,
     CurrencyInstrumentDetails,
     CurrencyTransfer,
@@ -234,6 +241,8 @@ def process_income_stream(
             to_treasury=treasury,
         )
 
+    _enforce_garnishments(stream, treasury, net)
+
     declared = net if declared_amount is None else declared_amount
     return IncomeDeclaration.objects.create(
         stream=stream,
@@ -433,3 +442,152 @@ def repay_principal(debt: DebtInstrument, amount: int) -> CurrencyTransfer:
         update_fields.append("active")
     debt.save(update_fields=update_fields)
     return row
+
+
+def _enforce_garnishments(
+    stream: OrgIncomeStream, treasury: OrganizationTreasury, net: int
+) -> None:
+    """Divert liened income from a defaulted contract's stream (#928).
+
+    The lien was agreed at signing; enforcement only begins after default —
+    the system enforces agreed terms, it never initiates antagonism.
+    """
+    for lien in Contract.objects.filter(
+        garnish_stream=stream,
+        status=ContractStatus.DEFAULTED,
+        garnish_percent__gt=0,
+    ):
+        amount = net * lien.garnish_percent // 100
+        if amount == 0:
+            continue
+        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
+        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
+        transfer(
+            amount=amount,
+            reason=f"garnishment: {lien.title}",
+            from_treasury=treasury,
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+
+
+def _party_accounts(
+    contract: Contract, *, proposer: bool
+) -> tuple[CharacterPurse | None, OrganizationTreasury | None]:
+    """Resolve one contract side to its money container (purse XOR treasury)."""
+    persona = contract.proposer_persona if proposer else contract.counterparty_persona
+    organization = (
+        contract.proposer_organization if proposer else contract.counterparty_organization
+    )
+    if persona is not None:
+        return get_or_create_purse(persona.character_sheet), None
+    if organization is None:  # pragma: no cover - DB constraint guards this
+        msg = "Contract side has no party."
+        raise ValidationError(msg)
+    return None, get_or_create_treasury(organization)
+
+
+@transaction.atomic
+def sign_contract(contract: Contract) -> Contract:
+    """The consent moment (#928): counterparty accepts the fixed terms.
+
+    Terms, stakes, and the default-consequence menu must already be on the
+    row — nothing about the deal may change after consent. Notarized
+    contracts charge the notary fee (a sink) from the proposer's side and
+    require a notary org. Handshakes activate with no machinery.
+    """
+    if contract.status != ContractStatus.PROPOSED:
+        msg = "Only a proposed contract can be signed."
+        raise ValidationError(msg)
+    if contract.formality == ContractFormality.NOTARIZED:
+        if contract.notary_organization is None:
+            msg = "Notarized contracts need a notary organization."
+            raise ValidationError(msg)
+        purse, treasury = _party_accounts(contract, proposer=True)
+        transfer(
+            amount=NOTARY_FEE_COPPERS,
+            reason=f"notary fee: {contract.title}",
+            from_purse=purse,
+            from_treasury=treasury,
+        )
+    contract.status = ContractStatus.ACTIVE
+    contract.signed_at = timezone.now()
+    contract.save(update_fields=["status", "signed_at"])
+    return contract
+
+
+def _pay_contract_term(contract: Contract, term: ContractTerm) -> CurrencyTransfer | None:
+    """Pay one term payer→payee; None on insufficient funds (a miss)."""
+    from_purse, from_treasury = _party_accounts(contract, proposer=term.payer_is_proposer)
+    to_purse, to_treasury = _party_accounts(contract, proposer=not term.payer_is_proposer)
+    try:
+        return transfer(
+            amount=term.amount,
+            reason=f"contract: {contract.title}",
+            from_purse=from_purse,
+            from_treasury=from_treasury,
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+    except ValidationError:
+        return None
+
+
+@transaction.atomic
+def settle_contract_cycle(contract: Contract) -> list[CurrencyTransfer]:
+    """Run one settlement cycle for an ACTIVE notarized contract (#928).
+
+    Due terms (unfulfilled one-shots + all recurring) pay payer→payee. A
+    funds-short cycle counts one miss; CONTRACT_DEFAULT_AFTER_MISSES
+    consecutive misses flips the contract DEFAULTED — activating the agreed
+    consequence menu (the garnishment lien is enforced by
+    process_income_stream; collateral/reputation are story content). When
+    no recurring terms remain and every one-shot is fulfilled, the
+    contract COMPLETES. Handshake contracts are never settled — RP only.
+    """
+    if not contract.is_enforced:
+        msg = "Handshake contracts are not enforced by the system."
+        raise ValidationError(msg)
+    if contract.status != ContractStatus.ACTIVE:
+        msg = "Only active contracts settle."
+        raise ValidationError(msg)
+
+    transfers: list[CurrencyTransfer] = []
+    missed = False
+    terms = list(contract.payment_terms.all())
+    for term in terms:
+        if term.fulfilled and not term.recurring:
+            continue
+        row = _pay_contract_term(contract, term)
+        if row is None:
+            missed = True
+            continue
+        transfers.append(row)
+        if not term.recurring:
+            term.fulfilled = True
+            term.save(update_fields=["fulfilled"])
+
+    _update_contract_status(contract, terms=terms, missed=missed)
+    return transfers
+
+
+def _update_contract_status(contract: Contract, *, terms: list[ContractTerm], missed: bool) -> None:
+    """Advance miss counters / default / completion after a settlement pass."""
+    if missed:
+        contract.consecutive_missed += 1
+        update_fields = ["consecutive_missed"]
+        if contract.consecutive_missed >= CONTRACT_DEFAULT_AFTER_MISSES:
+            contract.status = ContractStatus.DEFAULTED
+            update_fields.append("status")
+        contract.save(update_fields=update_fields)
+        return
+
+    if contract.consecutive_missed:
+        contract.consecutive_missed = 0
+        contract.save(update_fields=["consecutive_missed"])
+
+    has_recurring = any(t.recurring for t in terms)
+    all_oneshots_done = all(t.fulfilled for t in terms if not t.recurring)
+    if not has_recurring and all_oneshots_done:
+        contract.status = ContractStatus.COMPLETED
+        contract.save(update_fields=["status"])

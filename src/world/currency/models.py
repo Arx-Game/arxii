@@ -20,6 +20,8 @@ from world.currency.constants import (
     GRAFT_DEFAULT_PCT,
     GRAFT_FLOOR_PCT,
     GRAFT_MAX_PCT,
+    ContractFormality,
+    ContractStatus,
     Denomination,
     IncomeStreamKind,
 )
@@ -422,3 +424,155 @@ class DebtInstrument(SharedMemoryModel):
     @property
     def monthly_interest(self) -> int:
         return self.principal * self.interest_bps_monthly // 10000
+
+
+class Contract(SharedMemoryModel):
+    """A consent-gated agreement between two economic parties (#928).
+
+    Signing is THE consent moment — terms, stakes, and default consequences
+    are all fixed before the counterparty accepts (mirrors the combat
+    risk-acknowledgement pattern). Formality decides enforcement: NOTARIZED
+    contracts settle automatically and can default; HANDSHAKE contracts are
+    RP-only and the system never touches them after signing. Golden-rule
+    scoping: the system enforces agreed terms; it never initiates
+    antagonism.
+
+    Each side is exactly one of (persona, organization) — typed nullable
+    FK pairs like CurrencyTransfer.
+    """
+
+    proposer_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_proposed",
+    )
+    proposer_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_proposed",
+    )
+    counterparty_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_received",
+    )
+    counterparty_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="contracts_received",
+    )
+    title = models.CharField(max_length=120)
+    terms = models.TextField(help_text="The agreed terms, exactly as shown at the consent moment.")
+    formality = models.CharField(
+        max_length=20,
+        choices=ContractFormality.choices,
+        default=ContractFormality.HANDSHAKE,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ContractStatus.choices,
+        default=ContractStatus.PROPOSED,
+    )
+    notary_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contracts_notarized",
+        help_text="The org that notarized (required for NOTARIZED formality).",
+    )
+    # Default-consequence menu, agreed at signing (#928). All optional.
+    collateral_description = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Named collateral that cedes on default (story content).",
+    )
+    reputation_stake = models.BooleanField(
+        default=False,
+        help_text="Default carries reputation/standing damage.",
+    )
+    garnish_stream = models.ForeignKey(
+        OrgIncomeStream,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="garnishing_contracts",
+        help_text="Income stream liened at signing; garnished after default.",
+    )
+    garnish_percent = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of the liened stream's net diverted after default.",
+    )
+    signed_at = models.DateTimeField(null=True, blank=True)
+    consecutive_missed = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(proposer_persona__isnull=False)
+                    ^ models.Q(proposer_organization__isnull=False)
+                ),
+                name="contract_one_proposer",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(counterparty_persona__isnull=False)
+                    ^ models.Q(counterparty_organization__isnull=False)
+                ),
+                name="contract_one_counterparty",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Contract({self.title}: {self.status})"
+
+    @property
+    def is_enforced(self) -> bool:
+        return self.formality == ContractFormality.NOTARIZED
+
+
+class ContractTerm(SharedMemoryModel):
+    """One scheduled payment inside a contract (#928).
+
+    ``payer_is_proposer`` picks the direction; recurring terms run every
+    settlement cycle (stipends, pensions, patronage), one-shots run once
+    (ransom payment, hired muscle's fee).
+    """
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="payment_terms",
+    )
+    payer_is_proposer = models.BooleanField(
+        help_text="True: proposer pays counterparty; False: the reverse.",
+    )
+    amount = models.PositiveBigIntegerField(help_text="Coppers per cycle.")
+    recurring = models.BooleanField(
+        default=False,
+        help_text="Runs every settlement cycle until the contract ends.",
+    )
+    fulfilled = models.BooleanField(
+        default=False,
+        help_text="One-shot terms flip this after paying.",
+    )
+
+    class Meta:
+        ordering = ["contract_id", "id"]
+
+    def __str__(self) -> str:
+        direction = "proposer→counterparty" if self.payer_is_proposer else "counterparty→proposer"
+        return f"Term({self.amount}c {direction}{' recurring' if self.recurring else ''})"
