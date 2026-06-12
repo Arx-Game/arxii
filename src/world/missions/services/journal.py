@@ -133,6 +133,10 @@ def _node_default_compass(instance: MissionInstance, node: MissionNode) -> tuple
     """Room names + anywhere-flag for a node's own location default."""
     if node.location_mode == NodeLocationMode.ANYWHERE:
         return [], True
+    if node.location_mode == NodeLocationMode.INSTANCE:
+        if instance.spawned_room_id is not None:
+            return [instance.spawned_room.objectdb.db_key], False
+        return [], False
     if node.location_mode == NodeLocationMode.ANCHOR:
         if instance.anchor_room_id is not None:
             return [instance.anchor_room.objectdb.db_key], False

@@ -375,3 +375,91 @@ class JournalApiTests(TestCase):
         resolve_beat_option(self.instance, self.character, option_id=self.second_option.pk)
         res = self.client.get(f"/api/missions/journal/{self.instance.pk}/beat/")
         self.assertEqual(res.status_code, 404)
+
+
+class InstancedPlayTests(TestCase):
+    """#886 — option-driven instanced rooms (spawn, gate, reuse, teardown)."""
+
+    def setUp(self) -> None:
+        self.start_room, self.start_profile = _room("Inn Hallway")
+
+    def _spawning_run(self):
+        template, entry, entry_option, second, second_option = _graph("instanced")
+        entry_option.spawns_instance = True
+        entry_option.instance_name = "Darkened Interior"
+        entry_option.instance_description = "PLACEHOLDER a ransacked parlor"
+        entry_option.save()
+        second.location_mode = NodeLocationMode.INSTANCE
+        second.save(update_fields=["location_mode"])
+        character = _pc(self.start_room)
+        instance = staff_assign_mission(template, character)
+        participant = instance.participants.get(character=character)
+        return instance, entry, entry_option, second, second_option, character, participant
+
+    def test_resolving_spawning_option_moves_actor_into_instance(self) -> None:
+        from world.instances.models import InstancedRoom
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, _s, _so, character, participant = self._spawning_run()
+
+        resolve_option(instance, entry, entry_option, participant)
+
+        instance.refresh_from_db()
+        assert instance.spawned_room_id is not None
+        spawned = instance.spawned_room.objectdb
+        assert spawned.db_key == "Darkened Interior"
+        character.refresh_from_db()
+        assert character.location == spawned
+        assert InstancedRoom.objects.filter(room=spawned).exists()
+
+    def test_instance_mode_gates_to_spawned_room(self) -> None:
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, second, _so, _character, participant = self._spawning_run()
+
+        # Before the spawn, INSTANCE-mode options are nowhere.
+        assert build_option_list(instance, second, participant) == []
+
+        resolve_option(instance, entry, entry_option, participant)
+        instance.refresh_from_db()
+
+        # Inside the spawned room, the follow-up node is live.
+        live = build_option_list(instance, second, participant)
+        assert len(live) == 1
+
+    def test_spawn_is_idempotent_per_run(self) -> None:
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, _s, _so, character, participant = self._spawning_run()
+        resolve_option(instance, entry, entry_option, participant)
+        instance.refresh_from_db()
+        first_room_id = instance.spawned_room_id
+
+        # Walk out and resolve the doorway again — same interior.
+        character.db_location = self.start_room
+        character.save(update_fields=["db_location"])
+        instance.current_node = entry
+        instance.save(update_fields=["current_node"])
+        resolve_option(instance, entry, entry_option, participant)
+        instance.refresh_from_db()
+        assert instance.spawned_room_id == first_room_id
+        character.refresh_from_db()
+        assert character.location == instance.spawned_room.objectdb
+
+    def test_terminal_completion_tears_down_instance(self) -> None:
+        from world.instances.constants import InstanceStatus
+        from world.instances.models import InstancedRoom
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, second, second_option, _character, participant = (
+            self._spawning_run()
+        )
+        resolve_option(instance, entry, entry_option, participant)
+        instance.refresh_from_db()
+        spawned = instance.spawned_room.objectdb
+
+        resolve_option(instance, second, second_option, participant)
+
+        record = InstancedRoom.objects.filter(room_id=spawned.pk).first()
+        # Completed (occupants relocated) — or already deleted as ephemeral.
+        assert record is None or record.status == InstanceStatus.COMPLETED

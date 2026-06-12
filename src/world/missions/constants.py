@@ -135,11 +135,14 @@ class NodeLocationMode(models.TextChoices):
     at grant time) — keeps reusable trigger-pool templates location-flavored
     without authored rooms.
     ROOMS — options live in the node's authored ``locations`` set.
+    INSTANCE — options live only in the instanced room this run spawned
+    (#886); before anything spawns, they are nowhere.
     """
 
     ANYWHERE = "anywhere", "Anywhere"
     ANCHOR = "anchor", "Anchor Room"
     ROOMS = "rooms", "Authored Rooms"
+    INSTANCE = "instance", "Spawned Instance"
 
 
 class GiverKind(models.TextChoices):
