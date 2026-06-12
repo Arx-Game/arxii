@@ -149,11 +149,20 @@ What was built:
   combat-panel ceremony dialog (auto-opens on a pending offer, with the corruption
   advisory and an active-Audere strip). Encounter cleanup ends Audere with full
   reversion and deletes unanswered offers.
+- **Audere Majora / Crossing the Threshold (#543)** — the unified tier-crossing event.
+  Per-boundary `AudereMajoraThreshold` rows (levels 5/10/15/20) gate a cast-time offer
+  (harsher intensity/Soulfray thresholds + engagement + active Audere + an eligible
+  next-stage path). Accepting atomically advances the level boundary, writes
+  `CharacterPathHistory`, records an irreversible `AudereMajoraCrossing` receipt, and
+  applies the existing Audere Majora power-spike condition. Ceremony content
+  (vision/manifestation) is DB-authored and spoiler-private; the player's own
+  declaration pose is the public moment. REST inbox/respond at
+  `/api/magic/audere-majora/` + amber combat-panel ceremony dialog. Encounter cleanup
+  ends the condition and deletes unanswered offers.
 
 Documented for future (hook points built, logic not implemented):
 - Resonance/affinity bonuses (needs fashion, environment, Gift-resonance filter)
 - Technique revelation during Audere (needs Path progression)
-- Audere Majora threshold-crossing (needs tier advancement)
 - Relationship event intensity spikes (needs combat events, Thread integration)
 - Escalation tick triggers (owned by future combat/missions/challenges)
 - Contextual modifier evaluation (Trigger-like system for situational bonuses)
