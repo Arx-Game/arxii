@@ -418,9 +418,16 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     if is_staff:
         return True
 
-    # Whisper or place-scoped (table talk): only writer + receivers, even
-    # inside a public or private scene.
+    # Whisper, receiver-scoped mutter, or place-scoped (table talk): only
+    # writer + receivers, even inside a public or private scene. A mutter
+    # WITHOUT receiver rows is the public fragment (#905) — what the room
+    # heard — and falls through to scene-level visibility.
     if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
+        return is_receiver or is_writer
+    if (
+        interaction.mode == InteractionMode.MUTTER
+        and InteractionReceiver.objects.filter(interaction=interaction).exists()
+    ):
         return is_receiver or is_writer
 
     # Private scene: all scene participants
@@ -735,3 +742,66 @@ def resolve_persona_display(
 
     linked = discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
     return f"{linked.name} (as {persona.name})", True
+
+
+def mutter_fragment(text: str) -> str:
+    """The room-audible fragment of a mutter (#905): random word leak.
+
+    Classic MUSH mutter, per Apostate's ruling: roughly one word in three
+    survives; elided runs collapse to a single "...". At least one word
+    always leaks (a mutter is audible, that's the point — and the risk).
+    """
+    import random  # noqa: PLC0415
+
+    rng = random.SystemRandom()
+    words = text.split()
+    if not words:
+        return "..."
+    kept_flags = [rng.random() < 1 / 3 for _ in words]
+    if not any(kept_flags):
+        kept_flags[rng.randrange(len(words))] = True
+    parts: list[str] = []
+    for word, kept in zip(words, kept_flags, strict=True):
+        if kept:
+            parts.append(word)
+        elif not parts or parts[-1] != "...":
+            parts.append("...")
+    return " ".join(parts)
+
+
+def record_mutter_interaction(
+    *,
+    character: ObjectDB,
+    receivers: list[ObjectDB],
+    content: str,
+) -> tuple[Interaction | None, Interaction | None]:
+    """Record a mutter as TWO interactions (#905): full + fragment.
+
+    The full text persists receiver-scoped (exactly like a whisper); the
+    fragment persists PUBLIC — because the fragment is what the room
+    heard, and the log never shows more than the room heard (#900/#903).
+    Returns (full, fragment); ephemeral scenes push without persisting and
+    return (None, None) exactly like the other recorders.
+    """
+    receiver_personas: list[Persona] = []
+    for receiver in receivers:
+        try:
+            persona = receiver.sheet_data.primary_persona
+        except ObjectDoesNotExist:
+            continue
+        if persona is not None:
+            receiver_personas.append(persona)
+
+    full = record_interaction(
+        character=character,
+        content=content,
+        mode=InteractionMode.MUTTER,
+        receivers=receiver_personas,
+        target_personas=receiver_personas or None,
+    )
+    fragment = record_interaction(
+        character=character,
+        content=mutter_fragment(content),
+        mode=InteractionMode.MUTTER,
+    )
+    return full, fragment

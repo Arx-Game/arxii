@@ -193,6 +193,67 @@ class EmitAction(Action):
 
 
 @dataclass
+class MutterAction(Action):
+    """Mutter to specific listeners; the room catches a fragment (#905).
+
+    Receivers hear (and their feed records) the full text; everyone else
+    in the room hears a random-word fragment — which is also what the
+    public log shows, preserving the never-more-than-the-room-heard
+    invariant. Risky by design: the wrong word can leak.
+    """
+
+    key: str = "mutter"
+    name: str = "Mutter"
+    icon: str = "whisper"
+    category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.AREA
+
+    intent_event: str | None = "before_mutter"
+    result_event: str | None = "mutter"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.interaction_services import (  # noqa: PLC0415
+            mutter_fragment,
+            record_mutter_interaction,
+        )
+
+        text = kwargs.get("text", "")
+        receivers: list[ObjectDB] = kwargs.get("receivers", [])
+        if not text:
+            return ActionResult(success=False, message="Mutter what?")
+        if not receivers:
+            return ActionResult(success=False, message="Mutter to whom?")
+
+        sdm = context.scene_data if context else SceneDataManager()
+
+        fragment = mutter_fragment(text)
+        receiver_ids = {receiver.pk for receiver in receivers}
+        # Telnet delivery: full text to receivers, fragment to the rest.
+        for receiver in receivers:
+            receiver_state = sdm.initialize_state_for_object(receiver)
+            send_message(receiver_state, f'{actor.key} mutters, "{text}"')
+        location = actor.location
+        if location is not None:
+            for obj in location.contents:
+                if obj.pk in receiver_ids or obj.pk == actor.pk:
+                    continue
+                if not hasattr(obj, "msg"):
+                    continue
+                bystander_state = sdm.initialize_state_for_object(obj)
+                send_message(bystander_state, f'{actor.key} mutters, "{fragment}"')
+
+        record_mutter_interaction(character=actor, receivers=receivers, content=text)
+
+        return ActionResult(success=True)
+
+
+@dataclass
 class PemitAction(Action):
     """Staff-only private narrative emit to an explicit receiver list (#906).
 

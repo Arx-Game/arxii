@@ -163,3 +163,53 @@ class ResultInteractionRoutingTests(TestCase):
         )
         assert interaction.place_id is None
         assert can_view_interaction(interaction, self.outsider) is True
+
+
+class MutterDeliveryTests(TestCase):
+    """#905 — partial echo: full to receivers, fragment to the room."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.outsider = PersonaFactory()
+
+    def test_fragment_leaks_subset_with_elision(self) -> None:
+        from world.scenes.interaction_services import mutter_fragment
+
+        text = "meet me behind the granary at midnight and bring the ledger"
+        fragment = mutter_fragment(text)
+
+        original_words = set(text.split())
+        leaked = [w for w in fragment.split() if w != "..."]
+        assert leaked  # at least one word always escapes
+        assert all(word in original_words for word in leaked)
+        assert "... ..." not in fragment  # runs collapse
+
+    def test_fragment_of_empty_text(self) -> None:
+        from world.scenes.interaction_services import mutter_fragment
+
+        assert mutter_fragment("") == "..."
+
+    def test_mutter_delivery_scopes_full_and_publishes_fragment(self) -> None:
+        from world.scenes.models import Interaction
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            delivery=ActionDelivery.MUTTER,
+        )
+        before = set(Interaction.objects.values_list("pk", flat=True))
+        full = _create_result_interaction(action_request=request, result=_make_enhanced_result())
+        new_rows = Interaction.objects.exclude(pk__in=before)
+
+        assert full.mode == InteractionMode.MUTTER
+        # Full result: receiver-scoped like a whisper.
+        assert can_view_interaction(full, self.target) is True
+        assert can_view_interaction(full, self.outsider) is False
+        # A second, PUBLIC fragment interaction exists — what the room heard.
+        fragment = new_rows.exclude(pk=full.pk).get()
+        assert fragment.mode == InteractionMode.MUTTER
+        assert can_view_interaction(fragment, self.outsider) is True

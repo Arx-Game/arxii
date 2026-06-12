@@ -24,6 +24,7 @@ class InteractionMode(models.TextChoices):
     EMIT = "emit", "Emit"
     SAY = "say", "Say"
     WHISPER = "whisper", "Whisper"
+    MUTTER = "mutter", "Mutter"
     SHOUT = "shout", "Shout"
     ACTION = "action", "Action"
     OUTCOME = "outcome", "Outcome"

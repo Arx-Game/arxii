@@ -10,6 +10,7 @@ from evennia.utils import search
 
 from actions.definitions.communication import (
     EmitAction,
+    MutterAction,
     PemitAction,
     PoseAction,
     SayAction,
@@ -180,6 +181,37 @@ class CmdPose(ArxCommand):
         if targets:
             result["targets"] = targets
         return result
+
+
+class CmdMutter(ArxCommand):
+    """Mutter to specific listeners; the room catches a fragment (#905).
+
+    Usage: mutter <name>[,<name>...]=<text>
+    """
+
+    key = "mutter"
+    locks = "cmd:all()"
+    action = MutterAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if "=" not in args:
+            msg = "Usage: mutter <name>[,<name>...]=<text>"
+            raise CommandError(msg)
+        names_part, text = args.split("=", 1)
+        text = text.strip()
+        names = [n.strip() for n in names_part.split(",") if n.strip()]
+        if not names or not text:
+            msg = "Usage: mutter <name>[,<name>...]=<text>"
+            raise CommandError(msg)
+        receivers = []
+        for name in names:
+            target = self.caller.search(name)
+            if not target:
+                msg = f"Could not find '{name}'."
+                raise CommandError(msg)
+            receivers.append(target)
+        return {"receivers": receivers, "text": text}
 
 
 class CmdPemit(ArxCommand):

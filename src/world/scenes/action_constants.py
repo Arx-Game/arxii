@@ -35,13 +35,16 @@ class ActionDelivery(models.TextChoices):
 
     NOT a fork of InteractionMode: delivery is a routing strategy that maps
     onto (mode, receivers, place) at interaction-creation time. TABLE_TALK
-    has no mode of its own — it is place-scoping. EMIT (pemit GM surface)
-    and MUTTER (partial echo) are deferred follow-ups.
+    has no mode of its own — it is place-scoping. MUTTER (#905) is the
+    partial echo: receivers get the full text, the room gets a random-word
+    fragment (two interactions — the fragment is public BECAUSE it is what
+    the room heard). EMIT (pemit GM surface) lives on the staff action.
     """
 
     POSE = "pose", "Pose (whole room)"
     WHISPER = "whisper", "Whisper (target only)"
     TABLE_TALK = "table_talk", "Table talk (your place)"
+    MUTTER = "mutter", "Mutter (partial echo)"
 
 
 DIFFICULTY_VALUES: dict[str, int] = {
