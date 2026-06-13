@@ -245,6 +245,24 @@ class ConsequenceEffect(SharedMemoryModel):
     )
     legend_description_template = models.TextField(blank=True, default="")
 
+    # Capture effects (#931). Both optional: a captor org may be unnamed, and
+    # the off-screen-loss flag defaults to the safe "never lost off-screen".
+    capture_captor_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="capture_consequence_effects",
+        help_text="The org that takes the captive (and issues any ransom). Optional.",
+    )
+    capture_offscreen_loss_allowed = models.BooleanField(
+        default=False,
+        help_text=(
+            "Authored default for the captive's off-screen-loss flag. False keeps"
+            " the captive un-loseable while the player is away."
+        ),
+    )
+
     class Meta:
         ordering = ["execution_order"]
 

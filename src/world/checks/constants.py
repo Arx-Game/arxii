@@ -16,6 +16,7 @@ class EffectType(models.TextChoices):
     GRANT_CODEX = "grant_codex", "Grant Codex Entry"
     MAGICAL_SCARS = "magical_scars", "Mage Scars"
     LEGEND_AWARD = "legend_award", "Award Legend"
+    CAPTURE = "capture", "Capture"
 
 
 class EffectTarget(models.TextChoices):
