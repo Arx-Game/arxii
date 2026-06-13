@@ -193,6 +193,12 @@ skipped-design tasks, just edit and commit.
 
 ### 4. Sync with main
 
+Sync **once here** to surface conflicts and migration collisions early and to
+run CI against a recent base. You do **not** need to re-sync every time main
+moves afterward — the merge queue (#991) re-integrates the PR against the
+latest main at merge time, so there is no "update branch before merge" step and
+no re-sync cascade when neighbouring PRs land.
+
 Run `scripts/sync-with-main.sh <branch>`. The script automatically picks the
 right strategy:
 - **Branch not yet on origin (local-only):** rebase onto origin/main. Clean
@@ -236,7 +242,13 @@ in the issue body, so there is no spec-file link to pass.
 > is for design and implementation, not waiting.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): post a brief status comment, exit the session.
+- `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh
+  <pr-N>` (arms squash auto-merge), post a brief status comment, exit the
+  session. **Do NOT re-sync with main or merge by hand.** The merge queue
+  re-tests the PR on top of the latest main and merges it in order once a human
+  approves — that human approval is the only remaining gate. If main moves while
+  the PR waits for approval, the queue handles the re-integration; the agent
+  does nothing further.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 
@@ -374,6 +386,7 @@ where it stopped, what the human should decide.
 | File a follow-up issue | `scripts/file-followup.sh <title> <body-path> [labels...]` |
 | Comment on an issue | `scripts/comment-on-issue.sh <issue> <body-path>` |
 | Watch CI | `scripts/watch-ci.sh <pr>` |
+| Enqueue for the merge queue | `scripts/enqueue-pr.sh <pr>` |
 | Read failing log | `scripts/get-ci-failure.sh <pr> <check-name>` |
 | Read unread PR comments | `scripts/read-pr-comments.sh <pr>` |
 | Clean up after merge | `scripts/post-merge-cleanup.sh <branch> <pr>` |
