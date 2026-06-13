@@ -37,3 +37,5 @@ class ModifierSourceKind(models.TextChoices):
     EFFORT = "effort", "Effort"
     FATIGUE = "fatigue", "Fatigue"
     STRAIN = "strain", "Strain"
+    AFFINITY = "affinity", "Affinity"
+    PULL = "pull", "Combat Pull"
