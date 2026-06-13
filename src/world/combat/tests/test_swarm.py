@@ -147,3 +147,25 @@ class SwarmResolutionTests(TestCase):
             for sheet in (sheet_a, sheet_b)
         ]
         self.assertTrue(any(h < 100 for h in healths))
+
+
+class SwarmAttritionArcTests(TestCase):
+    """End-to-end attritional curve: repeated damage drives swarm to DEFEATED (#875)."""
+
+    def test_swarm_attrition_to_defeat(self):
+        swarm = SwarmOpponentFactory(swarm_count=20, max_swarm_count=20, body_toughness=5)
+        counts = []
+        for _ in range(10):
+            if swarm.status == OpponentStatus.DEFEATED:
+                break
+            apply_damage_to_opponent(swarm, 25)  # 5 bodies/hit
+            swarm.refresh_from_db()
+            counts.append(swarm.swarm_count)
+        self.assertEqual(swarm.swarm_count, 0)
+        self.assertEqual(swarm.status, OpponentStatus.DEFEATED)
+        self.assertEqual(counts, sorted(counts, reverse=True))  # monotonic decline
+
+    def test_attack_volume_declines_with_count(self):
+        hi = swarm_attack_count(30, bodies_per_attack=6, active_pc_count=4)
+        lo = swarm_attack_count(6, bodies_per_attack=6, active_pc_count=4)
+        self.assertGreater(hi, lo)

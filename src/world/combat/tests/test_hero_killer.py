@@ -2,9 +2,10 @@
 
 from django.test import TestCase
 
-from world.combat.constants import EncounterOutcome, OpponentStatus
+from world.combat.constants import EncounterOutcome, OpponentStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
+    CombatParticipantFactory,
     HeroKillerOpponentFactory,
 )
 from world.combat.services import _classify_encounter_outcome, apply_damage_to_opponent
@@ -36,3 +37,14 @@ class ForcedEscapeFlagTests(TestCase):
         hk.status = OpponentStatus.FLED  # no longer on the field
         hk.save(update_fields=["status"])
         self.assertFalse(encounter.forced_escape)
+
+
+class HeroKillerEscapeArcTests(TestCase):
+    """End-to-end escape arc: Hero Killer survives all damage; all-fled PCs → FLED (#875)."""
+
+    def test_all_pcs_flee_yields_fled_not_victory(self):
+        encounter = CombatEncounterFactory()
+        HeroKillerOpponentFactory(encounter=encounter)
+        CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.FLED)
+        self.assertEqual(_classify_encounter_outcome(encounter), EncounterOutcome.FLED)
+        self.assertTrue(encounter.forced_escape)
