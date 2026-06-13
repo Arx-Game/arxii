@@ -44,14 +44,17 @@ _TEMPLATE_CONSEQUENCES_PREFETCH = Prefetch(
 class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
     """Read-only endpoint for ConsequenceOutcome records.
 
-    Returns the roulette display recomputed from the persisted pool +
-    selected_consequence on every read.
+    Returns the roulette display recomputed on every read — from the persisted
+    pool + selected_consequence, or, when pool is None (#865), reconstructed from
+    the authored approach/template consequence links.
 
     Queryset scoping:
     - Staff users see all outcomes.
-    - Non-staff users see only outcomes for characters they own
+    - Non-staff users see outcomes for characters they own
       (chain: ConsequenceOutcome.character → CharacterSheet.character →
-      ObjectDB.db_account == request.user).
+      ObjectDB.db_account == request.user), AND outcomes whose scene they
+      participate in (#866) — reached via combat_interaction.scene or
+      challenge_record.challenge_instance.situation_instance.scene.
 
     Write operations are intentionally absent — outcomes are append-only and
     written by the resolution pipeline.
