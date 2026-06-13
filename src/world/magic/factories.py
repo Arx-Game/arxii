@@ -24,6 +24,7 @@ from world.magic.constants import (
     AlterationTier,
     CantripArchetype,
     EffectKind,
+    MagicMilestoneKind,
     ParticipationRule,
     PendingAlterationStatus,
     ResonanceValence,
@@ -50,6 +51,7 @@ from world.magic.models import (
     IntensityTier,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
+    MagicProgressionMilestone,
     MishapPoolTier,
     Motif,
     MotifResonance,
@@ -2545,3 +2547,21 @@ def ensure_audere_majora_threshold(
         vision_text="[PLACEHOLDER VISION — real text is authored in the DB]",
         manifestation_text="[PLACEHOLDER MANIFESTATION — real text is authored in the DB]",
     )
+
+
+# =============================================================================
+# Progression Dashboard (#536) — MagicProgressionMilestone factory
+# =============================================================================
+
+
+class MagicProgressionMilestoneFactory(factory.django.DjangoModelFactory):
+    """Factory for MagicProgressionMilestone — authored stage/kind → CodexEntry join."""
+
+    class Meta:
+        model = MagicProgressionMilestone
+        django_get_or_create = ("stage", "kind")
+
+    stage = PathStage.POTENTIAL
+    kind = MagicMilestoneKind.THREAD_WEAVING
+    codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
+    sort_order = 0

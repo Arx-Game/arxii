@@ -109,6 +109,34 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 
 **Post-CG progression unlock order:** cantrip (L1) → resonance discovery (L2) → thread weaving + motif (L3) → technique development + anima ritual (L4) → second gift (L5) → deeper magic (L6+)
 
+### Progression dashboard (BUILT — #536)
+
+A read-first surface that exposes this unlock order to players at `/magic/progression`,
+organized by PathStage (Prospect→Transcendent, current stage highlighted). It does **not**
+introduce new gates — it aggregates each feature's *existing* eligibility check and is
+**discovery-gated by the codex**: a milestone is shown in full (eligibility +
+what's-missing + a CTA routing to that feature's own surface) only for things the
+character knows exist (`CharacterCodexKnowledge` / `CodexEntry.is_public`); uncovered
+knowledge shows a "learn more" teaser; undiscovered milestones collapse to a single
+content-free "mystery" slot per stage (count hidden, to preserve discovery drama).
+
+What was built:
+- `MagicProgressionMilestone` — thin authored join (PathStage × `MagicMilestoneKind` ×
+  `CodexEntry`) carrying `route_name`/`sort_order`. The one new persistent model; the
+  per-feature gates already existed.
+- `services/progression_dashboard.build_progression_dashboard(sheet)` — per-kind
+  eligibility resolver delegating to existing checks (`_current_path_stage`,
+  `has_pending_alterations`, `is_protagonism_locked`, weaving/anima/gift/resonance
+  presence). XP cost is intentionally left to each feature's own authored source — what
+  costs XP is an ongoing tuning question, never decided here.
+- `GET /api/magic/progression/` (`MagicProgressionView`, mirrors `ThreadHubSummaryView`).
+- Frontend `MagicProgressionPage` + `StageSection`/`MilestoneCard`/`MysteryMilestoneSlot`
+  + `useMagicProgression` hook; nav entry in `Header`.
+
+Requires authored `CodexEntry` rows + `PathCodexGrant`s for the magic features (and
+`MagicProgressionMilestone` rows) to surface real content — engine only; content
+authoring is separate.
+
 ## What's Needed for MVP
 
 ### Technique Use Flow (Design Spec Complete)
@@ -307,9 +335,9 @@ What was built:
   (10 E2E-ish cases, payload-exact on both resolution paths), `PendingAlterationBanner.test.tsx`
   (4 cases), `XpKudosPage.alterationGate.test.tsx` (3 cases).
 
-Known gap: `accept_thread_weaving_unlock` spends XP without checking the scar gate
-(`AlterationGateError` is only raised in `spend_xp_on_unlock`). A follow-up issue is being
-filed at PR time.
+Both magic XP-spend sites now enforce the gate: `accept_thread_weaving_unlock` and
+`cross_thread_xp_lock` both raise `AlterationGateError` / `ProtagonismLockedError` before
+any XP is deducted. Fixed in #898.
 
 **Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
 

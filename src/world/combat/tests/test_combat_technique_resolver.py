@@ -70,7 +70,12 @@ def _build_resolver(
         action=action,
         pull_flat_bonus=pull_flat_bonus,
         fatigue_category=ActionCategory.PHYSICAL,
-        offense_check_type=MagicMock(),
+        # A real CheckType (not MagicMock) so _roll_check exercises the live
+        # collect_check_modifiers path — equipment/character branches run for
+        # real instead of being skipped by the isinstance(check_type, Model)
+        # guard. The guard remains for callers that legitimately mock the
+        # pipeline; this helper no longer relies on it (#867).
+        offense_check_type=CheckTypeFactory(),
         offense_check_fn=None,
     )
 
@@ -126,6 +131,43 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
 
         # Bare character: breakdown total == effort, plus pull_flat_bonus == 3.
         self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], expected_effort + 3)
+
+    def test_pull_bonus_routed_as_labeled_contribution(self) -> None:
+        """pull_flat_bonus must be expressed as a labeled PULL ModifierContribution
+        routed through collect_check_modifiers, so the recorded breakdown is
+        exhaustive — its total alone equals extra_modifiers (no out-of-band additive
+        the provenance UI can't see)."""
+        from world.checks.constants import ModifierSourceKind
+
+        resolver = _build_resolver(pull_flat_bonus=5, effort_level=EffortLevel.MEDIUM)
+
+        captured: dict = {}
+        from world.checks import services as checks_services
+
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            captured["extra_contributions"] = kwargs.get("extra_contributions")
+            return real_collect(sheet, check_type, **kwargs)
+
+        with (
+            patch("world.combat.services.perform_check") as mock_perform,
+            patch(
+                "world.combat.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolver._roll_check()
+
+        extras = captured["extra_contributions"]
+        pull_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.PULL]
+        self.assertEqual(len(pull_contribs), 1)
+        self.assertEqual(pull_contribs[0].value, 5)
+        self.assertEqual(pull_contribs[0].source_label, "Combat pull")
+        # MEDIUM effort = 0, bare character → breakdown total alone carries the pull,
+        # so extra_modifiers == 5 with no separate additive term.
+        self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], 5)
 
 
 class CombatTechniqueResolverApplyDamageTests(TestCase):
