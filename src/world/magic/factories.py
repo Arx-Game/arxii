@@ -346,6 +346,174 @@ class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
     damage_per_extra_sl = 0
 
 
+# ---------------------------------------------------------------------------
+# Passive action archetypes (#874)
+#
+# A passive IS a Technique declared in a CombatRoundAction's ``*_passive`` slot.
+# ``_apply_passive_technique`` applies its authored ``TechniqueAppliedCondition``
+# rows with NO roll (fixed scaling at ``intensity`` / each row's min SL) and grants
+# ``combo_opening_probing`` to active opponents. These four factories author one of
+# each archetype as integration-test content that doubles as future seed data
+# (factories-as-seed-data): defend / buff / debuff / combo-opener. They REUSE the
+# existing technique + condition factories rather than minting new model surface.
+# ---------------------------------------------------------------------------
+
+
+class DefendPassiveTechniqueFactory(TechniqueFactory):
+    """A SELF defensive passive: raises the PC's incoming-damage resistance.
+
+    Built around the REAL damage-mitigation wiring — ``ConditionResistanceModifier``
+    rows on the applied ``ConditionTemplate``, which ``apply_damage_to_participant``
+    reads via ``character.conditions.resistance_modifier(damage_type)`` to subtract
+    from incoming damage. So declaring this passive measurably lowers an NPC attack's
+    damage the same round (passives resolve before the focused/NPC actions).
+
+    The resistance is all-types by default (``damage_type=None``). Tunables are
+    passed through the ``defend_condition`` post-generation hook:
+    ``DefendPassiveTechniqueFactory(defend_condition__resist_amount=30,
+    defend_condition__damage_type=<DamageType>)``. Pass ``defend_condition=<template>``
+    to attach the resistance to a pre-built ConditionTemplate.
+    """
+
+    action_category = ActionCategory.PHYSICAL
+    intensity = 4
+    combo_opening_probing = None
+
+    @factory.post_generation
+    def defend_condition(self, create, extracted, **kwargs):
+        if not create:
+            return
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+        )
+
+        resist_amount = kwargs.get("resist_amount", 25)
+        damage_type = kwargs.get("damage_type")
+        # ConditionTemplateFactory auto-sequences a unique ``name`` when omitted.
+        condition = extracted or ConditionTemplateFactory()
+        # The damage-mitigation row the combat resolver actually honors.
+        ConditionResistanceModifierFactory(
+            condition=condition,
+            stage=None,
+            damage_type=damage_type,
+            modifier_value=resist_amount,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self,
+            condition=condition,
+            target_kind="self",
+            base_severity=1,
+            minimum_success_level=1,
+        )
+
+
+class BuffPassiveTechniqueFactory(TechniqueFactory):
+    """A SELF/ALLY offensive passive: raises an offensive/trait modifier term.
+
+    Applies a ``ConditionTemplate`` carrying a ``ConditionModifierEffect`` that adds
+    to a ModifierTarget term (e.g. an offensive trait), so the buffed actor's later
+    rolls run hotter. Tunables via the ``buff_condition`` hook:
+    ``BuffPassiveTechniqueFactory(buff_condition__value=15,
+    buff_condition__target_kind="ally")``.
+    """
+
+    action_category = ActionCategory.PHYSICAL
+    intensity = 4
+    combo_opening_probing = None
+
+    @factory.post_generation
+    def buff_condition(self, create, extracted, **kwargs):
+        if not create:
+            return
+        from world.conditions.factories import (
+            ConditionModifierEffectFactory,
+        )
+
+        value = kwargs.get("value", 10)
+        target_kind = kwargs.get("target_kind", "self")
+        condition = extracted or ConditionTemplateFactory()
+        ConditionModifierEffectFactory(
+            condition=condition,
+            stage=None,
+            value=value,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self,
+            condition=condition,
+            target_kind=target_kind,
+            base_severity=1,
+            minimum_success_level=1,
+        )
+
+
+class DebuffPassiveTechniqueFactory(TechniqueFactory):
+    """An ENEMY debuff passive: lowers an opponent's modifier term.
+
+    Applies a ``ConditionTemplate`` carrying a NEGATIVE ``ConditionModifierEffect`` to
+    every active enemy, dragging down the targeted term (offense/defense). Tune the
+    magnitude via ``DebuffPassiveTechniqueFactory(debuff_condition__value=-15)``.
+    """
+
+    action_category = ActionCategory.PHYSICAL
+    intensity = 4
+    combo_opening_probing = None
+
+    @factory.post_generation
+    def debuff_condition(self, create, extracted, **kwargs):
+        if not create:
+            return
+        from world.conditions.factories import (
+            ConditionModifierEffectFactory,
+        )
+
+        value = kwargs.get("value", -10)
+        condition = extracted or ConditionTemplateFactory()
+        ConditionModifierEffectFactory(
+            condition=condition,
+            stage=None,
+            value=value,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self,
+            condition=condition,
+            target_kind="enemy",
+            base_severity=1,
+            minimum_success_level=1,
+        )
+
+
+class ComboOpeningPassiveTechniqueFactory(TechniqueFactory):
+    """A combo-opening passive: feeds per-opponent probing (combo unlock fuel).
+
+    Carries ``combo_opening_probing`` so ``_apply_passive_technique`` raises every
+    active opponent's probing counter (which satisfies ``ComboDefinition`` probing
+    gates). Optionally attaches a small ENEMY debuff via
+    ``ComboOpeningPassiveTechniqueFactory(opener_debuff=True)``.
+    """
+
+    action_category = ActionCategory.PHYSICAL
+    intensity = 4
+    combo_opening_probing = 3
+
+    @factory.post_generation
+    def opener_debuff(self, create, extracted, **kwargs):
+        if not create or not extracted:
+            return
+        from world.conditions.factories import (
+            ConditionModifierEffectFactory,
+        )
+
+        condition = ConditionTemplateFactory()
+        ConditionModifierEffectFactory(condition=condition, stage=None, value=-5)
+        TechniqueAppliedConditionFactory(
+            technique=self,
+            condition=condition,
+            target_kind="enemy",
+            base_severity=1,
+            minimum_success_level=1,
+        )
+
+
 class IntensityTierFactory(factory.django.DjangoModelFactory):
     """Factory for IntensityTier - configurable power thresholds."""
 

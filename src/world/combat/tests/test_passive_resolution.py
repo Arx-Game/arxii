@@ -16,20 +16,28 @@ from world.combat.factories import (
     ComboDefinitionFactory,
     ComboLearningFactory,
     ComboSlotFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
 )
-from world.combat.models import CombatRoundAction
+from world.combat.models import CombatOpponentAction, CombatRoundAction
 from world.combat.services import (
     _apply_passive_technique,
     detect_available_combos,
     resolve_round,
 )
-from world.conditions.models import ConditionInstance
+from world.conditions.factories import DamageTypeFactory
+from world.conditions.models import ConditionInstance, ConditionResistanceModifier
 from world.magic.factories import (
+    BuffPassiveTechniqueFactory,
+    ComboOpeningPassiveTechniqueFactory,
+    DebuffPassiveTechniqueFactory,
+    DefendPassiveTechniqueFactory,
     EffectTypeFactory,
     GiftFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
+from world.magic.models.techniques import ConditionTargetKind
 
 
 class ApplyPassiveTechniqueSelfBuffTest(TestCase):
@@ -87,10 +95,6 @@ class ResolveRoundAppliesPassiveTest(TestCase):
     drives the round, the passive's authored ``ConditionInstance`` must exist on
     the PC's character — proving passives land at the resolution layer, before
     focused/NPC actions resolve.
-
-    TODO(#874 Task 9): strengthen to a damage-delta assertion (NPC attack damage
-    measurably lower against a defend-archetype buff) once authored defend
-    archetypes exist.
     """
 
     def setUp(self):
@@ -142,6 +146,143 @@ class ResolveRoundAppliesPassiveTest(TestCase):
             success_level=self.applied.minimum_success_level,
         )
         self.assertEqual(instances.first().severity, expected_severity)
+
+
+class PassiveArchetypeFactoryTest(TestCase):
+    """Each authored passive archetype is a valid Technique with the right rows.
+
+    These are the four #874 Done-when archetypes (factories-as-seed-data). They
+    must each build a real ``Technique`` carrying the correct
+    ``TechniqueAppliedCondition`` target_kind and/or ``combo_opening_probing``.
+    """
+
+    def test_defend_archetype_self_resistance(self):
+        damage_type = DamageTypeFactory()
+        tech = DefendPassiveTechniqueFactory(
+            defend_condition__resist_amount=20,
+            defend_condition__damage_type=damage_type,
+        )
+        row = tech.condition_applications.get()
+        self.assertEqual(row.target_kind, ConditionTargetKind.SELF)
+        # The applied condition carries the real damage-mitigation row.
+        mod = ConditionResistanceModifier.objects.get(condition=row.condition)
+        self.assertEqual(mod.modifier_value, 20)
+        self.assertEqual(mod.damage_type_id, damage_type.pk)
+
+    def test_buff_archetype_self_modifier(self):
+        tech = BuffPassiveTechniqueFactory(buff_condition__value=12)
+        row = tech.condition_applications.get()
+        self.assertEqual(row.target_kind, ConditionTargetKind.SELF)
+        self.assertTrue(row.condition.conditionmodifiereffect_set.filter(value=12).exists())
+
+    def test_debuff_archetype_enemy_modifier(self):
+        tech = DebuffPassiveTechniqueFactory(debuff_condition__value=-15)
+        row = tech.condition_applications.get()
+        self.assertEqual(row.target_kind, ConditionTargetKind.ENEMY)
+        self.assertTrue(row.condition.conditionmodifiereffect_set.filter(value=-15).exists())
+
+    def test_combo_opener_archetype_grants_probing(self):
+        tech = ComboOpeningPassiveTechniqueFactory()
+        self.assertEqual(tech.combo_opening_probing, 3)
+        # No condition required for the bare opener.
+        self.assertFalse(tech.condition_applications.exists())
+
+    def test_combo_opener_archetype_with_debuff(self):
+        tech = ComboOpeningPassiveTechniqueFactory(opener_debuff=True)
+        self.assertEqual(tech.combo_opening_probing, 3)
+        row = tech.condition_applications.get()
+        self.assertEqual(row.target_kind, ConditionTargetKind.ENEMY)
+
+
+class DefensivePassiveLowersNpcAttackTest(TestCase):
+    """Headline #874 Done-when: a defensive passive measurably lowers NPC damage.
+
+    Two ``resolve_round`` runs with an IDENTICAL deterministic setup — the NPC
+    deals fixed ``base_damage`` of a fixed ``damage_type`` and no defense check is
+    rolled (``defense_check_type`` defaults to ``None``), so the damage path is
+    purely arithmetic: ``apply_damage_to_participant`` subtracts
+    ``character.conditions.resistance_modifier(damage_type)`` from the incoming
+    damage. The runs differ ONLY by whether the PC declared the
+    ``DefendPassiveTechniqueFactory`` passive (which applies a SELF
+    ``ConditionResistanceModifier``). Passives resolve before NPC actions, so the
+    resistance is live when the NPC hit lands the SAME round — the PC must take
+    strictly less damage in the passive case.
+    """
+
+    NPC_DAMAGE = 40
+    RESIST_AMOUNT = 15
+
+    def _build_round(self, *, with_passive: bool):
+        """Build an identical encounter; declare the defensive passive iff asked."""
+        from world.vitals.models import CharacterVitals
+
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=100,
+            max_health=100,
+        )
+
+        # Fixed-damage, fixed-type NPC attack targeting the PC.
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(
+            pool=pool,
+            base_damage=self.NPC_DAMAGE,
+            damage_type=self.damage_type,
+        )
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(participant)
+
+        action_kwargs = {}
+        if with_passive:
+            passive = DefendPassiveTechniqueFactory(
+                defend_condition__resist_amount=self.RESIST_AMOUNT,
+                defend_condition__damage_type=self.damage_type,
+            )
+            action_kwargs["physical_passive"] = passive
+        CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=None,
+            focused_action=None,
+            **action_kwargs,
+        )
+        return encounter, participant
+
+    def setUp(self):
+        # One shared DamageType so both runs hit the same resistance lookup.
+        self.damage_type = DamageTypeFactory()
+
+    def _damage_taken(self, *, with_passive: bool) -> int:
+        from world.vitals.models import CharacterVitals
+
+        encounter, participant = self._build_round(with_passive=with_passive)
+        resolve_round(encounter)
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
+        return 100 - vitals.health
+
+    def test_defensive_passive_reduces_incoming_npc_damage(self):
+        baseline = self._damage_taken(with_passive=False)
+        defended = self._damage_taken(with_passive=True)
+
+        # Baseline takes the full hit; the defensive passive soaks RESIST_AMOUNT.
+        self.assertEqual(baseline, self.NPC_DAMAGE)
+        self.assertEqual(defended, self.NPC_DAMAGE - self.RESIST_AMOUNT)
+        self.assertLess(
+            defended,
+            baseline,
+            "A declared defensive passive must measurably lower the NPC attack's "
+            "damage the same round.",
+        )
 
 
 class ComboOpeningPassiveUnlocksGatedComboTest(TestCase):
