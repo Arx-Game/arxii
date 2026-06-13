@@ -168,9 +168,7 @@ class WeaponDamageWiringTests(TestCase):
         resolver = self._weapon_profile_resolver(uses_equipped_weapon=True)
         attacker = resolver.participant.character_sheet.character
         weapon_dt = DamageTypeFactory(name="wired-slash")
-        weapon = self._equip_weapon(
-            attacker, damage=6, damage_type=weapon_dt, durability=10
-        )
+        weapon = self._equip_weapon(attacker, damage=6, damage_type=weapon_dt, durability=10)
 
         check = MagicMock(success_level=2)
         results = resolver._apply_damage(check, eff_intensity=0)
@@ -218,9 +216,7 @@ class WeaponDamageWiringTests(TestCase):
         resolver = self._weapon_profile_resolver(uses_equipped_weapon=False)
         attacker = resolver.participant.character_sheet.character
         weapon_dt = DamageTypeFactory(name="ignored-slash")
-        weapon = self._equip_weapon(
-            attacker, damage=6, damage_type=weapon_dt, durability=10
-        )
+        weapon = self._equip_weapon(attacker, damage=6, damage_type=weapon_dt, durability=10)
 
         check = MagicMock(success_level=2)
         results = resolver._apply_damage(check, eff_intensity=0)

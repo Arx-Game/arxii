@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("buildings", "0009_alter_projecttemplate_weekly_upkeep_cost"),
         ("conditions", "0007_conditioncapabilityeffect_scales_with_severity_and_more"),

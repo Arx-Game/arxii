@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 import math
 import random
@@ -344,7 +345,7 @@ class CombatTechniqueResolver:
         weapon: WeaponContribution | None,
         *,
         sl: int,
-        multiplier: float,
+        multiplier: Decimal,
         eff_intensity: int,
     ) -> tuple[int, DamageType | None]:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
