@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import Technique
+    from world.magic.models import Technique, TechniqueDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -310,28 +310,57 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
+        attacker = self.participant.character_sheet.character
+        weapon = effective_weapon_profile(attacker)
+        weapon_landed = False
+
         results: list[OpponentDamageResult] = []
         for profile in profiles:
-            if sl < profile.minimum_success_level:
-                continue
-            budget = profile.compute_damage_budget(
-                effective_power=eff_intensity,
-                success_level=sl,
+            scaled, profile_damage_type = self._profile_damage(
+                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
             )
-            scaled = int(budget * multiplier)
             if scaled <= 0:
                 continue
             target.refresh_from_db()
             if target.status == OpponentStatus.DEFEATED:
                 break
-            result = apply_damage_to_opponent(
-                target,
-                scaled,
-                damage_type=profile.damage_type,
-                source_sheet=self.participant.character_sheet,
+            results.append(
+                apply_damage_to_opponent(
+                    target,
+                    scaled,
+                    damage_type=profile_damage_type,
+                    source_sheet=self.participant.character_sheet,
+                )
             )
-            results.append(result)
+            weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
+
+        if weapon_landed:
+            _wear_equipped_weapon(attacker)
         return results
+
+    def _profile_damage(
+        self,
+        profile: TechniqueDamageProfile,
+        weapon: WeaponContribution | None,
+        *,
+        sl: int,
+        multiplier: float,
+        eff_intensity: int,
+    ) -> tuple[int, DamageType | None]:
+        """Scaled damage + effective damage_type for one profile (0 if it skips).
+
+        Returns ``(0, None)`` when the profile's minimum_success_level exceeds
+        ``sl``; otherwise folds the equipped weapon's contribution into the
+        formula budget and applies the success-level multiplier.
+        """
+        if sl < profile.minimum_success_level:
+            return 0, None
+        budget = profile.compute_damage_budget(
+            effective_power=eff_intensity,
+            success_level=sl,
+        )
+        budget, profile_damage_type = _weapon_augmented_budget(profile, budget, weapon)
+        return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
         self,
@@ -3725,3 +3754,37 @@ def effective_weapon_profile(character: Character) -> WeaponContribution | None:
         damage=inst.effective_weapon_damage,
         damage_type=inst.effective_weapon_damage_type,
     )
+
+
+def _weapon_augmented_budget(
+    profile: TechniqueDamageProfile,
+    budget: int,
+    weapon: WeaponContribution | None,
+) -> tuple[int, DamageType | None]:
+    """Fold an equipped weapon's contribution into a damage profile's budget.
+
+    For a ``uses_equipped_weapon`` profile with an equipped weapon, adds the
+    weapon's damage to the formula budget; if the profile authored no damage_type
+    of its own, the weapon's type is used. Returns ``(budget, damage_type)``;
+    non-weapon profiles (or an unarmed attacker) pass through unchanged.
+    """
+    profile_damage_type = profile.damage_type
+    if profile.uses_equipped_weapon and weapon is not None:
+        budget += weapon.damage
+        if profile_damage_type is None:
+            profile_damage_type = weapon.damage_type
+    return budget, profile_damage_type
+
+
+def _wear_equipped_weapon(character: Character) -> None:
+    """Apply one point of durability wear to the character's strongest weapon.
+
+    Called once per landed weapon-based attack (not once per damage profile), so
+    a multi-component technique does not double-wear the weapon.
+    """
+    weapon_inst = _select_equipped_weapon(character)
+    if weapon_inst is None:
+        return
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    decrement_item_durability(item_instance=weapon_inst)
