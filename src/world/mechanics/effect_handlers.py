@@ -395,6 +395,79 @@ def _apply_magical_scars(
     )
 
 
+def _capture_group_key(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> str | None:
+    """Stable key grouping captives of one capture event into a shared cell.
+
+    Keyed on the resolution's scene (the encounter's location handle the
+    context reliably carries) plus the captor org, so the same captor taking
+    several PCs in one scene shares a cell, while different captors — or no
+    scene at all — fall back to separate cells.
+    """
+    scene = context.scene
+    if scene is None:
+        return None
+    captor_part = effect.capture_captor_organization_id or "none"
+    return f"capture:scene:{scene.pk}:{captor_part}"
+
+
+def _apply_capture(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Take the resolved target into captivity (#931).
+
+    Fires the captivity service from any consequence pool — combat aftermath,
+    a mission route, a magical mishap — without that author touching the
+    captivity internals. The capture site (``context.location``) becomes the
+    cell's return location. Skips gracefully if the target has no sheet or is
+    already held, so a capture consequence never crashes a resolution.
+    """
+    from world.captivity.exceptions import AlreadyCapturedError  # noqa: PLC0415
+    from world.captivity.services import capture_character  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    try:
+        sheet = target.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.CAPTURE,
+            description="Target has no character sheet",
+            applied=False,
+            skip_reason="Target has no CharacterSheet",
+        )
+
+    try:
+        capture_character(
+            captive=sheet,
+            captor_organization=effect.capture_captor_organization,
+            # The captive's own location is the capture site they return to —
+            # not context.location (the caster's room), which differs for a
+            # TARGET capture. target.location may be None; the service allows it.
+            return_location=target.location,
+            offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
+            # Captives taken in one encounter (same scene + captor) share a
+            # cell — the shared-cell default, honoured on the per-character
+            # consequence path. No scene → per-character cells (group_key None).
+            group_key=_capture_group_key(effect, context),
+        )
+    except AlreadyCapturedError:
+        return AppliedEffect(
+            effect_type=EffectType.CAPTURE,
+            description=f"{target.db_key} is already a captive",
+            applied=False,
+            skip_reason="Target already held",
+        )
+
+    return AppliedEffect(
+        effect_type=EffectType.CAPTURE,
+        description=f"Captured {target.db_key}",
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -410,4 +483,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.GRANT_CODEX: _grant_codex,
     EffectType.MAGICAL_SCARS: _apply_magical_scars,
     EffectType.LEGEND_AWARD: _legend_award,
+    EffectType.CAPTURE: _apply_capture,
 }
