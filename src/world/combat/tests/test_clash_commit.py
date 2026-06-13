@@ -84,6 +84,7 @@ class CommitToClashTests(TestCase):
         self.assertFalse(result.was_overburn)
         expected_delta = outcome_to_delta(
             check_outcome=self.success_outcome,
+            power=result.power,
             config=self.config_clash,
         )
         self.assertEqual(result.progress_delta, expected_delta)
@@ -251,3 +252,91 @@ class CommitToClashTests(TestCase):
                 config_clash=self.config_clash,
                 config_strain=self.config_strain,
             )
+
+    # -------------------------------------------------------------------------
+    # 5. Power + ledger captured from the magic pipeline
+    # -------------------------------------------------------------------------
+
+    def test_power_captured_on_result(self) -> None:
+        """result.power must be a non-negative int populated from the magic pipeline."""
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertIsInstance(result.power, int)
+        self.assertGreaterEqual(result.power, 0)
+
+    def test_power_ledger_captured_on_result(self) -> None:
+        """result.power_ledger must be non-None (captured from the magic pipeline)."""
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertIsNotNone(result.power_ledger)
+
+    def test_progress_delta_matches_power_scaled_formula(self) -> None:
+        """progress_delta must equal outcome_to_delta(check_outcome, power, config)."""
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        expected = outcome_to_delta(
+            check_outcome=result.check_outcome,
+            power=result.power,
+            config=self.config_clash,
+        )
+        self.assertEqual(result.progress_delta, expected)
+
+    # -------------------------------------------------------------------------
+    # 6. clash_interaction is None when no CombatParticipant exists
+    # -------------------------------------------------------------------------
+
+    def test_clash_interaction_none_without_participant(self) -> None:
+        """When no CombatParticipant is wired to the clash encounter, clash_interaction
+        must be None (the pipeline degrades gracefully for unit tests)."""
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        # ClashFactory does NOT wire a CombatParticipant, so the lookup returns None.
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertIsNone(result.clash_interaction)

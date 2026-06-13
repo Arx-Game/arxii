@@ -10,8 +10,9 @@ Current scope (Tasks 2.1–5.1):
   - ``strain_to_modifier``: converts anima committed past the strain floor into
     a diminishing-returns check modifier, driven entirely by ``StrainConfig``
     tuning knobs.
-  - ``outcome_to_delta``: maps a ``CheckOutcome`` tier to a per-round progress
-    delta, driven by the six ``ClashConfig.delta_*`` tuning knobs.
+  - ``outcome_to_delta``: maps a ``CheckOutcome`` tier and power value to a per-round
+    progress delta, driven by ``ClashConfig.power_scale``, per-tier quality multipliers,
+    and ``ClashConfig.botch_backfire_fraction``.
   - ``commit_to_clash``: routes a PC's per-round clash contribution through
     the ``use_technique`` magic pipeline and returns a ``ClashContributionResult``.
   - ``npc_round_contribution``: returns the NPC's per-round progress contribution.
@@ -108,32 +109,30 @@ def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
     return mod
 
 
-def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int:
-    """Map a CheckOutcome tier to a clash progress delta.
+def outcome_to_delta(*, check_outcome: CheckOutcome, power: int, config: ClashConfig) -> int:
+    """Map a CheckOutcome tier and power value to a clash progress delta.
 
-    Banding (by CheckOutcome.success_level):
-      >= 3  → critical success → config.delta_critical_success
-      == 2  → great success    → config.delta_great_success
-      == 1  → success          → config.delta_success
-      == 0  → partial          → config.delta_partial
-      == -1 → failure          → config.delta_failure
-      <= -2 → botch            → config.delta_botch
+    Formula:
+      - botch (success_level <= -2): committed power rebounds negatively.
+        delta = -round(power * config.botch_backfire_fraction * config.power_scale)
+      - all other tiers: positive (or zero) delta scaled by quality and power.
+        delta = round(power * config.quality_multiplier_for(level) * config.power_scale)
 
-    Values outside the authored range are clamped to the nearest band.
+    Quality banding via ``config.quality_multiplier_for``:
+      >= 3  → critical  (config.quality_multiplier_critical)
+      == 2  → great     (config.quality_multiplier_great)
+      == 1  → success   (config.quality_multiplier_success)
+      == 0  → partial   (config.quality_multiplier_partial)
+      <= -1 → failure   (config.quality_multiplier_failure, typically 0.0)
+
+    ``round()`` on a Decimal product returns a plain int (Python banker's rounding).
     Pure function — no DB writes, no I/O.
     """
     level = check_outcome.success_level
-    if level >= 3:  # noqa: PLR2004
-        return config.delta_critical_success
-    if level == 2:  # noqa: PLR2004
-        return config.delta_great_success
-    if level == 1:
-        return config.delta_success
-    if level == 0:
-        return config.delta_partial
-    if level == -1:
-        return config.delta_failure
-    return config.delta_botch
+    if level <= -2:  # noqa: PLR2004
+        # botch — committed power rebounds as negative delta
+        return -round(power * config.botch_backfire_fraction * config.power_scale)
+    return round(power * config.quality_multiplier_for(level) * config.power_scale)
 
 
 def commit_to_clash(  # noqa: PLR0913
@@ -252,8 +251,14 @@ def commit_to_clash(  # noqa: PLR0913
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
-    # clash check is strain-driven; the power ledger is ledger-independent here.
-    def resolve_fn(*, power: int, ledger: object) -> object:  # noqa: ARG001
+    #    The power and ledger from the magic pipeline are captured via closure
+    #    so the caller can persist them on the result for future ledger-display
+    #    and power-driven formula work.
+    captured: dict[str, object] = {}
+
+    def resolve_fn(*, power: int, ledger: object) -> object:
+        captured["power"] = power
+        captured["ledger"] = ledger
         return perform_check(
             objectdb,
             check_type,
@@ -282,6 +287,12 @@ def commit_to_clash(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
+    # 5b. Read the power and ledger captured by the closure.  ``captured`` is
+    #     populated synchronously during use_technique → resolve_fn; it is
+    #     guaranteed to have both keys at this point.
+    clash_power = int(captured.get("power", 0))
+    clash_ledger = captured.get("ledger")
+
     # 6. Extract the CheckResult from the resolution_result (the closure returns
     #    a CheckResult directly, so resolution_result IS the CheckResult).
     check_result: CheckResult = technique_use_result.resolution_result  # type: ignore[assignment]
@@ -290,9 +301,10 @@ def commit_to_clash(  # noqa: PLR0913
         raise ValueError(msg)
     check_outcome: CheckOutcome = check_result.outcome
 
-    # 7. Convert outcome to progress delta.
+    # 7. Convert outcome to progress delta (power-scaled formula).
     progress_delta = outcome_to_delta(
         check_outcome=check_outcome,
+        power=clash_power,
         config=config_clash,
     )
 
@@ -318,6 +330,7 @@ def commit_to_clash(  # noqa: PLR0913
         encounter_id=clash.encounter_id,
         character_sheet=character_sheet,
     ).first()
+    recorded_interaction = None
     if participant is not None:
         clash_interaction = create_action_interaction(
             participant=participant,
@@ -331,6 +344,7 @@ def commit_to_clash(  # noqa: PLR0913
             )
 
             push_interaction(clash_interaction)
+            recorded_interaction = clash_interaction
 
     return ClashContributionResult(
         character=character_sheet,
@@ -343,6 +357,9 @@ def commit_to_clash(  # noqa: PLR0913
         was_audere=technique_use_result.was_audere,
         soulfray_severity_accrued=soulfray_severity_accrued,
         technique_use_result=technique_use_result,
+        power=clash_power,
+        power_ledger=clash_ledger,  # type: ignore[arg-type]
+        clash_interaction=recorded_interaction,
     )
 
 

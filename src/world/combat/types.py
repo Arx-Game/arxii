@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
+    from world.scenes.models import Interaction
     from world.traits.models import CheckOutcome
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -224,6 +225,9 @@ class ClashContributionResult:
     was_audere: bool
     soulfray_severity_accrued: int
     technique_use_result: TechniqueUseResult
+    power: int = 0
+    power_ledger: PowerLedger | None = None
+    clash_interaction: Interaction | None = None
 
 
 @dataclass(frozen=True)

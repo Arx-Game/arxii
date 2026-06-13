@@ -121,10 +121,12 @@ class RunClashRoundTests(TestCase):
         self.assertIsNotNone(result.clash_round.pk)
         self.assertTrue(ClashRound.objects.filter(pk=result.clash_round.pk).exists())
 
-        # Meter must have moved (success = +1 by default config).
-        # NPC pressure = 0 (no triggering_threat_entry) → progress = 0 + 1 - 0 = 1.
+        # Meter must have moved (power-scaled success).
+        # With intensity=5 (technique default), power=5, quality_success=1.0, power_scale=0.5:
+        # delta = round(5 * 1.0 * 0.5) = round(2.5) = 2 (banker's rounding).
+        # NPC pressure = 0 (no triggering_threat_entry) → progress = 0 + 2 - 0 = 2.
         clash.refresh_from_db()
-        self.assertEqual(clash.progress, 1)
+        self.assertEqual(clash.progress, 2)
 
     # -------------------------------------------------------------------------
     # 2. No contributions → NPC drifts meter toward NPC win
@@ -366,6 +368,7 @@ class RunClashRoundTests(TestCase):
         gift.resonances.add(resonance)
         technique = TechniqueFactory(
             gift=gift,
+            intensity=4,  # power=4 → round(4 * quality * 0.5) >= 1 for any non-zero quality
             anima_cost=3,
             action_template=ActionTemplateFactory(check_type=self.check_type),
         )
