@@ -30,7 +30,7 @@ from world.vitals.constants import (
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
@@ -253,21 +253,25 @@ def _record_combat_outcome(  # noqa: PLR0913 - mirrors record_consequence_outcom
     pool: ConsequencePool,
     pending: PendingResolution,
     breakdown: ModifierBreakdown,
-    combat_interaction: Interaction | None,
+    combat_interaction_factory: Callable[[], Interaction] | None,
     summary: str,
 ) -> None:
     """Persist one survivability tier's resolution as a ConsequenceOutcome.
 
-    No-op when ``combat_interaction`` is None (e.g. the mechanics effect_handlers
-    path) — the exactly-one-source constraint forbids a sourceless record.
+    No-op when ``combat_interaction_factory`` is None (e.g. the mechanics
+    effect_handlers path) — the exactly-one-source constraint forbids a
+    sourceless record. Otherwise the factory is invoked here to obtain the
+    Interaction; because this function is only called from a firing tier, the
+    Interaction is minted only when a consequence actually records (#864).
 
     Side-effect only (the existing return values are untouched). The selected
     Consequence is unwrapped from the pending resolution; an unsaved fallback
     consequence persists as a null selected_consequence (the outcome still
     records the pool + modifier provenance).
     """
-    if combat_interaction is None:
+    if combat_interaction_factory is None:
         return
+    combat_interaction = combat_interaction_factory()
 
     from world.checks.services import record_consequence_outcome  # noqa: PLC0415
 
@@ -340,7 +344,7 @@ def process_damage_consequences(
     damage_type: DamageType | None,
     *,
     extra_modifiers: int = 0,
-    combat_interaction: Interaction | None = None,
+    combat_interaction_factory: Callable[[], Interaction] | None = None,
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
@@ -366,12 +370,16 @@ def process_damage_consequences(
         damage_dealt: How much damage was dealt this hit.
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
-        combat_interaction: The combat Interaction this resolution belongs to.
-            When provided, each firing tier persists a ConsequenceOutcome bound
-            to it (#850). When None (e.g. the mechanics effect_handlers path),
-            recording is skipped — the exactly-one-source constraint forbids a
-            sourceless record. Recording is a pure side effect and never changes
-            the returned DamageConsequenceResult.
+        combat_interaction_factory: Zero-argument callable that returns the
+            combat Interaction this resolution belongs to. Invoked only inside a
+            firing tier branch (so a whiff never mints an Interaction); it may be
+            called more than once when multiple tiers fire, so the caller is
+            responsible for memoizing it — the NPC-action path does, so all
+            targets of the same action share one Interaction row (#864).
+            When None (e.g. the mechanics effect_handlers path), recording is
+            skipped — the exactly-one-source constraint forbids a sourceless
+            record. Recording is a pure side effect and never changes the
+            returned DamageConsequenceResult.
     """
     if character_sheet is None:
         return DamageConsequenceResult(message="No vitals found")
@@ -418,7 +426,7 @@ def process_damage_consequences(
                 wound_pool,
                 pending,
                 wound_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "permanent wound",
             )
 
@@ -445,7 +453,7 @@ def process_damage_consequences(
                 death_pool,
                 pending,
                 death_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "lethal hit",
             )
             return result
@@ -475,7 +483,7 @@ def process_damage_consequences(
                 knockout_pool,
                 pending,
                 ko_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "knockout",
             )
             return result

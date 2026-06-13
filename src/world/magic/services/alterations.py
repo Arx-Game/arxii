@@ -441,6 +441,21 @@ def has_pending_alterations(character: CharacterSheet) -> bool:
     ).exists()
 
 
+def enforce_advancement_gate(character: CharacterSheet) -> None:
+    """Raise if ``character`` may not spend advancement points right now.
+
+    Shared gate for every XP-spend site (mirrors ``spend_xp_on_unlock``):
+    protagonism lock first, then unresolved Mage Scars. See #898.
+    """
+    from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+    from world.magic.types import AlterationGateError  # noqa: PLC0415
+
+    if character.is_protagonism_locked:
+        raise ProtagonismLockedError
+    if has_pending_alterations(character):
+        raise AlterationGateError
+
+
 def staff_clear_alteration(
     *,
     pending: PendingAlteration,

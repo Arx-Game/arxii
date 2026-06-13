@@ -18,11 +18,13 @@ from world.character_sheets.models import CharacterSheet
 from world.classes.factories import PathFactory
 from world.magic.exceptions import XPInsufficient
 from world.magic.factories import (
+    PendingAlterationFactory,
     ThreadWeavingTeachingOfferFactory,
     ThreadWeavingUnlockFactory,
 )
 from world.magic.models import CharacterThreadWeavingUnlock
 from world.magic.services import accept_thread_weaving_unlock, compute_thread_weaving_xp_cost
+from world.magic.types import AlterationGateError
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import ExperiencePointsData, XPTransaction
 from world.roster.factories import RosterTenureFactory
@@ -247,3 +249,60 @@ class AcceptThreadWeavingUnlockTests(TestCase):
 
         # Learner should have no AP pool touched
         self.assertFalse(ActionPointPool.objects.filter(character=learner.character).exists())
+
+
+# =============================================================================
+# Mage Scar gate — accept_thread_weaving_unlock (#898)
+# =============================================================================
+
+
+class AcceptThreadWeavingUnlockGateTests(TestCase):
+    """accept_thread_weaving_unlock must block learners with an open Mage Scar."""
+
+    def setUp(self) -> None:
+        ActionPointPool.flush_instance_cache()
+
+    def _make_offer_with_teacher_ap(self, *, banked_ap: int = 5, xp_cost: int = 100) -> object:
+        tenure = RosterTenureFactory()
+        ActionPointPoolFactory(character=tenure.character, current=0, maximum=200, banked=banked_ap)
+        unlock = ThreadWeavingUnlockFactory(xp_cost=xp_cost)
+        return ThreadWeavingTeachingOfferFactory(teacher=tenure, unlock=unlock, banked_ap=banked_ap)
+
+    def test_open_pending_alteration_raises_alteration_gate_error(self) -> None:
+        """Learner with an OPEN PendingAlteration → AlterationGateError."""
+        offer = self._make_offer_with_teacher_ap(xp_cost=100)
+        learner = CharacterSheetFactory()
+        _seed_xp(learner, 500)
+        PendingAlterationFactory(character=learner)
+
+        with self.assertRaises(AlterationGateError):
+            accept_thread_weaving_unlock(learner, offer)
+
+    def test_open_pending_alteration_no_xp_deducted(self) -> None:
+        """No XP is deducted when the gate blocks the transaction."""
+        offer = self._make_offer_with_teacher_ap(xp_cost=100)
+        learner = CharacterSheetFactory()
+        xp_tracker = _seed_xp(learner, 500)
+        PendingAlterationFactory(character=learner)
+
+        with self.assertRaises(AlterationGateError):
+            accept_thread_weaving_unlock(learner, offer)
+
+        xp_tracker.refresh_from_db()
+        self.assertEqual(xp_tracker.current_available, 500)
+
+    def test_open_pending_alteration_no_unlock_row_created(self) -> None:
+        """No CharacterThreadWeavingUnlock row is created when the gate blocks."""
+        offer = self._make_offer_with_teacher_ap(xp_cost=100)
+        learner = CharacterSheetFactory()
+        _seed_xp(learner, 500)
+        PendingAlterationFactory(character=learner)
+
+        with self.assertRaises(AlterationGateError):
+            accept_thread_weaving_unlock(learner, offer)
+
+        self.assertFalse(
+            CharacterThreadWeavingUnlock.objects.filter(
+                character=learner, unlock=offer.unlock
+            ).exists()
+        )

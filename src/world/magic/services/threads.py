@@ -214,6 +214,10 @@ def cross_thread_xp_lock(
     if existing is not None:
         return existing
 
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
+
+    enforce_advancement_gate(character_sheet)
+
     # Spend XP.
     account = character_sheet.character.account
     xp_tracker = get_or_create_xp_tracker(account)
@@ -535,6 +539,10 @@ def accept_thread_weaving_unlock(
     Learner AP is NOT spent — ``ThreadWeavingUnlock`` has no ``learn_cost``
     field, unlike ``CodexEntry``.
     """
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
+
+    enforce_advancement_gate(learner)
+
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.progression.models import XPTransaction  # noqa: PLC0415
     from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415

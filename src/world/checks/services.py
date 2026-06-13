@@ -303,7 +303,7 @@ def chart_has_success_outcomes(rank_difference: int) -> bool:
 def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs all context fields
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
-    pool,  # actions.ConsequencePool — no TYPE_CHECKING import to avoid cross-app cycle
+    pool,  # actions.ConsequencePool | None — no TYPE_CHECKING import to avoid cross-app cycle
     selected_consequence: "Consequence | None",
     breakdown: ModifierBreakdown,
     *,

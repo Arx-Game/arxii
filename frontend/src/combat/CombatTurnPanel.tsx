@@ -23,6 +23,7 @@ import { CombatantsList } from './sections/CombatantsList';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
+import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { OutcomeDisplayRow } from './api';
 import type { components } from '@/generated/api';
@@ -81,9 +82,10 @@ export function CombatTurnPanel({
   // Available COMBAT-backend actions for the character (includes clash refs).
   const { data: combatActions } = useAvailableActions(characterId);
 
-  // Most recent consequence outcome for this character (for the roulette section).
+  // Most recent consequence outcome for this character scoped to the current encounter.
   const { data: consequenceOutcomes } = useConsequenceOutcomes({
     character: characterId,
+    encounter: encounterId,
     page_size: 1,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
@@ -170,6 +172,9 @@ export function CombatTurnPanel({
           </span>
         )}
       </div>
+
+      {/* Forced-escape banner — Hero Killer on field; victory impossible (#875). */}
+      {encounter.forced_escape && <ForcedEscapeBanner />}
 
       {/* 0. Audere offer gate — the most dramatic prompt in combat (#873).
           Renders null unless a pending offer exists for this character. */}

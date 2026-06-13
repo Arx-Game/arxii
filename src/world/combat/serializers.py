@@ -646,6 +646,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     escalation_tick_narration = serializers.CharField(
         source="escalation_curve.tick_narration", read_only=True, default=None, allow_null=True
     )
+    forced_escape = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CombatEncounter
@@ -674,6 +675,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "escalation_curve_name",
             "escalation_start_round",
             "escalation_tick_narration",
+            "forced_escape",
         ]
         extra_kwargs = {
             "outcome": {"read_only": True},

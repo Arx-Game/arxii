@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 import math
 import random
@@ -23,9 +24,11 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
+    from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
-    from world.magic.models import Technique
+    from world.items.models import ItemInstance
+    from world.magic.models import Technique, TechniqueDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -318,28 +321,57 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
+        attacker = self.participant.character_sheet.character
+        weapon = effective_weapon_profile(attacker)
+        weapon_landed = False
+
         results: list[OpponentDamageResult] = []
         for profile in profiles:
-            if sl < profile.minimum_success_level:
-                continue
-            budget = profile.compute_damage_budget(
-                effective_power=eff_intensity,
-                success_level=sl,
+            scaled, profile_damage_type = self._profile_damage(
+                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
             )
-            scaled = int(budget * multiplier)
             if scaled <= 0:
                 continue
             target.refresh_from_db()
             if target.status == OpponentStatus.DEFEATED:
                 break
-            result = apply_damage_to_opponent(
-                target,
-                scaled,
-                damage_type=profile.damage_type,
-                source_sheet=self.participant.character_sheet,
+            results.append(
+                apply_damage_to_opponent(
+                    target,
+                    scaled,
+                    damage_type=profile_damage_type,
+                    source_sheet=self.participant.character_sheet,
+                )
             )
-            results.append(result)
+            weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
+
+        if weapon_landed:
+            _wear_equipped_weapon(attacker)
         return results
+
+    def _profile_damage(
+        self,
+        profile: TechniqueDamageProfile,
+        weapon: WeaponContribution | None,
+        *,
+        sl: int,
+        multiplier: Decimal,
+        eff_intensity: int,
+    ) -> tuple[int, DamageType | None]:
+        """Scaled damage + effective damage_type for one profile (0 if it skips).
+
+        Returns ``(0, None)`` when the profile's minimum_success_level exceeds
+        ``sl``; otherwise folds the equipped weapon's contribution into the
+        formula budget and applies the success-level multiplier.
+        """
+        if sl < profile.minimum_success_level:
+            return 0, None
+        budget = profile.compute_damage_budget(
+            effective_power=eff_intensity,
+            success_level=sl,
+        )
+        budget, profile_damage_type = _weapon_augmented_budget(profile, budget, weapon)
+        return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
         self,
@@ -1467,20 +1499,51 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        weights = [e.weight for e in eligible]
-        chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+        if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+            n_attacks = swarm_attack_count(
+                opponent.swarm_count,
+                opponent.bodies_per_attack or 1,
+                len(active_participants),
+            )
+        else:
+            n_attacks = 1
 
-        targets = _select_targets(chosen, active_participants)
-
-        action = CombatOpponentAction.objects.create(
-            opponent=opponent,
-            round_number=encounter.round_number,
-            threat_entry=chosen,
-        )
-        action.targets.set(targets)
-        actions.append(action)
+        for _ in range(n_attacks):
+            weights = [e.weight for e in eligible]
+            chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+            targets = _select_targets(chosen, active_participants)
+            action = CombatOpponentAction.objects.create(
+                opponent=opponent,
+                round_number=encounter.round_number,
+                threat_entry=chosen,
+            )
+            action.targets.set(targets)
+            actions.append(action)
 
     return actions
+
+
+def swarm_kills(raw_damage: int, body_toughness: int) -> int:
+    """Bodies a single landing attack clears from a swarm (#875).
+
+    A landing hit always clears at least one body; big hits mow through many.
+    ``body_toughness`` is the damage needed per body.
+    """
+    if raw_damage <= 0:
+        return 0
+    return max(1, raw_damage // max(1, body_toughness))
+
+
+def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count: int) -> int:
+    """Attacks a swarm makes this round — scales with remaining bodies (#875).
+
+    Capped at the number of PCs who can act, so a swarm fans across the party
+    rather than dogpiling one PC. Derived on read; nothing persisted.
+    """
+    if swarm_count <= 0 or active_pc_count <= 0:
+        return 0
+    raw = math.ceil(swarm_count / max(1, bodies_per_attack))
+    return max(1, min(raw, active_pc_count))
 
 
 def apply_damage_to_opponent(
@@ -1501,6 +1564,24 @@ def apply_damage_to_opponent(
     counters: ``damage_dealt`` (by post-soak damage), and on defeat
     ``opponents_defeated``.
     """
+    # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        kills = min(swarm_kills(raw_damage, opponent.body_toughness or 1), opponent.swarm_count)
+        opponent.swarm_count -= kills
+        defeated = opponent.swarm_count <= 0
+        if defeated:
+            opponent.status = OpponentStatus.DEFEATED
+        opponent.save(update_fields=["swarm_count", "status"])
+        del source_sheet
+        return OpponentDamageResult(
+            damage_dealt=kills,
+            health_damaged=False,
+            probed=False,
+            probing_increment=0,
+            defeated=defeated,
+            kills=kills,
+        )
+
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
     resistance = 0
@@ -1513,9 +1594,14 @@ def apply_damage_to_opponent(
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
 
     opponent.health -= damage_through
+    # ``increment_probing`` is the sibling standalone write site for the no-damage
+    # passive path (combo-opening passives). This write stays inline because it
+    # shares a single combined save with health/status below; ``probing_increment``
+    # is already ``max(0, …)`` so both paths apply the same non-negative clamp.
     opponent.probing_current += probing_increment
 
-    defeated = opponent.health <= 0
+    # Hero Killer cannot be defeated -- narrative immunity ("you must run").
+    defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
         opponent.status = OpponentStatus.DEFEATED
 
@@ -1532,7 +1618,144 @@ def apply_damage_to_opponent(
         probed=probing_increment > 0,
         probing_increment=probing_increment,
         defeated=defeated,
+        kills=0,
     )
+
+
+def increment_probing(opponent: CombatOpponent, amount: int) -> None:
+    """Add ``amount`` to an opponent's probing counter (clamped at zero) and persist.
+
+    Single standalone write path for ``probing_current`` used by combo-opening
+    passives so probing feeds combo detection identically to damage-sourced probing.
+    """
+    opponent.probing_current = max(0, opponent.probing_current + amount)
+    opponent.save(update_fields=["probing_current"])
+
+
+def _apply_passive_technique(
+    technique: Technique,
+    participant: CombatParticipant,
+    encounter: CombatEncounter,
+) -> None:
+    """Apply a declared passive technique's authored conditions with NO dice roll.
+
+    A passive IS a Technique with authored ``TechniqueAppliedCondition`` rows.
+    Each row is applied at fixed scaling — ``effective_power=technique.intensity``
+    and ``success_level=row.minimum_success_level`` — so no ``CheckResult`` is
+    constructed and no offense roll happens (contrast ``CombatTechniqueResolver``,
+    which is roll/damage-bound). Reuses ``bulk_apply_conditions`` so passives feed
+    the exact same condition machinery as the focused path.
+
+    Target resolution (v1):
+
+    - ``SELF`` → the actor's own character.
+    - ``ENEMY`` → every ACTIVE opponent's ``objectdb``. Mirrors
+      ``_resolve_condition_target``'s ENEMY branch, which returns ``opp.objectdb``
+      for an active opponent. Every opponent (including ephemeral CombatNPCs) is
+      created with an ObjectDB by ``add_opponent``; the FK is only nulled if the
+      ObjectDB is destroyed externally, so we skip opponents whose ``objectdb`` is
+      None — matching the focused path's None-guard.
+    - ``ALLY`` → every ACTIVE participant except the actor.
+
+    When ``technique.combo_opening_probing`` is set, every ACTIVE opponent gains
+    that much probing (the combo-opening reward) via ``increment_probing`` — this
+    is the combo-opening effect for ephemeral opponents regardless of conditions.
+    """
+    from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+    from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    actor = participant.character_sheet.character
+
+    # Batch the opponent/ally queries ONCE before the row loop (no queries in loop).
+    active_opponents = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        ).select_related("objectdb")
+    )
+    active_allies = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet__character")
+    )
+
+    # Combo-opening probing: granted to every active opponent independent of any
+    # condition application (the combo-opening effect for ephemeral opponents).
+    if technique.combo_opening_probing:
+        for opp in active_opponents:
+            increment_probing(opp, technique.combo_opening_probing)
+
+    # resolve_round prefetches ``..._passive__condition_applications__condition`` so
+    # this ``.all()`` reads the prefetch cache (no per-passive query in the resolution
+    # loop). Standalone callers fall back to lazy loads. Do NOT add ``.select_related``
+    # here — it forces a fresh query and bypasses the prefetch cache.
+    rows = list(technique.condition_applications.all())
+    if not rows:
+        return
+
+    applications: list[BulkConditionApplication] = []
+    for row in rows:
+        severity = row.compute_severity(
+            effective_power=technique.intensity,
+            success_level=row.minimum_success_level,
+        )
+        duration = row.compute_duration_rounds(
+            effective_power=technique.intensity,
+            success_level=row.minimum_success_level,
+        )
+
+        if row.target_kind == ConditionTargetKind.SELF:
+            targets = [actor]
+        elif row.target_kind == ConditionTargetKind.ENEMY:
+            targets = [opp.objectdb for opp in active_opponents if opp.objectdb is not None]
+        elif row.target_kind == ConditionTargetKind.ALLY:
+            targets = [ally.character_sheet.character for ally in active_allies]
+        else:
+            targets = []
+
+        applications.extend(
+            BulkConditionApplication(
+                target=target,
+                template=row.condition,
+                severity=severity,
+                duration_rounds=duration,
+                stack_count=row.stack_count,
+            )
+            for target in targets
+        )
+
+    if not applications:
+        return
+
+    bulk_apply_conditions(
+        applications,
+        source_character=actor,
+        source_technique=technique,
+        source_description=f"passive: {technique.name}",
+    )
+
+
+def _resolve_passive_actions(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Apply every declared passive on every PC action before focused resolution.
+
+    Runs before ``_resolve_actions`` so defensive/buff passives land before any
+    focused or NPC action resolves this round.
+    """
+    for action in pc_actions.values():
+        for passive in (
+            action.physical_passive,
+            action.social_passive,
+            action.mental_passive,
+        ):
+            if passive is not None:
+                _apply_passive_technique(passive, action.participant, encounter)
 
 
 def apply_damage_to_participant(  # noqa: PLR0913
@@ -1608,6 +1831,10 @@ def apply_damage_to_participant(  # noqa: PLR0913
     if damage_type is not None:
         resistance = character.conditions.resistance_modifier(damage_type)
         effective_damage = max(0, effective_damage - resistance)
+
+    # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
+    # armor is their only soak source, and absorbing pieces take durability wear.
+    effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
     health_before = vitals.health
     vitals.health -= effective_damage
@@ -2554,7 +2781,7 @@ def _resolve_pc_action(
     return outcome
 
 
-def _resolve_npc_action(
+def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
@@ -2578,19 +2805,26 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
-    # One ACTION-mode Interaction anchors every survivability ConsequenceOutcome
-    # this NPC action drives (#850). Authored by the Narrator persona because the
-    # NPC opponent has no PRIMARY persona.
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
     )
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    # Lazy factory: mint the ACTION-mode Interaction only when the first
+    # survivability tier actually fires (#864). Memoised so all targets of this
+    # NPC action share one row.
     npc_action_label = ", ".join(str(t) for t in targets) if targets else None
-    npc_action_interaction = create_npc_action_interaction(
-        opponent_action=npc_action,
-        target_label=npc_action_label,
-    )
+    _npc_interaction_cache: list[Interaction] = []
+
+    def _get_npc_action_interaction() -> Interaction:
+        if not _npc_interaction_cache:
+            _npc_interaction_cache.append(
+                create_npc_action_interaction(
+                    opponent_action=npc_action,
+                    target_label=npc_action_label,
+                )
+            )
+        return _npc_interaction_cache[0]
 
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
@@ -2631,7 +2865,7 @@ def _resolve_npc_action(
             character_sheet=target_participant.character_sheet,
             damage_dealt=dmg_result.damage_dealt,
             damage_type=npc_action.threat_entry.damage_type,
-            combat_interaction=npc_action_interaction,
+            combat_interaction_factory=_get_npc_action_interaction,
         )
         outcome.damage_consequences.append(consequence)
 
@@ -2670,7 +2904,7 @@ def _resolve_npc_action(
 def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
     pc_actions: dict[int, CombatRoundAction],
-    npc_actions: dict[int, CombatOpponentAction],
+    npc_actions: dict[int, list[CombatOpponentAction]],
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
@@ -2688,11 +2922,10 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
                 continue
-            npc_action = npc_actions.get(entity.pk)
-            if npc_action is not None:
-                outcomes.append(
-                    _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn),
-                )
+            outcomes.extend(
+                _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
+                for npc_action in npc_actions.get(entity.pk, [])
+            )
     return outcomes
 
 
@@ -2854,7 +3087,8 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     """Classify a completing encounter (#876 spec §1).
 
-    1. No ACTIVE opponents → VICTORY.
+    1. No ACTIVE opponents and no Hero Killer present → VICTORY. An unbeatable
+       Hero Killer (#875) on the field at any status forbids VICTORY.
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
@@ -2862,7 +3096,13 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
         encounter=encounter, status=OpponentStatus.ACTIVE
     ).exists()
     if not any_active_opponents:
-        return EncounterOutcome.VICTORY
+        hero_killer_present = CombatOpponent.objects.filter(
+            encounter=encounter, tier=OpponentTier.HERO_KILLER
+        ).exists()
+        if not hero_killer_present:
+            return EncounterOutcome.VICTORY
+        # An unbeatable Hero Killer was on the field -- never a victory.
+        # Fall through to FLED / DEFEAT classification below.
 
     statuses = set(
         CombatParticipant.objects.filter(encounter=encounter).values_list("status", flat=True)
@@ -3430,22 +3670,33 @@ def resolve_round(
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
-    for action in CombatRoundAction.objects.filter(
-        participant__encounter=encounter,
-        round_number=round_number,
-    ).select_related(
-        "participant",
-        "participant__character_sheet",
-        "focused_action",
-        "focused_action__effect_type",
-        "focused_action__action_template",
-        "focused_action__action_template__check_type",
-        "focused_opponent_target",
-        "combo_upgrade",
+    for action in (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=round_number,
+        )
+        .select_related(
+            "participant",
+            "participant__character_sheet",
+            "focused_action",
+            "focused_action__effect_type",
+            "focused_action__action_template",
+            "focused_action__action_template__check_type",
+            "focused_opponent_target",
+            "combo_upgrade",
+            "physical_passive",
+            "social_passive",
+            "mental_passive",
+        )
+        .prefetch_related(
+            "physical_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "social_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "mental_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+        )
     ):
         pc_actions[action.participant_id] = action
 
-    npc_actions: dict[int, CombatOpponentAction] = {}
+    npc_actions: dict[int, list[CombatOpponentAction]] = defaultdict(list)
     for npc_action in (
         CombatOpponentAction.objects.filter(
             opponent__encounter=encounter,
@@ -3466,10 +3717,11 @@ def resolve_round(
             ),
         )
     ):
-        npc_actions[npc_action.opponent_id] = npc_action
+        npc_actions[npc_action.opponent_id].append(npc_action)
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
+    _resolve_passive_actions(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,
@@ -3643,3 +3895,123 @@ def declare_clash_contribution(
         },
     )
     return declaration
+
+
+# ---------------------------------------------------------------------------
+# Equipped-gear combat contribution helpers (#508, Task 7)
+# ---------------------------------------------------------------------------
+#
+# Pure read helpers over ``character.equipped_items`` (the iterable
+# CharacterEquipmentHandler, whose rows arrive with item_instance + template +
+# quality_tier select_related, so reading effective_* during iteration is
+# query-free). They do NOT mutate combat damage logic — that wiring is Tasks
+# 8/9. ``_select_equipped_weapon`` is kept separate so the weapon-durability
+# decrement task can reuse the same selection.
+
+
+def effective_soak_from_armor(character: Character) -> int:
+    """Sum effective armor soak across the character's equipped armor pieces."""
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+
+    total = 0
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype in ARMOR_ARCHETYPES:
+            total += inst.effective_armor_soak
+    return total
+
+
+def apply_equipped_armor_soak(character: Character, damage: int) -> int:
+    """Reduce ``damage`` by equipped-armor soak, wearing pieces that absorbed it.
+
+    PCs have no authored soak field; worn armor is their only soak source. Each
+    armor piece that contributes positive soak takes one point of durability wear
+    on a hit it helps absorb. Returns the post-soak damage (floored at 0).
+    """
+    soak = effective_soak_from_armor(character)
+    if soak <= 0 or damage <= 0:
+        return damage
+
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    # Materialize before decrementing — decrement_item_durability invalidates
+    # the equipped_items handler, which would mutate a live iterator.
+    contributors = [
+        eq.item_instance
+        for eq in list(character.equipped_items)
+        if eq.item_instance.template.gear_archetype in ARMOR_ARCHETYPES
+        and eq.item_instance.effective_armor_soak > 0
+    ]
+    for inst in contributors:
+        decrement_item_durability(item_instance=inst)
+    return max(0, damage - soak)
+
+
+def _select_equipped_weapon(character: Character) -> ItemInstance | None:
+    """The character's strongest equipped weapon instance (>0 effective damage).
+
+    Deterministic: max by effective_weapon_damage, tie-break by item_instance pk
+    (lowest pk wins, via negating pk in the comparison key).
+    """
+    from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+    best = None
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype not in WEAPON_ARCHETYPES:
+            continue
+        dmg = inst.effective_weapon_damage
+        if dmg <= 0:
+            continue
+        key = (dmg, -inst.pk)
+        if best is None or key > best[0]:
+            best = (key, inst)
+    return best[1] if best is not None else None
+
+
+def effective_weapon_profile(character: Character) -> WeaponContribution | None:
+    """The character's strongest equipped weapon as a combat contribution."""
+    from world.combat.types import WeaponContribution  # noqa: PLC0415
+
+    inst = _select_equipped_weapon(character)
+    if inst is None:
+        return None
+    return WeaponContribution(
+        damage=inst.effective_weapon_damage,
+        damage_type=inst.effective_weapon_damage_type,
+    )
+
+
+def _weapon_augmented_budget(
+    profile: TechniqueDamageProfile,
+    budget: int,
+    weapon: WeaponContribution | None,
+) -> tuple[int, DamageType | None]:
+    """Fold an equipped weapon's contribution into a damage profile's budget.
+
+    For a ``uses_equipped_weapon`` profile with an equipped weapon, adds the
+    weapon's damage to the formula budget; if the profile authored no damage_type
+    of its own, the weapon's type is used. Returns ``(budget, damage_type)``;
+    non-weapon profiles (or an unarmed attacker) pass through unchanged.
+    """
+    profile_damage_type = profile.damage_type
+    if profile.uses_equipped_weapon and weapon is not None:
+        budget += weapon.damage
+        if profile_damage_type is None:
+            profile_damage_type = weapon.damage_type
+    return budget, profile_damage_type
+
+
+def _wear_equipped_weapon(character: Character) -> None:
+    """Apply one point of durability wear to the character's strongest weapon.
+
+    Called once per landed weapon-based attack (not once per damage profile), so
+    a multi-component technique does not double-wear the weapon.
+    """
+    weapon_inst = _select_equipped_weapon(character)
+    if weapon_inst is None:
+        return
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    decrement_item_durability(item_instance=weapon_inst)

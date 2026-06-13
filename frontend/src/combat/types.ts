@@ -94,6 +94,7 @@ export interface ActionRef {
   registry_key?: string | null;
   clash_id?: number | null;
   clash_action_slot?: string | null;
+  action_slot?: string | null;
 }
 
 /** POST /api/actions/characters/{id}/dispatch/ request body. */

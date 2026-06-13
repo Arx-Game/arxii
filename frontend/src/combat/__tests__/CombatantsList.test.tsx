@@ -128,6 +128,7 @@ function makeEncounter(
     escalation_curve_name: null,
     escalation_start_round: null,
     escalation_tick_narration: null,
+    forced_escape: false,
   };
 }
 

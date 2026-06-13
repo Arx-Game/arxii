@@ -285,6 +285,16 @@ class Technique(SharedMemoryModel):
             "(drives combat slot + fatigue routing)."
         ),
     )
+    combo_opening_probing = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "If set, this technique used as a passive grants this much probing to "
+            "engaged opponents when it resolves (feeds combo minimum_probing). "
+            "None means the technique is not a combo-opening passive."
+        ),
+    )
     anima_cost = models.PositiveIntegerField(
         help_text="Anima cost to use this technique.",
     )
@@ -736,6 +746,13 @@ class TechniqueDamageProfile(SharedMemoryModel):
         default=Decimal(0),
     )
     damage_per_extra_sl = models.PositiveIntegerField(default=0)
+    uses_equipped_weapon = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, the wielder's equipped-weapon effective damage is added "
+            "to this profile's budget and its damage_type fills in when null."
+        ),
+    )
 
     class Meta:
         constraints = [

@@ -25,11 +25,12 @@ if TYPE_CHECKING:
         CombatRoundAction,
         ComboDefinition,
     )
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import ConditionTemplate, DamageType
     from world.magic.models import Affinity
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
+    from world.scenes.models import Interaction
     from world.traits.models import CheckOutcome
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -44,6 +45,7 @@ class OpponentDamageResult:
     probed: bool
     probing_increment: int
     defeated: bool
+    kills: int = 0  # swarm bodies cleared this hit (#875); 0 for non-swarm
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,9 @@ class ClashContributionResult:
     was_audere: bool
     soulfray_severity_accrued: int
     technique_use_result: TechniqueUseResult
+    power: int = 0
+    power_ledger: PowerLedger | None = None
+    clash_interaction: Interaction | None = None
 
 
 @dataclass(frozen=True)
@@ -340,3 +345,16 @@ class EscalationTickResult:
     control_modifier: int
     pace_success_level: int | None
     capped: bool
+
+
+# ---------------------------------------------------------------------------
+# Equipped-gear combat contribution types (#508, Task 7)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WeaponContribution:
+    """Effective combat contribution of a character's equipped weapon."""
+
+    damage: int
+    damage_type: DamageType | None

@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
-import type { ActionContext, ActionSlot } from '@/actions/types';
+import type { ActionContext, ActionSlot, EffortLevel } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
 import {
@@ -63,6 +63,22 @@ export interface YourTurnProps {
 // ---------------------------------------------------------------------------
 
 const PASSIVE_SLOTS: ActionSlot[] = ['passive-physical', 'passive-social', 'passive-mental'];
+
+/**
+ * Map the UI's uppercase EffortLevel to the backend's lowercase
+ * fatigue.EffortLevel TextChoices value (the value stored on CombatRoundAction
+ * and keyed in EFFORT_CHECK_MODIFIER). The COMBAT dispatch requires
+ * `effort_level` in kwargs on every declaration (focused + each passive) or it
+ * rejects with UNKNOWN_ACTION_REF. The UI's 'VERY_HIGH' tier maps to the
+ * backend's 'extreme'.
+ */
+const EFFORT_TO_BACKEND: Record<EffortLevel, string> = {
+  VERY_LOW: 'very_low',
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  VERY_HIGH: 'extreme',
+};
 
 /**
  * Derive the focused slot's category from the selected technique's
@@ -353,6 +369,11 @@ export function YourTurn({
     // Submission order per plan: focused first, then passives, then clashes.
     const dispatchJobs: Array<() => Promise<unknown>> = [];
 
+    // The round effort comes from the focused slot and applies to every
+    // declaration (focused + passives). The COMBAT dispatch requires
+    // effort_level in kwargs on every ref or it rejects (UNKNOWN_ACTION_REF).
+    const effortLevel = EFFORT_TO_BACKEND[focusedContext.effort];
+
     // 1. Focused action (if technique selected)
     if (focusedContext.techniqueId !== undefined) {
       dispatchJobs.push(() =>
@@ -360,8 +381,9 @@ export function YourTurn({
           ref: {
             backend: 'COMBAT',
             technique_id: focusedContext.techniqueId ?? null,
+            action_slot: 'focused',
           },
-          kwargs: {},
+          kwargs: { effort_level: effortLevel },
         })
       );
     }
@@ -375,8 +397,12 @@ export function YourTurn({
             ref: {
               backend: 'COMBAT',
               technique_id: ctx.techniqueId ?? null,
+              // `slot` is already the 'passive-<category>' string the backend's
+              // CombatActionSlot expects — pass it straight through.
+              action_slot: slot,
             },
-            kwargs: {},
+            // Passives inherit the round effort declared on the focused slot.
+            kwargs: { effort_level: effortLevel },
           })
         );
       }

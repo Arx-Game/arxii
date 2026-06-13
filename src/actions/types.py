@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend, ActionCategory, TargetKind
+from actions.constants import ActionBackend, ActionCategory, CombatActionSlot, TargetKind
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -113,7 +113,13 @@ class ActionRef:
     Two mutually exclusive COMBAT variants:
 
     1. Technique declaration: ``technique_id`` is set, ``clash_id`` / ``clash_action_slot``
-       are ``None``.  Used by the normal round-declaration path.
+       are ``None``.  Used by the normal round-declaration path.  ``action_slot`` is a
+       ``CombatActionSlot`` value naming which round-action slot the technique fills:
+       ``"focused"`` (the actor's primary action) or ``"passive-physical"`` /
+       ``"passive-social"`` / ``"passive-mental"`` (the per-arena passive slots).  The
+       frontend dispatches the focused action and each passive as separate calls; the
+       backend reads-merges them onto one row by ``action_slot``.  Absent ``action_slot``
+       defaults to ``FOCUSED``.
 
     2. Clash contribution: ``clash_id`` + ``clash_action_slot`` are both set,
        ``technique_id`` is ``None``.  A future dispatcher reads these two fields to
@@ -134,6 +140,7 @@ class ActionRef:
     registry_key: str | None = None
     clash_id: int | None = None
     clash_action_slot: str | None = None
+    action_slot: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:
@@ -150,6 +157,14 @@ class ActionRef:
                 raise ValueError(msg)
             if has_technique and has_clash:
                 msg = "COMBAT ActionRef must not set both technique_id and clash_id"
+                raise ValueError(msg)
+            passive_slots = {
+                CombatActionSlot.PASSIVE_PHYSICAL,
+                CombatActionSlot.PASSIVE_SOCIAL,
+                CombatActionSlot.PASSIVE_MENTAL,
+            }
+            if self.action_slot in passive_slots and self.technique_id is None:
+                msg = "Passive COMBAT ActionRef requires technique_id"
                 raise ValueError(msg)
         if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
             msg = "REGISTRY ActionRef requires registry_key"

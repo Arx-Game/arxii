@@ -72,7 +72,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Character Progression & XP](character-progression.md) | in-progress | XP, skills, path steps, Audere Majora, power tiers, the Durance |
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
-| [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI complete; escalation/passives/aftermath gaps tracked), battle scenes, duels |
+| [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI + escalation/passives/aftermath complete; NPC-tier gap tracked), battle scenes, duels |
 | [Missions & Living Grid](missions.md) | not-started | Branching narrative quests, world consequences, CK-style events |
 | [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |

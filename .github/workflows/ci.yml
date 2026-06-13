@@ -4,11 +4,56 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Merge queue: GitHub builds speculative branches (this PR on top of main and
+  # any earlier-queued PRs) and merges in order once the required checks pass on
+  # them. Without this trigger the required checks never run on the queue's
+  # branch and queued PRs hang pending forever. The workflow used for a
+  # merge_group event is taken from `main`, so this trigger must be on main
+  # BEFORE the queue is enabled in branch protection (see #991).
+  merge_group:
 
 permissions:
   contents: read
 
 jobs:
+  # Detect which stacks the PR actually touches. Downstream heavy jobs are
+  # gated on these flags so a backend-only change skips the frontend suite
+  # (and vice-versa). The REQUIRED checks (`backend`, `frontend`) are the
+  # always-running aggregators below — they report success when their heavy
+  # job was skipped, so a gated-out stack never leaves a check pending.
+  # ci.yml is in BOTH filters: touching CI re-runs everything.
+  #
+  # Path-skipping applies to PULL REQUESTS ONLY. On merge_group (the queue) and
+  # push:main the full suite always runs — the integrated state must be fully
+  # validated, never partially skipped. So the dorny step runs only on PRs; on
+  # other events the filter outputs are empty and the heavy jobs fall through to
+  # their `|| github.event_name != 'pull_request'` clause instead. Gating dorny
+  # this way also guarantees the `changes` job itself SUCCEEDS on merge_group
+  # (dorny has no defined behavior there) — a failed `changes` job would fail
+  # the required aggregators and brick the queue.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v6
+      # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            backend:
+              - 'src/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'tools/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +79,9 @@ jobs:
   # The `backend` job below aggregates shard results so existing branch
   # protection rules requiring a check named "backend" continue to work.
   backend-shard:
+    needs: changes
+    # On PRs, gate on changed paths; on merge_group/push:main always run.
+    if: needs.changes.outputs.backend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -119,25 +167,54 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
+      # The default arxii_test DB MUST be migrated before `arx test`: Evennia's
+      # test runner calls evennia._init() in setup_test_environment(), which
+      # queries server_serverconfig on the DEFAULT connection before the test
+      # DB is built. An unmigrated default DB => "relation server_serverconfig
+      # does not exist". (See #990 — removing this step turned all shards red.)
       - name: Run migrations
         run: uv run arx manage migrate
+      # Build the test DB by CLONING the just-migrated default DB rather than
+      # letting Django replay all ~217 migrations a second time (~6.5 min/shard
+      # of pure waste). Postgres `CREATE DATABASE ... TEMPLATE` is a near-instant
+      # file copy; `arx test --keepdb` then reuses test_arxii_test (its migrate
+      # step is a no-op since django_migrations is already fully populated) and
+      # only clones it per parallel worker. The test DB name is Django's default
+      # `test_<NAME>` for DATABASES["default"] (NAME=arxii_test, no TEST override).
+      # We connect to the `postgres` maintenance DB so nothing is attached to the
+      # arxii_test template during the copy.
+      - name: Clone migrated DB into the test database
+        run: |
+          docker exec postgres-ci psql -U postgres -d postgres \
+            -c "CREATE DATABASE test_arxii_test TEMPLATE arxii_test"
       - name: Run tests
         # Bare --parallel (no value) lets Django auto-detect CPU count.
         # Don't pass `auto` literally — arx.py declares --parallel as a typer
         # boolean flag, so `auto` would fall through as a positional test label
         # and Django would fail trying to import a module named `auto`.
-        run: uv run arx test --parallel ${{ matrix.shard.apps }}
+        # --keepdb: reuse the pre-cloned test_arxii_test instead of rebuilding it.
+        run: uv run arx test --keepdb --parallel ${{ matrix.shard.apps }}
 
   # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
   # Lets branch protection require a single status check named "backend"
   # instead of having to enumerate each shard.
   backend:
-    needs: backend-shard
+    needs: [changes, backend-shard]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate shard results
         run: |
+          # Guard: if change-detection itself broke, don't silently pass.
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "changes job did not succeed (status: ${{ needs.changes.result }})"
+            exit 1
+          fi
+          # No backend changes -> shard skipped -> this required check passes.
+          if [[ "${{ needs.backend-shard.result }}" == "skipped" ]]; then
+            echo "No backend changes — backend tests not required. Passing."
+            exit 0
+          fi
           if [[ "${{ needs.backend-shard.result }}" != "success" ]]; then
             echo "One or more backend shards failed (status: ${{ needs.backend-shard.result }})"
             exit 1
@@ -145,6 +222,8 @@ jobs:
           echo "All backend shards passed."
 
   ty:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -154,7 +233,9 @@ jobs:
       - run: uv sync
       - run: uv run ty check
 
-  frontend:
+  frontend-test:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -174,6 +255,32 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # Aggregator mirroring `backend`: the REQUIRED check named "frontend" always
+  # runs and reports success when `frontend-test` was skipped (no frontend
+  # changes), so a backend-only PR never leaves this check pending.
+  frontend:
+    needs: [changes, frontend-test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate frontend result
+        run: |
+          # Guard: if change-detection itself broke, don't silently pass.
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "changes job did not succeed (status: ${{ needs.changes.result }})"
+            exit 1
+          fi
+          # No frontend changes -> frontend-test skipped -> this check passes.
+          if [[ "${{ needs.frontend-test.result }}" == "skipped" ]]; then
+            echo "No frontend changes — frontend tests not required. Passing."
+            exit 0
+          fi
+          if [[ "${{ needs.frontend-test.result }}" != "success" ]]; then
+            echo "Frontend job failed (status: ${{ needs.frontend-test.result }})"
+            exit 1
+          fi
+          echo "Frontend passed."
+
   # #756: generated-API-types drift gate. Regenerates src/schema.json +
   # frontend/src/generated/api.d.ts exactly the way `just gen-api-types`
   # does (spectacular → openapi-typescript → prettier) and fails when the
@@ -183,6 +290,8 @@ jobs:
   # one path param needs a migrated table), so this regenerates against a
   # migrated Postgres — trust-auth service container, no password exists.
   api-types-drift:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     services:
       postgres:

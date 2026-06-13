@@ -133,6 +133,24 @@ class CombatEncounter(SharedMemoryModel):
             f"(Round {self.round_number}, {self.get_status_display()})"
         )
 
+    @property
+    def forced_escape(self) -> bool:
+        """True when an unbeatable Hero Killer is on the field (#875).
+
+        Drives the "you must run" UI — victory is impossible; the party must
+        flee. Cache-aware: uses prefetched ``opponents_cached`` when present
+        so the detail serializer adds no query.
+        """
+        cached = getattr(self, "opponents_cached", None)  # noqa: GETATTR_LITERAL
+        if cached is not None:
+            return any(
+                o.tier == OpponentTier.HERO_KILLER and o.status == OpponentStatus.ACTIVE
+                for o in cached
+            )
+        return self.opponents.filter(
+            tier=OpponentTier.HERO_KILLER, status=OpponentStatus.ACTIVE
+        ).exists()
+
 
 class ThreatPool(SharedMemoryModel):
     """Named collection of NPC actions."""
@@ -328,6 +346,32 @@ class CombatOpponent(SharedMemoryModel):
         help_text="If True, the ObjectDB was created for this encounter only "
         "and will be cleaned up at encounter completion. Persona-bearing "
         "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
+    )
+
+    # === Swarm fields (#875) — populated only for SWARM tier, null elsewhere ===
+    swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies remaining. Damage clears bodies; "
+        "DEFEATED at 0. Null for non-swarm tiers.",
+    )
+    max_swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies at encounter start.",
+    )
+    body_toughness = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: damage needed to kill one body. A landing "
+        "attack clears max(1, raw_damage // body_toughness) bodies.",
+    )
+    bodies_per_attack = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: remaining-count → outgoing-attack ratio. The "
+        "swarm makes ceil(swarm_count / bodies_per_attack) attacks/round, capped "
+        "at the number of acting PCs.",
     )
 
     # === Clash fields (Task 1.5) ===
@@ -771,14 +815,6 @@ class CombatOpponentAction(SharedMemoryModel):
         related_name="incoming_attacks",
     )
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["opponent", "round_number"],
-                name="unique_action_per_opponent_per_round",
-            ),
-        ]
-
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
 
@@ -1144,9 +1180,12 @@ class ClashConfig(SharedMemoryModel):
     auto-resolves as ABANDONED.  ``max_round_cap`` is the hard upper limit after
     which any CLASH resolves as MUTUAL.
 
-    The six ``delta_*`` fields map check-result tiers to progress-delta integers.
-    Default table: critical +3, great +2, success +1, partial 0, failure -1,
-    botch -2.
+    Power-formula knobs (used by ``outcome_to_delta`` in clash.py):
+    - ``power_scale``: overall scalar applied to power before multiplying by quality.
+    - ``quality_multiplier_*``: per-tier quality coefficients; use
+      ``quality_multiplier_for(success_level)`` to look up the right one.
+    - ``botch_backfire_fraction``: fraction of power fed back as a negative delta
+      on a botch (handled by the caller, not by ``quality_multiplier_for``).
     """
 
     affinity_tilt_coefficient = models.DecimalField(
@@ -1186,13 +1225,54 @@ class ClashConfig(SharedMemoryModel):
         ),
     )
 
-    # Progress-delta table — can be negative.
-    delta_critical_success = models.IntegerField(default=3)
-    delta_great_success = models.IntegerField(default=2)
-    delta_success = models.IntegerField(default=1)
-    delta_partial = models.IntegerField(default=0)
-    delta_failure = models.IntegerField(default=-1)
-    delta_botch = models.IntegerField(default=-2)
+    # Power-formula scaling knob.
+    power_scale = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.5"),
+        help_text="Overall scalar applied to power when computing progress delta.",
+    )
+
+    # Per-tier quality multipliers — looked up via quality_multiplier_for().
+    quality_multiplier_critical = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.5"),
+        help_text="Quality multiplier for success_level >= 3 (critical success).",
+    )
+    quality_multiplier_great = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.25"),
+        help_text="Quality multiplier for success_level == 2 (great success).",
+    )
+    quality_multiplier_success = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        help_text="Quality multiplier for success_level == 1 (success).",
+    )
+    quality_multiplier_partial = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.5"),
+        help_text="Quality multiplier for success_level == 0 (partial success).",
+    )
+    quality_multiplier_failure = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.0"),
+        help_text="Quality multiplier for success_level <= -1 (failure/botch).",
+    )
+
+    # Botch backfire fraction — how much power feeds back negatively on a botch.
+    # The caller (outcome_to_delta) applies this; quality_multiplier_for() is not called for botch.
+    botch_backfire_fraction = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.5"),
+        help_text="Fraction of power returned as a negative delta on a botch.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -1202,6 +1282,26 @@ class ClashConfig(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="clash_config_updates",
     )
+
+    def quality_multiplier_for(self, success_level: int) -> Decimal:
+        """Return the quality multiplier for the given success-level band.
+
+        Banding:
+          >= 3  → critical
+          == 2  → great
+          == 1  → success
+          == 0  → partial
+          <= -1 → failure (botch backfire is handled by the caller separately)
+        """
+        if success_level >= 3:  # noqa: PLR2004
+            return self.quality_multiplier_critical
+        if success_level == 2:  # noqa: PLR2004
+            return self.quality_multiplier_great
+        if success_level == 1:
+            return self.quality_multiplier_success
+        if success_level == 0:
+            return self.quality_multiplier_partial
+        return self.quality_multiplier_failure
 
     def __str__(self) -> str:
         return f"ClashConfig(pk={self.pk})"
