@@ -16,13 +16,19 @@ These exercise the real dispatch path: a real ``PlayerAction`` carrying a real
 import django.test
 
 from actions.constants import ActionBackend
+from actions.factories import ActionTemplateFactory
+from actions.player_interface import dispatch_player_action
 from actions.round_context import get_active_round_context
 from actions.types import ActionRef, PlayerAction
 from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatRoundAction
 from world.fatigue.constants import EffortLevel
-from world.magic.factories import EffectTypeFactory, TechniqueFactory
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    EffectTypeFactory,
+    TechniqueFactory,
+)
 from world.vitals.models import CharacterVitals
 
 
@@ -134,3 +140,88 @@ class TestPassiveDispatchReadMergeWrite(django.test.TestCase):
         row = self._row()
         self.assertEqual(row.focused_action_id, focused.pk)
         self.assertIsNone(row.physical_passive_id)
+
+
+class TestPassiveDispatchEndToEnd(django.test.TestCase):
+    """Drive the REAL ``dispatch_player_action`` entry point, not ``record_declaration``.
+
+    The availability layer (`_combat_actions`) rebuilds each surfaced technique's
+    ``ActionRef`` with ``technique_id`` only — dropping the client's ``action_slot``.
+    ``_find_combat_player_action_for_ref`` then matches on ``technique_id`` and returns
+    that slot-less ref, so without the fix every passive dispatch collapses to the
+    FOCUSED slot (``ref.action_slot or FOCUSED``) and clobbers the focused action.
+
+    This test reproduces that exact end-to-end path: it dispatches a focused technique
+    then a passive-social technique through ``dispatch_player_action`` and asserts both
+    land on the single merged ``CombatRoundAction`` row.
+    """
+
+    def setUp(self) -> None:
+        # ObjectDB is not deepcopyable by setUpTestData; build per-test and flush the
+        # SharedMemoryModel identity map (SQLite recycles PKs across the per-test rollback).
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        self.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.sheet = self.participant.character_sheet
+        self.character = self.sheet.character
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet,
+            health=100,
+            max_health=100,
+        )
+
+    def _surfaced_technique(self, category: str) -> object:
+        """A combat-usable technique the character knows.
+
+        It has an ``action_template`` (so ``_combat_actions`` surfaces it) and no
+        damage profile / conditions (so no focused target is required), and is linked
+        to the character sheet via ``CharacterTechnique`` so it is dispatchable.
+        """
+        technique = TechniqueFactory(damage_profile=False, action_category=category)
+        technique.effect_type = EffectTypeFactory(base_power=None)
+        technique.action_template = ActionTemplateFactory()
+        technique.save()
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        return technique
+
+    def _dispatch(self, technique: object, action_slot: str) -> None:
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT,
+            technique_id=technique.pk,
+            action_slot=action_slot,
+        )
+        dispatch_player_action(self.character, ref, {"effort_level": EffortLevel.MEDIUM})
+
+    def _row(self) -> CombatRoundAction:
+        rows = CombatRoundAction.objects.filter(
+            participant=self.participant,
+            round_number=self.encounter.round_number,
+        )
+        self.assertEqual(rows.count(), 1, "expected exactly one merged CombatRoundAction row")
+        row = rows.first()
+        assert row is not None
+        return row
+
+    def test_focused_then_passive_coexist_through_real_dispatch(self) -> None:
+        """Focused (physical) then passive-social via ``dispatch_player_action``.
+
+        Both must land on one row: the passive must NOT overwrite the focused slot.
+        """
+        focused = self._surfaced_technique(ActionCategory.PHYSICAL)
+        social = self._surfaced_technique(ActionCategory.SOCIAL)
+
+        self._dispatch(focused, "focused")
+        self._dispatch(social, "passive-social")
+
+        row = self._row()
+        self.assertEqual(row.focused_action_id, focused.pk)
+        self.assertEqual(row.social_passive_id, social.pk)
