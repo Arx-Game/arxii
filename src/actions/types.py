@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from actions.constants import ActionBackend, ActionCategory, TargetKind
+from actions.constants import ActionBackend, ActionCategory, CombatActionSlot, TargetKind
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -134,6 +134,7 @@ class ActionRef:
     registry_key: str | None = None
     clash_id: int | None = None
     clash_action_slot: str | None = None
+    action_slot: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:
@@ -150,6 +151,14 @@ class ActionRef:
                 raise ValueError(msg)
             if has_technique and has_clash:
                 msg = "COMBAT ActionRef must not set both technique_id and clash_id"
+                raise ValueError(msg)
+            passive_slots = {
+                CombatActionSlot.PASSIVE_PHYSICAL,
+                CombatActionSlot.PASSIVE_SOCIAL,
+                CombatActionSlot.PASSIVE_MENTAL,
+            }
+            if self.action_slot in passive_slots and self.technique_id is None:
+                msg = "Passive COMBAT ActionRef requires technique_id"
                 raise ValueError(msg)
         if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
             msg = "REGISTRY ActionRef requires registry_key"

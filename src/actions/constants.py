@@ -76,6 +76,20 @@ class ActionCategory(models.TextChoices):
     MENTAL = "mental", "Mental"
 
 
+class CombatActionSlot(models.TextChoices):
+    """Which combat round-action slot a declared COMBAT technique fills.
+
+    ``FOCUSED`` is the actor's single primary action; the passive slots carry
+    auto-running techniques per arena. Values intentionally match the frontend
+    ``ActionSlot`` strings so the wire round-trips without translation.
+    """
+
+    FOCUSED = "focused", "Focused"
+    PASSIVE_PHYSICAL = "passive-physical", "Passive (Physical)"
+    PASSIVE_SOCIAL = "passive-social", "Passive (Social)"
+    PASSIVE_MENTAL = "passive-mental", "Passive (Mental)"
+
+
 class PlayerDecision(StrEnum):
     """Player decisions for paused resolution pipelines."""
 
