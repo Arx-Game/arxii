@@ -26,7 +26,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from flows.models.triggers import Trigger
 from world.character_sheets.factories import CharacterSheetFactory
@@ -1072,6 +1072,7 @@ def _make_tethered_pair_with_corruption(
 # ---------------------------------------------------------------------------
 
 
+@tag("postgres")
 class PerformSoulTetherRescueStage3Tests(TestCase):
     """Phase 8 §9.4 — stage-3 rescue happy path."""
 
@@ -1170,6 +1171,7 @@ class PerformSoulTetherRescueStage3Tests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@tag("postgres")
 class PerformSoulTetherRescueStage5Tests(TestCase):
     """Phase 8 §9.4 — stage-5 rescue lifts protagonism_lock when dropping below stage 5."""
 
@@ -1407,6 +1409,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
             )
         self.assertIn("insufficient resonance", ctx.exception.user_message)
 
+    @tag("postgres")
     def test_repeat_in_scene_raises(self) -> None:
         """Second rescue attempt for same (sineater, sinner, scene) raises RescueValidationError."""
         from world.magic.exceptions import RescueValidationError

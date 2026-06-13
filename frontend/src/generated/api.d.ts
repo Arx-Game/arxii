@@ -13464,6 +13464,8 @@ export interface components {
      *     * `effort` - Effort
      *     * `fatigue` - Fatigue
      *     * `strain` - Strain
+     *     * `affinity` - Affinity
+     *     * `pull` - Combat Pull
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -13474,7 +13476,9 @@ export interface components {
       | 'character'
       | 'effort'
       | 'fatigue'
-      | 'strain';
+      | 'strain'
+      | 'affinity'
+      | 'pull';
     ContributionRow: {
       id: number;
       persona_name: string;
