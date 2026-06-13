@@ -26,9 +26,7 @@ class ConsequenceOutcomeFilter(django_filters.FilterSet):
         from world.combat.models import CombatEncounter  # noqa: PLC0415
 
         scene_id = (
-            CombatEncounter.objects.filter(pk=value)
-            .values_list("scene_id", flat=True)
-            .first()
+            CombatEncounter.objects.filter(pk=value).values_list("scene_id", flat=True).first()
         )
         if scene_id is None:
             return queryset.none()

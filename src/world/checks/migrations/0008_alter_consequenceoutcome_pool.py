@@ -5,16 +5,22 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0007_alter_actiontemplate_default_delivery'),
-        ('checks', '0007_consequence_theater'),
+        ("actions", "0007_alter_actiontemplate_default_delivery"),
+        ("checks", "0007_consequence_theater"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='consequenceoutcome',
-            name='pool',
-            field=models.ForeignKey(blank=True, help_text='The ConsequencePool used for roulette selection. Null for plain (non-template) challenge resolutions whose roulette is reconstructed on read from the authored consequence links rather than persisted as a derived pool.', null=True, on_delete=django.db.models.deletion.PROTECT, related_name='consequence_outcomes', to='actions.consequencepool'),
+            model_name="consequenceoutcome",
+            name="pool",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="The ConsequencePool used for roulette selection. Null for plain (non-template) challenge resolutions whose roulette is reconstructed on read from the authored consequence links rather than persisted as a derived pool.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="consequence_outcomes",
+                to="actions.consequencepool",
+            ),
         ),
     ]

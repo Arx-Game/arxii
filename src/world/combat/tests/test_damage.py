@@ -606,9 +606,7 @@ class NpcActionInteractionLazyCreationTests(TestCase):
         )
 
         # The ConsequenceOutcome must reference that interaction.
-        outcomes = list(
-            ConsequenceOutcome.objects.filter(character=participant.character_sheet)
-        )
+        outcomes = list(ConsequenceOutcome.objects.filter(character=participant.character_sheet))
         self.assertEqual(len(outcomes), 1, "Exactly one ConsequenceOutcome should be recorded")
         npc_action_interaction = self._npc_action_interactions().order_by("-timestamp").first()
         self.assertIsNotNone(npc_action_interaction)
