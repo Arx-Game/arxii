@@ -7,7 +7,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0008_escalationcurve_combatencounter_escalation_curve"),
+        ("combat", "0010_remove_unique_action_per_opponent_per_round"),
     ]
 
     operations = [

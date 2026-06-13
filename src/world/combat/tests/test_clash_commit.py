@@ -213,52 +213,6 @@ class CommitToClashTests(TestCase):
             "Strain must not appear in the check breakdown — it feeds power now",
         )
 
-    def test_affinity_tilt_still_routed_to_check(self) -> None:
-        """check_modifier_extra (affinity tilt) must still appear as a ModifierContribution
-        in the check breakdown even after strain is removed from the check."""
-        from unittest.mock import patch
-
-        from world.checks import services as checks_services
-        from world.checks.constants import ModifierSourceKind
-
-        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
-        technique = self._make_technique_with_template(anima_cost=3)
-
-        captured: dict = {}
-        real_collect = checks_services.collect_check_modifiers
-
-        def _spy_collect(sheet, check_type, **kwargs):
-            breakdown = real_collect(sheet, check_type, **kwargs)
-            captured["extra_contributions"] = kwargs.get("extra_contributions") or []
-            return breakdown
-
-        with (
-            force_check_outcome(self.success_outcome),
-            patch(
-                "world.checks.services.collect_check_modifiers",
-                side_effect=_spy_collect,
-            ),
-        ):
-            commit_to_clash(
-                character_sheet=character_sheet,
-                technique=technique,
-                clash=self.clash,
-                strain_commitment=0,
-                action_slot="FOCUSED",
-                config_clash=self.config_clash,
-                config_strain=self.config_strain,
-                check_modifier_extra=5,
-            )
-
-        extras = captured["extra_contributions"]
-        affinity_contribs = [
-            c
-            for c in extras
-            if c.source_kind == ModifierSourceKind.STRAIN and c.source_label == "Affinity tilt"
-        ]
-        self.assertEqual(len(affinity_contribs), 1)
-        self.assertEqual(affinity_contribs[0].value, 5)
-
     def test_affinity_tilt_routed_as_labeled_contribution(self) -> None:
         """commit_to_clash must express the affinity tilt (check_modifier_extra) as a
         labeled AFFINITY ModifierContribution — distinct from STRAIN — so the
