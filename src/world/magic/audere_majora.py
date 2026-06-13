@@ -492,10 +492,8 @@ def resolve_audere_majora_offer(
         AudereMajoraOfferNotFoundError,
         AudereMajoraOfferStaleError,
         AudereMajoraPathError,
-        ProtagonismLockedError,
     )
-    from world.magic.services import has_pending_alterations  # noqa: PLC0415
-    from world.magic.types import AlterationGateError  # noqa: PLC0415
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
 
     offer = PendingAudereMajoraOffer.objects.filter(pk=offer_id).first()
     if offer is None:
@@ -516,10 +514,7 @@ def resolve_audere_majora_offer(
         raise AudereMajoraOfferStaleError
 
     # Spend guards
-    if sheet.is_protagonism_locked:
-        raise ProtagonismLockedError
-    if has_pending_alterations(sheet):
-        raise AlterationGateError
+    enforce_advancement_gate(sheet)
 
     # Path validation
     eligible_paths = eligible_paths_for_threshold(character, threshold)

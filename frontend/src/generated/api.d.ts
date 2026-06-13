@@ -6254,6 +6254,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/progression/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the progression dashboard for the acting character. */
+    get: operations['magic_progression_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/resonance-grants/': {
     parameters: {
       query?: never;
@@ -13464,6 +13481,8 @@ export interface components {
      *     * `effort` - Effort
      *     * `fatigue` - Fatigue
      *     * `strain` - Strain
+     *     * `affinity` - Affinity
+     *     * `pull` - Combat Pull
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -13474,7 +13493,9 @@ export interface components {
       | 'character'
       | 'effort'
       | 'fatigue'
-      | 'strain';
+      | 'strain'
+      | 'affinity'
+      | 'pull';
     ContributionRow: {
       id: number;
       persona_name: string;
@@ -14040,6 +14061,7 @@ export interface components {
       readonly escalation_curve_name: string | null;
       readonly escalation_start_round: number | null;
       readonly escalation_tick_narration: string | null;
+      readonly forced_escape: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -19777,6 +19799,26 @@ export interface components {
      * @enum {string}
      */
     PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
+    /** @description One milestone entry in a progression stage. */
+    ProgressionMilestone: {
+      kind: string;
+      tier: string;
+      title: string;
+      summary: string;
+      eligibility: string | null;
+      missing: string[];
+      xp_cost: number | null;
+      route_name: string | null;
+      codex_entry_id: number | null;
+    };
+    /** @description One stage row in the magic progression dashboard response. */
+    ProgressionStage: {
+      stage: number;
+      stage_label: string;
+      is_current: boolean;
+      has_undiscovered: boolean;
+      milestones: components['schemas']['ProgressionMilestone'][];
+    };
     /**
      * @description Input serializer for the CharacterCovenantRoleViewSet.promote action.
      *
@@ -30712,6 +30754,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_progression_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProgressionStage'][];
+        };
       };
     };
   };
