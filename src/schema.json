@@ -2450,14 +2450,17 @@ paths:
       description: |-
         Read-only endpoint for ConsequenceOutcome records.
 
-        Returns the roulette display recomputed from the persisted pool +
-        selected_consequence on every read.
+        Returns the roulette display recomputed on every read — from the persisted
+        pool + selected_consequence, or, when pool is None (#865), reconstructed from
+        the authored approach/template consequence links.
 
         Queryset scoping:
         - Staff users see all outcomes.
-        - Non-staff users see only outcomes for characters they own
+        - Non-staff users see outcomes for characters they own
           (chain: ConsequenceOutcome.character → CharacterSheet.character →
-          ObjectDB.db_account == request.user).
+          ObjectDB.db_account == request.user), AND outcomes whose scene they
+          participate in (#866) — reached via combat_interaction.scene or
+          challenge_record.challenge_instance.situation_instance.scene.
 
         Write operations are intentionally absent — outcomes are append-only and
         written by the resolution pipeline.
@@ -2491,14 +2494,17 @@ paths:
       description: |-
         Read-only endpoint for ConsequenceOutcome records.
 
-        Returns the roulette display recomputed from the persisted pool +
-        selected_consequence on every read.
+        Returns the roulette display recomputed on every read — from the persisted
+        pool + selected_consequence, or, when pool is None (#865), reconstructed from
+        the authored approach/template consequence links.
 
         Queryset scoping:
         - Staff users see all outcomes.
-        - Non-staff users see only outcomes for characters they own
+        - Non-staff users see outcomes for characters they own
           (chain: ConsequenceOutcome.character → CharacterSheet.character →
-          ObjectDB.db_account == request.user).
+          ObjectDB.db_account == request.user), AND outcomes whose scene they
+          participate in (#866) — reached via combat_interaction.scene or
+          challenge_record.challenge_instance.situation_instance.scene.
 
         Write operations are intentionally absent — outcomes are append-only and
         written by the resolution pipeline.
@@ -23566,6 +23572,10 @@ components:
         selected_consequence so the frontend always receives the full weighted
         roulette (outcome_display) rather than storing it.
 
+        When pool is None (challenge-based resolution), the roulette is
+        reconstructed from the authored consequence links on the approach and
+        challenge template — no pool is stored; no denormalization occurs.
+
         combat_interaction and challenge_record are exposed as plain integer ids to
         avoid touching the range-partitioned scenes_interaction table at
         serialization time.
@@ -23583,6 +23593,11 @@ components:
         pool:
           type: integer
           readOnly: true
+          nullable: true
+          description: The ConsequencePool used for roulette selection. Null for plain
+            (non-template) challenge resolutions whose roulette is reconstructed on
+            read from the authored consequence links rather than persisted as a derived
+            pool.
         selected_consequence:
           type: integer
           readOnly: true
@@ -23601,11 +23616,17 @@ components:
           description: |-
             Recompute the roulette from pool + selected_consequence on read.
 
-            Reads pool entries and parent entries from the prefetch cache
-            (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
-            _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries
-            are issued per row.  Mirrors the pool-walk logic of
+            When pool is not None, reads pool entries and parent entries from the
+            prefetch cache (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
+            _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries are
+            issued per row.  Mirrors the pool-walk logic of
             resolve_pool_consequences() but operates on already-fetched data.
+
+            When pool is None (challenge-based resolution), reconstructs the
+            consequence list from the authored ApproachConsequence and
+            ChallengeTemplateConsequence links via the challenge_record.  Uses
+            prefetch caches populated by the ViewSet's challenge-link Prefetch
+            objects.
 
             Returns a list of plain dicts matching OutcomeDisplay's fields.
           readOnly: true
