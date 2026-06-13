@@ -1209,17 +1209,20 @@ def _build_clash_for_action(
     if technique.clash_resolution_pool is None:
         return None
 
-    # Find the matching NPC action this round for the same opponent.
-    try:
-        npc_action = CombatOpponentAction.objects.select_related("threat_entry").get(
+    # The opponent may emit several actions in one round (e.g. a swarm). A PC's
+    # focused action forms at most one clash, so pick a clash-capable NPC action.
+    npc_action = (
+        CombatOpponentAction.objects.select_related("threat_entry")
+        .filter(
             opponent=opponent,
             round_number=round_number,
+            threat_entry__clash_capable=True,
         )
-    except CombatOpponentAction.DoesNotExist:
-        return None  # NPC has no action this round — no clash
-
-    if not npc_action.threat_entry.clash_capable:
-        return None  # NPC action is not clash-capable
+        .order_by("pk")
+        .first()
+    )
+    if npc_action is None:
+        return None  # no clash-capable NPC action this round — no clash
 
     # Property-based opposition gate — clash only opens if technique and
     # threat entry share at least one Property. Legacy-permissive: when
