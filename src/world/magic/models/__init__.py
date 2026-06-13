@@ -24,6 +24,7 @@ Submodules (see Scope 6 §4.4):
 - ritual_check_config: RitualCheckConfig
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
+- progression_milestone: MagicProgressionMilestone
 
 Additionally: ``AudereThreshold`` lives in ``world.magic.audere`` but is
 re-exported here so Django's model registry sees it via the ``magic.models``
@@ -91,6 +92,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
 )
 from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig
+from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_check_config import RitualCheckConfig
@@ -200,6 +202,8 @@ __all__ = [
     "IntensityTier",
     # power config (#637)
     "LevelPowerConfig",
+    # progression dashboard (#536)
+    "MagicProgressionMilestone",
     # alterations
     "MagicalAlterationEvent",
     "MagicalAlterationTemplate",

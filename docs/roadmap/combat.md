@@ -226,8 +226,19 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   deletes unanswered offers
 - **Passive action defaults are mechanically no-ops** — design wants secondary
   defend/buff/debuff/combo-opening effects — #874
-- **NPC tier mechanics** — `OpponentTier` enum exists but Swarm has no count-based
-  handling and Hero Killer has no narrative escape state — #875
+- ~~**NPC tier mechanics**~~ **DONE (#875):** Swarm and Hero Killer now have
+  differentiated mechanics. **Swarm** uses per-opponent count pools
+  (`swarm_count`/`max_swarm_count`/`body_toughness`/`bodies_per_attack` on
+  `CombatOpponent`, null for other tiers): damage ignores soak and clears
+  `max(1, raw // body_toughness)` bodies (DEFEATED at 0), and offensive volume
+  scales attritionally — `select_npc_actions` emits
+  `clamp(ceil(swarm_count / bodies_per_attack), 1, acting_PCs)` attacks/round
+  (the one-action-per-opponent unique constraint was dropped; `resolve_round`
+  resolves every swarm action). **Hero Killer** is unbeatable: damage never sets
+  DEFEATED, `_classify_encounter_outcome` forbids VICTORY while one is present, so
+  the only resolution is fleeing (FLED via the existing flee pipeline). A derived
+  `CombatEncounter.forced_escape` property drives a "you must run" banner in the
+  combat UI. Mook/Elite stat-default differentiation stays deferred to #566.
 - ~~**Encounter aftermath**~~ **DONE (#876):** completion runs through a single
   `complete_encounter` seam: a typed `EncounterOutcome`
   (victory/defeat/fled/abandoned, classified at completion) + `completed_at` on

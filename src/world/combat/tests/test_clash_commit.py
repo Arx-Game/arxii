@@ -259,6 +259,54 @@ class CommitToClashTests(TestCase):
         self.assertEqual(len(affinity_contribs), 1)
         self.assertEqual(affinity_contribs[0].value, 5)
 
+    def test_affinity_tilt_routed_as_labeled_contribution(self) -> None:
+        """commit_to_clash must express the affinity tilt (check_modifier_extra) as a
+        labeled AFFINITY ModifierContribution — distinct from STRAIN — so the
+        provenance UI attributes the tilt to its real source rather than folding it
+        under strain."""
+        from unittest.mock import patch
+
+        from world.checks import services as checks_services
+        from world.checks.constants import ModifierSourceKind
+
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        tilt = 4
+        captured: dict = {}
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            captured["extra_contributions"] = kwargs.get("extra_contributions")
+            return real_collect(sheet, check_type, **kwargs)
+
+        with (
+            force_check_outcome(self.success_outcome),
+            patch(
+                "world.checks.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+                check_modifier_extra=tilt,
+            )
+
+        extras = captured["extra_contributions"]
+        affinity_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.AFFINITY]
+        self.assertEqual(len(affinity_contribs), 1)
+        self.assertEqual(affinity_contribs[0].value, tilt)
+        self.assertEqual(affinity_contribs[0].source_label, "Affinity tilt")
+        # The tilt must NOT be mislabeled as STRAIN (no strain committed here).
+        strain_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.STRAIN]
+        self.assertEqual(strain_contribs, [])
+
     # -------------------------------------------------------------------------
     # 3. Overburn when strain exceeds anima pool
     # -------------------------------------------------------------------------

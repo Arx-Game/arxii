@@ -21,6 +21,7 @@ from world.magic.models import (
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
+    MagicProgressionMilestone,
     MishapPoolTier,
     Motif,
     MotifResonance,
@@ -674,3 +675,10 @@ class SceneEntryEndorsementAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(MagicProgressionMilestone)
+class MagicProgressionMilestoneAdmin(admin.ModelAdmin):
+    list_display = ("stage", "kind", "codex_entry", "sort_order")
+    list_filter = ("stage", "kind")
+    autocomplete_fields = ("codex_entry",)

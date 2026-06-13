@@ -12,9 +12,7 @@ from django.db import transaction
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.exceptions import ProtagonismLockedError
-from world.magic.services import has_pending_alterations
-from world.magic.types import AlterationGateError
+from world.magic.services.alterations import enforce_advancement_gate
 from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import (
@@ -31,7 +29,7 @@ if TYPE_CHECKING:
     from world.classes.models import CharacterClass
 
 
-def spend_xp_on_unlock(  # noqa: C901
+def spend_xp_on_unlock(
     character: ObjectDB,
     unlock_target: ClassLevelUnlock,
     gm: AccountDB | None = None,
@@ -54,10 +52,8 @@ def spend_xp_on_unlock(  # noqa: C901
         sheet = character.sheet_data
     except (CharacterSheet.DoesNotExist, AttributeError):
         sheet = None
-    if sheet is not None and sheet.is_protagonism_locked:
-        raise ProtagonismLockedError
-    if sheet is not None and has_pending_alterations(sheet):
-        raise AlterationGateError
+    if sheet is not None:
+        enforce_advancement_gate(sheet)
 
     account = character.account
 

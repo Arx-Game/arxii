@@ -21,6 +21,7 @@ from world.magic.views import (
     EffectTypeViewSet,
     FacetViewSet,
     GiftViewSet,
+    MagicProgressionView,
     PendingAlterationViewSet,
     PendingAudereMajoraOfferViewSet,
     PendingAudereOfferViewSet,
@@ -112,6 +113,11 @@ router.register("sanctums", SanctumViewSet, basename="sanctum")
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
     # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
+    path(
+        "progression/",
+        MagicProgressionView.as_view(),
+        name="magic-progression",
+    ),
     path(
         "applicable-pulls/",
         ApplicablePullsView.as_view(),

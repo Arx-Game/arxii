@@ -133,6 +133,24 @@ class CombatEncounter(SharedMemoryModel):
             f"(Round {self.round_number}, {self.get_status_display()})"
         )
 
+    @property
+    def forced_escape(self) -> bool:
+        """True when an unbeatable Hero Killer is on the field (#875).
+
+        Drives the "you must run" UI — victory is impossible; the party must
+        flee. Cache-aware: uses prefetched ``opponents_cached`` when present
+        so the detail serializer adds no query.
+        """
+        cached = getattr(self, "opponents_cached", None)  # noqa: GETATTR_LITERAL
+        if cached is not None:
+            return any(
+                o.tier == OpponentTier.HERO_KILLER and o.status == OpponentStatus.ACTIVE
+                for o in cached
+            )
+        return self.opponents.filter(
+            tier=OpponentTier.HERO_KILLER, status=OpponentStatus.ACTIVE
+        ).exists()
+
 
 class ThreatPool(SharedMemoryModel):
     """Named collection of NPC actions."""
@@ -328,6 +346,32 @@ class CombatOpponent(SharedMemoryModel):
         help_text="If True, the ObjectDB was created for this encounter only "
         "and will be cleaned up at encounter completion. Persona-bearing "
         "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
+    )
+
+    # === Swarm fields (#875) — populated only for SWARM tier, null elsewhere ===
+    swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies remaining. Damage clears bodies; "
+        "DEFEATED at 0. Null for non-swarm tiers.",
+    )
+    max_swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies at encounter start.",
+    )
+    body_toughness = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: damage needed to kill one body. A landing "
+        "attack clears max(1, raw_damage // body_toughness) bodies.",
+    )
+    bodies_per_attack = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: remaining-count → outgoing-attack ratio. The "
+        "swarm makes ceil(swarm_count / bodies_per_attack) attacks/round, capped "
+        "at the number of acting PCs.",
     )
 
     # === Clash fields (Task 1.5) ===
@@ -770,14 +814,6 @@ class CombatOpponentAction(SharedMemoryModel):
         CombatParticipant,
         related_name="incoming_attacks",
     )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["opponent", "round_number"],
-                name="unique_action_per_opponent_per_round",
-            ),
-        ]
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
