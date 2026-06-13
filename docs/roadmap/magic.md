@@ -307,9 +307,9 @@ What was built:
   (10 E2E-ish cases, payload-exact on both resolution paths), `PendingAlterationBanner.test.tsx`
   (4 cases), `XpKudosPage.alterationGate.test.tsx` (3 cases).
 
-Known gap: `accept_thread_weaving_unlock` spends XP without checking the scar gate
-(`AlterationGateError` is only raised in `spend_xp_on_unlock`). A follow-up issue is being
-filed at PR time.
+Both magic XP-spend sites now enforce the gate: `accept_thread_weaving_unlock` and
+`cross_thread_xp_lock` both raise `AlterationGateError` / `ProtagonismLockedError` before
+any XP is deducted. Fixed in #898.
 
 **Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
 

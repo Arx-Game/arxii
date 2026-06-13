@@ -19,6 +19,7 @@ from world.magic.factories import (
     CharacterSheetFactory,
     CharacterThreadWeavingUnlockFactory,
     FacetFactory,
+    PendingAlterationFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
@@ -39,6 +40,7 @@ from world.magic.services import (
     update_thread_narrative,
     weave_thread,
 )
+from world.magic.types import AlterationGateError
 from world.progression.models.rewards import ExperiencePointsData
 from world.traits.factories import TraitFactory
 
@@ -361,6 +363,94 @@ class CrossThreadXpLockTests(TestCase):
         ThreadXPLockedLevelFactory(level=30, xp_cost=200)
         with self.assertRaises(AnchorCapExceeded):
             cross_thread_xp_lock(thread.owner, thread, 30)
+
+
+# =============================================================================
+# 11.3b — cross_thread_xp_lock Mage Scar gate (#898)
+# =============================================================================
+
+
+class CrossThreadXpLockGateTests(TestCase):
+    """cross_thread_xp_lock must block characters with an open Mage Scar."""
+
+    def _make_thread_with_xp(
+        self,
+        thread_level: int = 10,
+        xp_available: int = 500,
+        trait_value: int = 100,
+        path_stage: int = 10,
+    ) -> tuple[Thread, ExperiencePointsData]:
+        """Helper: thread + seeded XP on an account linked to the character."""
+        from world.progression.models.rewards import ExperiencePointsData
+
+        account = AccountFactory()
+        sheet = CharacterSheetFactory(_path_stage=path_stage)
+        sheet.character.account = account
+        ObjectDB.objects.filter(pk=sheet.character.pk).update()
+        account.characters.add(sheet.character)
+
+        thread = ThreadFactory(
+            owner=sheet,
+            resonance=ResonanceFactory(),
+            level=thread_level,
+            _trait_value=trait_value,
+        )
+        xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
+            account=account,
+            defaults={"total_earned": xp_available, "total_spent": 0},
+        )
+        xp_tracker.total_earned = xp_available
+        xp_tracker.total_spent = 0
+        xp_tracker.save(update_fields=["total_earned", "total_spent"])
+        return thread, xp_tracker
+
+    def test_open_pending_alteration_raises_alteration_gate_error(self) -> None:
+        """Character with an OPEN PendingAlteration → AlterationGateError."""
+        thread, _ = self._make_thread_with_xp(thread_level=10, xp_available=500)
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        PendingAlterationFactory(character=thread.owner)
+
+        with self.assertRaises(AlterationGateError):
+            cross_thread_xp_lock(thread.owner, thread, 20)
+
+    def test_open_pending_alteration_no_xp_deducted(self) -> None:
+        """No XP is deducted when the Mage Scar gate blocks the transaction."""
+        thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        PendingAlterationFactory(character=thread.owner)
+
+        with self.assertRaises(AlterationGateError):
+            cross_thread_xp_lock(thread.owner, thread, 20)
+
+        xp_tracker.refresh_from_db()
+        self.assertEqual(xp_tracker.current_available, 500)
+
+    def test_open_pending_alteration_no_unlock_row_created(self) -> None:
+        """No ThreadLevelUnlock row is created when the Mage Scar gate blocks."""
+        thread, _ = self._make_thread_with_xp(thread_level=10, xp_available=500)
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        PendingAlterationFactory(character=thread.owner)
+
+        with self.assertRaises(AlterationGateError):
+            cross_thread_xp_lock(thread.owner, thread, 20)
+
+        self.assertFalse(
+            ThreadLevelUnlock.objects.filter(thread=thread, unlocked_level=20).exists()
+        )
+
+    def test_idempotent_unlock_bypasses_gate(self) -> None:
+        """Already-unlocked boundary returns existing row without checking the gate."""
+        from world.magic.factories import ThreadLevelUnlockFactory
+
+        thread, _ = self._make_thread_with_xp(thread_level=10, xp_available=500)
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        existing = ThreadLevelUnlockFactory(thread=thread, unlocked_level=20, xp_spent=200)
+        # Add a Mage Scar AFTER the unlock already exists — idempotency path
+        # must return existing without hitting the gate.
+        PendingAlterationFactory(character=thread.owner)
+
+        result = cross_thread_xp_lock(thread.owner, thread, 20)
+        self.assertEqual(result.pk, existing.pk)
 
 
 # =============================================================================

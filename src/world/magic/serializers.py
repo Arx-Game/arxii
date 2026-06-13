@@ -1141,13 +1141,18 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
 
     def create(self, validated_data: dict) -> CharacterThreadWeavingUnlock:  # type: ignore[override]
         """Call accept_thread_weaving_unlock; catch XPInsufficient → ValidationError."""
-        from world.magic.exceptions import XPInsufficient  # noqa: PLC0415
+        from world.magic.exceptions import ProtagonismLockedError, XPInsufficient  # noqa: PLC0415
         from world.magic.services.threads import accept_thread_weaving_unlock  # noqa: PLC0415
+        from world.magic.types import AlterationGateError  # noqa: PLC0415
 
         learner = validated_data["learner"]
         offer = self.context["offer"]
         try:
             return accept_thread_weaving_unlock(learner, offer)
+        except ProtagonismLockedError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except AlterationGateError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
         except XPInsufficient as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
@@ -2363,9 +2368,11 @@ class CrossXPLockSerializer(serializers.Serializer):
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
             InvalidImbueAmount,
+            ProtagonismLockedError,
             XPInsufficient,
         )
         from world.magic.services import cross_thread_xp_lock  # noqa: PLC0415
+        from world.magic.types import AlterationGateError  # noqa: PLC0415
 
         thread = self.context["thread"]
         try:
@@ -2374,6 +2381,10 @@ class CrossXPLockSerializer(serializers.Serializer):
                 thread=thread,
                 boundary_level=validated_data["boundary_level"],
             )
+        except ProtagonismLockedError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except AlterationGateError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
         except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
