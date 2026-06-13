@@ -44,6 +44,7 @@ class OpponentDamageResult:
     probed: bool
     probing_increment: int
     defeated: bool
+    kills: int = 0  # swarm bodies cleared this hit (#875); 0 for non-swarm
 
 
 @dataclass(frozen=True)

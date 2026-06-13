@@ -99,6 +99,7 @@ from world.magic.serializers import (
     LibraryEntrySerializer,
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
+    ProgressionStageSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPatchSerializer,
@@ -1543,6 +1544,32 @@ class AudereMajoraRespondView(APIView):
         return _dispatch_respond(
             request, AudereMajoraRespondSerializer, AudereMajoraCrossingResultSerializer
         )
+
+
+# =============================================================================
+# Magic Progression Dashboard (GET /api/magic/progression/)
+# =============================================================================
+
+
+class MagicProgressionView(APIView):
+    """Progression dashboard payload for a character's magic journey.
+
+    Returns all six stage views with per-stage milestone lists and
+    discovery metadata in one round-trip.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: ProgressionStageSerializer(many=True)})
+    def get(self, request: Request) -> Response:
+        """Return the progression dashboard for the acting character."""
+        from world.magic.services.progression_dashboard import (  # noqa: PLC0415
+            build_progression_dashboard,
+        )
+
+        sheet = _resolve_actor_sheet(request, body_key="character_sheet_id", from_query=True)
+        stages = build_progression_dashboard(sheet)
+        return Response({"stages": ProgressionStageSerializer(stages, many=True).data})
 
 
 # =============================================================================

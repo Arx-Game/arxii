@@ -260,3 +260,25 @@ class AuthoringContext(models.TextChoices):
     GM = "gm", "Game Master"
     PLAYER = "player", "Player"
     CG = "cg", "Character Creation"
+
+
+class MagicMilestoneKind(models.TextChoices):
+    RESONANCE_DISCOVERY = "resonance_discovery", "Resonance Discovery"
+    THREAD_WEAVING = "thread_weaving", "Thread Weaving"
+    MOTIF = "motif", "Motif"
+    TECHNIQUE_DEVELOPMENT = "technique_development", "Technique Development"
+    ANIMA_RITUAL = "anima_ritual", "Anima Ritual"
+    SECOND_GIFT = "second_gift", "Second Gift"
+    STAGE_CROSSING = "stage_crossing", "Stage Crossing"
+
+
+class MilestoneDiscoveryTier(models.TextChoices):
+    KNOWN = "known", "Known"
+    UNCOVERED = "uncovered", "Uncovered"
+    UNKNOWN = "unknown", "Unknown"
+
+
+class MilestoneEligibility(models.TextChoices):
+    ALREADY_HAVE = "already_have", "Already Have"
+    ELIGIBLE = "eligible", "Eligible"
+    LOCKED = "locked", "Locked"

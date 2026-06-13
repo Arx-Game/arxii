@@ -155,7 +155,13 @@ class OrgBooksViewSet(viewsets.ViewSet):
 
 
 def _viewer_persona(request: Request):
-    """The viewer's presented persona (PRIMARY convention), or None."""
+    """The viewer's PRIMARY persona, or None.
+
+    NOTE: this resolves the account's PRIMARY persona, NOT the currently
+    *presented* persona — so an ESTABLISHED persona's org memberships are not
+    gated here. That mirrors RankingDisplayViewSet's existing posture; moving
+    books gating to the presented persona is tracked as a follow-up.
+    """
     from world.scenes.services import (  # noqa: PLC0415
         MissingPrimaryPersonaError,
         persona_for_character,

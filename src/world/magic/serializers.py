@@ -2633,6 +2633,35 @@ class _WeavableTechniqueSerializer(serializers.Serializer):
     gift_name = serializers.CharField()
 
 
+# =============================================================================
+# Magic Progression Dashboard (GET /api/magic/progression/)
+# =============================================================================
+
+
+class ProgressionMilestoneSerializer(serializers.Serializer):
+    """One milestone entry in a progression stage."""
+
+    kind = serializers.CharField()
+    tier = serializers.CharField()
+    title = serializers.CharField()
+    summary = serializers.CharField(allow_blank=True)
+    eligibility = serializers.CharField(allow_null=True)
+    missing = serializers.ListField(child=serializers.CharField())
+    xp_cost = serializers.IntegerField(allow_null=True)
+    route_name = serializers.CharField(allow_null=True)
+    codex_entry_id = serializers.IntegerField(allow_null=True)
+
+
+class ProgressionStageSerializer(serializers.Serializer):
+    """One stage row in the magic progression dashboard response."""
+
+    stage = serializers.IntegerField()
+    stage_label = serializers.CharField()
+    is_current = serializers.BooleanField()
+    has_undiscovered = serializers.BooleanField()
+    milestones = ProgressionMilestoneSerializer(many=True)
+
+
 class ThreadHubSummarySerializer(serializers.Serializer):
     """Response serializer for GET /api/magic/thread-hub-summary/."""
 
