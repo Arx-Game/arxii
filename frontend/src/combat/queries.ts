@@ -5,7 +5,7 @@
  * Phase 7 of the unified-combat-ui plan.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type { DispatchActionRequest, EncounterListItem } from './types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
@@ -35,6 +35,14 @@ export const combatKeys = {
   consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
     [...combatKeys.all, 'consequence-outcomes', params] as const,
 };
+
+/**
+ * Invalidate every consequence-outcome query (all character/encounter variants),
+ * so the "Last Outcome" panel refetches after a round-affecting mutation (#866).
+ */
+function invalidateConsequenceOutcomes(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] }).catch(() => {});
+}
 
 // ---------------------------------------------------------------------------
 // Encounter read hook
@@ -133,9 +141,7 @@ export function useUpgradeCombo(encounterId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) }).catch(() => {});
-      qc
-        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
-        .catch(() => {});
+      invalidateConsequenceOutcomes(qc);
     },
   });
 }
@@ -235,9 +241,7 @@ export function useFleeMutation(encounterId: number) {
     mutationFn: () => api.postFlee(encounterId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-      qc
-        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
-        .catch(() => {});
+      invalidateConsequenceOutcomes(qc);
     },
   });
 }
@@ -262,9 +266,7 @@ export function useEndEncounter(encounterId: number) {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       // Terminal event: every character's action list for this fight is now stale.
       qc.invalidateQueries({ queryKey: combatKeys.availableActionsAll() }).catch(() => {});
-      qc
-        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
-        .catch(() => {});
+      invalidateConsequenceOutcomes(qc);
       if (typeof data.scene === 'number') {
         qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(
           () => {}
@@ -289,9 +291,7 @@ export function useCoverMutation(encounterId: number) {
     mutationFn: (allyParticipantId: number) => api.postCover(encounterId, allyParticipantId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-      qc
-        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
-        .catch(() => {});
+      invalidateConsequenceOutcomes(qc);
     },
   });
 }

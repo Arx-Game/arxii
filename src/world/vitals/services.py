@@ -253,21 +253,25 @@ def _record_combat_outcome(  # noqa: PLR0913 - mirrors record_consequence_outcom
     pool: ConsequencePool,
     pending: PendingResolution,
     breakdown: ModifierBreakdown,
-    combat_interaction: Interaction | None,
+    combat_interaction_factory: Callable[[], Interaction] | None,
     summary: str,
 ) -> None:
     """Persist one survivability tier's resolution as a ConsequenceOutcome.
 
-    No-op when ``combat_interaction`` is None (e.g. the mechanics effect_handlers
-    path) — the exactly-one-source constraint forbids a sourceless record.
+    No-op when ``combat_interaction_factory`` is None (e.g. the mechanics
+    effect_handlers path) — the exactly-one-source constraint forbids a
+    sourceless record. Otherwise the factory is invoked here to obtain the
+    Interaction; because this function is only called from a firing tier, the
+    Interaction is minted only when a consequence actually records (#864).
 
     Side-effect only (the existing return values are untouched). The selected
     Consequence is unwrapped from the pending resolution; an unsaved fallback
     consequence persists as a null selected_consequence (the outcome still
     records the pool + modifier provenance).
     """
-    if combat_interaction is None:
+    if combat_interaction_factory is None:
         return
+    combat_interaction = combat_interaction_factory()
 
     from world.checks.services import record_consequence_outcome  # noqa: PLC0415
 
@@ -416,16 +420,13 @@ def process_damage_consequences(
         if wounds:
             result.wounds_applied.extend(wounds)
             result.modifier_breakdown = wound_breakdown
-            combat_interaction = (
-                combat_interaction_factory() if combat_interaction_factory is not None else None
-            )
             _record_combat_outcome(
                 character_sheet,
                 wound_check_type,
                 wound_pool,
                 pending,
                 wound_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "permanent wound",
             )
 
@@ -446,16 +447,13 @@ def process_damage_consequences(
         if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
-            combat_interaction = (
-                combat_interaction_factory() if combat_interaction_factory is not None else None
-            )
             _record_combat_outcome(
                 character_sheet,
                 death_check_type,
                 death_pool,
                 pending,
                 death_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "lethal hit",
             )
             return result
@@ -479,16 +477,13 @@ def process_damage_consequences(
         if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
-            combat_interaction = (
-                combat_interaction_factory() if combat_interaction_factory is not None else None
-            )
             _record_combat_outcome(
                 character_sheet,
                 ko_check_type,
                 knockout_pool,
                 pending,
                 ko_breakdown,
-                combat_interaction,
+                combat_interaction_factory,
                 "knockout",
             )
             return result
