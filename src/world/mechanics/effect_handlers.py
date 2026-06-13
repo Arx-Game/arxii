@@ -425,7 +425,10 @@ def _apply_capture(
         capture_character(
             captive=sheet,
             captor_organization=effect.capture_captor_organization,
-            return_location=context.location,
+            # The captive's own location is the capture site they return to —
+            # not context.location (the caster's room), which differs for a
+            # TARGET capture. target.location may be None; the service allows it.
+            return_location=target.location,
             offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
         )
     except AlreadyCapturedError:
