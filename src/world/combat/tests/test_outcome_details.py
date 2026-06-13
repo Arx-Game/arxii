@@ -12,6 +12,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.combat.factories import ClashContributionFactory, ClashRoundFactory
+from world.magic.types.power_ledger import PowerLedgerBuilder
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import InteractionFactory
+from world.scenes.power_ledger_services import persist_power_ledger
 
 
 class ActionOutcomeDetailsViewTests(APITestCase):
@@ -199,3 +204,88 @@ class DerivedOutcomeRowsTest(TestCase):
         assert detail.effects, "second participant should see the action's effects"
         kinds = {row.kind for row in detail.effects}
         assert "status" in kinds
+
+
+# ---------------------------------------------------------------------------
+# Clash contribution detail — strain→power fields (Task 7)
+# ---------------------------------------------------------------------------
+
+
+class ClashContributionDetailStrainPowerTest(TestCase):
+    """_build_outcome_detail populates strain_committed, power, progress_delta for clashes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Build a ClashContribution linked to an ACTION Interaction with a ledger.
+        self.interaction = InteractionFactory(mode=InteractionMode.ACTION)
+        self.clash_round = ClashRoundFactory()
+        self.contribution = ClashContributionFactory(
+            clash_round=self.clash_round,
+            anima_committed=5,
+            progress_delta=3,
+            interaction=self.interaction,
+            interaction_timestamp=self.interaction.timestamp,
+        )
+        # Persist a power ledger onto the interaction (total = 12).
+        persist_power_ledger(
+            interaction=self.interaction,
+            ledger=PowerLedgerBuilder(base=12).build(),
+        )
+        # Staff account — passes both _viewer_can_see and viewer_can_see_ledger.
+        self.staff_account = AccountFactory()
+        self.staff_account.is_staff = True
+        self.staff_account.save()
+
+    def test_strain_committed_and_progress_delta_in_detail(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        detail = _build_outcome_detail(self.interaction.pk, self.staff_account)
+        assert detail.strain_committed == 5
+        assert detail.progress_delta == 3
+
+    def test_power_derived_from_ledger_for_privileged_viewer(self) -> None:
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        detail = _build_outcome_detail(self.interaction.pk, self.staff_account)
+        assert detail.power is not None
+        assert detail.power == 12
+
+    def test_power_withheld_from_non_privileged_viewer(self) -> None:
+        """Non-staff, non-caster viewers see no power but still get strain/progress."""
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        outsider = AccountFactory()
+        # outsider is not staff and does not play the contribution's character;
+        # they also are not in the encounter — so _viewer_can_see returns False,
+        # meaning effects are empty as well.  The important thing: power is None.
+        detail = _build_outcome_detail(self.interaction.pk, outsider)
+        assert detail.power is None
+
+    def test_new_fields_absent_from_non_clash_details(self) -> None:
+        """Non-clash interaction IDs must not break existing path (None defaults)."""
+        from world.combat.views_outcome_details import _build_outcome_detail
+
+        # Unknown ID → falls through to the bare ActionOutcomeDetail with defaults.
+        detail = _build_outcome_detail(99999, self.staff_account)
+        assert detail.strain_committed is None
+        assert detail.power is None
+        assert detail.progress_delta is None
+
+    def test_clash_detail_json_contains_new_keys(self) -> None:
+        """The endpoint returns the new fields in the JSON response body."""
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.staff_account)
+        url = reverse("combat:action-outcome-details")
+        resp = client.get(url, {"action_interaction_ids": str(self.interaction.pk)})
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert len(data) == 1
+        detail = data[0]
+        assert "strain_committed" in detail, f"missing strain_committed in {list(detail)}"
+        assert "power" in detail, f"missing power in {list(detail)}"
+        assert "progress_delta" in detail, f"missing progress_delta in {list(detail)}"
+        assert detail["strain_committed"] == 5
+        assert detail["progress_delta"] == 3
+        assert detail["power"] == 12

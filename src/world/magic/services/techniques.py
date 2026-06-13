@@ -694,6 +694,7 @@ def use_technique(  # noqa: PLR0913
     strain_commitment: int = 0,
     applicable_threads: Sequence[ApplicableThread] | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    power_intensity_bonus: int = 0,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -701,6 +702,11 @@ def use_technique(  # noqa: PLR0913
     effective cost (e.g. for Clash contributions). It defaults to ``0`` so every
     existing caller is unaffected. The strain adds on top of the floored
     effective cost via ``calculate_effective_anima_cost``.
+
+    ``power_intensity_bonus`` is extra intensity folded into power derivation only
+    (not anima cost); used by clash strain→power to let strain commitment raise the
+    cast's effective power without changing the anima the caster pays. Defaults to
+    ``0`` so every existing caller is unaffected. Negative values are clamped to 0.
 
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
@@ -743,7 +749,7 @@ def use_technique(  # noqa: PLR0913
     room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
 
     seed_ledger = _derive_power(
-        channeled_intensity=stats.intensity,
+        channeled_intensity=stats.intensity + max(power_intensity_bonus, 0),
         technique=technique,
         character=character,
         applicable_threads=applicable_threads,

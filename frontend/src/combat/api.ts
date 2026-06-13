@@ -214,6 +214,12 @@ export interface ActionOutcomeDetail {
   action_interaction_id: number;
   effects: OutcomeEffectRow[];
   power_ledger?: PowerLedger | null;
+  // Clash contributions only (null for non-clash outcomes). `power` mirrors the
+  // power_ledger total and is gated to caster/staff; strain_committed and
+  // progress_delta tell the strain→power→progress story and are not gated.
+  strain_committed?: number | null;
+  power?: number | null;
+  progress_delta?: number | null;
 }
 
 /**

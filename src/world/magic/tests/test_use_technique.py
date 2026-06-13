@@ -488,3 +488,71 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
 
         # _resolve_mishap must have been called with the extracted check_result
         mock_resolve_mishap.assert_called_once_with(self.character, fake_pool, mock_check_result)
+
+
+class PowerIntensityBonusTests(TestCase):
+    """power_intensity_bonus raises power seen by resolve_fn without touching anima cost."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
+
+    def setUp(self) -> None:
+        self.anima = CharacterAnimaFactory(current=20, maximum=20)
+        self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
+
+    def _run(self, *, power_intensity_bonus: int = 0) -> "tuple[int, object]":
+        """Return (captured_power, TechniqueUseResult) for one use_technique call."""
+        captured: dict[str, object] = {}
+
+        def resolve(*, power: int, ledger: object = None) -> SimpleNamespace:
+            captured["power"] = power
+            return SimpleNamespace(check_result=None)
+
+        result = use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=resolve,
+            strain_commitment=0,
+            power_intensity_bonus=power_intensity_bonus,
+        )
+        return captured["power"], result
+
+    def test_power_intensity_bonus_raises_power_not_anima_cost(self) -> None:
+        """A positive power_intensity_bonus raises the power seen by resolve_fn.
+
+        The anima effective_cost must remain identical because the bonus does NOT
+        flow through calculate_effective_anima_cost — it is folded into the
+        _derive_power channeled_intensity only.
+        """
+        base_power, base_result = self._run(power_intensity_bonus=0)
+        boosted_power, boosted_result = self._run(power_intensity_bonus=6)
+
+        self.assertGreater(boosted_power, base_power, "Bonus must raise power seen by resolve_fn")
+        self.assertEqual(
+            boosted_result.anima_cost.effective_cost,
+            base_result.anima_cost.effective_cost,
+            "power_intensity_bonus must NOT change anima effective_cost",
+        )
+
+    def test_zero_bonus_is_identical_to_no_kwarg(self) -> None:
+        """Calling with power_intensity_bonus=0 is equivalent to omitting the kwarg."""
+        explicit_zero_power, explicit_zero_result = self._run(power_intensity_bonus=0)
+        # Re-run to compare (same setUp state each time via setUp per-method)
+        default_power, default_result = self._run(power_intensity_bonus=0)
+        self.assertEqual(explicit_zero_power, default_power)
+        self.assertEqual(
+            explicit_zero_result.anima_cost.effective_cost,
+            default_result.anima_cost.effective_cost,
+        )
+
+    def test_negative_bonus_is_clamped_to_zero(self) -> None:
+        """A negative power_intensity_bonus must not reduce power (max(bonus, 0) guard)."""
+        base_power, _ = self._run(power_intensity_bonus=0)
+        clamped_power, _ = self._run(power_intensity_bonus=-10)
+        self.assertEqual(
+            clamped_power,
+            base_power,
+            "Negative power_intensity_bonus must be clamped to 0 and not reduce power",
+        )
