@@ -510,7 +510,7 @@ class ProcessDamageConsequencesRecordingTests(TestCase):
                 character_sheet=character.sheet_data,
                 damage_dealt=5,
                 damage_type=None,
-                combat_interaction=interaction,
+                combat_interaction_factory=lambda: interaction,
             )
 
         outcomes = list(ConsequenceOutcome.objects.filter(character=vitals.character_sheet))

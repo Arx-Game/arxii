@@ -30,7 +30,7 @@ from world.vitals.constants import (
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
@@ -340,7 +340,7 @@ def process_damage_consequences(
     damage_type: DamageType | None,
     *,
     extra_modifiers: int = 0,
-    combat_interaction: Interaction | None = None,
+    combat_interaction_factory: Callable[[], Interaction] | None = None,
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
@@ -366,12 +366,14 @@ def process_damage_consequences(
         damage_dealt: How much damage was dealt this hit.
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
-        combat_interaction: The combat Interaction this resolution belongs to.
-            When provided, each firing tier persists a ConsequenceOutcome bound
-            to it (#850). When None (e.g. the mechanics effect_handlers path),
-            recording is skipped — the exactly-one-source constraint forbids a
-            sourceless record. Recording is a pure side effect and never changes
-            the returned DamageConsequenceResult.
+        combat_interaction_factory: Zero-argument callable that returns the
+            combat Interaction this resolution belongs to. Called at most once,
+            on the first tier that actually fires — the NPC-action path memoizes
+            it so all targets of the same action share one Interaction row (#864).
+            When None (e.g. the mechanics effect_handlers path), recording is
+            skipped — the exactly-one-source constraint forbids a sourceless
+            record. Recording is a pure side effect and never changes the
+            returned DamageConsequenceResult.
     """
     if character_sheet is None:
         return DamageConsequenceResult(message="No vitals found")
@@ -412,6 +414,9 @@ def process_damage_consequences(
         if wounds:
             result.wounds_applied.extend(wounds)
             result.modifier_breakdown = wound_breakdown
+            combat_interaction = (
+                combat_interaction_factory() if combat_interaction_factory is not None else None
+            )
             _record_combat_outcome(
                 character_sheet,
                 wound_check_type,
@@ -439,6 +444,9 @@ def process_damage_consequences(
         if _applied_bleed_out(pending):
             result.dying = True
             result.message = "took a lethal hit and is dying"
+            combat_interaction = (
+                combat_interaction_factory() if combat_interaction_factory is not None else None
+            )
             _record_combat_outcome(
                 character_sheet,
                 death_check_type,
@@ -469,6 +477,9 @@ def process_damage_consequences(
         if _applied_unconscious(pending):
             result.knocked_out = True
             result.message = "was knocked unconscious"
+            combat_interaction = (
+                combat_interaction_factory() if combat_interaction_factory is not None else None
+            )
             _record_combat_outcome(
                 character_sheet,
                 ko_check_type,

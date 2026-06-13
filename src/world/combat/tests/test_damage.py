@@ -4,9 +4,15 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 from evennia.utils.test_resources import EvenniaTestCase
 
-from actions.factories import ActionTemplateFactory
+from actions.factories import (
+    ActionTemplateFactory,
+    ConsequencePoolEntryFactory,
+    ConsequencePoolFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory
+from world.checks.constants import EffectType
+from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ActionCategory, EncounterStatus, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
@@ -22,7 +28,10 @@ from world.combat.services import (
     apply_damage_to_participant,
     resolve_round,
 )
-from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.factories import (
+    DamageSuccessLevelMultiplierFactory,
+    UnconsciousConditionFactory,
+)
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
@@ -30,6 +39,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
 
@@ -441,3 +451,169 @@ class ApplyDamageToParticipantResistanceTests(EvenniaTestCase):
         result = apply_damage_to_participant(participant, 12, damage_type=fire)
         # 12 - 8 resistance = 4 (no threads on test character, so thread reduction = 0)
         self.assertEqual(result.damage_dealt, 4)
+
+
+class NpcActionInteractionLazyCreationTests(TestCase):
+    """Tests that the NPC-action Interaction is created lazily (only when a
+    survivability tier fires) rather than eagerly before the per-target loop.
+
+    Two invariants:
+    - When no tier fires (whiff), no narrator-authored Interaction is created.
+    - When a tier fires, exactly one narrator-authored Interaction is created,
+      and the ConsequenceOutcome references it.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        cls.effect_attack = EffectTypeFactory(name="LazyNPCAttack", base_power=20)
+        cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="LazyFull"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="LazyPartial"
+        )
+
+    def _seed_knockout_pool(self):
+        """Seed a knockout pool with an Unconscious-applying consequence.
+
+        Returns the CheckOutcome that triggers knockout (failure tier).
+        """
+        from world.vitals.services import get_vitals_consequence_config
+
+        failure_outcome = CheckOutcomeFactory(name="LazyKO-Failure", success_level=-1)
+        unconscious = UnconsciousConditionFactory()
+        consequence = ConsequenceFactory(outcome_tier=failure_outcome, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=unconscious,
+            target="self",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        cfg = get_vitals_consequence_config()
+        cfg.knockout_pool = pool
+        cfg.save(update_fields=["knockout_pool"])
+        return failure_outcome
+
+    def _setup_encounter(self, *, pc_health: int = 100, npc_damage: int = 5):
+        """Create an encounter: 1 PC, 1 NPC (mook), NPC targeting PC."""
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=npc_damage)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=500,
+            max_health=500,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
+            health=pc_health,
+            max_health=100,
+        )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key=f"LazyNPCRoom-{pc_health}-{npc_damage}",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=opponent,
+        )
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(participant)
+        return encounter, participant, opponent
+
+    def _npc_action_interactions(self):
+        """Return the queryset of narrator-authored ACTION-mode Interactions.
+
+        These are the only interactions created by create_npc_action_interaction;
+        broadcast_action_outcome creates OUTCOME-mode interactions with the same
+        narrator persona, so we must filter on mode=ACTION to isolate the signal.
+        """
+        from world.scenes.constants import InteractionMode
+        from world.scenes.models import Interaction
+
+        return Interaction.objects.filter(persona__name="Narrator", mode=InteractionMode.ACTION)
+
+    def test_npc_action_whiff_creates_no_interaction(self) -> None:
+        """When no survivability tier fires (PC at full health, small NPC damage),
+        no narrator-authored ACTION Interaction should be created.
+
+        Before fix: create_npc_action_interaction() is called eagerly → narrator
+        ACTION interaction created unconditionally. After fix: it must not be created.
+        """
+        # PC full health (100/100), NPC deals 5 damage → health 95/100.
+        # wound_difficulty=0 (5 < 50% of 100), death_difficulty=0 (95>0),
+        # knockout_difficulty=0 (95% > 20%). No tier fires.
+        encounter, _participant, _opponent = self._setup_encounter(pc_health=100, npc_damage=5)
+
+        count_before = self._npc_action_interactions().count()
+        resolve_round(encounter)
+        count_after = self._npc_action_interactions().count()
+
+        self.assertEqual(
+            count_after,
+            count_before,
+            "No narrator ACTION Interaction should be created when no tier fires (whiff)",
+        )
+
+    def test_npc_action_tier_fire_creates_one_shared_interaction(self) -> None:
+        """When a survivability tier fires (PC in knockout zone, knockout pool
+        seeded, forced failure outcome), exactly one narrator ACTION Interaction
+        is created, and the ConsequenceOutcome references it.
+        """
+        from world.checks.outcome_models import ConsequenceOutcome
+
+        failure_outcome = self._seed_knockout_pool()
+
+        # PC at 10/100 health (10%), NPC deals 5 damage → health 5/100 (5%).
+        # knockout_difficulty > 0, death_difficulty=0 (5>0), wound_difficulty=0 (5<50).
+        encounter, participant, _opponent = self._setup_encounter(pc_health=10, npc_damage=5)
+
+        count_before = self._npc_action_interactions().count()
+
+        with force_check_outcome(failure_outcome):
+            resolve_round(encounter)
+
+        new_count = self._npc_action_interactions().count() - count_before
+        self.assertEqual(
+            new_count,
+            1,
+            "Exactly one narrator ACTION Interaction should be created when a tier fires",
+        )
+
+        # The ConsequenceOutcome must reference that interaction.
+        outcomes = list(
+            ConsequenceOutcome.objects.filter(character=participant.character_sheet)
+        )
+        self.assertEqual(len(outcomes), 1, "Exactly one ConsequenceOutcome should be recorded")
+        npc_action_interaction = self._npc_action_interactions().order_by("-timestamp").first()
+        self.assertIsNotNone(npc_action_interaction)
+        self.assertEqual(
+            outcomes[0].combat_interaction_id,
+            npc_action_interaction.pk,
+            "ConsequenceOutcome must reference the narrator ACTION Interaction",
+        )

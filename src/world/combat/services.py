@@ -2544,7 +2544,7 @@ def _resolve_pc_action(
     return outcome
 
 
-def _resolve_npc_action(
+def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
@@ -2568,19 +2568,26 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
-    # One ACTION-mode Interaction anchors every survivability ConsequenceOutcome
-    # this NPC action drives (#850). Authored by the Narrator persona because the
-    # NPC opponent has no PRIMARY persona.
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
     )
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    # Lazy factory: mint the ACTION-mode Interaction only when the first
+    # survivability tier actually fires (#864). Memoised so all targets of this
+    # NPC action share one row.
     npc_action_label = ", ".join(str(t) for t in targets) if targets else None
-    npc_action_interaction = create_npc_action_interaction(
-        opponent_action=npc_action,
-        target_label=npc_action_label,
-    )
+    _npc_interaction_cache: list[Interaction] = []
+
+    def _get_npc_action_interaction() -> Interaction:
+        if not _npc_interaction_cache:
+            _npc_interaction_cache.append(
+                create_npc_action_interaction(
+                    opponent_action=npc_action,
+                    target_label=npc_action_label,
+                )
+            )
+        return _npc_interaction_cache[0]
 
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
@@ -2621,7 +2628,7 @@ def _resolve_npc_action(
             character_sheet=target_participant.character_sheet,
             damage_dealt=dmg_result.damage_dealt,
             damage_type=npc_action.threat_entry.damage_type,
-            combat_interaction=npc_action_interaction,
+            combat_interaction_factory=_get_npc_action_interaction,
         )
         outcome.damage_consequences.append(consequence)
 
