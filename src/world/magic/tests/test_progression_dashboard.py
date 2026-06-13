@@ -165,7 +165,7 @@ class ProgressionDashboardTests(TestCase):
         from world.magic.services.progression_dashboard import build_progression_dashboard
 
         # Verify sheet has no roster_entry
-        assert getattr(self.sheet, "roster_entry", None) is None
+        assert getattr(self.sheet, "roster_entry", None) is None  # noqa: GETATTR_LITERAL
 
         self._make_nonpublic_milestone(PathStage.POTENTIAL, MagicMilestoneKind.MOTIF)
 
