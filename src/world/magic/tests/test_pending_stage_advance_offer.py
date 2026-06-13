@@ -18,7 +18,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -591,6 +591,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
         cls.thread.hollow_current = 8
         cls.thread.save()
 
+    @tag("postgres")
     def test_happy_path_returns_result(self) -> None:
         """resolve_stage_advance_prompt_from_db returns a StageAdvanceBonusResult."""
         _seed_pending_offer(
@@ -605,6 +606,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
         self.assertFalse(result.declined)
         self.assertEqual(result.hollow_drained, 3)
 
+    @tag("postgres")
     def test_happy_path_deletes_pending_row(self) -> None:
         """resolve_stage_advance_prompt_from_db deletes the PendingStageAdvanceOffer on success."""
         _seed_pending_offer(

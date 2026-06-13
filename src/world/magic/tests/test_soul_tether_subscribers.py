@@ -29,7 +29,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -793,6 +793,7 @@ class StageAdvancePromptNonCorruptionConditionTests(TestCase):
         self.assertEqual(len(_pending_stage_advance_offers), 0)
 
 
+@tag("postgres")
 class StageAdvanceBonusAcceptTests(TestCase):
     """7.2 — Accept path: resolve_stage_advance_prompt drains Hollow + adds Strain."""
 

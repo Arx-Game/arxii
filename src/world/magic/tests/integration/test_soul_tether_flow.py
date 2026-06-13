@@ -20,7 +20,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -348,6 +348,7 @@ class SoulTetherFullPipelineTests(TestCase):
     # Steps 2–6: Full lifecycle (single sequential test to share capstone ref)
     # -----------------------------------------------------------------------
 
+    @tag("postgres")
     def test_04_full_lifecycle(self) -> None:
         """Steps 2–6: Sineating → redirect → rescue → dissolution → persistence."""
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
@@ -762,6 +763,7 @@ class ManyToManyIndependenceTests(TestCase):
         self.assertGreater(thread_a.hollow_current, 0, "Sinner A's Hollow should have filled")
         self.assertEqual(thread_b.hollow_current, 0, "Sinner B's Hollow must not be affected")
 
+    @tag("postgres")
     def test_rescue_for_sinner_a_leaves_sinner_b_unchanged(self) -> None:
         """Rescue for Sinner A reduces Sinner A's corruption; Sinner B's is untouched."""
         # Set Sinner A to stage 3; Sinner B stays clean.
@@ -866,6 +868,7 @@ class ManyToManyIndependenceTests(TestCase):
         )
         self.assertTrue(thread_b.exists(), "Sinner B's Thread must survive Bond A dissolution")
 
+    @tag("postgres")
     def test_tether_strain_is_single_instance_across_both_bonds(self) -> None:
         """Rescue for Sinner A creates a Tether Strain instance on the Sineater.
 
