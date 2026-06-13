@@ -2887,7 +2887,8 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     """Classify a completing encounter (#876 spec §1).
 
-    1. No ACTIVE opponents → VICTORY.
+    1. No ACTIVE opponents and no Hero Killer present → VICTORY. An unbeatable
+       Hero Killer (#875) on the field at any status forbids VICTORY.
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
