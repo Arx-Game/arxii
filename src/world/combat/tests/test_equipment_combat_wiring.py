@@ -3,11 +3,18 @@
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
-from world.combat.services import effective_soak_from_armor, effective_weapon_profile
+from world.combat.factories import CombatParticipantFactory
+from world.combat.services import (
+    apply_damage_to_participant,
+    effective_soak_from_armor,
+    effective_weapon_profile,
+)
 from world.conditions.factories import DamageTypeFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import EquippedItem
+from world.vitals.constants import CharacterLifeState
+from world.vitals.models import CharacterVitals
 
 
 class EquipmentStatHelperTests(TestCase):
@@ -53,3 +60,50 @@ class EquipmentStatHelperTests(TestCase):
 
     def test_no_weapon_returns_none(self):
         self.assertIsNone(effective_weapon_profile(self.character))
+
+
+class ArmorSoakDamageWiringTests(TestCase):
+    """Equipped-armor soak reduces PC damage and wears the armor (#508, Task 8)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.participant = CombatParticipantFactory()
+
+    def setUp(self) -> None:
+        self.character = self.participant.character_sheet.character
+        self.vitals, _ = CharacterVitals.objects.get_or_create(
+            character_sheet=self.participant.character_sheet,
+            defaults={"health": 100, "max_health": 100},
+        )
+        self.vitals.health = 100
+        self.vitals.max_health = 100
+        self.vitals.life_state = CharacterLifeState.ALIVE
+        self.vitals.save()
+
+    def _equip(self, template, durability, body_region):
+        inst = ItemInstanceFactory(template=template, durability=durability)
+        EquippedItem.objects.create(
+            character=self.character,
+            item_instance=inst,
+            body_region=body_region,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.character.equipped_items.invalidate()
+        return inst
+
+    def test_armor_soak_reduces_damage_and_wears_armor(self):
+        armor_template = ItemTemplateFactory(
+            armor=True, name="soak-hauberk", base_armor_soak=4, max_durability=10
+        )
+        armor = self._equip(armor_template, 10, BodyRegion.TORSO)
+
+        baseline = self.vitals.health
+        apply_damage_to_participant(self.participant, 10, damage_type=None)
+
+        self.vitals.refresh_from_db()
+        # 10 raw damage - 4 soak = 6 health lost.
+        self.assertEqual(self.vitals.health, baseline - 6)
+
+        armor.refresh_from_db()
+        # The piece absorbed damage, so it took 1 point of durability wear.
+        self.assertEqual(armor.durability, 9)

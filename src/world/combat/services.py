@@ -1601,6 +1601,10 @@ def apply_damage_to_participant(  # noqa: PLR0913
         resistance = character.conditions.resistance_modifier(damage_type)
         effective_damage = max(0, effective_damage - resistance)
 
+    # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
+    # armor is their only soak source, and absorbing pieces take durability wear.
+    effective_damage = apply_equipped_armor_soak(character, effective_damage)
+
     health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
@@ -3659,6 +3663,33 @@ def effective_soak_from_armor(character: Character) -> int:
         if inst.template.gear_archetype in ARMOR_ARCHETYPES:
             total += inst.effective_armor_soak
     return total
+
+
+def apply_equipped_armor_soak(character: Character, damage: int) -> int:
+    """Reduce ``damage`` by equipped-armor soak, wearing pieces that absorbed it.
+
+    PCs have no authored soak field; worn armor is their only soak source. Each
+    armor piece that contributes positive soak takes one point of durability wear
+    on a hit it helps absorb. Returns the post-soak damage (floored at 0).
+    """
+    soak = effective_soak_from_armor(character)
+    if soak <= 0 or damage <= 0:
+        return damage
+
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    # Materialize before decrementing — decrement_item_durability invalidates
+    # the equipped_items handler, which would mutate a live iterator.
+    contributors = [
+        eq.item_instance
+        for eq in list(character.equipped_items)
+        if eq.item_instance.template.gear_archetype in ARMOR_ARCHETYPES
+        and eq.item_instance.effective_armor_soak > 0
+    ]
+    for inst in contributors:
+        decrement_item_durability(item_instance=inst)
+    return max(0, damage - soak)
 
 
 def _select_equipped_weapon(character: Character) -> ItemInstance | None:
