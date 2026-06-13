@@ -24925,6 +24925,9 @@ components:
           type: string
           readOnly: true
           nullable: true
+        forced_escape:
+          type: boolean
+          readOnly: true
       required:
       - clashes
       - completed_at
@@ -24933,6 +24936,7 @@ components:
       - escalation_curve_name
       - escalation_start_round
       - escalation_tick_narration
+      - forced_escape
       - id
       - is_gm
       - is_participant

@@ -14023,6 +14023,7 @@ export interface components {
       readonly escalation_curve_name: string | null;
       readonly escalation_start_round: number | null;
       readonly escalation_tick_narration: string | null;
+      readonly forced_escape: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
