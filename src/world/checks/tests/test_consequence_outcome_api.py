@@ -26,6 +26,7 @@ from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.serializers import ConsequenceOutcomeSerializer
+from world.combat.factories import CombatEncounterFactory
 from world.mechanics.factories import (
     ApproachConsequenceFactory,
     ChallengeApproachFactory,
@@ -448,3 +449,72 @@ class ConsequenceOutcomeSceneVisibilityTest(ConsequenceOutcomeAPISetupMixin, Tes
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 0)
         self.assertEqual(response.json()["results"], [])
+
+
+class ConsequenceOutcomeEncounterFilterTest(ConsequenceOutcomeAPISetupMixin, TestCase):
+    """Encounter filter: ?encounter=<id> returns only outcomes from that encounter's scene.
+
+    Two outcomes for the same owned character, each anchored to a combat_interaction
+    in a different scene.  Filtering by one encounter's id returns only the outcome
+    whose combat_interaction.scene matches.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # cls.outcome is already in cls.scene (set up by parent mixin via interaction).
+        # We need a second scene + encounter, and a second outcome in a different scene.
+
+        # Scene A: attach an encounter and wire cls.interaction into it.
+        cls.scene_a = SceneFactory()
+        cls.encounter_a = CombatEncounterFactory(scene=cls.scene_a)
+        cls.interaction.scene = cls.scene_a
+        cls.interaction.save()
+
+        # Scene B + encounter B + a second outcome for the same character.
+        cls.scene_b = SceneFactory()
+        cls.encounter_b = CombatEncounterFactory(scene=cls.scene_b)
+        cls.interaction_b = InteractionFactory(scene=cls.scene_b)
+        cls.outcome_b = ConsequenceOutcome.objects.create(
+            character=cls.sheet,
+            check_type=cls.check_type,
+            pool=cls.pool,
+            selected_consequence=cls.consequence_a,
+            modifier_total=0,
+            summary="Second outcome in scene B",
+            combat_interaction=cls.interaction_b,
+            combat_interaction_timestamp=cls.interaction_b.timestamp,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.owner_account)
+
+    def test_encounter_filter_returns_only_matching_outcome(self) -> None:
+        """?encounter=<id> returns only the outcome whose combat_interaction is in that
+        encounter's scene."""
+        response = self.client.get(
+            f"/api/checks/consequence-outcomes/?encounter={self.encounter_a.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        result_ids = [r["id"] for r in data["results"]]
+        self.assertIn(self.outcome.pk, result_ids)
+        self.assertNotIn(self.outcome_b.pk, result_ids)
+
+    def test_encounter_filter_b_returns_outcome_b(self) -> None:
+        """?encounter=<id> for scene B returns only outcome_b."""
+        response = self.client.get(
+            f"/api/checks/consequence-outcomes/?encounter={self.encounter_b.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        result_ids = [r["id"] for r in data["results"]]
+        self.assertIn(self.outcome_b.pk, result_ids)
+        self.assertNotIn(self.outcome.pk, result_ids)
+
+    def test_encounter_filter_nonexistent_returns_empty(self) -> None:
+        """?encounter=<nonexistent_id> returns an empty result set."""
+        response = self.client.get("/api/checks/consequence-outcomes/?encounter=999999")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 0)
