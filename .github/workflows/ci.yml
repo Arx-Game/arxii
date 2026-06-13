@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Merge queue: GitHub builds speculative branches (this PR on top of main and
+  # any earlier-queued PRs) and merges in order once the required checks pass on
+  # them. Without this trigger the required checks never run on the queue's
+  # branch and queued PRs hang pending forever. The workflow used for a
+  # merge_group event is taken from `main`, so this trigger must be on main
+  # BEFORE the queue is enabled in branch protection (see #991).
+  merge_group:
 
 permissions:
   contents: read
@@ -15,6 +22,15 @@ jobs:
   # always-running aggregators below — they report success when their heavy
   # job was skipped, so a gated-out stack never leaves a check pending.
   # ci.yml is in BOTH filters: touching CI re-runs everything.
+  #
+  # Path-skipping applies to PULL REQUESTS ONLY. On merge_group (the queue) and
+  # push:main the full suite always runs — the integrated state must be fully
+  # validated, never partially skipped. So the dorny step runs only on PRs; on
+  # other events the filter outputs are empty and the heavy jobs fall through to
+  # their `|| github.event_name != 'pull_request'` clause instead. Gating dorny
+  # this way also guarantees the `changes` job itself SUCCEEDS on merge_group
+  # (dorny has no defined behavior there) — a failed `changes` job would fail
+  # the required aggregators and brick the queue.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -25,6 +41,7 @@ jobs:
       # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             backend:
@@ -63,7 +80,8 @@ jobs:
   # protection rules requiring a check named "backend" continue to work.
   backend-shard:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    # On PRs, gate on changed paths; on merge_group/push:main always run.
+    if: needs.changes.outputs.backend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -205,7 +223,7 @@ jobs:
 
   ty:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.backend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -217,7 +235,7 @@ jobs:
 
   frontend-test:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -273,7 +291,7 @@ jobs:
   # migrated Postgres — trust-auth service container, no password exists.
   api-types-drift:
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     services:
       postgres:
