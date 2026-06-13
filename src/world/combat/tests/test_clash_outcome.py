@@ -116,9 +116,7 @@ class OutcomeToDeltaTests(TestCase):
     def test_botch_zero_power_returns_zero(self) -> None:
         """Botch with power=0 returns 0 (no power to backfire)."""
         outcome = CheckOutcomeFactory(success_level=-2)
-        self.assertEqual(
-            outcome_to_delta(check_outcome=outcome, power=0, config=self.config), 0
-        )
+        self.assertEqual(outcome_to_delta(check_outcome=outcome, power=0, config=self.config), 0)
 
     def test_return_type_is_int(self) -> None:
         """outcome_to_delta always returns a plain int, never Decimal."""
