@@ -153,6 +153,22 @@ const CovenantDetailPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded org books pages (#930)
+// ---------------------------------------------------------------------------
+
+const BooksShelfPage = lazy(() =>
+  import('@/org_books/pages/BooksShelfPage').then((m) => ({
+    default: m.BooksShelfPage,
+  }))
+);
+
+const OrgBooksPage = lazy(() =>
+  import('@/org_books/pages/OrgBooksPage').then((m) => ({
+    default: m.OrgBooksPage,
+  }))
+);
+
+// ---------------------------------------------------------------------------
 // Lazy-loaded rituals pages
 // ---------------------------------------------------------------------------
 
@@ -706,6 +722,30 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <CovenantDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Org books — the family-books / management screen (#930)            */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/books"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <BooksShelfPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/books/:orgId"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <OrgBooksPage />
               </ProtectedRoute>
             </Suspense>
           }

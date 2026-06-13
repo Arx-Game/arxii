@@ -4317,14 +4317,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantRole'
           description: ''
+  /api/currency/org-books/:
+    get:
+      operationId: currency_org_books_list
+      description: |-
+        GET /org-books/{org_id}/ — the member-visible books.
+
+        The list endpoint is the viewer's own shelf — only orgs the presented
+        persona belongs to, never a browse of all orgs (the diegetic posture
+        mirrors RankingDisplayViewSet).
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyBooksRow'
+          description: ''
   /api/currency/org-books/{id}/:
     get:
       operationId: currency_org_books_retrieve
       description: |-
-        Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+        GET /org-books/{org_id}/ — the member-visible books.
 
-        No list endpoint: books are reached from an org you belong to, not
-        browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+        The list endpoint is the viewer's own shelf — only orgs the presented
+        persona belongs to, never a browse of all orgs (the diegetic posture
+        mirrors RankingDisplayViewSet).
       parameters:
       - in: path
         name: id
@@ -23654,6 +23677,8 @@ components:
     ContributionRow:
       type: object
       properties:
+        id:
+          type: integer
         persona_name:
           type: string
         amount:
@@ -23666,6 +23691,7 @@ components:
       required:
       - amount
       - created_at
+      - id
       - persona_name
       - reason
     Covenant:
@@ -24077,6 +24103,8 @@ components:
     DebtRow:
       type: object
       properties:
+        id:
+          type: integer
         creditor:
           type: string
         principal:
@@ -24093,6 +24121,7 @@ components:
       - arrears
       - creditor
       - diverting
+      - id
       - in_default
       - interest_bps_monthly
       - principal
@@ -27110,6 +27139,8 @@ components:
     IncomeStreamRow:
       type: object
       properties:
+        id:
+          type: integer
         name:
           type: string
         kind:
@@ -27121,6 +27152,7 @@ components:
       required:
       - active
       - gross_amount
+      - id
       - kind
       - name
     InlineActionInteraction:
@@ -27992,6 +28024,8 @@ components:
     LedgerRow:
       type: object
       properties:
+        id:
+          type: integer
         amount:
           type: integer
         reason:
@@ -28005,6 +28039,7 @@ components:
       - amount
       - created_at
       - direction
+      - id
       - reason
     LibraryEntry:
       type: object
@@ -29363,6 +29398,23 @@ components:
       - category_name
       - id
       - name
+    MyBooksRow:
+      type: object
+      description: One organization whose books the viewer may open.
+      properties:
+        organization_id:
+          type: integer
+        organization_name:
+          type: string
+        rank:
+          type: integer
+        rank_title:
+          type: string
+      required:
+      - organization_id
+      - organization_name
+      - rank
+      - rank_title
     MyRosterEntry:
       type: object
       description: Serialize a summary of a roster entry for account menus.
@@ -29789,6 +29841,8 @@ components:
     ObligationRow:
       type: object
       properties:
+        id:
+          type: integer
         name:
           type: string
         to_organization:
@@ -29799,6 +29853,7 @@ components:
           type: boolean
       required:
       - active
+      - id
       - name
       - percent
       - to_organization

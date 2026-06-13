@@ -25,7 +25,10 @@ const links = [
 ];
 
 /** Nav links visible only to authenticated users (account != null). */
-const authLinks = [{ to: '/stories/my-active', label: 'My Stories' }];
+const authLinks = [
+  { to: '/stories/my-active', label: 'My Stories' },
+  { to: '/books', label: 'Books' },
+];
 
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
