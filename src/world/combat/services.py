@@ -1546,7 +1546,8 @@ def apply_damage_to_opponent(
     opponent.health -= damage_through
     opponent.probing_current += probing_increment
 
-    defeated = opponent.health <= 0
+    # Hero Killer cannot be defeated -- narrative immunity ("you must run").
+    defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
         opponent.status = OpponentStatus.DEFEATED
 
@@ -2894,7 +2895,13 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
         encounter=encounter, status=OpponentStatus.ACTIVE
     ).exists()
     if not any_active_opponents:
-        return EncounterOutcome.VICTORY
+        hero_killer_present = CombatOpponent.objects.filter(
+            encounter=encounter, tier=OpponentTier.HERO_KILLER
+        ).exists()
+        if not hero_killer_present:
+            return EncounterOutcome.VICTORY
+        # An unbeatable Hero Killer was on the field -- never a victory.
+        # Fall through to FLED / DEFEAT classification below.
 
     statuses = set(
         CombatParticipant.objects.filter(encounter=encounter).values_list("status", flat=True)
