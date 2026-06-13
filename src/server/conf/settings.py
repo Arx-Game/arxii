@@ -80,6 +80,7 @@ INSTALLED_APPS += [
     "world.areas.apps.AreasConfig",
     "world.locations.apps.LocationsConfig",
     "world.instances.apps.InstancesConfig",
+    "world.captivity.apps.CaptivityConfig",
     "world.journals.apps.JournalsConfig",
     "world.game_clock.apps.GameClockConfig",
     "world.items.apps.ItemsConfig",
