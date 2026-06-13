@@ -293,7 +293,10 @@ class SpendResonanceForImbuingTests(TestCase):
 # =============================================================================
 
 
-class CrossThreadXpLockTests(TestCase):
+class _CrossXpLockSetupMixin:
+    """Shared setup for cross_thread_xp_lock test classes (#898): builds a thread
+    owned by a character whose account has seeded XP."""
+
     def _make_thread_with_xp(
         self,
         thread_level: int = 10,
@@ -326,6 +329,8 @@ class CrossThreadXpLockTests(TestCase):
         xp_tracker.save(update_fields=["total_earned", "total_spent"])
         return thread, xp_tracker
 
+
+class CrossThreadXpLockTests(_CrossXpLockSetupMixin, TestCase):
     def test_pays_xp_creates_unlock_row(self) -> None:
         thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
@@ -370,39 +375,8 @@ class CrossThreadXpLockTests(TestCase):
 # =============================================================================
 
 
-class CrossThreadXpLockGateTests(TestCase):
+class CrossThreadXpLockGateTests(_CrossXpLockSetupMixin, TestCase):
     """cross_thread_xp_lock must block characters with an open Mage Scar."""
-
-    def _make_thread_with_xp(
-        self,
-        thread_level: int = 10,
-        xp_available: int = 500,
-        trait_value: int = 100,
-        path_stage: int = 10,
-    ) -> tuple[Thread, ExperiencePointsData]:
-        """Helper: thread + seeded XP on an account linked to the character."""
-        from world.progression.models.rewards import ExperiencePointsData
-
-        account = AccountFactory()
-        sheet = CharacterSheetFactory(_path_stage=path_stage)
-        sheet.character.account = account
-        ObjectDB.objects.filter(pk=sheet.character.pk).update()
-        account.characters.add(sheet.character)
-
-        thread = ThreadFactory(
-            owner=sheet,
-            resonance=ResonanceFactory(),
-            level=thread_level,
-            _trait_value=trait_value,
-        )
-        xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
-            account=account,
-            defaults={"total_earned": xp_available, "total_spent": 0},
-        )
-        xp_tracker.total_earned = xp_available
-        xp_tracker.total_spent = 0
-        xp_tracker.save(update_fields=["total_earned", "total_spent"])
-        return thread, xp_tracker
 
     def test_open_pending_alteration_raises_alteration_gate_error(self) -> None:
         """Character with an OPEN PendingAlteration → AlterationGateError."""
