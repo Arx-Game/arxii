@@ -145,6 +145,33 @@ class BossOpponentFactory(CombatOpponentFactory):
     probing_threshold = 50
 
 
+class SwarmOpponentFactory(CombatOpponentFactory):
+    """A swarm-tier opponent: count-based fodder, no soak.
+
+    health/max_health are required columns but unused for swarms (damage
+    routes through swarm_count). Defaults: 30 bodies, 5 damage per body,
+    one outgoing attack per 6 bodies.
+    """
+
+    tier = OpponentTier.SWARM
+    health = 1
+    max_health = 1
+    soak_value = 0
+    swarm_count = 30
+    max_swarm_count = 30
+    body_toughness = 5
+    bodies_per_attack = 6
+
+
+class HeroKillerOpponentFactory(CombatOpponentFactory):
+    """A Hero Killer: unbeatable endgame threat — PCs must flee."""
+
+    tier = OpponentTier.HERO_KILLER
+    health = 9999
+    max_health = 9999
+    soak_value = 200
+
+
 class BossPhaseFactory(factory_django.DjangoModelFactory):
     """Factory for BossPhase."""
 
