@@ -273,11 +273,11 @@ class ClashContent:
         # should grant the boss_held window-state at full strength or a weaker/shorter variant.
         #
         # Also wire PC_MARGINAL (success_level=2) → boss_held, so that a marginal
-        # LOCK win also opens the combo window.  With default ClashConfig deltas
-        # (delta_critical_success=3, decisive_overshoot=3, threshold=10) the
-        # first threshold crossing produces PC_MARGINAL, not PC_DECISIVE.  Both
-        # tiers should apply the boss_held condition so integration tests pass
-        # regardless of the exact resolution tier.
+        # LOCK win also opens the combo window.  With the power-driven formula
+        # (round(power × quality_multiplier × power_scale)) and decisive_overshoot=3,
+        # the first threshold crossing often produces PC_MARGINAL rather than
+        # PC_DECISIVE.  Both tiers should apply the boss_held condition so integration
+        # tests pass regardless of the exact resolution tier.
         marginal_outcome = check_outcomes[2]  # success_level=2 → PC_MARGINAL
         lock_marginal_consequence, _ = Consequence.objects.get_or_create(
             outcome_tier=marginal_outcome,

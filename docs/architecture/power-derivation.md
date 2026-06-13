@@ -23,7 +23,8 @@ added. Modifiers *contribute to* power; they are never *stored as* power.
 - **Intensity** — what the caster *channels*. Drives anima cost, mishap (`control_deficit`),
   resonance attribution, and Soulfray. A ward must never reduce this.
 - **Power** — the *effective magnitude the working carries into the world*. Drives damage
-  budgets, condition severity/duration, and capability grants. This is the modifiable lever.
+  budgets, condition severity/duration, capability grants, and per-round clash progress
+  magnitude. This is the modifiable lever.
 
 The two values are separately carried on `TechniquePreCastPayload` (`intensity`, `power`).
 Caster-side calculations always read `stats.intensity`; world-side calculations read `power`
@@ -137,6 +138,11 @@ The ledger rides the event payloads throughout the pipeline:
   REACTIVE entry appended if any hook edited it).
 - `TechniqueAffectedPayload` — frozen; carries `power` (effective) and `ledger` (effective).
 
+**Clash contributions** also persist the ledger via `persist_power_ledger` on
+`ClashContribution`, recording the full strain→intensity→power→delta story per round.
+This is caster- and staff-gated on the action-outcome panel — the same ledger data,
+surfaced through the clash contribution's interaction record.
+
 Combat narration reads the ledger via `_power_outcome_clause(power_ledger)` in
 `world/combat/interaction_services.py`, which folds a concise ward/environment outcome clause
 into the `render_action_outcome_narration` line:
@@ -163,6 +169,8 @@ into the `render_action_outcome_narration` line:
 | `CombatTechniqueResolver._apply_penetration` | `world/combat/services.py` |
 | `_power_outcome_clause`, `render_action_outcome_narration` | `world/combat/interaction_services.py` |
 | `evaluate_resonance_environment` | `world/magic/services/resonance_environment.py` |
+| `strain_to_intensity`, `outcome_to_delta` | `world/combat/clash.py` |
+| `ClashConfig` (power-formula knobs: `power_scale`, `botch_backfire_fraction`) | `world/combat/models.py` |
 
 ---
 

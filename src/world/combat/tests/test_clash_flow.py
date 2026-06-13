@@ -418,8 +418,8 @@ class SuppressFlowTests(TestCase):
         )
 
         # PC should win (decisive or marginal — both tiers apply boss_held in
-        # ClashContent).  With default delta_critical_success=3 and threshold=10,
-        # the first crossing gives overshoot=2 < decisive_overshoot=3 → PC_MARGINAL.
+        # ClashContent).  The power-driven formula (round(power × quality_multiplier
+        # × power_scale)) means overshoot at the first crossing varies with power;
         # ClashContent seeds boss_held on both PC_DECISIVE and PC_MARGINAL tiers.
         self.assertIn(
             clash.resolution,
