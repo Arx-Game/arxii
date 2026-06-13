@@ -2,7 +2,9 @@
 
 from django.test import TestCase
 
-from world.combat.services import swarm_attack_count, swarm_kills
+from world.combat.constants import OpponentStatus
+from world.combat.factories import SwarmOpponentFactory
+from world.combat.services import apply_damage_to_opponent, swarm_attack_count, swarm_kills
 
 
 class SwarmHelperTests(TestCase):
@@ -27,3 +29,22 @@ class SwarmHelperTests(TestCase):
     def test_swarm_attack_count_zero_when_no_bodies_or_no_targets(self):
         self.assertEqual(swarm_attack_count(0, bodies_per_attack=6, active_pc_count=4), 0)
         self.assertEqual(swarm_attack_count(10, bodies_per_attack=6, active_pc_count=0), 0)
+
+
+class SwarmDamageTests(TestCase):
+    def test_damage_reduces_count_not_health_and_ignores_soak(self):
+        swarm = SwarmOpponentFactory(swarm_count=30, max_swarm_count=30, body_toughness=5)
+        result = apply_damage_to_opponent(swarm, 12)  # 12 // 5 = 2 bodies
+        swarm.refresh_from_db()
+        self.assertEqual(result.kills, 2)
+        self.assertEqual(swarm.swarm_count, 28)
+        self.assertEqual(swarm.health, 1)  # untouched
+        self.assertEqual(swarm.status, OpponentStatus.ACTIVE)
+
+    def test_swarm_defeated_when_count_hits_zero(self):
+        swarm = SwarmOpponentFactory(swarm_count=2, max_swarm_count=30, body_toughness=5)
+        result = apply_damage_to_opponent(swarm, 100)  # would clear 20, clamped to 2
+        swarm.refresh_from_db()
+        self.assertEqual(swarm.swarm_count, 0)
+        self.assertTrue(result.defeated)
+        self.assertEqual(swarm.status, OpponentStatus.DEFEATED)

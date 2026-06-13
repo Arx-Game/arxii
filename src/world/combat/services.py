@@ -1514,6 +1514,24 @@ def apply_damage_to_opponent(
     counters: ``damage_dealt`` (by post-soak damage), and on defeat
     ``opponents_defeated``.
     """
+    # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        kills = min(swarm_kills(raw_damage, opponent.body_toughness or 1), opponent.swarm_count)
+        opponent.swarm_count -= kills
+        defeated = opponent.swarm_count <= 0
+        if defeated:
+            opponent.status = OpponentStatus.DEFEATED
+        opponent.save(update_fields=["swarm_count", "status"])
+        del source_sheet
+        return OpponentDamageResult(
+            damage_dealt=kills,
+            health_damaged=False,
+            probed=False,
+            probing_increment=0,
+            defeated=defeated,
+            kills=kills,
+        )
+
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
     resistance = 0
@@ -1545,6 +1563,7 @@ def apply_damage_to_opponent(
         probed=probing_increment > 0,
         probing_increment=probing_increment,
         defeated=defeated,
+        kills=0,
     )
 
 
