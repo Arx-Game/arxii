@@ -30156,6 +30156,15 @@ components:
           allOf:
           - $ref: '#/components/schemas/PowerLedger'
           nullable: true
+        strain_committed:
+          type: integer
+          nullable: true
+        power:
+          type: integer
+          nullable: true
+        progress_delta:
+          type: integer
+          nullable: true
       required:
       - action_interaction_id
       - effects

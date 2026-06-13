@@ -16575,6 +16575,9 @@ export interface components {
       action_interaction_id: number;
       effects: components['schemas']['EffectRow'][];
       power_ledger?: components['schemas']['PowerLedger'] | null;
+      strain_committed?: number | null;
+      power?: number | null;
+      progress_delta?: number | null;
     };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
