@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
         ComboDefinition,
     )
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import ConditionTemplate, DamageType
     from world.magic.models import Affinity
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
@@ -340,3 +340,16 @@ class EscalationTickResult:
     control_modifier: int
     pace_success_level: int | None
     capped: bool
+
+
+# ---------------------------------------------------------------------------
+# Equipped-gear combat contribution types (#508, Task 7)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WeaponContribution:
+    """Effective combat contribution of a character's equipped weapon."""
+
+    damage: int
+    damage_type: DamageType | None

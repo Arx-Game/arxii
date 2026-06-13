@@ -23,8 +23,10 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
+    from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
+    from world.items.models import ItemInstance
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
@@ -3633,3 +3635,62 @@ def declare_clash_contribution(
         },
     )
     return declaration
+
+
+# ---------------------------------------------------------------------------
+# Equipped-gear combat contribution helpers (#508, Task 7)
+# ---------------------------------------------------------------------------
+#
+# Pure read helpers over ``character.equipped_items`` (the iterable
+# CharacterEquipmentHandler, whose rows arrive with item_instance + template +
+# quality_tier select_related, so reading effective_* during iteration is
+# query-free). They do NOT mutate combat damage logic — that wiring is Tasks
+# 8/9. ``_select_equipped_weapon`` is kept separate so the weapon-durability
+# decrement task can reuse the same selection.
+
+
+def effective_soak_from_armor(character: Character) -> int:
+    """Sum effective armor soak across the character's equipped armor pieces."""
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+
+    total = 0
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype in ARMOR_ARCHETYPES:
+            total += inst.effective_armor_soak
+    return total
+
+
+def _select_equipped_weapon(character: Character) -> ItemInstance | None:
+    """The character's strongest equipped weapon instance (>0 effective damage).
+
+    Deterministic: max by effective_weapon_damage, tie-break by item_instance pk
+    (lowest pk wins, via negating pk in the comparison key).
+    """
+    from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+    best = None
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype not in WEAPON_ARCHETYPES:
+            continue
+        dmg = inst.effective_weapon_damage
+        if dmg <= 0:
+            continue
+        key = (dmg, -inst.pk)
+        if best is None or key > best[0]:
+            best = (key, inst)
+    return best[1] if best is not None else None
+
+
+def effective_weapon_profile(character: Character) -> WeaponContribution | None:
+    """The character's strongest equipped weapon as a combat contribution."""
+    from world.combat.types import WeaponContribution  # noqa: PLC0415
+
+    inst = _select_equipped_weapon(character)
+    if inst is None:
+        return None
+    return WeaponContribution(
+        damage=inst.effective_weapon_damage,
+        damage_type=inst.effective_weapon_damage_type,
+    )
