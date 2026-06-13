@@ -52,6 +52,7 @@ from world.combat.types import (
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
+from world.magic.types.power_ledger import PowerLedger
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -249,14 +250,16 @@ def commit_to_clash(  # noqa: PLR0913
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
-    #    The power and ledger from the magic pipeline are captured via closure
-    #    so the caller can persist them on the result for future ledger-display
-    #    and power-driven formula work.
-    captured: dict[str, object] = {}
+    #    The power and ledger from the magic pipeline are captured via typed
+    #    nonlocal locals so the caller can persist them on the result for
+    #    ledger-display and power-driven formula work.
+    captured_power: int = 0
+    captured_ledger: PowerLedger | None = None
 
-    def resolve_fn(*, power: int, ledger: object) -> object:
-        captured["power"] = power
-        captured["ledger"] = ledger
+    def resolve_fn(*, power: int, ledger: PowerLedger) -> object:
+        nonlocal captured_power, captured_ledger
+        captured_power = power
+        captured_ledger = ledger
         return perform_check(
             objectdb,
             check_type,
@@ -288,11 +291,12 @@ def commit_to_clash(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
-    # 5b. Read the power and ledger captured by the closure.  ``captured`` is
-    #     populated synchronously during use_technique → resolve_fn; it is
-    #     guaranteed to have both keys at this point.
-    clash_power = int(captured.get("power", 0))  # type: ignore[arg-type]
-    clash_ledger = captured.get("ledger")
+    # 5b. Read the power and ledger captured by the closure.  ``captured_power``
+    #     and ``captured_ledger`` are populated synchronously during
+    #     use_technique → resolve_fn; they are guaranteed to hold the cast
+    #     values at this point.
+    clash_power = captured_power
+    clash_ledger = captured_ledger
 
     # 6. Extract the CheckResult from the resolution_result (the closure returns
     #    a CheckResult directly, so resolution_result IS the CheckResult).
@@ -359,7 +363,7 @@ def commit_to_clash(  # noqa: PLR0913
         soulfray_severity_accrued=soulfray_severity_accrued,
         technique_use_result=technique_use_result,
         power=clash_power,
-        power_ledger=clash_ledger,  # type: ignore[arg-type]
+        power_ledger=clash_ledger,
         clash_interaction=recorded_interaction,
     )
 

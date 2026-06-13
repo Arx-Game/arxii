@@ -150,7 +150,10 @@ round. This mirrors the `CombatPull` / `CombatPullResolvedEffect` audit pattern.
      cast's power through `_derive_power`. The check outcome determines a **quality
      multiplier** on that power: critical/great/success/partial scale the power up;
      failure yields 0 progress; a **botch backfires** — the committed power rebounds
-     as a negative progress delta plus extra Soulfray (`botch_backfire_fraction`).
+     as a negative progress delta (`botch_backfire_fraction`). Any Soulfray cost comes
+     from the strain→intensity→overburn coupling (committing more strain raises
+     intensity, which raises anima cost and can push the caster into overburn on any
+     outcome); there is no separate botch-specific Soulfray penalty.
    - Per-contributor progress delta = `round(power × quality_multiplier × power_scale)`
      (see `outcome_to_delta` and `ClashConfig`). Power sets the magnitude; the check
      outcome is the quality gate.
@@ -308,8 +311,9 @@ Each round a PC contributes through one of two action slots:
 committed anima → strain intensity bonus → power (via `_derive_power`) → power ×
 quality multiplier (from `CheckOutcome` tier) → that contributor's progress delta.
 The round's PC progress delta = the **sum** of all contributors' deltas. A botch
-backfires — it subtracts progress and accrues Soulfray — so it genuinely drags the
-round down even as others succeed.
+backfires — it subtracts progress — so it genuinely drags the round down even as
+others succeed. Soulfray accrues through the normal intensity/overburn path, not as a
+separate botch penalty.
 
 **Constraints / v1 simplifications:**
 
@@ -523,7 +527,8 @@ commitment exceeds the pool; Soulfray escalation as the natural consequence of r
 intensity); clash-commit (a contribution runs the cast pipeline, `_derive_power`
 produces a power value, `outcome_to_delta` converts power × quality multiplier to a
 delta, ledger is persisted via `persist_power_ledger`; a botch produces negative
-delta + extra Soulfray; writes the `ClashContribution`); aggregation (multi-PC
+delta (Soulfray comes from the intensity/overburn path, not a separate botch penalty);
+writes the `ClashContribution`); aggregation (multi-PC
 deltas sum; focused-vs-passive magnitude gap); NPC-side contribution per flavor;
 affinity tilt
 (per-contributor, RPS cycle, same-affinity and affinity-less → no tilt); resolution
