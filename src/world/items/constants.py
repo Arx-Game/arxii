@@ -68,6 +68,28 @@ class GearArchetype(models.TextChoices):
     OTHER = "other", "Other"
 
 
+# Archetype groupings for combat-stat gating (issue #508). SHIELD appears in
+# both: a shield can soak and (rarely) bash.
+WEAPON_ARCHETYPES = frozenset(
+    {
+        GearArchetype.MELEE_ONE_HAND,
+        GearArchetype.MELEE_TWO_HAND,
+        GearArchetype.RANGED,
+        GearArchetype.THROWN,
+        GearArchetype.SHIELD,
+    }
+)
+ARMOR_ARCHETYPES = frozenset(
+    {
+        GearArchetype.LIGHT_ARMOR,
+        GearArchetype.MEDIUM_ARMOR,
+        GearArchetype.HEAVY_ARMOR,
+        GearArchetype.ROBE,
+        GearArchetype.SHIELD,
+    }
+)
+
+
 # Base points contributed per worn in-vogue facet match, before quality and
 # the FashionStyleBonus.weight multiplier are applied (Outfits Phase B, #513).
 FASHION_MATCH_BASE = 1

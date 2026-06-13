@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerMedia
+    from world.conditions.models import DamageType
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
@@ -206,6 +208,26 @@ class ItemTemplate(SharedMemoryModel):
             "Immutable across instances of this template."
         ),
     )
+    weapon_damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weapon_templates",
+        help_text="Damage type dealt when this item is wielded as a weapon.",
+    )
+    base_weapon_damage = models.PositiveIntegerField(
+        default=0,
+        help_text="Base weapon-damage contribution (weapon archetypes only).",
+    )
+    base_armor_soak = models.PositiveIntegerField(
+        default=0,
+        help_text="Base damage-mitigation soak when worn (armor archetypes only).",
+    )
+    max_durability = models.PositiveIntegerField(
+        default=0,
+        help_text="Max durability. 0 = item is not durability-tracked.",
+    )
     # #676 Phase F — Polish contribution. Drives both room polish (when
     # placed via RoomItem) and fashion polish (when equipped on a body).
     # Typical values: 0.1-1 per per-item (stored as scaled integers ×10
@@ -248,6 +270,36 @@ class ItemTemplate(SharedMemoryModel):
             models.CheckConstraint(
                 check=models.Q(is_consumable=True) | models.Q(max_charges=0),
                 name="items_charges_requires_is_consumable",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        gear_archetype__in=[
+                            GearArchetype.MELEE_ONE_HAND,
+                            GearArchetype.MELEE_TWO_HAND,
+                            GearArchetype.RANGED,
+                            GearArchetype.THROWN,
+                            GearArchetype.SHIELD,
+                        ]
+                    )
+                    | models.Q(base_weapon_damage=0)
+                ),
+                name="items_weapon_damage_requires_weapon_archetype",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        gear_archetype__in=[
+                            GearArchetype.LIGHT_ARMOR,
+                            GearArchetype.MEDIUM_ARMOR,
+                            GearArchetype.HEAVY_ARMOR,
+                            GearArchetype.ROBE,
+                            GearArchetype.SHIELD,
+                        ]
+                    )
+                    | models.Q(base_armor_soak=0)
+                ),
+                name="items_armor_soak_requires_armor_archetype",
             ),
         ]
 
@@ -369,6 +421,11 @@ class ItemInstance(SharedMemoryModel):
         default=0,
         help_text="Remaining charges for consumable items.",
     )
+    durability = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Current durability. Null = not tracked; 0 = broken.",
+    )
     is_open = models.BooleanField(
         default=False,
         help_text="Whether this item is currently open.",
@@ -474,6 +531,31 @@ class ItemInstance(SharedMemoryModel):
         To invalidate: del instance.cached_item_facets
         """
         return list(self.item_facets.select_related("facet", "attachment_quality_tier"))
+
+    @property
+    def is_broken(self) -> bool:
+        return self.durability is not None and self.durability == 0
+
+    def _quality_multiplier(self) -> Decimal:
+        if self.quality_tier is None:
+            return Decimal(1)
+        return Decimal(str(self.quality_tier.stat_multiplier))
+
+    @cached_property
+    def effective_weapon_damage(self) -> int:
+        if self.is_broken:
+            return 0
+        return round(self.template.base_weapon_damage * self._quality_multiplier())
+
+    @cached_property
+    def effective_armor_soak(self) -> int:
+        if self.is_broken:
+            return 0
+        return round(self.template.base_armor_soak * self._quality_multiplier())
+
+    @property
+    def effective_weapon_damage_type(self) -> DamageType | None:
+        return self.template.weapon_damage_type
 
 
 class TemplateInteraction(SharedMemoryModel):
