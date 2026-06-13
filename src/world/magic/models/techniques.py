@@ -736,6 +736,13 @@ class TechniqueDamageProfile(SharedMemoryModel):
         default=Decimal(0),
     )
     damage_per_extra_sl = models.PositiveIntegerField(default=0)
+    uses_equipped_weapon = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, the wielder's equipped-weapon effective damage is added "
+            "to this profile's budget and its damage_type fills in when null."
+        ),
+    )
 
     class Meta:
         constraints = [

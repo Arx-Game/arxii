@@ -344,6 +344,7 @@ class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
     base_damage = 5
     damage_intensity_multiplier = Decimal(0)
     damage_per_extra_sl = 0
+    uses_equipped_weapon = False
 
 
 class IntensityTierFactory(factory.django.DjangoModelFactory):
