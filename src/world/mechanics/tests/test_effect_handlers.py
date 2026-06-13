@@ -3,14 +3,19 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from world.captivity.constants import CaptivityStatus
+from world.captivity.models import Captivity
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.conditions.factories import DamageTypeFactory
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
+from world.societies.factories import OrganizationFactory
 from world.vitals.models import CharacterVitals
 
 
@@ -142,3 +147,92 @@ class DealDamageHandlerTests(TestCase):
         context = ResolutionContext(character=char_no_sheet)
         result = apply_effect(effect, context)
         assert result.applied is False
+
+
+class CaptureHandlerTests(TestCase):
+    """Tests for the CAPTURE effect handler (#931).
+
+    The handler fires the captivity service from a consequence pool. Full
+    capture/release coverage lives in world.captivity.tests; this suite
+    proves the seam: dispatch, authored fields, and the skip paths.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.site = ObjectDB.objects.create(
+            db_key="Ambush Site",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _captive_at_site(self, key: str):
+        character = CharacterFactory(db_key=key)
+        sheet = CharacterSheetFactory(character=character)
+        character.move_to(self.site, quiet=True)
+        return character, sheet
+
+    def test_capture_takes_the_target_into_a_cell(self) -> None:
+        character, sheet = self._captive_at_site("capture_target")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied
+        sheet.refresh_from_db()
+        assert sheet.lifecycle_state == LifecycleState.CAPTURED
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.status == CaptivityStatus.HELD
+        # The capture site (the character's location) is where they'll return.
+        assert captivity.cell.return_location == self.site
+        assert captivity.offscreen_loss_allowed is False
+
+    def test_capture_carries_authored_captor_and_offscreen_flag(self) -> None:
+        character, sheet = self._captive_at_site("authored_target")
+        org = OrganizationFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+            capture_captor_organization=org,
+            capture_offscreen_loss_allowed=True,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.captor_organization == org
+        assert captivity.offscreen_loss_allowed is True
+
+    def test_capture_skips_without_sheet(self) -> None:
+        bare = CharacterFactory(db_key="no_sheet_capture")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+        context = ResolutionContext(character=bare)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is False
+        assert result.skip_reason is not None
+        assert Captivity.objects.count() == 0
+
+    def test_capture_skips_when_already_held(self) -> None:
+        character, sheet = self._captive_at_site("double_capture")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+        context = ResolutionContext(character=character)
+        apply_effect(effect, context)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is False
+        assert result.skip_reason is not None
+        assert Captivity.objects.filter(captive=sheet).count() == 1
