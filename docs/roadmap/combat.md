@@ -224,8 +224,27 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   a pending offer, active-Audere strip while it burns); encounter cleanup ends Audere
   via `end_audere` (reverting the intensity modifier and anima-pool expansion) and
   deletes unanswered offers
-- **Passive action defaults are mechanically no-ops** — design wants secondary
-  defend/buff/debuff/combo-opening effects — #874
+- ~~**Passive action defaults are mechanically no-ops**~~ **DONE (#874):** the
+  secondary defend/buff/debuff/combo-opening passives are now mechanically real
+  end-to-end. A PC's two non-focused categories each carry a passive technique
+  that resolves with **no roll** — `_apply_passive_technique` applies the
+  technique's authored conditions with severity from
+  `compute_severity(effective_power=technique.intensity,
+  success_level=row.minimum_success_level)` to SELF / ALLY / ENEMY targets, and
+  grants combo-opening probing (new `Technique.combo_opening_probing` column +
+  `increment_probing` helper) when authored. `_resolve_passive_actions` runs in
+  `resolve_round` **before** focused resolution so defensive passives land ahead
+  of incoming attacks (mitigation flows through the existing
+  `ConditionResistanceModifier` path). The frontend dispatches the focused action
+  and each passive as separate `/dispatch/` calls carrying an `action_slot`
+  discriminator (on the COMBAT `ActionRef`) plus `effort_level`; backend
+  `_record_combat_declaration` does a **slot-aware read-merge-write** so the
+  separate dispatches converge onto one `CombatRoundAction` row, with the
+  focused-vs-passive XOR resolved authoritatively on the backend regardless of
+  arrival order. Four authored passive archetypes
+  (defend / buff / debuff / combo-opening) ship as FactoryBoy chains; a
+  defensive-passive damage-delta integration test proves mitigation lands before
+  the attack resolves.
 - **NPC tier mechanics** — `OpponentTier` enum exists but Swarm has no count-based
   handling and Hero Killer has no narrative escape state — #875
 - ~~**Encounter aftermath**~~ **DONE (#876):** completion runs through a single
