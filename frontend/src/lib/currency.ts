@@ -13,8 +13,12 @@ const COPPERS_PER_GOLD = 100;
 
 /** Format integer coppers as the canonical mixed form, e.g. "3g 4s 7c". */
 export function formatCoppers(coppers: number): string {
-  const negative = coppers < 0;
-  const total = Math.abs(Math.trunc(coppers));
+  if (!Number.isFinite(coppers)) return '0c';
+  // Derive the sign from the truncated value so a fractional amount in (-1, 0)
+  // doesn't leave a lone minus on a zero magnitude ("-0c").
+  const whole = Math.trunc(coppers);
+  const negative = whole < 0;
+  const total = Math.abs(whole);
 
   const gold = Math.floor(total / COPPERS_PER_GOLD);
   const silver = Math.floor((total % COPPERS_PER_GOLD) / COPPERS_PER_SILVER);

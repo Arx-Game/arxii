@@ -238,10 +238,12 @@ class CombatTechniqueResolver:
         )
         effort_mod = EFFORT_CHECK_MODIFIER.get(self.action.effort_level, 0)
 
-        # Route effort through the shared modifier seam so the combat check ALSO
-        # honors condition + rollmod sources (the #851 individualization lever),
-        # not only its effort.  The pull bonus stays an explicit additive on top
-        # of the seam total — it is already a labeled combat-pull power source.
+        # Route effort AND the combat-pull flat bonus through the shared modifier
+        # seam so the combat check honors condition + rollmod sources (the #851
+        # individualization lever) and the recorded ModifierBreakdown is exhaustive:
+        # every point that shifts the roll is a labeled contribution, so the
+        # provenance UI can attribute it.  breakdown.total alone is the full roll
+        # shift — no out-of-band additive the breakdown can't see.
         extra_contributions: list[ModifierContribution] = []
         if effort_mod:
             extra_contributions.append(
@@ -251,12 +253,20 @@ class CombatTechniqueResolver:
                     value=effort_mod,
                 )
             )
+        if self.pull_flat_bonus:
+            extra_contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.PULL,
+                    source_label="Combat pull",
+                    value=self.pull_flat_bonus,
+                )
+            )
         breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
             extra_contributions=extra_contributions,
         )
-        extra_modifiers = breakdown.total + self.pull_flat_bonus
+        extra_modifiers = breakdown.total
         character = self.participant.character_sheet.character
         return check_fn(
             character,

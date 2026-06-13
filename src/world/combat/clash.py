@@ -236,7 +236,7 @@ def commit_to_clash(  # noqa: PLR0913
     if check_modifier_extra:
         extra_contributions.append(
             ModifierContribution(
-                source_kind=ModifierSourceKind.STRAIN,
+                source_kind=ModifierSourceKind.AFFINITY,
                 source_label="Affinity tilt",
                 value=check_modifier_extra,
             )
