@@ -12038,6 +12038,7 @@ export interface components {
       registry_key?: string | null;
       clash_id?: number | null;
       clash_action_slot?: string | null;
+      action_slot?: string | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {

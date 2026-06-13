@@ -20505,6 +20505,9 @@ components:
         clash_action_slot:
           type: string
           nullable: true
+        action_slot:
+          type: string
+          nullable: true
       required:
       - backend
     ActionTemplateMinimal:

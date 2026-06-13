@@ -1594,6 +1594,10 @@ def apply_damage_to_opponent(
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
 
     opponent.health -= damage_through
+    # ``increment_probing`` is the sibling standalone write site for the no-damage
+    # passive path (combo-opening passives). This write stays inline because it
+    # shares a single combined save with health/status below; ``probing_increment``
+    # is already ``max(0, …)`` so both paths apply the same non-negative clamp.
     opponent.probing_current += probing_increment
 
     # Hero Killer cannot be defeated -- narrative immunity ("you must run").
@@ -1616,6 +1620,142 @@ def apply_damage_to_opponent(
         defeated=defeated,
         kills=0,
     )
+
+
+def increment_probing(opponent: CombatOpponent, amount: int) -> None:
+    """Add ``amount`` to an opponent's probing counter (clamped at zero) and persist.
+
+    Single standalone write path for ``probing_current`` used by combo-opening
+    passives so probing feeds combo detection identically to damage-sourced probing.
+    """
+    opponent.probing_current = max(0, opponent.probing_current + amount)
+    opponent.save(update_fields=["probing_current"])
+
+
+def _apply_passive_technique(
+    technique: Technique,
+    participant: CombatParticipant,
+    encounter: CombatEncounter,
+) -> None:
+    """Apply a declared passive technique's authored conditions with NO dice roll.
+
+    A passive IS a Technique with authored ``TechniqueAppliedCondition`` rows.
+    Each row is applied at fixed scaling — ``effective_power=technique.intensity``
+    and ``success_level=row.minimum_success_level`` — so no ``CheckResult`` is
+    constructed and no offense roll happens (contrast ``CombatTechniqueResolver``,
+    which is roll/damage-bound). Reuses ``bulk_apply_conditions`` so passives feed
+    the exact same condition machinery as the focused path.
+
+    Target resolution (v1):
+
+    - ``SELF`` → the actor's own character.
+    - ``ENEMY`` → every ACTIVE opponent's ``objectdb``. Mirrors
+      ``_resolve_condition_target``'s ENEMY branch, which returns ``opp.objectdb``
+      for an active opponent. Every opponent (including ephemeral CombatNPCs) is
+      created with an ObjectDB by ``add_opponent``; the FK is only nulled if the
+      ObjectDB is destroyed externally, so we skip opponents whose ``objectdb`` is
+      None — matching the focused path's None-guard.
+    - ``ALLY`` → every ACTIVE participant except the actor.
+
+    When ``technique.combo_opening_probing`` is set, every ACTIVE opponent gains
+    that much probing (the combo-opening reward) via ``increment_probing`` — this
+    is the combo-opening effect for ephemeral opponents regardless of conditions.
+    """
+    from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+    from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    actor = participant.character_sheet.character
+
+    # Batch the opponent/ally queries ONCE before the row loop (no queries in loop).
+    active_opponents = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        ).select_related("objectdb")
+    )
+    active_allies = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet__character")
+    )
+
+    # Combo-opening probing: granted to every active opponent independent of any
+    # condition application (the combo-opening effect for ephemeral opponents).
+    if technique.combo_opening_probing:
+        for opp in active_opponents:
+            increment_probing(opp, technique.combo_opening_probing)
+
+    # resolve_round prefetches ``..._passive__condition_applications__condition`` so
+    # this ``.all()`` reads the prefetch cache (no per-passive query in the resolution
+    # loop). Standalone callers fall back to lazy loads. Do NOT add ``.select_related``
+    # here — it forces a fresh query and bypasses the prefetch cache.
+    rows = list(technique.condition_applications.all())
+    if not rows:
+        return
+
+    applications: list[BulkConditionApplication] = []
+    for row in rows:
+        severity = row.compute_severity(
+            effective_power=technique.intensity,
+            success_level=row.minimum_success_level,
+        )
+        duration = row.compute_duration_rounds(
+            effective_power=technique.intensity,
+            success_level=row.minimum_success_level,
+        )
+
+        if row.target_kind == ConditionTargetKind.SELF:
+            targets = [actor]
+        elif row.target_kind == ConditionTargetKind.ENEMY:
+            targets = [opp.objectdb for opp in active_opponents if opp.objectdb is not None]
+        elif row.target_kind == ConditionTargetKind.ALLY:
+            targets = [ally.character_sheet.character for ally in active_allies]
+        else:
+            targets = []
+
+        applications.extend(
+            BulkConditionApplication(
+                target=target,
+                template=row.condition,
+                severity=severity,
+                duration_rounds=duration,
+                stack_count=row.stack_count,
+            )
+            for target in targets
+        )
+
+    if not applications:
+        return
+
+    bulk_apply_conditions(
+        applications,
+        source_character=actor,
+        source_technique=technique,
+        source_description=f"passive: {technique.name}",
+    )
+
+
+def _resolve_passive_actions(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Apply every declared passive on every PC action before focused resolution.
+
+    Runs before ``_resolve_actions`` so defensive/buff passives land before any
+    focused or NPC action resolves this round.
+    """
+    for action in pc_actions.values():
+        for passive in (
+            action.physical_passive,
+            action.social_passive,
+            action.mental_passive,
+        ):
+            if passive is not None:
+                _apply_passive_technique(passive, action.participant, encounter)
 
 
 def apply_damage_to_participant(  # noqa: PLR0913
@@ -3530,18 +3670,29 @@ def resolve_round(
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
-    for action in CombatRoundAction.objects.filter(
-        participant__encounter=encounter,
-        round_number=round_number,
-    ).select_related(
-        "participant",
-        "participant__character_sheet",
-        "focused_action",
-        "focused_action__effect_type",
-        "focused_action__action_template",
-        "focused_action__action_template__check_type",
-        "focused_opponent_target",
-        "combo_upgrade",
+    for action in (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=round_number,
+        )
+        .select_related(
+            "participant",
+            "participant__character_sheet",
+            "focused_action",
+            "focused_action__effect_type",
+            "focused_action__action_template",
+            "focused_action__action_template__check_type",
+            "focused_opponent_target",
+            "combo_upgrade",
+            "physical_passive",
+            "social_passive",
+            "mental_passive",
+        )
+        .prefetch_related(
+            "physical_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "social_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "mental_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+        )
     ):
         pc_actions[action.participant_id] = action
 
@@ -3570,6 +3721,7 @@ def resolve_round(
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
+    _resolve_passive_actions(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,

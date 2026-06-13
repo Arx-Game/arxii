@@ -615,6 +615,94 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
+  it('dispatches focused + passive with action_slot and effort_level (#874)', async () => {
+    setupMocks();
+
+    // A focused physical technique (id=10) so resolveFocusedCategory hides
+    // passive-physical, leaving passive-social + passive-mental visible.
+    const base = makePlayerAction(null, 'Flame Strike');
+    const focusedTech: PlayerAction = {
+      ...base,
+      ref: { ...base.ref, technique_id: 10 },
+      action_category: 'physical',
+    };
+
+    // Per-slot technique ids + a non-default focused effort ('HIGH') so we prove
+    // the round effort flows from focusedContext.effort and is mapped to the
+    // backend's lowercase EffortLevel value, and that passives inherit it.
+    const techniqueIds: Record<string, number> = {
+      focused: 10,
+      'passive-social': 20,
+      'passive-mental': 30,
+    };
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      const tid = techniqueIds[slot];
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'HIGH',
+                strainCommitment: 0,
+                techniqueId: tid,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [focusedTech] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    // Select focused (physical) + one passive (social). passive-physical is
+    // hidden because the focused technique's category is physical.
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('card-select-technique-passive-social'));
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    // Two dispatches: focused → passive-social.
+    expect(mockMutateAsync).toHaveBeenCalledTimes(2);
+
+    const calls = mockMutateAsync.mock.calls as Array<
+      [
+        {
+          ref: { backend: string; technique_id: number | null; action_slot?: string };
+          kwargs: Record<string, unknown>;
+        },
+      ]
+    >;
+
+    // Focused dispatch: action_slot 'focused', effort_level mapped to 'high'.
+    expect(calls[0][0]).toMatchObject({
+      ref: { backend: 'COMBAT', technique_id: 10, action_slot: 'focused' },
+      kwargs: { effort_level: 'high' },
+    });
+
+    // Passive dispatch: action_slot carries the slot string, same round effort.
+    expect(calls[1][0]).toMatchObject({
+      ref: { backend: 'COMBAT', technique_id: 20, action_slot: 'passive-social' },
+      kwargs: { effort_level: 'high' },
+    });
+
+    // Restore default stub implementation for subsequent tests.
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
   it('shows inline error alert when dispatch rejects', async () => {
     setupMocks();
 
