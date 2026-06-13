@@ -2711,7 +2711,7 @@ def _resolve_npc_action(
 def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
     pc_actions: dict[int, CombatRoundAction],
-    npc_actions: dict[int, CombatOpponentAction],
+    npc_actions: dict[int, list[CombatOpponentAction]],
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
@@ -2729,11 +2729,10 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
                 continue
-            npc_action = npc_actions.get(entity.pk)
-            if npc_action is not None:
-                outcomes.append(
-                    _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn),
-                )
+            outcomes.extend(
+                _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
+                for npc_action in npc_actions.get(entity.pk, [])
+            )
     return outcomes
 
 
@@ -3493,7 +3492,7 @@ def resolve_round(
     ):
         pc_actions[action.participant_id] = action
 
-    npc_actions: dict[int, CombatOpponentAction] = {}
+    npc_actions: dict[int, list[CombatOpponentAction]] = defaultdict(list)
     for npc_action in (
         CombatOpponentAction.objects.filter(
             opponent__encounter=encounter,
@@ -3514,7 +3513,7 @@ def resolve_round(
             ),
         )
     ):
-        npc_actions[npc_action.opponent_id] = npc_action
+        npc_actions[npc_action.opponent_id].append(npc_action)
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)

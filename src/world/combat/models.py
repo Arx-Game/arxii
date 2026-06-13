@@ -797,9 +797,6 @@ class CombatOpponentAction(SharedMemoryModel):
         related_name="incoming_attacks",
     )
 
-    class Meta:
-        pass
-
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
 

@@ -2,7 +2,8 @@
 
 from django.test import TestCase
 
-from world.combat.constants import EncounterStatus, OpponentStatus
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import ENTITY_TYPE_NPC, EncounterStatus, OpponentStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -12,10 +13,12 @@ from world.combat.factories import (
 )
 from world.combat.services import (
     apply_damage_to_opponent,
+    resolve_round,
     select_npc_actions,
     swarm_attack_count,
     swarm_kills,
 )
+from world.vitals.models import CharacterVitals
 
 
 class SwarmHelperTests(TestCase):
@@ -84,3 +87,63 @@ class SwarmOffenseTests(TestCase):
 
         swarm_actions = [a for a in actions if a.opponent_id == swarm.pk]
         self.assertEqual(len(swarm_actions), 2)
+
+
+class SwarmResolutionTests(TestCase):
+    """End-to-end: a multi-action swarm resolves multiple attacks per round (#875).
+
+    Task 6 dropped the unique (opponent, round_number) constraint so a swarm can
+    emit several CombatOpponentActions in one round. This proves the resolution
+    path (resolve_round → _resolve_actions) does NOT collapse that volume back to
+    a single action — both swarm attacks resolve into distinct outcomes and both
+    PCs take damage.
+    """
+
+    def test_swarm_resolves_multiple_attacks_per_round(self):
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        pool = ThreatPoolFactory()
+        # base_damage applied directly (no defense_check_type in resolve_round call).
+        ThreatPoolEntryFactory(pool=pool, base_damage=10)
+        swarm = SwarmOpponentFactory(
+            encounter=encounter,
+            swarm_count=30,
+            bodies_per_attack=6,
+            threat_pool=pool,
+        )
+        # Two acting PCs (vitals row → is_dead/can_act resolve correctly and damage
+        # can land). 30 bodies / 6 per attack = 5 raw, capped at 2 acting PCs → 2.
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet_a)
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet_b)
+        CharacterVitals.objects.create(character_sheet=sheet_a, health=100, max_health=100)
+        CharacterVitals.objects.create(character_sheet=sheet_b, health=100, max_health=100)
+
+        # Emit the swarm's volume-scaled actions, then resolve the round.
+        emitted = select_npc_actions(encounter)
+        self.assertEqual(len([a for a in emitted if a.opponent_id == swarm.pk]), 2)
+
+        result = resolve_round(encounter)
+
+        # The swarm's two attacks resolve into two distinct NPC outcomes — the
+        # volume is NOT collapsed to one at resolution.
+        swarm_outcomes = [
+            o
+            for o in result.action_outcomes
+            if o.entity_type == ENTITY_TYPE_NPC and o.entity_label == str(swarm)
+        ]
+        self.assertEqual(len(swarm_outcomes), 2)
+
+        # Each attack resolved real damage against a PC (one damage result each):
+        # the swarm landed two separate hits this round, not one.
+        total_damage_results = sum(len(o.damage_results) for o in swarm_outcomes)
+        self.assertEqual(total_damage_results, 2)
+        # At least one PC visibly lost health from the swarm's volley.
+        healths = [
+            CharacterVitals.objects.get(character_sheet=sheet).health
+            for sheet in (sheet_a, sheet_b)
+        ]
+        self.assertTrue(any(h < 100 for h in healths))
