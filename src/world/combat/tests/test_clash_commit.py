@@ -203,7 +203,8 @@ class CommitToClashTests(TestCase):
         # No STRAIN-kind contribution with source_label "Strain" must appear.
         extras = captured["extra_contributions"]
         strain_contribs = [
-            c for c in extras
+            c
+            for c in extras
             if c.source_kind == ModifierSourceKind.STRAIN and c.source_label == "Strain"
         ]
         self.assertEqual(
@@ -251,7 +252,8 @@ class CommitToClashTests(TestCase):
 
         extras = captured["extra_contributions"]
         affinity_contribs = [
-            c for c in extras
+            c
+            for c in extras
             if c.source_kind == ModifierSourceKind.STRAIN and c.source_label == "Affinity tilt"
         ]
         self.assertEqual(len(affinity_contribs), 1)

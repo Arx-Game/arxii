@@ -62,6 +62,10 @@ class ActionOutcomeDetail:
     action_interaction_id: int
     effects: list[EffectRow] = field(default_factory=list)
     power_ledger: PowerLedger | None = None
+    # Clash-contribution fields — None on non-clash details.
+    strain_committed: int | None = None
+    power: int | None = None
+    progress_delta: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +108,10 @@ class OutcomeDetailSerializer(serializers.Serializer):
     action_interaction_id = serializers.IntegerField()
     effects = EffectRowSerializer(many=True)
     power_ledger = PowerLedgerSerializer(allow_null=True, required=False)
+    # Clash-only fields; None when the detail is for a CombatRoundAction.
+    strain_committed = serializers.IntegerField(allow_null=True, required=False)
+    power = serializers.IntegerField(allow_null=True, required=False)
+    progress_delta = serializers.IntegerField(allow_null=True, required=False)
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +310,7 @@ def _build_outcome_detail(
             return ActionOutcomeDetail(
                 action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
             )
-        return _build_clash_contribution_detail(contribution, action_interaction_id)
+        return _build_clash_contribution_detail(contribution, action_interaction_id, ledger)
 
     return ActionOutcomeDetail(
         action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
@@ -312,8 +320,14 @@ def _build_outcome_detail(
 def _build_clash_contribution_detail(
     contribution: ClashContribution,
     action_interaction_id: int,
+    ledger: PowerLedger | None,
 ) -> ActionOutcomeDetail:
-    """Render rows directly from ClashContribution fields."""
+    """Render rows directly from ClashContribution fields.
+
+    ``ledger`` is already visibility-gated by the caller: it is ``None`` when the
+    viewer cannot see power numbers, so we propagate ``power=None`` in that case
+    without re-checking the gate here.
+    """
     effects: list[EffectRow] = []
     clash = contribution.clash_round.clash
     opponent_name = clash.npc_opponent.name if clash.npc_opponent_id else "?"
@@ -353,7 +367,16 @@ def _build_clash_contribution_detail(
                 deep_link=None,
             )
         )
-    return ActionOutcomeDetail(action_interaction_id=action_interaction_id, effects=effects)
+    # Derive power from the already-loaded (and already gated) ledger total.
+    power: int | None = ledger.total if ledger is not None else None
+    return ActionOutcomeDetail(
+        action_interaction_id=action_interaction_id,
+        effects=effects,
+        power_ledger=ledger,
+        strain_committed=contribution.anima_committed,
+        power=power,
+        progress_delta=contribution.progress_delta,
+    )
 
 
 class ActionOutcomeDetailsView(APIView):
