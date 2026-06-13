@@ -1467,20 +1467,51 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        weights = [e.weight for e in eligible]
-        chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+        if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+            n_attacks = swarm_attack_count(
+                opponent.swarm_count,
+                opponent.bodies_per_attack or 1,
+                len(active_participants),
+            )
+        else:
+            n_attacks = 1
 
-        targets = _select_targets(chosen, active_participants)
-
-        action = CombatOpponentAction.objects.create(
-            opponent=opponent,
-            round_number=encounter.round_number,
-            threat_entry=chosen,
-        )
-        action.targets.set(targets)
-        actions.append(action)
+        for _ in range(n_attacks):
+            weights = [e.weight for e in eligible]
+            chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+            targets = _select_targets(chosen, active_participants)
+            action = CombatOpponentAction.objects.create(
+                opponent=opponent,
+                round_number=encounter.round_number,
+                threat_entry=chosen,
+            )
+            action.targets.set(targets)
+            actions.append(action)
 
     return actions
+
+
+def swarm_kills(raw_damage: int, body_toughness: int) -> int:
+    """Bodies a single landing attack clears from a swarm (#875).
+
+    A landing hit always clears at least one body; big hits mow through many.
+    ``body_toughness`` is the damage needed per body.
+    """
+    if raw_damage <= 0:
+        return 0
+    return max(1, raw_damage // max(1, body_toughness))
+
+
+def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count: int) -> int:
+    """Attacks a swarm makes this round — scales with remaining bodies (#875).
+
+    Capped at the number of PCs who can act, so a swarm fans across the party
+    rather than dogpiling one PC. Derived on read; nothing persisted.
+    """
+    if swarm_count <= 0 or active_pc_count <= 0:
+        return 0
+    raw = math.ceil(swarm_count / max(1, bodies_per_attack))
+    return max(1, min(raw, active_pc_count))
 
 
 def apply_damage_to_opponent(
@@ -1501,6 +1532,24 @@ def apply_damage_to_opponent(
     counters: ``damage_dealt`` (by post-soak damage), and on defeat
     ``opponents_defeated``.
     """
+    # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        kills = min(swarm_kills(raw_damage, opponent.body_toughness or 1), opponent.swarm_count)
+        opponent.swarm_count -= kills
+        defeated = opponent.swarm_count <= 0
+        if defeated:
+            opponent.status = OpponentStatus.DEFEATED
+        opponent.save(update_fields=["swarm_count", "status"])
+        del source_sheet
+        return OpponentDamageResult(
+            damage_dealt=kills,
+            health_damaged=False,
+            probed=False,
+            probing_increment=0,
+            defeated=defeated,
+            kills=kills,
+        )
+
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
     resistance = 0
@@ -1515,7 +1564,8 @@ def apply_damage_to_opponent(
     opponent.health -= damage_through
     opponent.probing_current += probing_increment
 
-    defeated = opponent.health <= 0
+    # Hero Killer cannot be defeated -- narrative immunity ("you must run").
+    defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
         opponent.status = OpponentStatus.DEFEATED
 
@@ -1532,6 +1582,7 @@ def apply_damage_to_opponent(
         probed=probing_increment > 0,
         probing_increment=probing_increment,
         defeated=defeated,
+        kills=0,
     )
 
 
@@ -2670,7 +2721,7 @@ def _resolve_npc_action(
 def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
     pc_actions: dict[int, CombatRoundAction],
-    npc_actions: dict[int, CombatOpponentAction],
+    npc_actions: dict[int, list[CombatOpponentAction]],
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
@@ -2688,11 +2739,10 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
                 continue
-            npc_action = npc_actions.get(entity.pk)
-            if npc_action is not None:
-                outcomes.append(
-                    _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn),
-                )
+            outcomes.extend(
+                _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
+                for npc_action in npc_actions.get(entity.pk, [])
+            )
     return outcomes
 
 
@@ -2854,7 +2904,8 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     """Classify a completing encounter (#876 spec §1).
 
-    1. No ACTIVE opponents → VICTORY.
+    1. No ACTIVE opponents and no Hero Killer present → VICTORY. An unbeatable
+       Hero Killer (#875) on the field at any status forbids VICTORY.
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
@@ -2862,7 +2913,13 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
         encounter=encounter, status=OpponentStatus.ACTIVE
     ).exists()
     if not any_active_opponents:
-        return EncounterOutcome.VICTORY
+        hero_killer_present = CombatOpponent.objects.filter(
+            encounter=encounter, tier=OpponentTier.HERO_KILLER
+        ).exists()
+        if not hero_killer_present:
+            return EncounterOutcome.VICTORY
+        # An unbeatable Hero Killer was on the field -- never a victory.
+        # Fall through to FLED / DEFEAT classification below.
 
     statuses = set(
         CombatParticipant.objects.filter(encounter=encounter).values_list("status", flat=True)
@@ -3445,7 +3502,7 @@ def resolve_round(
     ):
         pc_actions[action.participant_id] = action
 
-    npc_actions: dict[int, CombatOpponentAction] = {}
+    npc_actions: dict[int, list[CombatOpponentAction]] = defaultdict(list)
     for npc_action in (
         CombatOpponentAction.objects.filter(
             opponent__encounter=encounter,
@@ -3466,7 +3523,7 @@ def resolve_round(
             ),
         )
     ):
-        npc_actions[npc_action.opponent_id] = npc_action
+        npc_actions[npc_action.opponent_id].append(npc_action)
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
