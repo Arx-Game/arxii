@@ -62,16 +62,14 @@ def _prefetch_facts(sheet: CharacterSheet) -> _Prefetched:
     weaving_exists = CharacterThreadWeavingUnlock.objects.filter(character=sheet).exists()
     motif_exists = Motif.objects.filter(character=sheet).exists()
 
-    # CharacterAnima.character is a FK to ObjectDB — query via sheet.character
+    # CharacterAnima.character is a FK to ObjectDB accessed via sheet.character.
+    # Bare-factory CharacterSheets may not have an ObjectDB character attached yet.
     try:
         anima_exists = CharacterAnima.objects.filter(character=sheet.character).exists()
-    except Exception:  # noqa: BLE001
+    except AttributeError:
         anima_exists = False
 
-    try:
-        gift_count = CharacterGift.objects.filter(character=sheet).count()
-    except Exception:  # noqa: BLE001
-        gift_count = 0
+    gift_count = CharacterGift.objects.filter(character=sheet).count()
 
     return _Prefetched(
         resonance_exists=resonance_exists,
@@ -82,20 +80,20 @@ def _prefetch_facts(sheet: CharacterSheet) -> _Prefetched:
     )
 
 
-def _knowledge_tier(roster_entry: object | None, entry: object | None) -> str:
-    """Return MilestoneDiscoveryTier for a codex entry given the character's roster entry."""
+def _knowledge_tier(knowledge_status_by_entry_id: dict[int, str], entry: object | None) -> str:
+    """Return MilestoneDiscoveryTier for a codex entry using a pre-fetched status dict.
+
+    The dict maps entry_id → CodexKnowledgeStatus value and is built once in
+    build_progression_dashboard to avoid per-milestone queries.
+    """
     if entry is None:
         return MilestoneDiscoveryTier.UNKNOWN
     if entry.is_public:
         return MilestoneDiscoveryTier.KNOWN
-    if roster_entry is None:
+    status = knowledge_status_by_entry_id.get(entry.pk)
+    if status is None:
         return MilestoneDiscoveryTier.UNKNOWN
-    row = CharacterCodexKnowledge.objects.filter(
-        roster_entry=roster_entry, entry=entry
-    ).first()
-    if row is None:
-        return MilestoneDiscoveryTier.UNKNOWN
-    if row.status == CodexKnowledgeStatus.KNOWN:
+    if status == CodexKnowledgeStatus.KNOWN:
         return MilestoneDiscoveryTier.KNOWN
     return MilestoneDiscoveryTier.UNCOVERED
 
@@ -141,7 +139,7 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
 
     No queries run inside the per-stage / per-milestone loops.
     """
-    roster_entry = getattr(sheet, "roster_entry", None)
+    roster_entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
     current_stage = _current_path_stage(sheet)
 
     # Load all milestones in a single query.
@@ -153,6 +151,16 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
 
     # Prefetch per-sheet "already-have" facts before the loop.
     prefetched = _prefetch_facts(sheet)
+
+    # Prefetch codex knowledge in one query so _knowledge_tier has no per-milestone DB hit.
+    if roster_entry is not None:
+        knowledge_status_by_entry_id: dict[int, str] = dict(
+            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry).values_list(
+                "entry_id", "status"
+            )
+        )
+    else:
+        knowledge_status_by_entry_id = {}
 
     # Group milestones by stage for efficient per-stage access.
     milestones_by_stage: dict[int, list[MagicProgressionMilestone]] = {}
@@ -167,7 +175,7 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
 
         for milestone in stage_milestones:
             entry = milestone.codex_entry
-            tier = _knowledge_tier(roster_entry, entry)
+            tier = _knowledge_tier(knowledge_status_by_entry_id, entry)
 
             if tier == MilestoneDiscoveryTier.UNKNOWN:
                 has_undiscovered = True
