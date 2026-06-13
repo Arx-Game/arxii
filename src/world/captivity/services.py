@@ -22,13 +22,14 @@ from world.captivity.constants import RESOLVED_STATUSES, CaptivityStatus
 from world.captivity.exceptions import AlreadyCapturedError, NotHeldError
 from world.captivity.models import Captivity
 from world.character_sheets.types import LifecycleState
+from world.instances.constants import InstanceStatus
+from world.instances.models import InstancedRoom
 from world.instances.services import complete_instanced_room, spawn_instanced_room
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.instances.models import InstancedRoom
     from world.societies.models import Organization
 
 # PLACEHOLDER cell flavor — rewrite in the project voice before launch.
@@ -46,12 +47,16 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
     return_location: ObjectDB | None = None,
     offscreen_loss_allowed: bool = False,
     cell: InstancedRoom | None = None,
+    group_key: str | None = None,
     cell_name: str | None = None,
     cell_description: str | None = None,
 ) -> Captivity:
     """Take one character into a cell and record the captivity.
 
-    Spawns a fresh cell unless ``cell`` is supplied (the shared-cell path).
+    Spawns a fresh cell unless ``cell`` is supplied (the explicit shared-cell
+    path) or ``group_key`` matches an existing active cell (the keyed
+    shared-cell path: captives of the same capture event reuse one cell — the
+    consequence-effect path can't pass a cell object, so it passes a key).
     Flips the captive's lifecycle to CAPTURED and moves their body inside.
 
     Raises ``AlreadyCapturedError`` if the character is already held.
@@ -60,13 +65,15 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
         raise AlreadyCapturedError
 
     with transaction.atomic():
+        if cell is None and group_key is not None:
+            cell = _active_group_cell(group_key)
         if cell is None:
             room = spawn_instanced_room(
                 name=cell_name or _DEFAULT_CELL_NAME,
                 description=cell_description or _DEFAULT_CELL_DESCRIPTION,
                 owner=captive,
                 return_location=return_location,
-                source_key=f"capture:{captive.pk}",
+                source_key=group_key or f"capture:{captive.pk}",
             )
             cell = room.instance_data
 
@@ -181,6 +188,20 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
     room = cell.room
     Captivity.objects.filter(cell=cell).update(cell=None)
     complete_instanced_room(room)
+
+
+def _active_group_cell(group_key: str) -> InstancedRoom | None:
+    """The still-active cell already spawned for this capture group, if any.
+
+    Cells are tagged with the group key as their ``source_key``; a resolved
+    group's cell is completed/torn down, so an ACTIVE match means the group is
+    still being held and the next captive joins it (the shared-cell default).
+    """
+    return (
+        InstancedRoom.objects.filter(source_key=group_key, status=InstanceStatus.ACTIVE)
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def _relocate_freed_captive(captive: CharacterSheet, cell: InstancedRoom | None) -> None:

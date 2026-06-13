@@ -395,6 +395,24 @@ def _apply_magical_scars(
     )
 
 
+def _capture_group_key(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> str | None:
+    """Stable key grouping captives of one capture event into a shared cell.
+
+    Keyed on the resolution's scene (the encounter's location handle the
+    context reliably carries) plus the captor org, so the same captor taking
+    several PCs in one scene shares a cell, while different captors — or no
+    scene at all — fall back to separate cells.
+    """
+    scene = context.scene
+    if scene is None:
+        return None
+    captor_part = effect.capture_captor_organization_id or "none"
+    return f"capture:scene:{scene.pk}:{captor_part}"
+
+
 def _apply_capture(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -430,6 +448,10 @@ def _apply_capture(
             # TARGET capture. target.location may be None; the service allows it.
             return_location=target.location,
             offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
+            # Captives taken in one encounter (same scene + captor) share a
+            # cell — the shared-cell default, honoured on the per-character
+            # consequence path. No scene → per-character cells (group_key None).
+            group_key=_capture_group_key(effect, context),
         )
     except AlreadyCapturedError:
         return AppliedEffect(
