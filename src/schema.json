@@ -9776,6 +9776,23 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/progression/:
+    get:
+      operationId: magic_progression_list
+      description: Return the progression dashboard for the acting character.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressionStage'
+          description: ''
   /api/magic/resonance-grants/:
     get:
       operationId: magic_resonance_grants_list
@@ -23664,6 +23681,8 @@ components:
       - effort
       - fatigue
       - strain
+      - affinity
+      - pull
       type: string
       description: |-
         * `condition` - Condition
@@ -23674,6 +23693,8 @@ components:
         * `effort` - Effort
         * `fatigue` - Fatigue
         * `strain` - Strain
+        * `affinity` - Affinity
+        * `pull` - Combat Pull
     ContributionRow:
       type: object
       properties:
@@ -35597,6 +35618,66 @@ components:
         * `public` - Public
         * `private` - Private
         * `ephemeral` - Ephemeral
+    ProgressionMilestone:
+      type: object
+      description: One milestone entry in a progression stage.
+      properties:
+        kind:
+          type: string
+        tier:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        eligibility:
+          type: string
+          nullable: true
+        missing:
+          type: array
+          items:
+            type: string
+        xp_cost:
+          type: integer
+          nullable: true
+        route_name:
+          type: string
+          nullable: true
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - codex_entry_id
+      - eligibility
+      - kind
+      - missing
+      - route_name
+      - summary
+      - tier
+      - title
+      - xp_cost
+    ProgressionStage:
+      type: object
+      description: One stage row in the magic progression dashboard response.
+      properties:
+        stage:
+          type: integer
+        stage_label:
+          type: string
+        is_current:
+          type: boolean
+        has_undiscovered:
+          type: boolean
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressionMilestone'
+      required:
+      - has_undiscovered
+      - is_current
+      - milestones
+      - stage
+      - stage_label
     PromoteSubrole:
       type: object
       description: |-
