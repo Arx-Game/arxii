@@ -23664,6 +23664,8 @@ components:
       - effort
       - fatigue
       - strain
+      - affinity
+      - pull
       type: string
       description: |-
         * `condition` - Condition
@@ -23674,6 +23676,8 @@ components:
         * `effort` - Effort
         * `fatigue` - Fatigue
         * `strain` - Strain
+        * `affinity` - Affinity
+        * `pull` - Combat Pull
     ContributionRow:
       type: object
       properties:
