@@ -38,6 +38,7 @@ Registry exclusion note:
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend, ActionCategory, TargetKind
@@ -118,6 +119,16 @@ def dispatch_player_action(
         if ctx is None or not ctx.is_declaration_open:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
         player_action = _find_combat_player_action_for_ref(character, ref)
+
+        # The availability layer rebuilds the ref with technique_id only; carry the
+        # client's slot intent (focused vs passive-<category>) onto it so the
+        # declaration routes to the correct CombatRoundAction slot (#874).
+        if ref.action_slot is not None:
+            player_action = dataclasses.replace(
+                player_action,
+                ref=dataclasses.replace(player_action.ref, action_slot=ref.action_slot),
+            )
+
         avail = None  # COMBAT doesn't use AvailableAction
 
         # Clash-contribution path: bypass record_declaration and write directly.
