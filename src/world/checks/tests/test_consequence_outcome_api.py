@@ -401,3 +401,8 @@ class ConsequenceOutcomePoollessDisplayTest(TestCase):
         selected = [row for row in data["outcome_display"] if row["is_selected"]]
         self.assertEqual(len(selected), 1)
         self.assertEqual(selected[0]["label"], "Approach Stumble")
+        # The display is the UNION of approach- and template-level links — assert
+        # the template consequence is present too, so a regression that drops the
+        # template side would fail here rather than pass silently.
+        labels = {row["label"] for row in data["outcome_display"]}
+        self.assertIn("Template Wound", labels)
