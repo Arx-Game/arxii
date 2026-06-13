@@ -26,6 +26,8 @@ from world.combat.types import ClashContributionResult
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
+    LedgerOp,
+    PowerStage,
     ResonanceValence,
 )
 from world.magic.factories import (
@@ -36,6 +38,9 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.resonance_environment import AffinityInteraction
+from world.magic.types.power_ledger import PowerLedger, PowerLedgerEntry
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import InteractionFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -424,6 +429,110 @@ class AggregateClashRoundTests(TestCase):
         db_count = ClashContribution.objects.filter(clash_round=result.clash_round).count()
         self.assertEqual(db_count, 0)
         self.assertEqual(len(result.contributions), 0)
+
+    def test_interaction_fk_and_timestamp_set_on_contribution(self) -> None:
+        """ClashContributionResult with clash_interaction → ClashContribution.interaction FK set."""
+        from unittest.mock import MagicMock
+
+        interaction = InteractionFactory(mode=InteractionMode.ACTION)
+        contrib = ClashContributionResult(
+            character=self.character_a,
+            action_slot=ClashActionSlot.FOCUSED,
+            technique=self.technique,
+            check_outcome=self.check_outcome,
+            progress_delta=2,
+            anima_committed=3,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+            technique_use_result=MagicMock(),
+            clash_interaction=interaction,
+            power_ledger=None,
+        )
+        clash = ClashFactory(progress=0)
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[contrib],
+            npc_delta=0,
+        )
+        row = ClashContribution.objects.get(clash_round=result.clash_round)
+        self.assertEqual(row.interaction_id, interaction.id)
+        self.assertIsNotNone(row.interaction_timestamp)
+        self.assertEqual(row.interaction_timestamp, interaction.timestamp)
+
+    def test_power_ledger_persisted_when_interaction_present(self) -> None:
+        """A non-None power_ledger with a clash_interaction → InteractionPowerLedgerEntry rows."""
+        from unittest.mock import MagicMock
+
+        from world.scenes.models import InteractionPowerLedgerEntry
+
+        interaction = InteractionFactory(mode=InteractionMode.ACTION)
+        ledger = PowerLedger(
+            entries=(
+                PowerLedgerEntry(
+                    stage=PowerStage.BASE,
+                    source_label="channeled intensity",
+                    op=LedgerOp.SET,
+                    amount=5,
+                    running_total=5,
+                ),
+            ),
+            total=5,
+        )
+        contrib = ClashContributionResult(
+            character=self.character_a,
+            action_slot=ClashActionSlot.FOCUSED,
+            technique=self.technique,
+            check_outcome=self.check_outcome,
+            progress_delta=2,
+            anima_committed=3,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+            technique_use_result=MagicMock(),
+            clash_interaction=interaction,
+            power_ledger=ledger,
+        )
+        clash = ClashFactory(progress=0)
+        aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[contrib],
+            npc_delta=0,
+        )
+        self.assertTrue(
+            InteractionPowerLedgerEntry.objects.filter(interaction=interaction).exists()
+        )
+
+    def test_none_interaction_contribution_aggregates_safely(self) -> None:
+        """ClashContributionResult with clash_interaction=None: interaction stays NULL, no crash."""
+        from unittest.mock import MagicMock
+
+        contrib = ClashContributionResult(
+            character=self.character_a,
+            action_slot=ClashActionSlot.FOCUSED,
+            technique=self.technique,
+            check_outcome=self.check_outcome,
+            progress_delta=1,
+            anima_committed=0,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+            technique_use_result=MagicMock(),
+            clash_interaction=None,
+            power_ledger=None,
+        )
+        clash = ClashFactory(progress=0)
+        result = aggregate_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[contrib],
+            npc_delta=0,
+        )
+        row = ClashContribution.objects.get(clash_round=result.clash_round)
+        self.assertIsNone(row.interaction_id)
+        self.assertIsNone(row.interaction_timestamp)
 
 
 class CheckClashThresholdTests(TestCase):

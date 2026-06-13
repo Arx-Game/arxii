@@ -600,10 +600,22 @@ def aggregate_clash_round(
                 was_overburn=c.was_overburn,
                 was_audere=c.was_audere,
                 soulfray_severity_accrued=c.soulfray_severity_accrued,
+                interaction=c.clash_interaction,
+                interaction_timestamp=(
+                    c.clash_interaction.timestamp if c.clash_interaction is not None else None
+                ),
             )
             for c in pc_contributions
         ]
     )
+
+    # 4b. Persist each contribution's power ledger anchored to its interaction.
+    #     Must be called inside the existing @transaction.atomic — no nested transaction.
+    from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
+
+    for c in pc_contributions:
+        if c.clash_interaction is not None:
+            persist_power_ledger(interaction=c.clash_interaction, ledger=c.power_ledger)
 
     # 5. Update clash.progress with the new value.
     clash.progress = progress_after
