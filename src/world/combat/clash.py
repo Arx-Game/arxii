@@ -7,11 +7,13 @@ each function is unit-testable in isolation.  Higher-level orchestration
 Clash logic themselves.
 
 Current scope (Tasks 2.1–5.1):
-  - ``strain_to_modifier``: converts anima committed past the strain floor into
-    a diminishing-returns check modifier, driven entirely by ``StrainConfig``
-    tuning knobs.
-  - ``outcome_to_delta``: maps a ``CheckOutcome`` tier to a per-round progress
-    delta, driven by the six ``ClashConfig.delta_*`` tuning knobs.
+  - ``strain_to_intensity``: converts anima committed past the strain floor into
+    a diminishing-returns intensity bonus, driven entirely by ``StrainConfig``
+    tuning knobs.  The bonus is passed as ``power_intensity_bonus`` to
+    ``use_technique`` so strain scales power — not the check roll.
+  - ``outcome_to_delta``: maps a ``CheckOutcome`` tier and power value to a per-round
+    progress delta, driven by ``ClashConfig.power_scale``, per-tier quality multipliers,
+    and ``ClashConfig.botch_backfire_fraction``.
   - ``commit_to_clash``: routes a PC's per-round clash contribution through
     the ``use_technique`` magic pipeline and returns a ``ClashContributionResult``.
   - ``npc_round_contribution``: returns the NPC's per-round progress contribution.
@@ -50,6 +52,7 @@ from world.combat.types import (
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
+from world.magic.types.power_ledger import PowerLedger
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -83,8 +86,8 @@ def can_clash(
     return bool(props_a & props_b)
 
 
-def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
-    """Convert a strain commitment (anima poured in past the floor) to a check modifier.
+def strain_to_intensity(*, strain_commitment: int, config: StrainConfig) -> int:
+    """Convert a strain commitment (anima poured in past the floor) to an intensity bonus.
 
     Diminishing-returns curve: the first points convert efficiently, deep strain
     converts poorly.  Knobs come from ``StrainConfig``:
@@ -94,46 +97,48 @@ def strain_to_modifier(*, anima_committed: int, config: StrainConfig) -> int:
       conversion by 1
     - ``diminishing_floor``: the conversion never drops below this per-anima value
 
-    ``anima_committed`` is treated as ``0`` when negative (defensive guard).
-    Returns exactly ``0`` when ``anima_committed`` is ``0``.
+    The returned value is passed as ``power_intensity_bonus`` to ``use_technique``,
+    so committed strain scales power (and thus progress delta) without affecting
+    the check roll itself — the check reflects only skill + affinity + conditions.
+
+    ``strain_commitment`` is treated as ``0`` when negative (defensive guard).
+    Returns exactly ``0`` when ``strain_commitment`` is ``0``.
     """
-    remaining = max(anima_committed, 0)
-    mod = 0
+    remaining = max(strain_commitment, 0)
+    bonus = 0
     rate = config.conversion_base
     while remaining > 0:
         take = min(remaining, config.diminishing_step)
-        mod += take * rate
+        bonus += take * rate
         remaining -= take
         rate = max(rate - 1, config.diminishing_floor)
-    return mod
+    return bonus
 
 
-def outcome_to_delta(*, check_outcome: CheckOutcome, config: ClashConfig) -> int:
-    """Map a CheckOutcome tier to a clash progress delta.
+def outcome_to_delta(*, check_outcome: CheckOutcome, power: int, config: ClashConfig) -> int:
+    """Map a CheckOutcome tier and power value to a clash progress delta.
 
-    Banding (by CheckOutcome.success_level):
-      >= 3  → critical success → config.delta_critical_success
-      == 2  → great success    → config.delta_great_success
-      == 1  → success          → config.delta_success
-      == 0  → partial          → config.delta_partial
-      == -1 → failure          → config.delta_failure
-      <= -2 → botch            → config.delta_botch
+    Formula:
+      - botch (success_level <= -2): committed power rebounds negatively.
+        delta = -round(power * config.botch_backfire_fraction * config.power_scale)
+      - all other tiers: positive (or zero) delta scaled by quality and power.
+        delta = round(power * config.quality_multiplier_for(level) * config.power_scale)
 
-    Values outside the authored range are clamped to the nearest band.
+    Quality banding via ``config.quality_multiplier_for``:
+      >= 3  → critical  (config.quality_multiplier_critical)
+      == 2  → great     (config.quality_multiplier_great)
+      == 1  → success   (config.quality_multiplier_success)
+      == 0  → partial   (config.quality_multiplier_partial)
+      <= -1 → failure   (config.quality_multiplier_failure, typically 0.0)
+
+    ``round()`` on a Decimal product returns a plain int (Python banker's rounding).
     Pure function — no DB writes, no I/O.
     """
     level = check_outcome.success_level
-    if level >= 3:  # noqa: PLR2004
-        return config.delta_critical_success
-    if level == 2:  # noqa: PLR2004
-        return config.delta_great_success
-    if level == 1:
-        return config.delta_success
-    if level == 0:
-        return config.delta_partial
-    if level == -1:
-        return config.delta_failure
-    return config.delta_botch
+    if level <= -2:  # noqa: PLR2004
+        # botch — committed power rebounds as negative delta
+        return -round(power * config.botch_backfire_fraction * config.power_scale)
+    return round(power * config.quality_multiplier_for(level) * config.power_scale)
 
 
 def commit_to_clash(  # noqa: PLR0913
@@ -167,12 +172,11 @@ def commit_to_clash(  # noqa: PLR0913
             echoed into the returned ``ClashContributionResult`` for audit use by
             the round aggregator.
         config_clash: Clash tuning knobs for ``outcome_to_delta``.
-        config_strain: Strain curve knobs for ``strain_to_modifier``.
+        config_strain: Strain curve knobs for ``strain_to_intensity``.
         targets: Optional explicit targets forwarded to the magic pipeline.
-        check_modifier_extra: Additional flat modifier applied to the check on top
-            of the strain modifier.  Default 0 (no effect).  Used by the round
-            driver to thread the affinity tilt through without changing the
-            strain computation.
+        check_modifier_extra: Additional flat modifier applied to the check (affinity
+            tilt).  Default 0 (no effect).  Strain no longer modifies the check roll;
+            it is converted to a ``power_intensity_bonus`` that scales power instead.
 
     Returns:
         A frozen ``ClashContributionResult`` with the check outcome, progress
@@ -213,26 +217,20 @@ def commit_to_clash(  # noqa: PLR0913
         raise ValueError(msg)
     check_type = template.check_type
 
-    # 2. Convert strain commitment to a check modifier (diminishing-returns curve).
-    strain_modifier = strain_to_modifier(
-        anima_committed=strain_commitment,
+    # 2. Convert strain commitment to a power_intensity_bonus (diminishing-returns curve).
+    #    Strain no longer modifies the check roll — the check reflects skill + affinity +
+    #    conditions only.  Instead, committed strain scales power via use_technique's
+    #    power_intensity_bonus kwarg, so heavier strain → higher power → higher progress delta.
+    power_intensity_bonus = strain_to_intensity(
+        strain_commitment=strain_commitment,
         config=config_strain,
     )
 
-    # 2b. Express strain + affinity-tilt as labeled ModifierContributions and route
-    #     them through the shared collect_check_modifiers seam so the clash check
-    #     ALSO honors condition + rollmod sources (the #851 individualization lever),
-    #     not only its strain/affinity.  The summed .total replaces the former
-    #     ad-hoc ``strain_modifier + check_modifier_extra`` arithmetic.
+    # 2b. Express the affinity tilt as a labeled ModifierContribution and route it
+    #     through the shared collect_check_modifiers seam so the clash check honors
+    #     condition + rollmod sources (the #851 individualization lever).
+    #     The summed .total reaches perform_check as extra_modifiers.
     extra_contributions: list[ModifierContribution] = []
-    if strain_modifier:
-        extra_contributions.append(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.STRAIN,
-                source_label="Strain",
-                value=strain_modifier,
-            )
-        )
     if check_modifier_extra:
         extra_contributions.append(
             ModifierContribution(
@@ -252,8 +250,16 @@ def commit_to_clash(  # noqa: PLR0913
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
     #    value as resolution_result; we return a CheckResult directly.
-    # clash check is strain-driven; the power ledger is ledger-independent here.
-    def resolve_fn(*, power: int, ledger: object) -> object:  # noqa: ARG001
+    #    The power and ledger from the magic pipeline are captured via typed
+    #    nonlocal locals so the caller can persist them on the result for
+    #    ledger-display and power-driven formula work.
+    captured_power: int = 0
+    captured_ledger: PowerLedger | None = None
+
+    def resolve_fn(*, power: int, ledger: PowerLedger) -> object:
+        nonlocal captured_power, captured_ledger
+        captured_power = power
+        captured_ledger = ledger
         return perform_check(
             objectdb,
             check_type,
@@ -263,6 +269,8 @@ def commit_to_clash(  # noqa: PLR0913
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,
     #    reactive events, corruption, resonance environment).
+    #    power_intensity_bonus folds the strain intensity into power derivation only —
+    #    anima cost is unaffected by this parameter.
     technique_use_result = use_technique(
         character=objectdb,
         technique=technique,
@@ -270,6 +278,7 @@ def commit_to_clash(  # noqa: PLR0913
         strain_commitment=strain_commitment,
         targets=targets,
         confirm_soulfray_risk=True,
+        power_intensity_bonus=power_intensity_bonus,
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should
@@ -282,6 +291,13 @@ def commit_to_clash(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
+    # 5b. Read the power and ledger captured by the closure.  ``captured_power``
+    #     and ``captured_ledger`` are populated synchronously during
+    #     use_technique → resolve_fn; they are guaranteed to hold the cast
+    #     values at this point.
+    clash_power = captured_power
+    clash_ledger = captured_ledger
+
     # 6. Extract the CheckResult from the resolution_result (the closure returns
     #    a CheckResult directly, so resolution_result IS the CheckResult).
     check_result: CheckResult = technique_use_result.resolution_result  # type: ignore[assignment]
@@ -290,9 +306,10 @@ def commit_to_clash(  # noqa: PLR0913
         raise ValueError(msg)
     check_outcome: CheckOutcome = check_result.outcome
 
-    # 7. Convert outcome to progress delta.
+    # 7. Convert outcome to progress delta (power-scaled formula).
     progress_delta = outcome_to_delta(
         check_outcome=check_outcome,
+        power=clash_power,
         config=config_clash,
     )
 
@@ -318,6 +335,7 @@ def commit_to_clash(  # noqa: PLR0913
         encounter_id=clash.encounter_id,
         character_sheet=character_sheet,
     ).first()
+    recorded_interaction = None
     if participant is not None:
         clash_interaction = create_action_interaction(
             participant=participant,
@@ -331,6 +349,7 @@ def commit_to_clash(  # noqa: PLR0913
             )
 
             push_interaction(clash_interaction)
+            recorded_interaction = clash_interaction
 
     return ClashContributionResult(
         character=character_sheet,
@@ -343,6 +362,9 @@ def commit_to_clash(  # noqa: PLR0913
         was_audere=technique_use_result.was_audere,
         soulfray_severity_accrued=soulfray_severity_accrued,
         technique_use_result=technique_use_result,
+        power=clash_power,
+        power_ledger=clash_ledger,
+        clash_interaction=recorded_interaction,
     )
 
 
@@ -582,10 +604,22 @@ def aggregate_clash_round(
                 was_overburn=c.was_overburn,
                 was_audere=c.was_audere,
                 soulfray_severity_accrued=c.soulfray_severity_accrued,
+                interaction=c.clash_interaction,
+                interaction_timestamp=(
+                    c.clash_interaction.timestamp if c.clash_interaction is not None else None
+                ),
             )
             for c in pc_contributions
         ]
     )
+
+    # 4b. Persist each contribution's power ledger anchored to its interaction.
+    #     Must be called inside the existing @transaction.atomic — no nested transaction.
+    from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
+
+    for c in pc_contributions:
+        if c.clash_interaction is not None:
+            persist_power_ledger(interaction=c.clash_interaction, ledger=c.power_ledger)
 
     # 5. Update clash.progress with the new value.
     clash.progress = progress_after

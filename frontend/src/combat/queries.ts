@@ -5,7 +5,7 @@
  * Phase 7 of the unified-combat-ui plan.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type { DispatchActionRequest, EncounterListItem } from './types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
@@ -35,6 +35,33 @@ export const combatKeys = {
   consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
     [...combatKeys.all, 'consequence-outcomes', params] as const,
 };
+
+/**
+ * Invalidate every consequence-outcome query (all character/encounter variants),
+ * so the "Last Outcome" panel refetches after a round-affecting mutation (#866).
+ */
+function invalidateConsequenceOutcomes(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] }).catch(() => {});
+}
+
+/**
+ * Mutation hook for a simple combat action whose only cache effect is to refresh
+ * the encounter detail and the consequence-outcome panel. Hooks with extra
+ * invalidations (useEndEncounter, useUpgradeCombo) stay bespoke.
+ */
+function useEncounterMutation<TData, TArgs = void>(
+  encounterId: number,
+  mutationFn: (args: TArgs) => Promise<TData>
+) {
+  const qc = useQueryClient();
+  return useMutation<TData, Error, TArgs>({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      invalidateConsequenceOutcomes(qc);
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Encounter read hook
@@ -133,6 +160,7 @@ export function useUpgradeCombo(encounterId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) }).catch(() => {});
+      invalidateConsequenceOutcomes(qc);
     },
   });
 }
@@ -227,13 +255,7 @@ export function useDispatchPlayerAction(characterId: number) {
  * Invalidates encounter key on success.
  */
 export function useFleeMutation(encounterId: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.postFlee(encounterId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-    },
-  });
+  return useEncounterMutation(encounterId, () => api.postFlee(encounterId));
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +278,7 @@ export function useEndEncounter(encounterId: number) {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       // Terminal event: every character's action list for this fight is now stale.
       qc.invalidateQueries({ queryKey: combatKeys.availableActionsAll() }).catch(() => {});
+      invalidateConsequenceOutcomes(qc);
       if (typeof data.scene === 'number') {
         qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(
           () => {}
@@ -275,13 +298,9 @@ export function useEndEncounter(encounterId: number) {
  * Invalidates encounter key on success.
  */
 export function useCoverMutation(encounterId: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (allyParticipantId: number) => api.postCover(encounterId, allyParticipantId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-    },
-  });
+  return useEncounterMutation(encounterId, (allyParticipantId: number) =>
+    api.postCover(encounterId, allyParticipantId)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,11 +318,12 @@ export function useConsequenceOutcomes(params: api.ConsequenceOutcomesParams) {
   // Only enable when a meaningful filter is provided (> 0 to guard against un-initialized ids).
   const hasFilter =
     (params.character !== undefined && params.character > 0) ||
-    (params.pool !== undefined && params.pool > 0);
+    (params.pool !== undefined && params.pool > 0) ||
+    (params.encounter !== undefined && params.encounter > 0);
   return useQuery({
     queryKey: combatKeys.consequenceOutcomes(params),
     queryFn: () => api.fetchConsequenceOutcomes(params),
     enabled: hasFilter,
-    staleTime: 60_000,
+    staleTime: 5_000,
   });
 }

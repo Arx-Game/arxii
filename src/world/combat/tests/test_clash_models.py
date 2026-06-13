@@ -39,8 +39,8 @@ class ClashConfigTests(TestCase):
         cfg, _ = ClashConfig.objects.get_or_create(pk=1)
         self.assertGreater(cfg.affinity_tilt_coefficient, 0)
         self.assertGreater(cfg.passive_anima_cap, 0)
-        self.assertEqual(cfg.delta_great_success, 2)
         self.assertGreaterEqual(cfg.break_abandon_idle_rounds, 1)
+        self.assertGreater(cfg.power_scale, 0)
 
     def test_get_strain_config_lazy_creates_singleton(self):
         self.assertFalse(StrainConfig.objects.filter(pk=1).exists())
@@ -51,17 +51,20 @@ class ClashConfigTests(TestCase):
         self.assertGreaterEqual(cfg.diminishing_floor, 1)
 
     def test_get_clash_config_lazy_creates_singleton(self):
+        from decimal import Decimal
+
         self.assertFalse(ClashConfig.objects.filter(pk=1).exists())
         cfg = get_clash_config()
         self.assertEqual(cfg.pk, 1)
         self.assertGreater(cfg.affinity_tilt_coefficient, 0)
         self.assertGreater(cfg.passive_anima_cap, 0)
-        self.assertEqual(cfg.delta_critical_success, 3)
-        self.assertEqual(cfg.delta_great_success, 2)
-        self.assertEqual(cfg.delta_success, 1)
-        self.assertEqual(cfg.delta_partial, 0)
-        self.assertEqual(cfg.delta_failure, -1)
-        self.assertEqual(cfg.delta_botch, -2)
+        self.assertEqual(cfg.power_scale, Decimal("0.5"))
+        self.assertEqual(cfg.quality_multiplier_critical, Decimal("1.5"))
+        self.assertEqual(cfg.quality_multiplier_great, Decimal("1.25"))
+        self.assertEqual(cfg.quality_multiplier_success, Decimal("1.0"))
+        self.assertEqual(cfg.quality_multiplier_partial, Decimal("0.5"))
+        self.assertEqual(cfg.quality_multiplier_failure, Decimal("0.0"))
+        self.assertEqual(cfg.botch_backfire_fraction, Decimal("0.5"))
 
 
 class ClashModelTests(TestCase):
