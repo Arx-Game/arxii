@@ -212,7 +212,7 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
         result.append(
             StageView(
                 stage=stage_value,
-                stage_label=stage_label,
+                stage_label=str(stage_label),
                 is_current=(stage_value == current_stage),
                 milestones=milestone_views,
                 has_undiscovered=has_undiscovered,
