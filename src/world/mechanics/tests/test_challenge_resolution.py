@@ -707,6 +707,40 @@ class ResolveFullTests(TestCase):
             self.approach.save()
 
     @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_plain_resolution_records_consequence_outcome(self, mock_check) -> None:
+        """Standard (non-template) resolve_challenge persists a ConsequenceOutcome, pool=None."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.outcome_models import ConsequenceOutcome
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        before = ConsequenceOutcome.objects.count()
+        challenge = self._make_challenge()
+        resolve_challenge(character, challenge, self.approach, self.source)
+
+        self.assertEqual(ConsequenceOutcome.objects.count(), before + 1)
+        outcome = ConsequenceOutcome.objects.latest("created_at")
+        self.assertIsNone(outcome.pool)
+        self.assertEqual(outcome.check_type, self.approach.check_type)
+        self.assertIsNotNone(outcome.challenge_record_id)
+        self.assertIsNone(outcome.combat_interaction_id)
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
     def test_approach_consequence_override_in_full_flow(self, mock_check) -> None:
         """Approach consequence override works through full resolution."""
         from world.checks.types import CheckResult

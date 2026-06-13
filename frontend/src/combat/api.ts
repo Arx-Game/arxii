@@ -214,6 +214,12 @@ export interface ActionOutcomeDetail {
   action_interaction_id: number;
   effects: OutcomeEffectRow[];
   power_ledger?: PowerLedger | null;
+  // Clash contributions only (null for non-clash outcomes). `power` mirrors the
+  // power_ledger total and is gated to caster/staff; strain_committed and
+  // progress_delta tell the strain→power→progress story and are not gated.
+  strain_committed?: number | null;
+  power?: number | null;
+  progress_delta?: number | null;
 }
 
 /**
@@ -236,6 +242,7 @@ export async function fetchOutcomeDetails(
 export interface ConsequenceOutcomesParams {
   character?: number;
   pool?: number;
+  encounter?: number;
   created_after?: string;
   created_before?: string;
   page?: number;
@@ -255,6 +262,7 @@ export async function fetchConsequenceOutcomes(
   const qs = new URLSearchParams();
   if (params.character !== undefined) qs.set('character', String(params.character));
   if (params.pool !== undefined) qs.set('pool', String(params.pool));
+  if (params.encounter !== undefined) qs.set('encounter', String(params.encounter));
   if (params.created_after !== undefined) qs.set('created_after', params.created_after);
   if (params.created_before !== undefined) qs.set('created_before', params.created_before);
   if (params.page !== undefined) qs.set('page', String(params.page));

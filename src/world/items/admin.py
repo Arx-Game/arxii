@@ -63,10 +63,11 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_stackable",
         "is_consumable",
         "is_craftable",
+        "gear_archetype",
     ]
     search_fields = ["name"]
     list_select_related = ["minimum_quality_tier", "image"]
-    raw_id_fields = ["image"]
+    raw_id_fields = ["image", "weapon_damage_type"]
     inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 
@@ -77,10 +78,12 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "template",
         "quality_tier",
         "quantity",
+        "durability",
         "holder_character_sheet",
         "crafter_character_sheet",
     ]
     list_filter = ["quality_tier", "template"]
+    readonly_fields = ["is_broken"]
     list_select_related = [
         "template",
         "quality_tier",

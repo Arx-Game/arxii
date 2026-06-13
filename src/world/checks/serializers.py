@@ -25,6 +25,10 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     selected_consequence so the frontend always receives the full weighted
     roulette (outcome_display) rather than storing it.
 
+    When pool is None (challenge-based resolution), the roulette is
+    reconstructed from the authored consequence links on the approach and
+    challenge template — no pool is stored; no denormalization occurs.
+
     combat_interaction and challenge_record are exposed as plain integer ids to
     avoid touching the range-partitioned scenes_interaction table at
     serialization time.
@@ -56,15 +60,26 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     def get_outcome_display(self, obj: ConsequenceOutcome) -> list[dict]:
         """Recompute the roulette from pool + selected_consequence on read.
 
-        Reads pool entries and parent entries from the prefetch cache
-        (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
-        _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries
-        are issued per row.  Mirrors the pool-walk logic of
+        When pool is not None, reads pool entries and parent entries from the
+        prefetch cache (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
+        _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries are
+        issued per row.  Mirrors the pool-walk logic of
         resolve_pool_consequences() but operates on already-fetched data.
+
+        When pool is None (challenge-based resolution), reconstructs the
+        consequence list from the authored ApproachConsequence and
+        ChallengeTemplateConsequence links via the challenge_record.  Uses
+        prefetch caches populated by the ViewSet's challenge-link Prefetch
+        objects.
 
         Returns a list of plain dicts matching OutcomeDisplay's fields.
         """
         pool = obj.pool
+        if pool is None:
+            all_consequences = self._reconstruct_consequences_from_links(obj)
+            display_items = build_outcome_display(all_consequences, obj.selected_consequence)
+            return [asdict(item) for item in display_items]
+
         # Read from prefetch cache — pool.entries.all() hits the cache when
         # the ViewSet has declared a Prefetch for "pool__entries".
         own_entries = list(pool.entries.all())
@@ -84,3 +99,43 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
 
         display_items = build_outcome_display(all_consequences, obj.selected_consequence)
         return [asdict(item) for item in display_items]
+
+    def _reconstruct_consequences_from_links(self, obj: ConsequenceOutcome) -> list:
+        """Reconstruct the consequence list from authored links when pool is None.
+
+        Gathers consequences from:
+        1. The approach's ApproachConsequence rows (approach.consequences prefetch)
+        2. The challenge template's ChallengeTemplateConsequence rows
+           (challenge_instance.template.challenge_consequences prefetch)
+
+        Deduplication is by consequence PK; approach-level consequences come
+        first (matching resolution-time ordering), followed by template-level
+        consequences not already included.
+
+        Returns an empty list if challenge_record is absent (defensive only —
+        pool=None outcomes are always expected to have a challenge_record).
+        """
+        record = obj.challenge_record
+        if record is None:
+            return []
+
+        seen_pks: set[int] = set()
+        consequences = []
+
+        # Approach-level consequences first (ApproachConsequence.related_name="consequences")
+        for link in record.approach.consequences.all():
+            c = link.consequence
+            if c.pk not in seen_pks:
+                seen_pks.add(c.pk)
+                consequences.append(c)
+
+        # Template-level consequences
+        # (ChallengeTemplateConsequence.related_name="challenge_consequences")
+        template = record.challenge_instance.template
+        for link in template.challenge_consequences.all():
+            c = link.consequence
+            if c.pk not in seen_pks:
+                seen_pks.add(c.pk)
+                consequences.append(c)
+
+        return consequences

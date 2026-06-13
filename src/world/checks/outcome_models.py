@@ -52,8 +52,16 @@ class ConsequenceOutcome(SharedMemoryModel):
     )
     pool = models.ForeignKey(
         "actions.ConsequencePool",
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name="consequence_outcomes",
+        help_text=(
+            "The ConsequencePool used for roulette selection. "
+            "Null for plain (non-template) challenge resolutions whose roulette "
+            "is reconstructed on read from the authored consequence links rather "
+            "than persisted as a derived pool."
+        ),
     )
     selected_consequence = models.ForeignKey(
         "checks.Consequence",

@@ -146,10 +146,20 @@ round. This mirrors the `CombatPull` / `CombatPullResolvedEffect` audit pattern.
 2. **Resolution** (in initiative order — see §10):
    - Each PC contribution runs through `use_technique` — anima deduction, overburn
      → Soulfray, mishap rider, reactive events, corruption all fire normally.
-   - Each commit's check resolves to a `CheckOutcome` tier → a progress delta via
-     the tier→delta table.
-   - Sum PC deltas; compute the NPC delta from the threat pattern; apply the
-     affinity tilt (§8).
+   - Strain converts to an intensity bonus (`strain_to_intensity`), which raises the
+     cast's power through `_derive_power`. The check outcome determines a **quality
+     multiplier** on that power: critical/great/success/partial scale the power up;
+     failure yields 0 progress; a **botch backfires** — the committed power rebounds
+     as a negative progress delta (`botch_backfire_fraction`). Any Soulfray cost comes
+     from the strain→intensity→overburn coupling (committing more strain raises
+     intensity, which raises anima cost and can push the caster into overburn on any
+     outcome); there is no separate botch-specific Soulfray penalty.
+   - Per-contributor progress delta = `round(power × quality_multiplier × power_scale)`
+     (see `outcome_to_delta` and `ClashConfig`). Power sets the magnitude; the check
+     outcome is the quality gate.
+   - Sum PC deltas; compute the NPC delta from the threat pattern (NPC-side
+     contributions remain on the `npc_delta` model — power-driving the NPC side is a
+     known follow-up); apply the affinity tilt (§8).
    - Write `ClashRound` + `ClashContribution` rows; update `clash.progress`.
    - Fire `per_round_consequence_pool` if set (visible incremental feedback).
    - Threshold check → if crossed, resolve (fire `resolution_consequence_pool`, set
@@ -167,12 +177,13 @@ for this spec, only consumer.
   much more to pour in.
 - Excess over the character's pool → overburn → Soulfray severity, via the existing
   `calculate_soulfray_severity` path. No new risk machinery.
-- The strain commitment converts to amplification — a **check modifier**. The
-  conversion is governed by an authored `StrainConfig` singleton (sibling to
-  `SoulfrayConfig` / `CorruptionConfig`), so the curve is staff-tunable. The design
-  intent is **diminishing returns**: early anima converts efficiently, deep strain
-  converts poorly, so "dump everything" is a real decision against the Soulfray
-  risk rather than a foregone optimum.
+- The strain commitment converts to an **intensity bonus** via `strain_to_intensity`
+  (`world/combat/clash.py`). That bonus raises the cast's **power** through the
+  normal `_derive_power` pipeline — strain does not modify the check roll. Higher
+  strain → higher intensity → higher power → larger progress contribution.
+- Because intensity already drives anima cost, overburn, and Soulfray, pushing strain
+  **automatically escalates Soulfray** through the existing machinery. There is no
+  separate escalation rule; it falls out of the intensity model.
 
 Strain is the anima-denominated sibling of thread pulls (Spec A): thread pulls
 spend *resonance* for authored thematic payoff and risk only opportunity cost;
@@ -289,19 +300,20 @@ Each round a PC contributes through one of two action slots:
 
 - **Focused contribution** — the clash *is* the PC's main action. Full strain
   available; the contribution runs as a technique cast through `use_technique`, the
-  check type being whatever the contributing technique uses, strain commitment
-  riding as `extra_modifiers`. Largest per-round contribution.
+  check type being whatever the contributing technique uses, strain converting to an
+  intensity bonus via `strain_to_intensity`. Largest per-round contribution.
 - **Passive contribution** — "Lend strength to the clash" slotted into one of the
   PC's two passive categories (Physical / Social / Mental). The PC's focused action
-  that round is something else. Lower stakes: a capped, lower anima commitment, a
-  smaller modifier, a smaller delta.
+  that round is something else. Lower stakes: a capped, lower anima commitment, lower
+  power, a smaller delta.
 
-**Aggregation:** every contributor rolls their own check independently; committed
-anima → strain modifier → check → `CheckOutcome` tier → that contributor's progress
-delta. The round's PC progress delta = the **sum** of all contributors' deltas.
-This is the "X successes of varying levels, failures/botches subtract" model — each
-PC's contribution is one success-level, and they sum; a botch genuinely drags the
-round down even as others succeed.
+**Aggregation:** every contributor rolls their own check independently. For each:
+committed anima → strain intensity bonus → power (via `_derive_power`) → power ×
+quality multiplier (from `CheckOutcome` tier) → that contributor's progress delta.
+The round's PC progress delta = the **sum** of all contributors' deltas. A botch
+backfires — it subtracts progress — so it genuinely drags the round down even as
+others succeed. Soulfray accrues through the normal intensity/overburn path, not as a
+separate botch penalty.
 
 **Constraints / v1 simplifications:**
 
@@ -402,13 +414,20 @@ Soulfray ladder, reactive events, corruption) from *applying effects to targets*
 and substitutes the second:
 
 - The caller specifies a `strain_commitment` — anima poured in beyond the computed
-  `effective_cost`, which becomes a floor. This is the one real change inside the
-  cost path.
+  `effective_cost`, which becomes a floor. `strain_to_intensity` converts that
+  committed excess to an intensity bonus, which is fed into `_derive_power` to yield
+  a higher power for the cast. Strain's effect is entirely mediated through intensity
+  and power; it does not modify the check roll directly.
 - The cast runs the full pipeline — overburn → Soulfray, mishap rider, reactive
-  events, corruption all fire live, per round.
-- Instead of `apply_damage_to_opponent` / applying conditions, the cast's
-  `CheckOutcome` is captured and handed back to the clash orchestrator, which
-  converts it to a progress delta and writes the `ClashContribution`.
+  events, corruption all fire live, per round. Because strain raises intensity, the
+  overburn and Soulfray escalation that follow are the normal intensity-driven
+  machinery, not a separate path.
+- Instead of `apply_damage_to_opponent` / applying conditions, the cast's power and
+  `CheckOutcome` are captured and handed back to the clash orchestrator. `outcome_to_delta`
+  converts them (power × quality multiplier × `power_scale`) to a progress delta;
+  the orchestrator writes the `ClashContribution` and persists the interaction +
+  power ledger via `persist_power_ledger`, enabling the action-outcome panel to show
+  the full strain→intensity→power→delta story (caster- and staff-gated).
 
 Whether this is a parameter on `use_technique`, a thin `commit_to_clash` wrapper, or
 a decomposition of `use_technique` into reusable halves is a plan-phase decision.
@@ -503,11 +522,15 @@ relationships and the one-contribution-per-PC-per-round `UniqueConstraint`;
 factories (`ClashFactory` + per-flavor variants, `ClashRoundFactory`,
 `ClashContributionFactory`).
 
-**Service tests** — strain conversion (the `StrainConfig` diminishing-returns curve;
-overburn when commitment exceeds the pool); clash-commit (a contribution runs the
-cast pipeline, produces a `CheckOutcome`, converts to a delta, writes the
-`ClashContribution`); aggregation (multi-PC deltas sum; focused-vs-passive magnitude
-gap; a botch subtracting); NPC-side contribution per flavor; affinity tilt
+**Service tests** — strain conversion (`strain_to_intensity` curve; overburn when
+commitment exceeds the pool; Soulfray escalation as the natural consequence of raised
+intensity); clash-commit (a contribution runs the cast pipeline, `_derive_power`
+produces a power value, `outcome_to_delta` converts power × quality multiplier to a
+delta, ledger is persisted via `persist_power_ledger`; a botch produces negative
+delta (Soulfray comes from the intensity/overburn path, not a separate botch penalty);
+writes the `ClashContribution`); aggregation (multi-PC
+deltas sum; focused-vs-passive magnitude gap); NPC-side contribution per flavor;
+affinity tilt
 (per-contributor, RPS cycle, same-affinity and affinity-less → no tilt); resolution
 (threshold crossing, decisive-vs-marginal by overshoot, exhaustion, `WARD` duration
 expiry, `BREAK` abandonment; resolution pool fires with the tier as selector;
@@ -550,8 +573,9 @@ without `--keepdb` before pushing (integration tests create encounters →
 - Exact `Clash` schema — field types, nullability, the precise discriminator
   `CheckConstraint`s
 - Whether clash-commit is a `use_technique` parameter, a wrapper, or a decomposition
-- Location of the affinity-tilt coefficient (`ResonanceEnvironmentConfig` vs. a new
-  `ClashConfig`) and of the tier→delta table and per-tier default thresholds
+- Location of the affinity-tilt coefficient (`ResonanceEnvironmentConfig` vs.
+  `ClashConfig`) — `ClashConfig` is built and houses `power_scale` and
+  `botch_backfire_fraction`; affinity-tilt coefficient location is still open
 - Final `resolution` enum membership across the flavors
 - The archetype `flavor` enum value (`CLASH` literal vs. a descriptive value)
 - The `ComboDefinition` clash-prerequisite field shape (active-clash vs.
