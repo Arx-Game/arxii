@@ -1503,6 +1503,10 @@ def apply_damage_to_opponent(
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
 
     opponent.health -= damage_through
+    # ``increment_probing`` is the sibling standalone write site for the no-damage
+    # passive path (combo-opening passives). This write stays inline because it
+    # shares a single combined save with health/status below; ``probing_increment``
+    # is already ``max(0, …)`` so both paths apply the same non-negative clamp.
     opponent.probing_current += probing_increment
 
     defeated = opponent.health <= 0
@@ -1523,6 +1527,16 @@ def apply_damage_to_opponent(
         probing_increment=probing_increment,
         defeated=defeated,
     )
+
+
+def increment_probing(opponent: CombatOpponent, amount: int) -> None:
+    """Add ``amount`` to an opponent's probing counter (clamped at zero) and persist.
+
+    Single standalone write path for ``probing_current`` used by combo-opening
+    passives so probing feeds combo detection identically to damage-sourced probing.
+    """
+    opponent.probing_current = max(0, opponent.probing_current + amount)
+    opponent.save(update_fields=["probing_current"])
 
 
 def apply_damage_to_participant(  # noqa: PLR0913
