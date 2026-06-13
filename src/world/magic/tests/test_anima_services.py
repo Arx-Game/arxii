@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.magic.services import (
@@ -215,6 +215,7 @@ class GetSoulfrayWarningTests(TestCase):
     def test_no_soulfray_returns_none(self) -> None:
         assert get_soulfray_warning(self.character) is None
 
+    @tag("postgres")
     def test_soulfray_present_returns_warning(self) -> None:
         from world.conditions.services import apply_condition
 
