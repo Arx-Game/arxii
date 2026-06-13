@@ -1473,6 +1473,29 @@ def select_npc_actions(
     return actions
 
 
+def swarm_kills(raw_damage: int, body_toughness: int) -> int:
+    """Bodies a single landing attack clears from a swarm (#875).
+
+    A landing hit always clears at least one body; big hits mow through many.
+    ``body_toughness`` is the damage needed per body.
+    """
+    if raw_damage <= 0:
+        return 0
+    return max(1, raw_damage // max(1, body_toughness))
+
+
+def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count: int) -> int:
+    """Attacks a swarm makes this round — scales with remaining bodies (#875).
+
+    Capped at the number of PCs who can act, so a swarm fans across the party
+    rather than dogpiling one PC. Derived on read; nothing persisted.
+    """
+    if swarm_count <= 0 or active_pc_count <= 0:
+        return 0
+    raw = math.ceil(swarm_count / max(1, bodies_per_attack))
+    return max(1, min(raw, active_pc_count))
+
+
 def apply_damage_to_opponent(
     opponent: CombatOpponent,
     raw_damage: int,
