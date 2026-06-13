@@ -14,7 +14,7 @@ export function ForcedEscapeBanner() {
       role="alert"
       className={cn(
         'rounded-md border px-4 py-3 text-center text-lg font-semibold tracking-wide',
-        'border-red-600/70 bg-red-950/50 text-red-200 animate-pulse'
+        'animate-pulse border-red-600/70 bg-red-950/50 text-red-200'
       )}
     >
       You cannot win this fight — you must run.
