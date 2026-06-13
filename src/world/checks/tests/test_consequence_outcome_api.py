@@ -9,6 +9,7 @@ Covers:
   an empty list, staff bypass returns all rows
 - List endpoint query count does NOT scale with the number of
   ConsequenceOutcome rows (prefetch cache is hit, not bypassed)
+- Roulette reconstructed from authored consequence links when pool is None
 """
 
 from __future__ import annotations
@@ -24,6 +25,15 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
+from world.checks.serializers import ConsequenceOutcomeSerializer
+from world.mechanics.factories import (
+    ApproachConsequenceFactory,
+    ChallengeApproachFactory,
+    ChallengeInstanceFactory,
+    ChallengeTemplateConsequenceFactory,
+    ChallengeTemplateFactory,
+)
+from world.mechanics.models import CharacterChallengeRecord
 from world.scenes.factories import InteractionFactory
 
 
@@ -316,3 +326,78 @@ class ConsequenceOutcomeQueryCountTest(ConsequenceOutcomeAPISetupMixin, TestCase
                 f"got {query_count}. Prefetch cache may not be hit."
             ),
         )
+
+
+class ConsequenceOutcomePoollessDisplayTest(TestCase):
+    """Serializer reconstructs roulette display from authored links when pool is None.
+
+    Covers the branch in get_outcome_display() for ConsequenceOutcome rows
+    written by resolve_challenge (pool=None, challenge_record set).
+    """
+
+    def setUp(self) -> None:
+        from world.traits.factories import CheckOutcomeFactory
+
+        self.owner_account = AccountFactory()
+        char = CharacterFactory()
+        char.db_account = self.owner_account
+        char.save()
+        self.sheet = CharacterSheetFactory(character=char)
+
+        self.check_type = CheckTypeFactory()
+        self.outcome_tier = CheckOutcomeFactory(name="Partial Success")
+
+        # Two consequences: one template-level, one approach-level.
+        self.template_consequence = ConsequenceFactory(
+            label="Template Wound",
+            outcome_tier=self.outcome_tier,
+            weight=4,
+        )
+        self.approach_consequence = ConsequenceFactory(
+            label="Approach Stumble",
+            outcome_tier=self.outcome_tier,
+            weight=6,
+        )
+
+        # Wire up the challenge hierarchy
+        self.template = ChallengeTemplateFactory()
+        self.approach = ChallengeApproachFactory(
+            challenge_template=self.template,
+            check_type=self.check_type,
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=self.template,
+            consequence=self.template_consequence,
+        )
+        ApproachConsequenceFactory(
+            approach=self.approach,
+            consequence=self.approach_consequence,
+        )
+
+        self.challenge_instance = ChallengeInstanceFactory(template=self.template)
+
+        self.challenge_record = CharacterChallengeRecord.objects.create(
+            character=char,
+            challenge_instance=self.challenge_instance,
+            approach=self.approach,
+            consequence=self.approach_consequence,
+        )
+
+        # pool=None — the resolution did not use a ConsequencePool
+        self.pool_less_outcome = ConsequenceOutcome.objects.create(
+            character=self.sheet,
+            check_type=self.check_type,
+            pool=None,
+            selected_consequence=self.approach_consequence,
+            modifier_total=0,
+            summary="Poolless test",
+            challenge_record=self.challenge_record,
+        )
+
+    def test_outcome_display_reconstructed_when_pool_is_none(self) -> None:
+        """Serializer builds outcome_display from authored links, not from pool."""
+        data = ConsequenceOutcomeSerializer(self.pool_less_outcome).data
+        self.assertGreater(len(data["outcome_display"]), 0)
+        selected = [row for row in data["outcome_display"] if row["is_selected"]]
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["label"], "Approach Stumble")

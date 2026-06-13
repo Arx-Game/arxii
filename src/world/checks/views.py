@@ -11,6 +11,7 @@ from actions.models.consequence_pools import ConsequencePoolEntry
 from world.checks.filters import ConsequenceOutcomeFilter
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.serializers import ConsequenceOutcomeSerializer
+from world.mechanics.models import ApproachConsequence, ChallengeTemplateConsequence
 from world.stories.pagination import StandardResultsSetPagination
 
 # Prefetch pool entries including each consequence's outcome_tier so the
@@ -27,6 +28,16 @@ _PARENT_ENTRIES_PREFETCH = Prefetch(
 _MODIFIERS_PREFETCH = Prefetch(
     "modifiers",
     queryset=ConsequenceOutcomeModifier.objects.all(),
+)
+# Prefetches for pool=None (challenge-based) outcomes: reconstruct roulette
+# from authored ApproachConsequence and ChallengeTemplateConsequence links.
+_APPROACH_CONSEQUENCES_PREFETCH = Prefetch(
+    "challenge_record__approach__consequences",
+    queryset=ApproachConsequence.objects.select_related("consequence__outcome_tier"),
+)
+_TEMPLATE_CONSEQUENCES_PREFETCH = Prefetch(
+    "challenge_record__challenge_instance__template__challenge_consequences",
+    queryset=ChallengeTemplateConsequence.objects.select_related("consequence__outcome_tier"),
 )
 
 
@@ -63,11 +74,15 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
                 "selected_consequence__outcome_tier",
                 "character",
                 "check_type",
+                "challenge_record__approach",
+                "challenge_record__challenge_instance__template",
             )
             .prefetch_related(
                 _MODIFIERS_PREFETCH,
                 _POOL_ENTRIES_PREFETCH,
                 _PARENT_ENTRIES_PREFETCH,
+                _APPROACH_CONSEQUENCES_PREFETCH,
+                _TEMPLATE_CONSEQUENCES_PREFETCH,
             )
             .order_by("-created_at")
         )
