@@ -8,16 +8,28 @@ combo-opening probing to active opponents.
 
 from django.test import TestCase
 
-from world.combat.constants import EncounterStatus
+from world.combat.constants import ActionCategory, EncounterStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ComboDefinitionFactory,
+    ComboLearningFactory,
+    ComboSlotFactory,
 )
 from world.combat.models import CombatRoundAction
-from world.combat.services import _apply_passive_technique, resolve_round
+from world.combat.services import (
+    _apply_passive_technique,
+    detect_available_combos,
+    resolve_round,
+)
 from world.conditions.models import ConditionInstance
-from world.magic.factories import TechniqueAppliedConditionFactory, TechniqueFactory
+from world.magic.factories import (
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueAppliedConditionFactory,
+    TechniqueFactory,
+)
 
 
 class ApplyPassiveTechniqueSelfBuffTest(TestCase):
@@ -130,3 +142,93 @@ class ResolveRoundAppliesPassiveTest(TestCase):
             success_level=self.applied.minimum_success_level,
         )
         self.assertEqual(instances.first().severity, expected_severity)
+
+
+class ComboOpeningPassiveUnlocksGatedComboTest(TestCase):
+    """End-to-end (#874): a combo-opening passive raises probing and unlocks a combo.
+
+    Closes the combo-opening archetype loop: a passive whose ``Technique`` carries
+    ``combo_opening_probing`` feeds the per-opponent probing counter at the
+    resolution layer, and that probing then satisfies a ``ComboDefinition``'s
+    ``minimum_probing`` gate in ``detect_available_combos`` — so the combo becomes
+    available on the following round.
+    """
+
+    def setUp(self):
+        from world.vitals.models import CharacterVitals
+
+        self.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        CharacterVitals.objects.create(
+            character_sheet=self.participant.character_sheet,
+            health=100,
+            max_health=100,
+        )
+        # Active opponent starts with zero probing (factory/model default ACTIVE).
+        self.opponent = CombatOpponentFactory(encounter=self.encounter)
+        self.assertEqual(self.opponent.probing_current, 0)
+
+        # Round-1 passive: a bare technique carrying combo-opening probing (no
+        # focused action needed — only the combo_opening_probing column matters).
+        self.passive = TechniqueFactory(
+            action_category="physical",
+            intensity=4,
+            combo_opening_probing=3,
+        )
+        CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_category=None,
+            focused_action=None,
+            physical_passive=self.passive,
+        )
+
+    def test_passive_raises_probing_and_unlocks_gated_combo(self):
+        # --- Drive the round: passives resolve before focused/NPC actions. ---
+        resolve_round(self.encounter)
+
+        # 1) Probing rose to the passive's combo_opening_probing on the opponent.
+        self.opponent.refresh_from_db()
+        self.assertEqual(self.opponent.probing_current, 3)
+
+        # 2) A probing-gated combo is now available. Build a single-slot combo the
+        #    PC knows, gated at minimum_probing == 3, and declare a next-round
+        #    focused action whose effect type fills the slot.
+        effect_type = EffectTypeFactory(name="Combo Opener Attack")
+        combo = ComboDefinitionFactory(
+            discoverable_via_combat=False,
+            minimum_probing=3,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=effect_type,
+        )
+        ComboLearningFactory(
+            combo=combo,
+            character_sheet=self.participant.character_sheet,
+        )
+
+        next_round = self.encounter.round_number + 1
+        focused = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=effect_type,
+        )
+        CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=next_round,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=focused,
+        )
+
+        available = detect_available_combos(self.encounter, next_round)
+        available_combos = {ac.combo for ac in available}
+        self.assertIn(
+            combo,
+            available_combos,
+            "Probing raised to 3 by the passive must satisfy the combo's "
+            "minimum_probing gate and make it available.",
+        )
