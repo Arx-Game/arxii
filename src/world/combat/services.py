@@ -1642,6 +1642,25 @@ def _apply_passive_technique(
     )
 
 
+def _resolve_passive_actions(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Apply every declared passive on every PC action before focused resolution.
+
+    Runs before ``_resolve_actions`` so defensive/buff passives land before any
+    focused or NPC action resolves this round.
+    """
+    for action in pc_actions.values():
+        for passive in (
+            action.physical_passive,
+            action.social_passive,
+            action.mental_passive,
+        ):
+            if passive is not None:
+                _apply_passive_technique(passive, action.participant, encounter)
+
+
 def apply_damage_to_participant(  # noqa: PLR0913
     participant: CombatParticipant,
     damage: int,
@@ -3549,6 +3568,13 @@ def resolve_round(
         "focused_action__action_template__check_type",
         "focused_opponent_target",
         "combo_upgrade",
+        "physical_passive",
+        "social_passive",
+        "mental_passive",
+    ).prefetch_related(
+        "physical_passive__condition_applications__condition",
+        "social_passive__condition_applications__condition",
+        "mental_passive__condition_applications__condition",
     ):
         pc_actions[action.participant_id] = action
 
@@ -3577,6 +3603,7 @@ def resolve_round(
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
+    _resolve_passive_actions(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,
