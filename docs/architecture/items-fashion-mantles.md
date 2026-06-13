@@ -72,9 +72,16 @@ contributions (no denormalization).
   `drop`, `steal`, `transfer` are explicitly out of scope. Deferred to a
   follow-up spec.
 - **Combat stat blocks** (weapon damage, armor protection numbers, durability).
-  These exist in concept (referenced in covenant compatibility math) but the
-  concrete `ItemCombatStat` model + integration with `world.combat` is deferred
-  to PR3 of this spec's phasing.
+  Resolved by issue #508: `ItemTemplate` carries the authored base stats
+  (`weapon_damage_type`, `base_weapon_damage`, `base_armor_soak`,
+  `max_durability`, gated by `gear_archetype`); `ItemInstance` derives
+  `effective_weapon_damage` / `effective_armor_soak` (base × quality multiplier,
+  zero when broken) plus `durability` / `is_broken`; the
+  `decrement_item_durability` service handles wear and consumption; and combat is
+  wired so armor soak reduces incoming damage in `apply_damage_to_participant`
+  while equipped-weapon damage feeds attacks via
+  `TechniqueDamageProfile.uses_equipped_weapon`. (No separate `ItemCombatStat`
+  model was needed — the stats live directly on template/instance.)
 - **Crafting recipes / skill-gated craft system.** This spec relies on crafters
   having a path to write `ItemFacet` and `ItemInstance` rows but does not design
   the recipe model. Deferred to a follow-up spec.
