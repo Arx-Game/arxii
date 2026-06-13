@@ -330,6 +330,32 @@ class CombatOpponent(SharedMemoryModel):
         "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
     )
 
+    # === Swarm fields (#875) — populated only for SWARM tier, null elsewhere ===
+    swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies remaining. Damage clears bodies; "
+        "DEFEATED at 0. Null for non-swarm tiers.",
+    )
+    max_swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: bodies at encounter start.",
+    )
+    body_toughness = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: damage needed to kill one body. A landing "
+        "attack clears max(1, raw_damage // body_toughness) bodies.",
+    )
+    bodies_per_attack = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="SWARM tier only: remaining-count → outgoing-attack ratio. The "
+        "swarm makes ceil(swarm_count / bodies_per_attack) attacks/round, capped "
+        "at the number of acting PCs.",
+    )
+
     # === Clash fields (Task 1.5) ===
     barrier_strength = models.PositiveIntegerField(
         null=True,
