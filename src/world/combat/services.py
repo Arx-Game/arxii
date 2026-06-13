@@ -1596,7 +1596,11 @@ def _apply_passive_technique(
         for opp in active_opponents:
             increment_probing(opp, technique.combo_opening_probing)
 
-    rows = list(technique.condition_applications.select_related("condition").all())
+    # resolve_round prefetches ``..._passive__condition_applications__condition`` so
+    # this ``.all()`` reads the prefetch cache (no per-passive query in the resolution
+    # loop). Standalone callers fall back to lazy loads. Do NOT add ``.select_related``
+    # here — it forces a fresh query and bypasses the prefetch cache.
+    rows = list(technique.condition_applications.all())
     if not rows:
         return
 
