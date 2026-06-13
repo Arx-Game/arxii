@@ -26,6 +26,13 @@ and verify issue number↔title before any mutation. Temporary — removal track
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.
   After a squash-merge: `git checkout main && git pull && git branch -D feature-name`.
+- **`main` uses a merge queue (#991).** Once a PR is green, **enqueue it**
+  (`gh pr merge --auto --squash`, or `enqueue-pr.sh` in the `issue-to-merged-pr`
+  skill) and stop — do not re-sync with main or merge by hand. The queue
+  re-tests the PR on top of the latest main and merges in order; a human
+  approval is the only remaining gate. A migration collision shows up as the
+  loser being bounced from the queue (others keep flowing) — fix it with
+  `arx manage makemigrations --merge` (or renumber), push, re-enqueue.
 - **No `cd &&` compound commands.** Use `git -C /path <command>` for git, or
   absolute paths / a tool's own directory flag otherwise. (Claude Code on Windows
   flags every `cd && <command>` for manual approval as a bare-repo-attack
