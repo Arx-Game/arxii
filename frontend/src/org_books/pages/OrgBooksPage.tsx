@@ -84,7 +84,14 @@ function BooksSkeleton() {
 function OrgBooksInner({ orgId }: { orgId: number }) {
   const { data: books, isLoading } = useOrgBooks(orgId);
 
-  if (isLoading || !books) return <BooksSkeleton />;
+  if (isLoading) return <BooksSkeleton />;
+  if (!books) {
+    return (
+      <p className="py-8 text-center text-muted-foreground" data-testid="org-books-empty">
+        Those books could not be loaded.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-4" data-testid="org-books">
@@ -308,12 +315,19 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
 export function OrgBooksPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const id = Number(orgId);
+  const validId = Number.isFinite(id) && id > 0;
 
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <ErrorBoundary>
-        <OrgBooksInner orgId={Number.isFinite(id) ? id : 0} />
-      </ErrorBoundary>
+      {validId ? (
+        <ErrorBoundary>
+          <OrgBooksInner orgId={id} />
+        </ErrorBoundary>
+      ) : (
+        <p className="py-8 text-center text-muted-foreground" data-testid="org-books-invalid">
+          That is not a valid organization.
+        </p>
+      )}
     </div>
   );
 }

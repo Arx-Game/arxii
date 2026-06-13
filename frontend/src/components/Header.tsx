@@ -22,6 +22,7 @@ const links = [
   { to: '/news', label: 'News' },
   { to: '/community', label: 'Community' },
   { to: '/threads', label: 'Threads' },
+  { to: '/magic/progression', label: 'Progression' },
 ];
 
 /** Nav links visible only to authenticated users (account != null). */

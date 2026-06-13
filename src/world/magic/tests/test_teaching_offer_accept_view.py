@@ -25,10 +25,12 @@ from evennia_extensions.models import PlayerData
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    PendingAlterationFactory,
     ThreadWeavingTeachingOfferFactory,
     ThreadWeavingUnlockFactory,
 )
 from world.magic.models import CharacterThreadWeavingUnlock
+from world.magic.types import AlterationGateError
 from world.progression.models import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
@@ -184,6 +186,22 @@ class TeachingOfferAcceptViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # DRF ValidationError from serializer.create → list of ErrorDetail
         self.assertIn("You do not have enough XP for this.", response.data)
+
+    def test_open_mage_scar_returns_400_with_gate_message(self) -> None:
+        """Learner with an open Mage Scar gets HTTP 400 with the gate user_message."""
+        _give_xp(self.learner_account, 500)
+        # Give teacher enough banked AP
+        teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher_character)
+        teacher_pool.regenerate(10)
+        teacher_pool.bank(5)
+        PendingAlterationFactory(character=self.learner_sheet)
+
+        self.client.force_authenticate(user=self.learner_account)
+        response = self.client.post(self._accept_url(self.offer.pk), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # The gate message must appear somewhere in the response
+        self.assertIn(AlterationGateError.user_message, str(response.data))
 
     # ------------------------------------------------------------------
     # Alt guard — multiple active tenures
