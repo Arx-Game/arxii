@@ -3560,25 +3560,29 @@ def resolve_round(
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
-    for action in CombatRoundAction.objects.filter(
-        participant__encounter=encounter,
-        round_number=round_number,
-    ).select_related(
-        "participant",
-        "participant__character_sheet",
-        "focused_action",
-        "focused_action__effect_type",
-        "focused_action__action_template",
-        "focused_action__action_template__check_type",
-        "focused_opponent_target",
-        "combo_upgrade",
-        "physical_passive",
-        "social_passive",
-        "mental_passive",
-    ).prefetch_related(
-        "physical_passive__condition_applications__condition",
-        "social_passive__condition_applications__condition",
-        "mental_passive__condition_applications__condition",
+    for action in (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=round_number,
+        )
+        .select_related(
+            "participant",
+            "participant__character_sheet",
+            "focused_action",
+            "focused_action__effect_type",
+            "focused_action__action_template",
+            "focused_action__action_template__check_type",
+            "focused_opponent_target",
+            "combo_upgrade",
+            "physical_passive",
+            "social_passive",
+            "mental_passive",
+        )
+        .prefetch_related(
+            "physical_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "social_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+            "mental_passive__condition_applications__condition",  # noqa: PREFETCH_STRING
+        )
     ):
         pc_actions[action.participant_id] = action
 

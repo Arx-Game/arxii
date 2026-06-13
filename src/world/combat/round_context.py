@@ -152,6 +152,7 @@ class CombatRoundContext(RoundContext):
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.constants import ActionCategory  # noqa: PLC0415
         from world.combat.services import declare_action  # noqa: PLC0415
+        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
         # The frontend dispatches the focused action and each passive as SEPARATE
         # /dispatch/ calls, every one routing through here. To land them all on a
@@ -197,7 +198,11 @@ class CombatRoundContext(RoundContext):
         elif slot == CombatActionSlot.PASSIVE_MENTAL:
             mental = technique
 
-        effort = kwargs.get(_EFFORT_LEVEL_KEY) or (existing.effort_level if existing else None)
+        effort = (
+            kwargs.get(_EFFORT_LEVEL_KEY)
+            or (existing.effort_level if existing else None)
+            or EffortLevel.MEDIUM
+        )
 
         declare_action(
             participant,
