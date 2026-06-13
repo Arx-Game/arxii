@@ -798,12 +798,7 @@ class CombatOpponentAction(SharedMemoryModel):
     )
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["opponent", "round_number"],
-                name="unique_action_per_opponent_per_round",
-            ),
-        ]
+        pass
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"

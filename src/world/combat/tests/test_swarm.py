@@ -2,9 +2,20 @@
 
 from django.test import TestCase
 
-from world.combat.constants import OpponentStatus
-from world.combat.factories import SwarmOpponentFactory
-from world.combat.services import apply_damage_to_opponent, swarm_attack_count, swarm_kills
+from world.combat.constants import EncounterStatus, OpponentStatus
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatParticipantFactory,
+    SwarmOpponentFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
+from world.combat.services import (
+    apply_damage_to_opponent,
+    select_npc_actions,
+    swarm_attack_count,
+    swarm_kills,
+)
 
 
 class SwarmHelperTests(TestCase):
@@ -48,3 +59,28 @@ class SwarmDamageTests(TestCase):
         self.assertEqual(swarm.swarm_count, 0)
         self.assertTrue(result.defeated)
         self.assertEqual(swarm.status, OpponentStatus.DEFEATED)
+
+
+class SwarmOffenseTests(TestCase):
+    """Swarm emits volume-scaled CombatOpponentActions via select_npc_actions."""
+
+    def test_high_count_swarm_emits_multiple_attacks(self):
+        """30 bodies / 6 per attack = 5 raw, capped at 2 acting PCs → 2 actions."""
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool)
+        swarm = SwarmOpponentFactory(
+            encounter=encounter,
+            swarm_count=30,
+            bodies_per_attack=6,
+            threat_pool=pool,
+        )
+        # Two actable PC participants (no vitals row → is_dead=False, no AWARENESS
+        # CapabilityType → can_act=True).
+        CombatParticipantFactory(encounter=encounter)
+        CombatParticipantFactory(encounter=encounter)
+
+        actions = select_npc_actions(encounter)
+
+        swarm_actions = [a for a in actions if a.opponent_id == swarm.pk]
+        self.assertEqual(len(swarm_actions), 2)

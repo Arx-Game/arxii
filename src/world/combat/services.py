@@ -1457,18 +1457,26 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        weights = [e.weight for e in eligible]
-        chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+        if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+            n_attacks = swarm_attack_count(
+                opponent.swarm_count,
+                opponent.bodies_per_attack or 1,
+                len(active_participants),
+            )
+        else:
+            n_attacks = 1
 
-        targets = _select_targets(chosen, active_participants)
-
-        action = CombatOpponentAction.objects.create(
-            opponent=opponent,
-            round_number=encounter.round_number,
-            threat_entry=chosen,
-        )
-        action.targets.set(targets)
-        actions.append(action)
+        for _ in range(n_attacks):
+            weights = [e.weight for e in eligible]
+            chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+            targets = _select_targets(chosen, active_participants)
+            action = CombatOpponentAction.objects.create(
+                opponent=opponent,
+                round_number=encounter.round_number,
+                threat_entry=chosen,
+            )
+            action.targets.set(targets)
+            actions.append(action)
 
     return actions
 
