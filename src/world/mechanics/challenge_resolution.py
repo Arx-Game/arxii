@@ -326,10 +326,11 @@ def _resolve_via_template(
         consequence=consequence if consequence.pk else None,
     )
 
-    # Persist the unified ConsequenceOutcome (#850). Only the action-template path
-    # carries a ConsequencePool (ConsequenceOutcome.pool is non-nullable), so this
-    # is the only challenge path that records. check_result may be None for a
-    # gate-only resolution; without a check_type we cannot record.
+    # Persist the unified ConsequenceOutcome (#850). The action-template path
+    # records with its own ConsequencePool; the standard path records with
+    # pool=None (#865, roulette reconstructed on read from the authored links).
+    # check_result may be None for a gate-only resolution; without a check_type
+    # we cannot record.
     _record_challenge_outcome(
         record=record,
         character=character,
