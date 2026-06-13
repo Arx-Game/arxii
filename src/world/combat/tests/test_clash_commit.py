@@ -9,7 +9,7 @@ from django.test import TestCase
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.clash import commit_to_clash, outcome_to_delta, strain_to_modifier
+from world.combat.clash import commit_to_clash, outcome_to_delta
 from world.combat.factories import ClashConfigFactory, ClashFactory, StrainConfigFactory
 from world.combat.types import ClashContributionResult
 from world.conditions.factories import ConditionTemplateFactory
@@ -91,27 +91,19 @@ class CommitToClashTests(TestCase):
         self.assertIsNotNone(result.technique_use_result)
 
     # -------------------------------------------------------------------------
-    # 2. Strain modifier reaches perform_check
+    # 2. Strain routes to power (not check modifier)
     # -------------------------------------------------------------------------
 
-    def test_strain_modifier_passed_to_check(self) -> None:
-        """A positive strain commitment must raise the modifier relative to zero strain.
+    def test_strain_anima_recorded_on_result(self) -> None:
+        """A positive strain commitment must be recorded on result.anima_committed.
 
-        We run two commits: one with strain_commitment=0, one with a non-trivial
-        commitment, and verify the resulting progress_delta reflects a higher check
-        modifier (i.e. a better outcome) when forced outcomes are the same, OR just
-        verify anima_committed matches the commitment and the result is valid.
+        Strain no longer raises the check modifier — it feeds power_intensity_bonus
+        so higher strain → higher power → higher progress_delta on a success.
         """
         character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
         technique = self._make_technique_with_template(anima_cost=3)
 
         strain_n = 10
-        expected_modifier = strain_to_modifier(
-            anima_committed=strain_n,
-            config=self.config_strain,
-        )
-        # Modifier must be positive for a non-zero commitment
-        self.assertGreater(expected_modifier, 0)
 
         with force_check_outcome(self.success_outcome):
             result = commit_to_clash(
@@ -131,15 +123,50 @@ class CommitToClashTests(TestCase):
         # effective_cost >= strain_n (strain adds ON TOP of floor-0)
         self.assertGreaterEqual(effective_cost, strain_n)
 
+    def test_higher_strain_yields_higher_power(self) -> None:
+        """Strain feeds power via power_intensity_bonus, so a higher strain_commitment
+        must produce a higher result.power on identical forced outcomes."""
+        character_sheet_lo, _anima_lo = self._make_character_with_anima(current=20, maximum=20)
+        technique_lo = self._make_technique_with_template(anima_cost=3)
+
+        character_sheet_hi, _anima_hi = self._make_character_with_anima(current=20, maximum=20)
+        technique_hi = self._make_technique_with_template(anima_cost=3)
+
+        with force_check_outcome(self.success_outcome):
+            result_lo = commit_to_clash(
+                character_sheet=character_sheet_lo,
+                technique=technique_lo,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        with force_check_outcome(self.success_outcome):
+            result_hi = commit_to_clash(
+                character_sheet=character_sheet_hi,
+                technique=technique_hi,
+                clash=self.clash,
+                strain_commitment=10,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertGreater(
+            result_hi.power,
+            result_lo.power,
+            "Higher strain_commitment must yield higher power (via power_intensity_bonus)",
+        )
+
     # -------------------------------------------------------------------------
-    # 2b. Strain + affinity tilt route through the shared modifier seam
+    # 2b. Check breakdown has NO Strain source; affinity tilt still threaded
     # -------------------------------------------------------------------------
 
-    def test_strain_routed_as_labeled_contribution(self) -> None:
-        """commit_to_clash must express strain as a labeled STRAIN ModifierContribution
-        routed through collect_check_modifiers, with the same magnitude as the raw
-        strain_modifier.  The breakdown total (== strain for a bare character) is what
-        reaches the check."""
+    def test_strain_not_in_check_breakdown(self) -> None:
+        """Strain must NOT appear as a 'Strain' ModifierContribution in the check
+        breakdown — it has been moved to power_intensity_bonus instead."""
         from unittest.mock import patch
 
         from world.checks import services as checks_services
@@ -148,26 +175,14 @@ class CommitToClashTests(TestCase):
         character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
         technique = self._make_technique_with_template(anima_cost=3)
 
-        strain_n = 10
-        expected_strain = strain_to_modifier(
-            anima_committed=strain_n,
-            config=self.config_strain,
-        )
-        self.assertGreater(expected_strain, 0)
-
         captured: dict = {}
         real_collect = checks_services.collect_check_modifiers
 
         def _spy_collect(sheet, check_type, **kwargs):
             breakdown = real_collect(sheet, check_type, **kwargs)
-            captured["extra_contributions"] = kwargs.get("extra_contributions")
-            captured["total"] = breakdown.total
+            captured["extra_contributions"] = kwargs.get("extra_contributions") or []
             return breakdown
 
-        # commit_to_clash imports collect_check_modifiers locally from
-        # world.checks.services, so patch it at the source module (the local import
-        # binds at call time).  The rest of the magic pipeline runs for real via
-        # force_check_outcome.
         with (
             force_check_outcome(self.success_outcome),
             patch(
@@ -179,23 +194,68 @@ class CommitToClashTests(TestCase):
                 character_sheet=character_sheet,
                 technique=technique,
                 clash=self.clash,
-                strain_commitment=strain_n,
+                strain_commitment=10,
                 action_slot="FOCUSED",
                 config_clash=self.config_clash,
                 config_strain=self.config_strain,
             )
 
-        # A STRAIN-kind contribution with the strain magnitude must have been
-        # routed through the seam.
+        # No STRAIN-kind contribution with source_label "Strain" must appear.
         extras = captured["extra_contributions"]
-        strain_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.STRAIN]
-        self.assertEqual(len(strain_contribs), 1)
-        self.assertEqual(strain_contribs[0].value, expected_strain)
-        self.assertEqual(strain_contribs[0].source_label, "Strain")
+        strain_contribs = [
+            c for c in extras
+            if c.source_kind == ModifierSourceKind.STRAIN and c.source_label == "Strain"
+        ]
+        self.assertEqual(
+            len(strain_contribs),
+            0,
+            "Strain must not appear in the check breakdown — it feeds power now",
+        )
 
-        # For a bare character with no conditions / rollmod, the breakdown total
-        # equals the strain modifier alone — provenance is unified, magnitude preserved.
-        self.assertEqual(captured["total"], expected_strain)
+    def test_affinity_tilt_still_routed_to_check(self) -> None:
+        """check_modifier_extra (affinity tilt) must still appear as a ModifierContribution
+        in the check breakdown even after strain is removed from the check."""
+        from unittest.mock import patch
+
+        from world.checks import services as checks_services
+        from world.checks.constants import ModifierSourceKind
+
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        captured: dict = {}
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            breakdown = real_collect(sheet, check_type, **kwargs)
+            captured["extra_contributions"] = kwargs.get("extra_contributions") or []
+            return breakdown
+
+        with (
+            force_check_outcome(self.success_outcome),
+            patch(
+                "world.checks.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+                check_modifier_extra=5,
+            )
+
+        extras = captured["extra_contributions"]
+        affinity_contribs = [
+            c for c in extras
+            if c.source_kind == ModifierSourceKind.STRAIN and c.source_label == "Affinity tilt"
+        ]
+        self.assertEqual(len(affinity_contribs), 1)
+        self.assertEqual(affinity_contribs[0].value, 5)
 
     # -------------------------------------------------------------------------
     # 3. Overburn when strain exceeds anima pool
