@@ -9,6 +9,34 @@ permissions:
   contents: read
 
 jobs:
+  # Detect which stacks the PR actually touches. Downstream heavy jobs are
+  # gated on these flags so a backend-only change skips the frontend suite
+  # (and vice-versa). The REQUIRED checks (`backend`, `frontend`) are the
+  # always-running aggregators below — they report success when their heavy
+  # job was skipped, so a gated-out stack never leaves a check pending.
+  # ci.yml is in BOTH filters: touching CI re-runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v6
+      # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'tools/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +62,8 @@ jobs:
   # The `backend` job below aggregates shard results so existing branch
   # protection rules requiring a check named "backend" continue to work.
   backend-shard:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -132,12 +162,22 @@ jobs:
   # Lets branch protection require a single status check named "backend"
   # instead of having to enumerate each shard.
   backend:
-    needs: backend-shard
+    needs: [changes, backend-shard]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate shard results
         run: |
+          # Guard: if change-detection itself broke, don't silently pass.
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "changes job did not succeed (status: ${{ needs.changes.result }})"
+            exit 1
+          fi
+          # No backend changes -> shard skipped -> this required check passes.
+          if [[ "${{ needs.backend-shard.result }}" == "skipped" ]]; then
+            echo "No backend changes — backend tests not required. Passing."
+            exit 0
+          fi
           if [[ "${{ needs.backend-shard.result }}" != "success" ]]; then
             echo "One or more backend shards failed (status: ${{ needs.backend-shard.result }})"
             exit 1
@@ -145,6 +185,8 @@ jobs:
           echo "All backend shards passed."
 
   ty:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -154,7 +196,9 @@ jobs:
       - run: uv sync
       - run: uv run ty check
 
-  frontend:
+  frontend-test:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -174,6 +218,32 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # Aggregator mirroring `backend`: the REQUIRED check named "frontend" always
+  # runs and reports success when `frontend-test` was skipped (no frontend
+  # changes), so a backend-only PR never leaves this check pending.
+  frontend:
+    needs: [changes, frontend-test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate frontend result
+        run: |
+          # Guard: if change-detection itself broke, don't silently pass.
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "changes job did not succeed (status: ${{ needs.changes.result }})"
+            exit 1
+          fi
+          # No frontend changes -> frontend-test skipped -> this check passes.
+          if [[ "${{ needs.frontend-test.result }}" == "skipped" ]]; then
+            echo "No frontend changes — frontend tests not required. Passing."
+            exit 0
+          fi
+          if [[ "${{ needs.frontend-test.result }}" != "success" ]]; then
+            echo "Frontend job failed (status: ${{ needs.frontend-test.result }})"
+            exit 1
+          fi
+          echo "Frontend passed."
+
   # #756: generated-API-types drift gate. Regenerates src/schema.json +
   # frontend/src/generated/api.d.ts exactly the way `just gen-api-types`
   # does (spectacular → openapi-typescript → prettier) and fails when the
@@ -183,6 +253,8 @@ jobs:
   # one path param needs a migrated table), so this regenerates against a
   # migrated Postgres — trust-auth service container, no password exists.
   api-types-drift:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
