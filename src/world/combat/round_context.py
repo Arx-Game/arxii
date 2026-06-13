@@ -149,18 +149,66 @@ class CombatRoundContext(RoundContext):
         except Technique.DoesNotExist as exc:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
 
+        from actions.constants import CombatActionSlot  # noqa: PLC0415
+        from world.combat.constants import ActionCategory  # noqa: PLC0415
         from world.combat.services import declare_action  # noqa: PLC0415
+
+        # The frontend dispatches the focused action and each passive as SEPARATE
+        # /dispatch/ calls, every one routing through here. To land them all on a
+        # single CombatRoundAction row we read the existing row, apply only the
+        # slot this call names, and write the merged full row back through
+        # declare_action (which itself does a full-row update_or_create).
+        slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
+
+        existing = CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=self._encounter.round_number,
+        ).first()
+
+        focused = existing.focused_action if existing else None
+        physical = existing.physical_passive if existing else None
+        social = existing.social_passive if existing else None
+        mental = existing.mental_passive if existing else None
+        # Targets belong to the focused slot only. Preserve them across passive
+        # merges; a FOCUSED dispatch re-supplies them from its own kwargs.
+        opponent_target = existing.focused_opponent_target if existing else None
+        ally_target = existing.focused_ally_target if existing else None
+
+        if slot == CombatActionSlot.FOCUSED:
+            focused = technique
+            opponent_target = kwargs.get("focused_opponent_target")
+            ally_target = kwargs.get("focused_ally_target")
+            # XOR authority lives on the backend: the just-declared focused action
+            # WINS over any previously-declared passive in the same category, so we
+            # clear that colliding passive before declare_action validates. This
+            # enforces the XOR regardless of dispatch arrival order (focused-first
+            # OR passive-first).
+            category = technique.action_category
+            if category == ActionCategory.PHYSICAL:
+                physical = None
+            elif category == ActionCategory.SOCIAL:
+                social = None
+            elif category == ActionCategory.MENTAL:
+                mental = None
+        elif slot == CombatActionSlot.PASSIVE_PHYSICAL:
+            physical = technique
+        elif slot == CombatActionSlot.PASSIVE_SOCIAL:
+            social = technique
+        elif slot == CombatActionSlot.PASSIVE_MENTAL:
+            mental = technique
+
+        effort = kwargs.get(_EFFORT_LEVEL_KEY) or (existing.effort_level if existing else None)
 
         declare_action(
             participant,
-            focused_action=technique,
-            focused_category=kwargs.get("focused_category"),
-            effort_level=kwargs[_EFFORT_LEVEL_KEY],
-            focused_opponent_target=kwargs.get("focused_opponent_target"),
-            focused_ally_target=kwargs.get("focused_ally_target"),
-            physical_passive=kwargs.get("physical_passive"),
-            social_passive=kwargs.get("social_passive"),
-            mental_passive=kwargs.get("mental_passive"),
+            focused_action=focused,
+            focused_category=None,
+            effort_level=effort,
+            focused_opponent_target=opponent_target,
+            focused_ally_target=ally_target,
+            physical_passive=physical,
+            social_passive=social,
+            mental_passive=mental,
         )
 
     @transaction.atomic

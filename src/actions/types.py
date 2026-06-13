@@ -113,7 +113,13 @@ class ActionRef:
     Two mutually exclusive COMBAT variants:
 
     1. Technique declaration: ``technique_id`` is set, ``clash_id`` / ``clash_action_slot``
-       are ``None``.  Used by the normal round-declaration path.
+       are ``None``.  Used by the normal round-declaration path.  ``action_slot`` is a
+       ``CombatActionSlot`` value naming which round-action slot the technique fills:
+       ``"focused"`` (the actor's primary action) or ``"passive-physical"`` /
+       ``"passive-social"`` / ``"passive-mental"`` (the per-arena passive slots).  The
+       frontend dispatches the focused action and each passive as separate calls; the
+       backend reads-merges them onto one row by ``action_slot``.  Absent ``action_slot``
+       defaults to ``FOCUSED``.
 
     2. Clash contribution: ``clash_id`` + ``clash_action_slot`` are both set,
        ``technique_id`` is ``None``.  A future dispatcher reads these two fields to
