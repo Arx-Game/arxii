@@ -3123,6 +3123,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /org-books/{org_id}/ — the member-visible books.
+     *
+     *     The list endpoint is the viewer's own shelf — only orgs the presented
+     *     persona belongs to, never a browse of all orgs (the diegetic posture
+     *     mirrors RankingDisplayViewSet).
+     */
+    get: operations['currency_org_books_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/currency/org-books/{id}/': {
     parameters: {
       query?: never;
@@ -3131,10 +3154,11 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+     * @description GET /org-books/{org_id}/ — the member-visible books.
      *
-     *     No list endpoint: books are reached from an org you belong to, not
-     *     browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+     *     The list endpoint is the viewer's own shelf — only orgs the presented
+     *     persona belongs to, never a browse of all orgs (the diegetic posture
+     *     mirrors RankingDisplayViewSet).
      */
     get: operations['currency_org_books_retrieve'];
     put?: never;
@@ -13435,6 +13459,7 @@ export interface components {
       | 'fatigue'
       | 'strain';
     ContributionRow: {
+      id: number;
       persona_name: string;
       amount: number;
       reason: string;
@@ -13638,6 +13663,7 @@ export interface components {
       readonly icon: string;
     };
     DebtRow: {
+      id: number;
       creditor: string;
       principal: number;
       arrears: number;
@@ -15045,6 +15071,7 @@ export interface components {
       readonly minimum_tier: number;
     };
     IncomeStreamRow: {
+      id: number;
       name: string;
       kind: string;
       gross_amount: number;
@@ -15433,6 +15460,7 @@ export interface components {
       compass_anywhere: boolean;
     };
     LedgerRow: {
+      id: number;
       amount: number;
       reason: string;
       direction: string;
@@ -16172,6 +16200,13 @@ export interface components {
       /** @description Whether this modifier target is currently active in the game */
       is_active?: boolean;
     };
+    /** @description One organization whose books the viewer may open. */
+    MyBooksRow: {
+      organization_id: number;
+      organization_name: string;
+      rank: number;
+      rank_title: string;
+    };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
       readonly id: number;
@@ -16379,6 +16414,7 @@ export interface components {
     /** @enum {unknown} */
     NullEnum: null;
     ObligationRow: {
+      id: number;
       name: string;
       to_organization: string;
       percent: number;
@@ -26007,6 +26043,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CovenantRole'];
+        };
+      };
+    };
+  };
+  currency_org_books_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyBooksRow'][];
         };
       };
     };

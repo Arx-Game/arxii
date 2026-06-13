@@ -32,6 +32,7 @@ _RECENT_ROWS = 50
 
 
 class IncomeStreamRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     name = serializers.CharField()
     kind = serializers.CharField()
     gross_amount = serializers.IntegerField()
@@ -39,6 +40,7 @@ class IncomeStreamRowSerializer(serializers.Serializer):
 
 
 class DebtRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     creditor = serializers.CharField()
     principal = serializers.IntegerField()
     arrears = serializers.IntegerField()
@@ -48,6 +50,7 @@ class DebtRowSerializer(serializers.Serializer):
 
 
 class ObligationRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     name = serializers.CharField()
     to_organization = serializers.CharField()
     percent = serializers.IntegerField()
@@ -55,6 +58,7 @@ class ObligationRowSerializer(serializers.Serializer):
 
 
 class ContributionRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     persona_name = serializers.CharField()
     amount = serializers.IntegerField()
     reason = serializers.CharField(allow_blank=True)
@@ -62,10 +66,20 @@ class ContributionRowSerializer(serializers.Serializer):
 
 
 class LedgerRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     amount = serializers.IntegerField()
     reason = serializers.CharField()
     direction = serializers.CharField()  # "in" | "out"
     created_at = serializers.DateTimeField()
+
+
+class MyBooksRowSerializer(serializers.Serializer):
+    """One organization whose books the viewer may open."""
+
+    organization_id = serializers.IntegerField()
+    organization_name = serializers.CharField()
+    rank = serializers.IntegerField()
+    rank_title = serializers.CharField()
 
 
 class OrgBooksSerializer(serializers.Serializer):
@@ -84,13 +98,33 @@ class OrgBooksSerializer(serializers.Serializer):
 
 
 class OrgBooksViewSet(viewsets.ViewSet):
-    """Retrieve-only: GET /org-books/{org_id}/ — the member-visible books.
+    """GET /org-books/{org_id}/ — the member-visible books.
 
-    No list endpoint: books are reached from an org you belong to, not
-    browsed. Mirrors RankingDisplayViewSet's diegetic posture.
+    The list endpoint is the viewer's own shelf — only orgs the presented
+    persona belongs to, never a browse of all orgs (the diegetic posture
+    mirrors RankingDisplayViewSet).
     """
 
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: MyBooksRowSerializer(many=True)})
+    def list(self, request: Request) -> Response:
+        persona = _viewer_persona(request)
+        if persona is None:
+            return Response([])
+        memberships = persona.organization_memberships.select_related(
+            "organization", "organization__org_type"
+        ).order_by("rank", "organization__name")
+        rows = [
+            {
+                "organization_id": m.organization.pk,
+                "organization_name": m.organization.name,
+                "rank": m.rank,
+                "rank_title": m.organization.get_rank_title(m.rank),
+            }
+            for m in memberships
+        ]
+        return Response(MyBooksRowSerializer(rows, many=True).data)
 
     @extend_schema(
         responses={
@@ -149,6 +183,7 @@ def _books_payload(organization) -> dict:
         [
             *(
                 {
+                    "id": t.pk,
                     "amount": t.amount,
                     "reason": t.reason,
                     "direction": "in",
@@ -158,6 +193,7 @@ def _books_payload(organization) -> dict:
             ),
             *(
                 {
+                    "id": t.pk,
                     "amount": t.amount,
                     "reason": t.reason,
                     "direction": "out",
@@ -177,11 +213,18 @@ def _books_payload(organization) -> dict:
         "spend_rank_max": treasury.spend_rank_max,
         "graft_pct": economics.graft_pct,
         "income_streams": [
-            {"name": s.name, "kind": s.kind, "gross_amount": s.gross_amount, "active": s.active}
+            {
+                "id": s.pk,
+                "name": s.name,
+                "kind": s.kind,
+                "gross_amount": s.gross_amount,
+                "active": s.active,
+            }
             for s in OrgIncomeStream.objects.filter(organization=organization)
         ],
         "debts": [
             {
+                "id": d.pk,
                 "creditor": d.creditor_organization.name,
                 "principal": d.principal,
                 "arrears": d.arrears,
@@ -195,6 +238,7 @@ def _books_payload(organization) -> dict:
         ],
         "obligations": [
             {
+                "id": o.pk,
                 "name": o.name,
                 "to_organization": o.to_organization.name,
                 "percent": o.percent,
@@ -206,6 +250,7 @@ def _books_payload(organization) -> dict:
         ],
         "contributions": [
             {
+                "id": c.pk,
                 "persona_name": c.persona.name,
                 "amount": c.amount,
                 "reason": c.reason,
