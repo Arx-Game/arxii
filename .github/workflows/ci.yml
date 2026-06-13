@@ -149,12 +149,13 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
-      # No explicit `arx manage migrate` here: Django's test runner builds its
-      # own `test_arxii_test` database from migrations on its own. The default
-      # `arxii_test` DB (created by the Postgres container's POSTGRES_DB) only
-      # needs to *exist* for the runner to connect and issue CREATE DATABASE —
-      # it never needs to be migrated. Migrating it was replaying all ~217
-      # migrations a second time per shard (~6.5 min of pure waste).
+      # The default arxii_test DB MUST be migrated before `arx test`: Evennia's
+      # test runner calls evennia._init() in setup_test_environment(), which
+      # queries server_serverconfig on the DEFAULT connection before the test
+      # DB is built. An unmigrated default DB => "relation server_serverconfig
+      # does not exist". (See #990 — removing this step turned all shards red.)
+      - name: Run migrations
+        run: uv run arx manage migrate
       - name: Run tests
         # Bare --parallel (no value) lets Django auto-detect CPU count.
         # Don't pass `auto` literally — arx.py declares --parallel as a typer
