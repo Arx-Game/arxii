@@ -367,9 +367,11 @@ def process_damage_consequences(
         damage_type: Type of damage (for wound/death pool routing).
         extra_modifiers: Additional modifiers (fatigue, conditions, etc.).
         combat_interaction_factory: Zero-argument callable that returns the
-            combat Interaction this resolution belongs to. Called at most once,
-            on the first tier that actually fires — the NPC-action path memoizes
-            it so all targets of the same action share one Interaction row (#864).
+            combat Interaction this resolution belongs to. Invoked only inside a
+            firing tier branch (so a whiff never mints an Interaction); it may be
+            called more than once when multiple tiers fire, so the caller is
+            responsible for memoizing it — the NPC-action path does, so all
+            targets of the same action share one Interaction row (#864).
             When None (e.g. the mechanics effect_handlers path), recording is
             skipped — the exactly-one-source constraint forbids a sourceless
             record. Recording is a pure side effect and never changes the
