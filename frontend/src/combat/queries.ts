@@ -44,6 +44,25 @@ function invalidateConsequenceOutcomes(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] }).catch(() => {});
 }
 
+/**
+ * Mutation hook for a simple combat action whose only cache effect is to refresh
+ * the encounter detail and the consequence-outcome panel. Hooks with extra
+ * invalidations (useEndEncounter, useUpgradeCombo) stay bespoke.
+ */
+function useEncounterMutation<TData, TArgs = void>(
+  encounterId: number,
+  mutationFn: (args: TArgs) => Promise<TData>
+) {
+  const qc = useQueryClient();
+  return useMutation<TData, Error, TArgs>({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      invalidateConsequenceOutcomes(qc);
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Encounter read hook
 // ---------------------------------------------------------------------------
@@ -236,14 +255,7 @@ export function useDispatchPlayerAction(characterId: number) {
  * Invalidates encounter key on success.
  */
 export function useFleeMutation(encounterId: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.postFlee(encounterId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-      invalidateConsequenceOutcomes(qc);
-    },
-  });
+  return useEncounterMutation(encounterId, () => api.postFlee(encounterId));
 }
 
 // ---------------------------------------------------------------------------
@@ -286,14 +298,9 @@ export function useEndEncounter(encounterId: number) {
  * Invalidates encounter key on success.
  */
 export function useCoverMutation(encounterId: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (allyParticipantId: number) => api.postCover(encounterId, allyParticipantId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
-      invalidateConsequenceOutcomes(qc);
-    },
-  });
+  return useEncounterMutation(encounterId, (allyParticipantId: number) =>
+    api.postCover(encounterId, allyParticipantId)
+  );
 }
 
 // ---------------------------------------------------------------------------
