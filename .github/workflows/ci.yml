@@ -156,12 +156,26 @@ jobs:
       # does not exist". (See #990 — removing this step turned all shards red.)
       - name: Run migrations
         run: uv run arx manage migrate
+      # Build the test DB by CLONING the just-migrated default DB rather than
+      # letting Django replay all ~217 migrations a second time (~6.5 min/shard
+      # of pure waste). Postgres `CREATE DATABASE ... TEMPLATE` is a near-instant
+      # file copy; `arx test --keepdb` then reuses test_arxii_test (its migrate
+      # step is a no-op since django_migrations is already fully populated) and
+      # only clones it per parallel worker. The test DB name is Django's default
+      # `test_<NAME>` for DATABASES["default"] (NAME=arxii_test, no TEST override).
+      # We connect to the `postgres` maintenance DB so nothing is attached to the
+      # arxii_test template during the copy.
+      - name: Clone migrated DB into the test database
+        run: |
+          docker exec postgres-ci psql -U postgres -d postgres \
+            -c "CREATE DATABASE test_arxii_test TEMPLATE arxii_test"
       - name: Run tests
         # Bare --parallel (no value) lets Django auto-detect CPU count.
         # Don't pass `auto` literally — arx.py declares --parallel as a typer
         # boolean flag, so `auto` would fall through as a positional test label
         # and Django would fail trying to import a module named `auto`.
-        run: uv run arx test --parallel ${{ matrix.shard.apps }}
+        # --keepdb: reuse the pre-cloned test_arxii_test instead of rebuilding it.
+        run: uv run arx test --keepdb --parallel ${{ matrix.shard.apps }}
 
   # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
   # Lets branch protection require a single status check named "backend"
