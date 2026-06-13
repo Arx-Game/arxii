@@ -88,6 +88,17 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
         )
         if user.is_staff:
             return qs
-        # Scope to outcomes for the requesting user's own characters.
-        # Chain: CharacterSheet.character (ObjectDB) → db_account == user.
-        return qs.filter(Q(character__character__db_account=user))
+        # Scope to outcomes for:
+        # 1. The requesting user's own characters
+        #    (chain: CharacterSheet.character (ObjectDB) → db_account == user).
+        # 2. Any outcome anchored to a combat interaction in a scene the user
+        #    participated in (combat_interaction.scene.participations.account == user).
+        # 3. Any outcome anchored to a challenge record whose situation instance
+        #    is linked to a scene the user participated in.
+        return qs.filter(
+            Q(character__character__db_account=user)
+            | Q(combat_interaction__scene__participations__account=user)
+            | Q(
+                challenge_record__challenge_instance__situation_instance__scene__participations__account=user
+            )
+        ).distinct()

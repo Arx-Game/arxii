@@ -34,7 +34,7 @@ from world.mechanics.factories import (
     ChallengeTemplateFactory,
 )
 from world.mechanics.models import CharacterChallengeRecord
-from world.scenes.factories import InteractionFactory
+from world.scenes.factories import InteractionFactory, SceneFactory, SceneParticipationFactory
 
 
 def _make_user(*, is_staff: bool = False):
@@ -406,3 +406,45 @@ class ConsequenceOutcomePoollessDisplayTest(TestCase):
         # template side would fail here rather than pass silently.
         labels = {row["label"] for row in data["outcome_display"]}
         self.assertIn("Template Wound", labels)
+
+
+class ConsequenceOutcomeSceneVisibilityTest(ConsequenceOutcomeAPISetupMixin, TestCase):
+    """Scene-participant visibility: participants can see outcomes from their scenes.
+
+    Covers:
+    - A non-owner account with a SceneParticipation on the outcome's scene CAN see it.
+    - A non-owner, non-participant account CANNOT see it.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # Ensure cls.interaction is linked to a scene so participation works.
+        cls.scene = SceneFactory()
+        cls.interaction.scene = cls.scene
+        cls.interaction.save()
+
+        # Participant account: has a SceneParticipation on the outcome's scene.
+        cls.participant_account = _make_user()
+        SceneParticipationFactory(scene=cls.scene, account=cls.participant_account)
+
+        # Non-participant account: no participation at all.
+        cls.non_participant_account = _make_user()
+
+    def test_scene_participant_can_view_outcome(self) -> None:
+        """Non-owner with a SceneParticipation on the outcome's scene CAN see it."""
+        client = APIClient()
+        client.force_authenticate(user=self.participant_account)
+        response = client.get("/api/checks/consequence-outcomes/")
+        self.assertEqual(response.status_code, 200)
+        result_ids = [r["id"] for r in response.json()["results"]]
+        self.assertIn(self.outcome.pk, result_ids)
+
+    def test_non_participant_cannot_view_outcome(self) -> None:
+        """Non-owner, non-participant account does NOT see the outcome."""
+        client = APIClient()
+        client.force_authenticate(user=self.non_participant_account)
+        response = client.get("/api/checks/consequence-outcomes/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 0)
+        self.assertEqual(response.json()["results"], [])
