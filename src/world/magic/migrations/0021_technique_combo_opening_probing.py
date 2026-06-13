@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0019_magicprogressionmilestone"),
+        ("magic", "0020_techniquedamageprofile_uses_equipped_weapon"),
     ]
 
     operations = [
