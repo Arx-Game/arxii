@@ -42,7 +42,7 @@ export function MilestoneCard({ milestone }: MilestoneCardProps) {
     <Card data-testid="milestone-card">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className={isKnown ? '' : 'text-muted-foreground italic'}>
+          <CardTitle className={isKnown ? '' : 'italic text-muted-foreground'}>
             {milestone.title}
           </CardTitle>
           {isKnown && <EligibilityBadge eligibility={milestone.eligibility} />}
@@ -55,7 +55,7 @@ export function MilestoneCard({ milestone }: MilestoneCardProps) {
             <p className="text-sm text-muted-foreground">{milestone.summary}</p>
 
             {milestone.eligibility === 'locked' && milestone.missing.length > 0 && (
-              <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-0.5">
+              <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
                 {milestone.missing.map((item) => (
                   <li key={item}>{item}</li>
                 ))}

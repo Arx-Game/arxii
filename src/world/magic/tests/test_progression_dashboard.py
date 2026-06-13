@@ -14,9 +14,15 @@ from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 class MilestoneEnumTests(TestCase):
     def test_kinds_cover_unlock_order(self):
         values = set(MagicMilestoneKind.values)
-        assert {"resonance_discovery", "thread_weaving", "motif",
-                "technique_development", "anima_ritual", "second_gift",
-                "stage_crossing"} <= values
+        assert {
+            "resonance_discovery",
+            "thread_weaving",
+            "motif",
+            "technique_development",
+            "anima_ritual",
+            "second_gift",
+            "stage_crossing",
+        } <= values
 
     def test_tiers_and_eligibility(self):
         assert set(MilestoneDiscoveryTier.values) == {"known", "uncovered", "unknown"}

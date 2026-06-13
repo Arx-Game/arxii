@@ -31,9 +31,7 @@ class MagicProgressionMilestone(SharedMemoryModel):
     class Meta:
         ordering: ClassVar[list[str]] = ["stage", "sort_order", "kind"]
         constraints: ClassVar[list] = [
-            models.UniqueConstraint(
-                fields=["stage", "kind"], name="uniq_milestone_stage_kind"
-            ),
+            models.UniqueConstraint(fields=["stage", "kind"], name="uniq_milestone_stage_kind"),
         ]
 
     def __str__(self) -> str:

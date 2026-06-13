@@ -19,8 +19,8 @@ export function StageSection({ stage }: StageSectionProps) {
       aria-label={stage.stage_label}
       className={
         stage.is_current
-          ? 'rounded-xl border-2 border-primary p-4 space-y-4'
-          : 'rounded-xl border p-4 space-y-4'
+          ? 'space-y-4 rounded-xl border-2 border-primary p-4'
+          : 'space-y-4 rounded-xl border p-4'
       }
     >
       <div className="flex items-center gap-3">

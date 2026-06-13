@@ -110,9 +110,7 @@ describe('MagicProgressionPage', () => {
 
   it('renders a loading skeleton grid while data is loading', () => {
     vi.mocked(progressionQueries.useMagicProgression).mockReturnValue(
-      makeQueryResult(undefined, true) as ReturnType<
-        typeof progressionQueries.useMagicProgression
-      >
+      makeQueryResult(undefined, true) as ReturnType<typeof progressionQueries.useMagicProgression>
     );
 
     render(<MagicProgressionPage />, { wrapper: createWrapper() });
@@ -124,12 +122,9 @@ describe('MagicProgressionPage', () => {
 
   it('renders an error message when the query errors', () => {
     vi.mocked(progressionQueries.useMagicProgression).mockReturnValue(
-      makeQueryResult(
-        undefined,
-        false,
-        true,
-        new Error('Network failure')
-      ) as ReturnType<typeof progressionQueries.useMagicProgression>
+      makeQueryResult(undefined, false, true, new Error('Network failure')) as ReturnType<
+        typeof progressionQueries.useMagicProgression
+      >
     );
 
     render(<MagicProgressionPage />, { wrapper: createWrapper() });
@@ -155,9 +150,7 @@ describe('MagicProgressionPage', () => {
 
   it('renders nothing but the heading when stages array is empty', () => {
     vi.mocked(progressionQueries.useMagicProgression).mockReturnValue(
-      makeQueryResult({ stages: [] }) as ReturnType<
-        typeof progressionQueries.useMagicProgression
-      >
+      makeQueryResult({ stages: [] }) as ReturnType<typeof progressionQueries.useMagicProgression>
     );
 
     render(<MagicProgressionPage />, { wrapper: createWrapper() });
