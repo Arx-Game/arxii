@@ -26,3 +26,13 @@ class HeroKillerOutcomeTests(TestCase):
         # fight was never winnable.
         HeroKillerOpponentFactory(encounter=encounter, status=OpponentStatus.DEFEATED)
         self.assertNotEqual(_classify_encounter_outcome(encounter), EncounterOutcome.VICTORY)
+
+
+class ForcedEscapeFlagTests(TestCase):
+    def test_forced_escape_true_with_active_hero_killer(self):
+        encounter = CombatEncounterFactory()
+        hk = HeroKillerOpponentFactory(encounter=encounter)
+        self.assertTrue(encounter.forced_escape)
+        hk.status = OpponentStatus.FLED  # no longer on the field
+        hk.save(update_fields=["status"])
+        self.assertFalse(encounter.forced_escape)

@@ -133,6 +133,24 @@ class CombatEncounter(SharedMemoryModel):
             f"(Round {self.round_number}, {self.get_status_display()})"
         )
 
+    @property
+    def forced_escape(self) -> bool:
+        """True when an unbeatable Hero Killer is on the field (#875).
+
+        Drives the "you must run" UI — victory is impossible; the party must
+        flee. Cache-aware: uses prefetched ``opponents_cached`` when present
+        so the detail serializer adds no query.
+        """
+        cached = getattr(self, "opponents_cached", None)  # noqa: GETATTR_LITERAL
+        if cached is not None:
+            return any(
+                o.tier == OpponentTier.HERO_KILLER and o.status == OpponentStatus.ACTIVE
+                for o in cached
+            )
+        return self.opponents.filter(
+            tier=OpponentTier.HERO_KILLER, status=OpponentStatus.ACTIVE
+        ).exists()
+
 
 class ThreatPool(SharedMemoryModel):
     """Named collection of NPC actions."""
