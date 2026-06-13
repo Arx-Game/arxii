@@ -21,7 +21,7 @@ vi.mock('@/evennia_replacements/api', () => ({
 import * as evenniaApi from '@/evennia_replacements/api';
 import { fetchConsequenceOutcomes } from '../api';
 import type { ConsequenceOutcome } from '../api';
-import { useConsequenceOutcomes } from '../queries';
+import { combatKeys, useConsequenceOutcomes } from '../queries';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -132,6 +132,26 @@ describe('fetchConsequenceOutcomes', () => {
     expect(url).toContain('page=2');
   });
 
+  it('appends encounter filter to the query string', async () => {
+    mockApiFetch(PAGINATED_RESPONSE);
+
+    await fetchConsequenceOutcomes({ encounter: 99 });
+
+    const [url] = mockedApiFetch.mock.calls[0] as [string];
+    expect(url).toContain('encounter=99');
+  });
+
+  it('combines encounter with character filter', async () => {
+    mockApiFetch(PAGINATED_RESPONSE);
+
+    await fetchConsequenceOutcomes({ character: 42, encounter: 7, page_size: 1 });
+
+    const [url] = mockedApiFetch.mock.calls[0] as [string];
+    expect(url).toContain('character=42');
+    expect(url).toContain('encounter=7');
+    expect(url).toContain('page_size=1');
+  });
+
   it('returns empty array when results is missing', async () => {
     mockApiFetch({ count: 0 });
 
@@ -201,5 +221,28 @@ describe('useConsequenceOutcomes', () => {
 
     // Hook is disabled (characterId=0 means no character filter), stays in idle state (no loading)
     expect(mockedApiFetch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// combatKeys.consequenceOutcomes — key includes encounter param
+// ---------------------------------------------------------------------------
+
+describe('combatKeys.consequenceOutcomes', () => {
+  it('includes encounter in the key when provided', () => {
+    const withEncounter = combatKeys.consequenceOutcomes({ character: 42, encounter: 7 });
+    const withoutEncounter = combatKeys.consequenceOutcomes({ character: 42 });
+
+    // Keys with different encounter values must differ
+    expect(withEncounter).not.toEqual(withoutEncounter);
+    // The encounter value is embedded somewhere in the key
+    expect(JSON.stringify(withEncounter)).toContain('7');
+  });
+
+  it('produces the same key for identical params', () => {
+    const a = combatKeys.consequenceOutcomes({ character: 42, encounter: 7, page_size: 1 });
+    const b = combatKeys.consequenceOutcomes({ character: 42, encounter: 7, page_size: 1 });
+
+    expect(a).toEqual(b);
   });
 });

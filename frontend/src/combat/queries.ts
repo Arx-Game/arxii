@@ -133,6 +133,9 @@ export function useUpgradeCombo(encounterId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: combatKeys.combos(encounterId) }).catch(() => {});
+      qc
+        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
+        .catch(() => {});
     },
   });
 }
@@ -232,6 +235,9 @@ export function useFleeMutation(encounterId: number) {
     mutationFn: () => api.postFlee(encounterId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      qc
+        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
+        .catch(() => {});
     },
   });
 }
@@ -256,6 +262,9 @@ export function useEndEncounter(encounterId: number) {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       // Terminal event: every character's action list for this fight is now stale.
       qc.invalidateQueries({ queryKey: combatKeys.availableActionsAll() }).catch(() => {});
+      qc
+        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
+        .catch(() => {});
       if (typeof data.scene === 'number') {
         qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(
           () => {}
@@ -280,6 +289,9 @@ export function useCoverMutation(encounterId: number) {
     mutationFn: (allyParticipantId: number) => api.postCover(encounterId, allyParticipantId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+      qc
+        .invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] })
+        .catch(() => {});
     },
   });
 }
@@ -299,11 +311,12 @@ export function useConsequenceOutcomes(params: api.ConsequenceOutcomesParams) {
   // Only enable when a meaningful filter is provided (> 0 to guard against un-initialized ids).
   const hasFilter =
     (params.character !== undefined && params.character > 0) ||
-    (params.pool !== undefined && params.pool > 0);
+    (params.pool !== undefined && params.pool > 0) ||
+    (params.encounter !== undefined && params.encounter > 0);
   return useQuery({
     queryKey: combatKeys.consequenceOutcomes(params),
     queryFn: () => api.fetchConsequenceOutcomes(params),
     enabled: hasFilter,
-    staleTime: 60_000,
+    staleTime: 5_000,
   });
 }

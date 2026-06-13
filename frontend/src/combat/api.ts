@@ -236,6 +236,7 @@ export async function fetchOutcomeDetails(
 export interface ConsequenceOutcomesParams {
   character?: number;
   pool?: number;
+  encounter?: number;
   created_after?: string;
   created_before?: string;
   page?: number;
@@ -255,6 +256,7 @@ export async function fetchConsequenceOutcomes(
   const qs = new URLSearchParams();
   if (params.character !== undefined) qs.set('character', String(params.character));
   if (params.pool !== undefined) qs.set('pool', String(params.pool));
+  if (params.encounter !== undefined) qs.set('encounter', String(params.encounter));
   if (params.created_after !== undefined) qs.set('created_after', params.created_after);
   if (params.created_before !== undefined) qs.set('created_before', params.created_before);
   if (params.page !== undefined) qs.set('page', String(params.page));

@@ -81,9 +81,10 @@ export function CombatTurnPanel({
   // Available COMBAT-backend actions for the character (includes clash refs).
   const { data: combatActions } = useAvailableActions(characterId);
 
-  // Most recent consequence outcome for this character (for the roulette section).
+  // Most recent consequence outcome for this character scoped to the current encounter.
   const { data: consequenceOutcomes } = useConsequenceOutcomes({
     character: characterId,
+    encounter: encounterId,
     page_size: 1,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
