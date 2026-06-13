@@ -2,7 +2,7 @@
 
 import factory
 
-from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.models import (
     EquippedItem,
     FashionStyle,
@@ -60,6 +60,18 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
     value = 0
     is_active = True
 
+    class Params:
+        weapon = factory.Trait(
+            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+            base_weapon_damage=5,
+            max_durability=30,
+        )
+        armor = factory.Trait(
+            gear_archetype=GearArchetype.LIGHT_ARMOR,
+            base_armor_soak=3,
+            max_durability=30,
+        )
+
 
 class ItemInstanceFactory(factory.django.DjangoModelFactory):
     """Factory for ItemInstance."""
@@ -71,6 +83,7 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     custom_name = ""
     custom_description = ""
     quantity = 1
+    durability = None
 
 
 class TemplateSlotFactory(factory.django.DjangoModelFactory):

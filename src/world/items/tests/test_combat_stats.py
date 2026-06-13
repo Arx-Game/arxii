@@ -86,3 +86,17 @@ class ItemInstanceEffectiveStatTests(TestCase):
         inst = ItemInstanceFactory(template=tmpl, durability=None)
         self.assertFalse(inst.is_broken)
         self.assertEqual(inst.effective_weapon_damage, 3)
+
+
+class CombatFactoryTraitTests(TestCase):
+    def test_weapon_trait_builds_valid_template(self):
+        from world.items.factories import ItemTemplateFactory
+
+        tmpl = ItemTemplateFactory(weapon=True, name="trait-sword")
+        self.assertGreater(tmpl.base_weapon_damage, 0)
+
+    def test_armor_trait_builds_valid_template(self):
+        from world.items.factories import ItemTemplateFactory
+
+        tmpl = ItemTemplateFactory(armor=True, name="trait-jacket")
+        self.assertGreater(tmpl.base_armor_soak, 0)
