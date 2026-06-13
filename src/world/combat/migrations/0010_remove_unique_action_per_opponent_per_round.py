@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("combat", "0009_combatopponent_bodies_per_attack_and_more"),
     ]

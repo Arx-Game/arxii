@@ -4,30 +4,43 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('combat', '0008_escalationcurve_combatencounter_escalation_curve'),
+        ("combat", "0008_escalationcurve_combatencounter_escalation_curve"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='combatopponent',
-            name='bodies_per_attack',
-            field=models.PositiveIntegerField(blank=True, help_text='SWARM tier only: remaining-count → outgoing-attack ratio. The swarm makes ceil(swarm_count / bodies_per_attack) attacks/round, capped at the number of acting PCs.', null=True),
+            model_name="combatopponent",
+            name="bodies_per_attack",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="SWARM tier only: remaining-count → outgoing-attack ratio. The swarm makes ceil(swarm_count / bodies_per_attack) attacks/round, capped at the number of acting PCs.",
+                null=True,
+            ),
         ),
         migrations.AddField(
-            model_name='combatopponent',
-            name='body_toughness',
-            field=models.PositiveIntegerField(blank=True, help_text='SWARM tier only: damage needed to kill one body. A landing attack clears max(1, raw_damage // body_toughness) bodies.', null=True),
+            model_name="combatopponent",
+            name="body_toughness",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="SWARM tier only: damage needed to kill one body. A landing attack clears max(1, raw_damage // body_toughness) bodies.",
+                null=True,
+            ),
         ),
         migrations.AddField(
-            model_name='combatopponent',
-            name='max_swarm_count',
-            field=models.PositiveIntegerField(blank=True, help_text='SWARM tier only: bodies at encounter start.', null=True),
+            model_name="combatopponent",
+            name="max_swarm_count",
+            field=models.PositiveIntegerField(
+                blank=True, help_text="SWARM tier only: bodies at encounter start.", null=True
+            ),
         ),
         migrations.AddField(
-            model_name='combatopponent',
-            name='swarm_count',
-            field=models.PositiveIntegerField(blank=True, help_text='SWARM tier only: bodies remaining. Damage clears bodies; DEFEATED at 0. Null for non-swarm tiers.', null=True),
+            model_name="combatopponent",
+            name="swarm_count",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="SWARM tier only: bodies remaining. Damage clears bodies; DEFEATED at 0. Null for non-swarm tiers.",
+                null=True,
+            ),
         ),
     ]
