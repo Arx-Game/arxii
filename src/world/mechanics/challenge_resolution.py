@@ -104,12 +104,20 @@ def resolve_challenge(
     # Future: track bypass duration and re-activate after N rounds.
 
     # 6. Create record
-    CharacterChallengeRecord.objects.create(
+    record = CharacterChallengeRecord.objects.create(
         character=character,
         challenge_instance=challenge_instance,
         approach=approach,
         outcome=check_result.outcome,
         consequence=consequence if consequence.pk else None,
+    )
+
+    _record_challenge_outcome(
+        record=record,
+        character=character,
+        pool=None,
+        check_type=approach.check_type,
+        consequence=consequence,
     )
 
     # 7. Build display consequences and return
@@ -145,8 +153,11 @@ def _record_challenge_outcome(
 
     Side-effect only — never changes the returned ChallengeResolutionResult.
     Skips silently when the inputs required by the non-nullable ConsequenceOutcome
-    columns are absent: a missing pool (check-only action template), a missing
-    check_type (gate-only resolution), or a character with no CharacterSheet.
+    columns are absent: a missing check_type (gate-only resolution), or a character
+    with no CharacterSheet.
+
+    A null pool is valid — it represents a plain (non-template) challenge resolution
+    whose roulette is reconstructed on read from the authored consequence links.
 
     The ModifierBreakdown is rebuilt from the character's live modifiers via
     collect_check_modifiers — the challenge pipeline does not retain a breakdown
@@ -157,7 +168,7 @@ def _record_challenge_outcome(
         record_consequence_outcome,
     )
 
-    if pool is None or check_type is None:
+    if check_type is None:
         return
     try:
         character_sheet = character.sheet_data
