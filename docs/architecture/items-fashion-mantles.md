@@ -939,10 +939,12 @@ coefficient). PR1 ships a placeholder that returns 0 for all targets; PR3
 wires actual values once combat balance is addressed.
 
 `item_mundane_stat_for_target(item, target)` reads mundane gear stats
-(weapon damage, armor protection, etc.) from the item's combat stat block —
-not yet authored. PR3 adds the `ItemCombatStat` model and the lookup
-function; until then this returns 0. Quality tier scales mundane stat
-magnitude (higher quality = larger flat contribution).
+(weapon damage, armor protection, etc.) from the combat stats authored
+directly on `ItemTemplate` (`base_weapon_damage`, `base_armor_soak`, etc.)
+and derived per-instance on `ItemInstance` (`effective_weapon_damage` /
+`effective_armor_soak`) — resolved by issue #508; there is no separate
+`ItemCombatStat` model. Quality tier scales mundane stat magnitude (higher
+quality = larger flat contribution).
 
 **Why this composes cleanly even when both lookups return 0 in PR1:** with
 both returning 0, `max(0, 0) == 0 + 0`, so the structural pipeline is
@@ -1277,7 +1279,9 @@ The minimum viable items integration. Lands:
   placeholders in PR1. The `covenant_role_bonus` walker IS wired into
   `get_modifier_total` in PR1 and runs on every modifier query touching
   equipment-relevant categories — it just contributes 0 for every target
-  until PR3 authors per-role bonus values and the `ItemCombatStat` model.
+  until PR3 authors per-role bonus values. (Item combat stats themselves now
+  live directly on `ItemTemplate`/`ItemInstance`, resolved by issue #508 —
+  no separate `ItemCombatStat` model.)
   This is intentional: PR1 ships the structural integration (pipeline
   doesn't crash, walker is on the hot path, modifier breakdown reports the
   walker as a contributing source), and PR3 lights up the values without
@@ -1309,8 +1313,11 @@ stats need combat balance; transfer service functions are independent.
 
 ### PR3 — Combat Stats + ItemCapabilityGrant
 
-- `ItemCombatStat` model (or fields on ItemTemplate/Instance) for weapon damage,
-  armor protection, durability.
+- Combat stats for weapon damage, armor protection, and durability live
+  directly on `ItemTemplate` (`weapon_damage_type`, `base_weapon_damage`,
+  `base_armor_soak`, `max_durability`) and `ItemInstance` (derived
+  `effective_*` + `durability`) — resolved ahead of this PR by issue #508;
+  no separate `ItemCombatStat` model.
 - `ItemCapabilityGrant` model — items as capability sources, parallel to
   `TechniqueCapabilityGrant`.
 - `_get_equipment_sources` extension to `get_capability_sources_for_character`.
