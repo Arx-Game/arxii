@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.captivity.constants import RESOLVED_STATUSES, CaptivityStatus
@@ -74,12 +74,18 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
         captive.lifecycle_state_at = timezone.now()
         captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
 
-        captivity = Captivity.objects.create(
-            captive=captive,
-            cell=cell,
-            captor_organization=captor_organization,
-            offscreen_loss_allowed=offscreen_loss_allowed,
-        )
+        try:
+            captivity = Captivity.objects.create(
+                captive=captive,
+                cell=cell,
+                captor_organization=captor_organization,
+                offscreen_loss_allowed=offscreen_loss_allowed,
+            )
+        except IntegrityError as exc:
+            # Lost a race against a concurrent capture — the partial unique
+            # constraint (one HELD per captive) is the real guard; surface it
+            # as the typed error the .exists() check above promises.
+            raise AlreadyCapturedError from exc
 
     character = captive.character
     if character is not None:
@@ -142,24 +148,53 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
         msg = f"{status!r} is not a resolved captivity status."
         raise ValueError(msg)
 
+    # Keep a reference to the cell before we detach from it — the resolved
+    # captivity outlives the cell (its history is the point), so we null the
+    # FK as part of the resolution save rather than trusting the cell's
+    # deletion to propagate a grandchild SET_NULL through Evennia's delete.
+    cell = captivity.cell
+
     with transaction.atomic():
         captivity.status = status
         captivity.resolved_at = timezone.now()
-        captivity.save(update_fields=["status", "resolved_at"])
+        captivity.cell = None
+        captivity.save(update_fields=["status", "resolved_at", "cell"])
 
         captive = captivity.captive
         captive.lifecycle_state = LifecycleState.ALIVE
         captive.lifecycle_state_at = timezone.now()
         captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
 
-    others_still_held = Captivity.objects.filter(
-        cell=captivity.cell, status=CaptivityStatus.HELD
-    ).exists()
-    if not others_still_held:
-        complete_instanced_room(captivity.cell.room)
-        return
+    # Relocate THIS captive ourselves — explicitly, before any teardown, and
+    # whether or not they are puppeted. complete_instanced_room only moves
+    # online occupants and would otherwise leave an offline freed captive in a
+    # cell that is about to be deleted (the off-screen ransom case).
+    _relocate_freed_captive(captivity.captive, cell)
 
-    character = captivity.captive.character
-    destination = captivity.cell.return_location
-    if character is not None and destination is not None:
+    if cell is None:
+        return
+    others_still_held = Captivity.objects.filter(cell=cell, status=CaptivityStatus.HELD).exists()
+    if others_still_held:
+        return
+    # Last one out: detach any remaining (already-resolved) captivities from
+    # the cell, then tear the now-empty cell down.
+    room = cell.room
+    Captivity.objects.filter(cell=cell).update(cell=None)
+    complete_instanced_room(room)
+
+
+def _relocate_freed_captive(captive: CharacterSheet, cell: InstancedRoom | None) -> None:
+    """Move a freed captive out of the cell to where they belong.
+
+    Destination: the cell's return location, falling back to the captive's
+    home (the same fallback ``complete_instanced_room`` uses). No-op if neither
+    exists or the character is gone.
+    """
+    character = captive.character
+    if character is None:
+        return
+    destination = cell.return_location if cell is not None else None
+    if destination is None:
+        destination = character.home
+    if destination is not None:
         character.move_to(destination, quiet=True)

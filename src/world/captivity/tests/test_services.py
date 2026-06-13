@@ -90,17 +90,19 @@ class ResolveCaptivityTests(TestCase):
         captivity = capture_character(captive=captive, return_location=self.return_room)
         # A scene in the cell keeps the room from being torn down so we can
         # assert the instance was completed rather than deleted.
-        SceneFactory(location=captivity.cell.room)
+        cell = captivity.cell
+        SceneFactory(location=cell.room)
 
         resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)
 
         captivity.refresh_from_db()
         assert captivity.status == CaptivityStatus.ESCAPED
         assert captivity.resolved_at is not None
+        assert captivity.cell is None  # detached from the cell on resolution
         captive.refresh_from_db()
         assert captive.lifecycle_state == LifecycleState.ALIVE
-        captivity.cell.refresh_from_db()
-        assert captivity.cell.status == InstanceStatus.COMPLETED
+        cell.refresh_from_db()
+        assert cell.status == InstanceStatus.COMPLETED
 
     def test_resolve_with_others_held_keeps_shared_cell(self) -> None:
         first, second = CharacterSheetFactory(), CharacterSheetFactory()
@@ -121,6 +123,38 @@ class ResolveCaptivityTests(TestCase):
         assert second.lifecycle_state == LifecycleState.CAPTURED
         held[1].cell.refresh_from_db()
         assert held[1].cell.status == InstanceStatus.ACTIVE
+
+    def test_resolve_last_held_without_scene_preserves_history(self) -> None:
+        # The common case: a cell with no Scene is torn down on resolution.
+        # The Captivity row (status, resolved_at, captor, ransom link) MUST
+        # survive that teardown — cell is SET_NULL, not CASCADE.
+        captive = CharacterSheetFactory()
+        captivity = capture_character(captive=captive, return_location=self.return_room)
+        cell_room = captivity.cell.room
+
+        resolve_captivity(captivity, status=CaptivityStatus.RANSOMED)
+
+        captivity.refresh_from_db()
+        assert captivity.status == CaptivityStatus.RANSOMED
+        assert captivity.resolved_at is not None
+        assert captivity.cell is None  # cell torn down, FK nulled — row lives on
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+        # Freed captive was relocated to the return location (not the deleted cell).
+        assert captive.character.location == self.return_room
+        assert not ObjectDB.objects.filter(pk=cell_room.pk).exists()
+
+    def test_resolve_relocates_an_offline_captive(self) -> None:
+        # complete_instanced_room only moves puppeted (online) chars; the
+        # captivity service must relocate an offline freed captive itself.
+        captive = CharacterSheetFactory()
+        captivity = capture_character(captive=captive, return_location=self.return_room)
+        assert not captive.character.sessions.all()  # offline — no sessions
+
+        resolve_captivity(captivity, status=CaptivityStatus.RESCUED)
+
+        captive.refresh_from_db()
+        assert captive.character.location == self.return_room
 
     def test_resolving_an_ended_captivity_is_rejected(self) -> None:
         captive = CharacterSheetFactory()

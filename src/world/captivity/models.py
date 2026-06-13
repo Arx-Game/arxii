@@ -36,9 +36,15 @@ class Captivity(SharedMemoryModel):
     )
     cell = models.ForeignKey(
         "instances.InstancedRoom",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="captivities",
-        help_text="The instanced cell this captive is held in (shared by a captured party).",
+        help_text=(
+            "The instanced cell this captive is held in (shared by a captured"
+            " party). Goes null when the cell is torn down on resolution — a"
+            " resolved captivity outlives its cell so its history survives."
+        ),
     )
     captor_organization = models.ForeignKey(
         "societies.Organization",
@@ -56,8 +62,10 @@ class Captivity(SharedMemoryModel):
     offscreen_loss_allowed = models.BooleanField(
         default=False,
         help_text=(
-            "Set from the consent gate at capture. When False, the captive can"
-            " never be lost off-screen — escalation requires the player present."
+            "Authored at the consent gate. Intended to gate off-screen loss"
+            " (False = un-loseable while the player is away), but NO consumer"
+            " reads it yet — escalation/loss logic that honours it is a later"
+            " phase. Today it is a recorded intent only.  TODO(#931 followup)."
         ),
     )
     ransom_contract = models.ForeignKey(
@@ -91,4 +99,4 @@ class Captivity(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"Captivity({self.captive_id}: {self.get_status_display()})"
+        return f"Captivity({self.captive.character.key}: {self.get_status_display()})"
