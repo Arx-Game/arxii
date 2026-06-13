@@ -214,14 +214,9 @@ def cross_thread_xp_lock(
     if existing is not None:
         return existing
 
-    from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
-    from world.magic.services.alterations import has_pending_alterations  # noqa: PLC0415
-    from world.magic.types import AlterationGateError  # noqa: PLC0415
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
 
-    if character_sheet.is_protagonism_locked:
-        raise ProtagonismLockedError
-    if has_pending_alterations(character_sheet):
-        raise AlterationGateError
+    enforce_advancement_gate(character_sheet)
 
     # Spend XP.
     account = character_sheet.character.account
@@ -544,14 +539,9 @@ def accept_thread_weaving_unlock(
     Learner AP is NOT spent — ``ThreadWeavingUnlock`` has no ``learn_cost``
     field, unlike ``CodexEntry``.
     """
-    from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
-    from world.magic.services.alterations import has_pending_alterations  # noqa: PLC0415
-    from world.magic.types import AlterationGateError  # noqa: PLC0415
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
 
-    if learner.is_protagonism_locked:
-        raise ProtagonismLockedError
-    if has_pending_alterations(learner):
-        raise AlterationGateError
+    enforce_advancement_gate(learner)
 
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.progression.models import XPTransaction  # noqa: PLC0415

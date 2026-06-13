@@ -1149,11 +1149,7 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
         offer = self.context["offer"]
         try:
             return accept_thread_weaving_unlock(learner, offer)
-        except ProtagonismLockedError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except AlterationGateError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except XPInsufficient as exc:
+        except (ProtagonismLockedError, AlterationGateError, XPInsufficient) as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
 
@@ -2381,11 +2377,13 @@ class CrossXPLockSerializer(serializers.Serializer):
                 thread=thread,
                 boundary_level=validated_data["boundary_level"],
             )
-        except ProtagonismLockedError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except AlterationGateError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
+        except (
+            ProtagonismLockedError,
+            AlterationGateError,
+            XPInsufficient,
+            AnchorCapExceeded,
+            InvalidImbueAmount,
+        ) as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
 
