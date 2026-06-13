@@ -220,6 +220,12 @@ const TechniqueBuilderPage = lazy(() =>
 
 const AlterationResolutionPage = lazy(() => import('@/magic/pages/AlterationResolutionPage'));
 
+const MagicProgressionPage = lazy(() =>
+  import('@/magic/pages/MagicProgressionPage').then((m) => ({
+    default: m.MagicProgressionPage,
+  }))
+);
+
 // ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
@@ -804,6 +810,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <TechniqueBuilderPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Magic progression dashboard (#536)                                 */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/magic/progression"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <MagicProgressionPage />
               </ProtectedRoute>
             </Suspense>
           }

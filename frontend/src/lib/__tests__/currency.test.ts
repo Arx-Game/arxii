@@ -31,5 +31,20 @@ describe('formatCoppers', () => {
 
   it('marks negative amounts', () => {
     expect(formatCoppers(-1_234)).toBe('-12g 3s 4c');
+    expect(formatCoppers(-5)).toBe('-5c');
+  });
+
+  it('formats exactly one gold', () => {
+    expect(formatCoppers(100)).toBe('1g');
+  });
+
+  it('does not leave a lone minus on a near-zero fraction', () => {
+    expect(formatCoppers(-0.5)).toBe('0c');
+  });
+
+  it('degrades non-finite input to 0c', () => {
+    expect(formatCoppers(NaN)).toBe('0c');
+    expect(formatCoppers(Infinity)).toBe('0c');
+    expect(formatCoppers(-Infinity)).toBe('0c');
   });
 });
