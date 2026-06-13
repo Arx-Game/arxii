@@ -1,6 +1,14 @@
-from django.test import TestCase
+from __future__ import annotations
 
+from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.models import PlayerData
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import MagicMilestoneKind, MilestoneDiscoveryTier, MilestoneEligibility
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 class MilestoneEnumTests(TestCase):
@@ -210,3 +218,74 @@ class ProgressionDashboardTests(TestCase):
         for sv in result:
             assert sv.has_undiscovered is False
             assert sv.milestones == []
+
+
+# =============================================================================
+# Progression Dashboard API endpoint tests
+# =============================================================================
+
+
+_PROGRESSION_URL = "/api/magic/progression/"
+
+
+def _link_account_to_sheet(account, character, sheet):
+    """Tie an AccountDB to a CharacterSheet via an active RosterTenure."""
+    character.account = account
+    account.characters.add(character)
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
+    return RosterTenureFactory(
+        roster_entry=RosterEntryFactory(character_sheet=sheet),
+        player_data=player_data,
+    )
+
+
+class MagicProgressionViewAuthTests(APITestCase):
+    """Auth guard for GET /api/magic/progression/."""
+
+    def test_requires_auth(self):
+        """Unauthenticated GET returns 401 or 403."""
+        response = self.client.get(_PROGRESSION_URL)
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+class MagicProgressionViewTests(APITestCase):
+    """Tests for GET /api/magic/progression/?character_sheet_id=<pk>."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory(username="prog_view_account")
+        cls.character = CharacterFactory(db_key="ProgViewChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        _link_account_to_sheet(cls.account, cls.character, cls.sheet)
+
+    def test_returns_six_stages(self):
+        """Authenticated GET returns 200 with stages list of length 6."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(_PROGRESSION_URL, {"character_sheet_id": self.sheet.pk})
+        assert response.status_code == status.HTTP_200_OK, response.data
+        stages = response.data["stages"]
+        assert len(stages) == 6
+
+    def test_undiscovered_stage_does_not_leak_titles(self):
+        """A stage with has_undiscovered True has no visible milestones in its list."""
+        from world.classes.models import PathStage
+        from world.codex.factories import CodexEntryFactory
+        from world.magic.factories import MagicProgressionMilestoneFactory
+
+        # Create a non-public milestone (UNKNOWN tier → omitted from milestones list)
+        entry = CodexEntryFactory(is_public=False, name="Hidden Milestone", summary="Secret.")
+        MagicProgressionMilestoneFactory(
+            stage=PathStage.PROSPECT,
+            kind=MagicMilestoneKind.THREAD_WEAVING,
+            codex_entry=entry,
+        )
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(_PROGRESSION_URL, {"character_sheet_id": self.sheet.pk})
+        assert response.status_code == status.HTTP_200_OK, response.data
+
+        stages = response.data["stages"]
+        stage1 = next(s for s in stages if s["stage"] == PathStage.PROSPECT)
+        assert stage1["has_undiscovered"] is True
+        # UNKNOWN milestone must NOT appear in the milestones list
+        assert len(stage1["milestones"]) == 0
