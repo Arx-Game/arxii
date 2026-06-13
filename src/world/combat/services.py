@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 import math
 import random
@@ -23,9 +24,11 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
+    from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
-    from world.magic.models import Technique
+    from world.items.models import ItemInstance
+    from world.magic.models import Technique, TechniqueDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -318,28 +321,57 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
+        attacker = self.participant.character_sheet.character
+        weapon = effective_weapon_profile(attacker)
+        weapon_landed = False
+
         results: list[OpponentDamageResult] = []
         for profile in profiles:
-            if sl < profile.minimum_success_level:
-                continue
-            budget = profile.compute_damage_budget(
-                effective_power=eff_intensity,
-                success_level=sl,
+            scaled, profile_damage_type = self._profile_damage(
+                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
             )
-            scaled = int(budget * multiplier)
             if scaled <= 0:
                 continue
             target.refresh_from_db()
             if target.status == OpponentStatus.DEFEATED:
                 break
-            result = apply_damage_to_opponent(
-                target,
-                scaled,
-                damage_type=profile.damage_type,
-                source_sheet=self.participant.character_sheet,
+            results.append(
+                apply_damage_to_opponent(
+                    target,
+                    scaled,
+                    damage_type=profile_damage_type,
+                    source_sheet=self.participant.character_sheet,
+                )
             )
-            results.append(result)
+            weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
+
+        if weapon_landed:
+            _wear_equipped_weapon(attacker)
         return results
+
+    def _profile_damage(
+        self,
+        profile: TechniqueDamageProfile,
+        weapon: WeaponContribution | None,
+        *,
+        sl: int,
+        multiplier: Decimal,
+        eff_intensity: int,
+    ) -> tuple[int, DamageType | None]:
+        """Scaled damage + effective damage_type for one profile (0 if it skips).
+
+        Returns ``(0, None)`` when the profile's minimum_success_level exceeds
+        ``sl``; otherwise folds the equipped weapon's contribution into the
+        formula budget and applies the success-level multiplier.
+        """
+        if sl < profile.minimum_success_level:
+            return 0, None
+        budget = profile.compute_damage_budget(
+            effective_power=eff_intensity,
+            success_level=sl,
+        )
+        budget, profile_damage_type = _weapon_augmented_budget(profile, budget, weapon)
+        return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
         self,
@@ -1660,6 +1692,10 @@ def apply_damage_to_participant(  # noqa: PLR0913
         resistance = character.conditions.resistance_modifier(damage_type)
         effective_damage = max(0, effective_damage - resistance)
 
+    # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
+    # armor is their only soak source, and absorbing pieces take durability wear.
+    effective_damage = apply_equipped_armor_soak(character, effective_damage)
+
     health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
@@ -2605,7 +2641,7 @@ def _resolve_pc_action(
     return outcome
 
 
-def _resolve_npc_action(
+def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
@@ -2629,19 +2665,26 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
-    # One ACTION-mode Interaction anchors every survivability ConsequenceOutcome
-    # this NPC action drives (#850). Authored by the Narrator persona because the
-    # NPC opponent has no PRIMARY persona.
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
     )
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    # Lazy factory: mint the ACTION-mode Interaction only when the first
+    # survivability tier actually fires (#864). Memoised so all targets of this
+    # NPC action share one row.
     npc_action_label = ", ".join(str(t) for t in targets) if targets else None
-    npc_action_interaction = create_npc_action_interaction(
-        opponent_action=npc_action,
-        target_label=npc_action_label,
-    )
+    _npc_interaction_cache: list[Interaction] = []
+
+    def _get_npc_action_interaction() -> Interaction:
+        if not _npc_interaction_cache:
+            _npc_interaction_cache.append(
+                create_npc_action_interaction(
+                    opponent_action=npc_action,
+                    target_label=npc_action_label,
+                )
+            )
+        return _npc_interaction_cache[0]
 
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
@@ -2682,7 +2725,7 @@ def _resolve_npc_action(
             character_sheet=target_participant.character_sheet,
             damage_dealt=dmg_result.damage_dealt,
             damage_type=npc_action.threat_entry.damage_type,
-            combat_interaction=npc_action_interaction,
+            combat_interaction_factory=_get_npc_action_interaction,
         )
         outcome.damage_consequences.append(consequence)
 
@@ -3700,3 +3743,123 @@ def declare_clash_contribution(
         },
     )
     return declaration
+
+
+# ---------------------------------------------------------------------------
+# Equipped-gear combat contribution helpers (#508, Task 7)
+# ---------------------------------------------------------------------------
+#
+# Pure read helpers over ``character.equipped_items`` (the iterable
+# CharacterEquipmentHandler, whose rows arrive with item_instance + template +
+# quality_tier select_related, so reading effective_* during iteration is
+# query-free). They do NOT mutate combat damage logic — that wiring is Tasks
+# 8/9. ``_select_equipped_weapon`` is kept separate so the weapon-durability
+# decrement task can reuse the same selection.
+
+
+def effective_soak_from_armor(character: Character) -> int:
+    """Sum effective armor soak across the character's equipped armor pieces."""
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+
+    total = 0
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype in ARMOR_ARCHETYPES:
+            total += inst.effective_armor_soak
+    return total
+
+
+def apply_equipped_armor_soak(character: Character, damage: int) -> int:
+    """Reduce ``damage`` by equipped-armor soak, wearing pieces that absorbed it.
+
+    PCs have no authored soak field; worn armor is their only soak source. Each
+    armor piece that contributes positive soak takes one point of durability wear
+    on a hit it helps absorb. Returns the post-soak damage (floored at 0).
+    """
+    soak = effective_soak_from_armor(character)
+    if soak <= 0 or damage <= 0:
+        return damage
+
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    # Materialize before decrementing — decrement_item_durability invalidates
+    # the equipped_items handler, which would mutate a live iterator.
+    contributors = [
+        eq.item_instance
+        for eq in list(character.equipped_items)
+        if eq.item_instance.template.gear_archetype in ARMOR_ARCHETYPES
+        and eq.item_instance.effective_armor_soak > 0
+    ]
+    for inst in contributors:
+        decrement_item_durability(item_instance=inst)
+    return max(0, damage - soak)
+
+
+def _select_equipped_weapon(character: Character) -> ItemInstance | None:
+    """The character's strongest equipped weapon instance (>0 effective damage).
+
+    Deterministic: max by effective_weapon_damage, tie-break by item_instance pk
+    (lowest pk wins, via negating pk in the comparison key).
+    """
+    from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+    best = None
+    for equipped in character.equipped_items:
+        inst = equipped.item_instance
+        if inst.template.gear_archetype not in WEAPON_ARCHETYPES:
+            continue
+        dmg = inst.effective_weapon_damage
+        if dmg <= 0:
+            continue
+        key = (dmg, -inst.pk)
+        if best is None or key > best[0]:
+            best = (key, inst)
+    return best[1] if best is not None else None
+
+
+def effective_weapon_profile(character: Character) -> WeaponContribution | None:
+    """The character's strongest equipped weapon as a combat contribution."""
+    from world.combat.types import WeaponContribution  # noqa: PLC0415
+
+    inst = _select_equipped_weapon(character)
+    if inst is None:
+        return None
+    return WeaponContribution(
+        damage=inst.effective_weapon_damage,
+        damage_type=inst.effective_weapon_damage_type,
+    )
+
+
+def _weapon_augmented_budget(
+    profile: TechniqueDamageProfile,
+    budget: int,
+    weapon: WeaponContribution | None,
+) -> tuple[int, DamageType | None]:
+    """Fold an equipped weapon's contribution into a damage profile's budget.
+
+    For a ``uses_equipped_weapon`` profile with an equipped weapon, adds the
+    weapon's damage to the formula budget; if the profile authored no damage_type
+    of its own, the weapon's type is used. Returns ``(budget, damage_type)``;
+    non-weapon profiles (or an unarmed attacker) pass through unchanged.
+    """
+    profile_damage_type = profile.damage_type
+    if profile.uses_equipped_weapon and weapon is not None:
+        budget += weapon.damage
+        if profile_damage_type is None:
+            profile_damage_type = weapon.damage_type
+    return budget, profile_damage_type
+
+
+def _wear_equipped_weapon(character: Character) -> None:
+    """Apply one point of durability wear to the character's strongest weapon.
+
+    Called once per landed weapon-based attack (not once per damage profile), so
+    a multi-component technique does not double-wear the weapon.
+    """
+    weapon_inst = _select_equipped_weapon(character)
+    if weapon_inst is None:
+        return
+    from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    decrement_item_durability(item_instance=weapon_inst)
