@@ -77,6 +77,36 @@ class CapturePartyTests(TestCase):
         assert InstancedRoom.objects.count() == 0
 
 
+class CaptureGroupKeyTests(TestCase):
+    def test_same_group_key_shares_one_cell(self) -> None:
+        first, second = CharacterSheetFactory(), CharacterSheetFactory()
+
+        a = capture_character(captive=first, group_key="event-1")
+        b = capture_character(captive=second, group_key="event-1")
+
+        assert a.cell_id == b.cell_id
+
+    def test_different_group_keys_get_separate_cells(self) -> None:
+        first, second = CharacterSheetFactory(), CharacterSheetFactory()
+
+        a = capture_character(captive=first, group_key="event-1")
+        b = capture_character(captive=second, group_key="event-2")
+
+        assert a.cell_id != b.cell_id
+
+    def test_resolved_group_cell_is_not_reused(self) -> None:
+        first = CharacterSheetFactory()
+        a = capture_character(captive=first, group_key="event-1")
+        old_cell_id = a.cell_id
+        resolve_captivity(a, status=CaptivityStatus.ESCAPED)  # tears the cell down
+
+        second = CharacterSheetFactory()
+        b = capture_character(captive=second, group_key="event-1")
+
+        # The old cell is no longer ACTIVE, so a fresh one is spawned.
+        assert b.cell_id != old_cell_id
+
+
 class ResolveCaptivityTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:

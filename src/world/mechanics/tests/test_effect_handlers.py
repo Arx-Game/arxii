@@ -15,6 +15,7 @@ from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.conditions.factories import DamageTypeFactory
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
+from world.scenes.factories import SceneFactory
 from world.societies.factories import OrganizationFactory
 from world.vitals.models import CharacterVitals
 
@@ -236,3 +237,40 @@ class CaptureHandlerTests(TestCase):
         assert result.applied is False
         assert result.skip_reason is not None
         assert Captivity.objects.filter(captive=sheet).count() == 1
+
+
+class CaptureGroupingTests(TestCase):
+    """The CAPTURE handler groups captives of one encounter into a shared cell (#982)."""
+
+    @staticmethod
+    def _capture_effect():
+        return ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+
+    def _capture(self, key: str, *, scene):
+        character = CharacterFactory(db_key=key)
+        sheet = CharacterSheetFactory(character=character)
+        apply_effect(self._capture_effect(), ResolutionContext(character=character, scene=scene))
+        return Captivity.objects.get(captive=sheet)
+
+    def test_same_scene_captures_share_a_cell(self) -> None:
+        scene = SceneFactory()
+
+        first = self._capture("grp_same_a", scene=scene)
+        second = self._capture("grp_same_b", scene=scene)
+
+        assert first.cell_id == second.cell_id
+
+    def test_different_scenes_do_not_share(self) -> None:
+        first = self._capture("grp_diff_a", scene=SceneFactory())
+        second = self._capture("grp_diff_b", scene=SceneFactory())
+
+        assert first.cell_id != second.cell_id
+
+    def test_no_scene_uses_separate_cells(self) -> None:
+        first = self._capture("grp_none_a", scene=None)
+        second = self._capture("grp_none_b", scene=None)
+
+        assert first.cell_id != second.cell_id
