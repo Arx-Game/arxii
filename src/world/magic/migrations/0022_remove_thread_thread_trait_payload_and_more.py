@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         ("covenants", "0008_covenantriteparticipant_and_more"),
         ("items", "0010_mantle_mantlelevelclearance_mantleleveldefinition_and_more"),
         ("magic", "0021_technique_combo_opening_probing"),
-        ("objects", "0014_defaultobject_defaultcharacter_defaultexit_and_more"),
+        ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
         ("relationships", "0003_relationshiptrack_fuels_escalation_spikes"),
         ("traits", "0001_initial"),
     ]
