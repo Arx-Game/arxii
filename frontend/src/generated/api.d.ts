@@ -5170,6 +5170,82 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/fashion-judgements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate, resolve the judge sheet, and return the endorsement. */
+    post: operations['items_fashion_judgements_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/fashion-presentations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Present an outfit + list presentations (#514).
+     *
+     *     POST /api/items/fashion-presentations/ — record the requesting account's
+     *     acting character presenting an outfit at an event.
+     *     GET  /api/items/fashion-presentations/?event=<id> — list presentations
+     *     (filterable by event) so the UI can show who is presenting there to judge.
+     *     GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+     */
+    get: operations['items_fashion_presentations_list'];
+    put?: never;
+    /**
+     * @description Present an outfit + list presentations (#514).
+     *
+     *     POST /api/items/fashion-presentations/ — record the requesting account's
+     *     acting character presenting an outfit at an event.
+     *     GET  /api/items/fashion-presentations/?event=<id> — list presentations
+     *     (filterable by event) so the UI can show who is presenting there to judge.
+     *     GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+     */
+    post: operations['items_fashion_presentations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/fashion-presentations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Present an outfit + list presentations (#514).
+     *
+     *     POST /api/items/fashion-presentations/ — record the requesting account's
+     *     acting character presenting an outfit at an event.
+     *     GET  /api/items/fashion-presentations/?event=<id> — list presentations
+     *     (filterable by event) so the UI can show who is presenting there to judge.
+     *     GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+     */
+    get: operations['items_fashion_presentations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/interaction-types/': {
     parameters: {
       query?: never;
@@ -14784,6 +14860,72 @@ export interface components {
      * @enum {string}
      */
     FamilyTypeEnum: 'commoner' | 'noble';
+    /**
+     * @description Serializer for judging a fashion presentation (#514).
+     *
+     *     Write: accepts ``presentation`` PK from the request body. The ``judge`` is
+     *     resolved from the requesting account in the view and injected via
+     *     ``serializer.save(judge=sheet)`` — never supplied by the client. On success
+     *     the created ``PresentationEndorsement`` is exposed via the
+     *     ``PresentationEndorsementSerializer`` read shape.
+     */
+    FashionJudgement: {
+      presentation: number;
+    };
+    /**
+     * @description Serializer for judging a fashion presentation (#514).
+     *
+     *     Write: accepts ``presentation`` PK from the request body. The ``judge`` is
+     *     resolved from the requesting account in the view and injected via
+     *     ``serializer.save(judge=sheet)`` — never supplied by the client. On success
+     *     the created ``PresentationEndorsement`` is exposed via the
+     *     ``PresentationEndorsementSerializer`` read shape.
+     */
+    FashionJudgementRequest: {
+      presentation: number;
+    };
+    /**
+     * @description Serializer for FashionPresentation create + read (#514).
+     *
+     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
+     *     request body. The ``presenter`` is resolved from the requesting account in
+     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
+     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
+     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *
+     *     Read: all fields are present; read-only fields cannot be supplied.
+     */
+    FashionPresentation: {
+      readonly id: number;
+      event: number;
+      /** @description The character this sheet belongs to */
+      readonly presenter: number;
+      /** @description The outfit presented (record-keeping; the check reads equipped items). */
+      outfit?: number | null;
+      readonly perceiving_society: number;
+      /** @description Floor from the society-taste-shaped presentation check. */
+      readonly base_score: number;
+      /** @description Final acclaim = base_score + heavily-weighted peer endorsements. */
+      readonly acclaim: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Serializer for FashionPresentation create + read (#514).
+     *
+     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
+     *     request body. The ``presenter`` is resolved from the requesting account in
+     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
+     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
+     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *
+     *     Read: all fields are present; read-only fields cannot be supplied.
+     */
+    FashionPresentationRequest: {
+      event: number;
+      /** @description The outfit presented (record-keeping; the check reads equipped items). */
+      outfit?: number | null;
+    };
     /** @description One fatigue pool's status (shape produced by fatigue.services.get_full_status). */
     FatiguePoolStatus: {
       current: number;
@@ -17179,6 +17321,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['EventList'][];
+    };
+    PaginatedFashionPresentationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['FashionPresentation'][];
     };
     PaginatedGMApplicationDetailList: {
       /** @example 123 */
@@ -19876,7 +20033,7 @@ export interface components {
       /** @description The interaction being endorsed. */
       interaction: number;
       resonance: number;
-      /** @description Endorsee's persona at endorsement time — captures masquerade for audit. */
+      /** @description Endorsee's persona at endorsement time — masquerade audit. */
       readonly persona_snapshot: number | null;
       /** Format: date-time */
       readonly created_at: string;
@@ -20814,6 +20971,7 @@ export interface components {
       /** @description The ENTRY pose being endorsed; nullable for resilience to interaction cleanup. */
       readonly entry_interaction: number | null;
       resonance: number;
+      /** @description Endorsee's persona at endorsement time — masquerade audit. */
       readonly persona_snapshot: number | null;
       /** @description Captured from config at creation. */
       readonly granted_amount: number;
@@ -22369,12 +22527,13 @@ export interface components {
       /** Format: date-time */
       dormant_since: string | null;
     };
-    /** @description Four-axis breakdown of the persona's total_prestige. */
+    /** @description Five-axis breakdown of the persona's total_prestige. */
     _PrestigeBreakdown: {
       dwellings: number;
       items: number;
       orgs: number;
       deeds: number;
+      fashion: number;
       total: number;
     };
     /**
@@ -29287,6 +29446,98 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EquippedItemRead'];
+        };
+      };
+    };
+  };
+  items_fashion_judgements_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FashionJudgementRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FashionJudgement'];
+        };
+      };
+    };
+  };
+  items_fashion_presentations_list: {
+    parameters: {
+      query?: {
+        event?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        presenter?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedFashionPresentationList'];
+        };
+      };
+    };
+  };
+  items_fashion_presentations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FashionPresentationRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FashionPresentation'];
+        };
+      };
+    };
+  };
+  items_fashion_presentations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this fashion presentation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FashionPresentation'];
         };
       };
     };

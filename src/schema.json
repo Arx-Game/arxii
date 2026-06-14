@@ -7978,6 +7978,120 @@ paths:
               schema:
                 $ref: '#/components/schemas/EquippedItemRead'
           description: ''
+  /api/items/fashion-judgements/:
+    post:
+      operationId: items_fashion_judgements_create
+      description: Validate, resolve the judge sheet, and return the endorsement.
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FashionJudgementRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FashionJudgement'
+          description: ''
+  /api/items/fashion-presentations/:
+    get:
+      operationId: items_fashion_presentations_list
+      description: |-
+        Present an outfit + list presentations (#514).
+
+        POST /api/items/fashion-presentations/ — record the requesting account's
+        acting character presenting an outfit at an event.
+        GET  /api/items/fashion-presentations/?event=<id> — list presentations
+        (filterable by event) so the UI can show who is presenting there to judge.
+        GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+      parameters:
+      - in: query
+        name: event
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: presenter
+        schema:
+          type: integer
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFashionPresentationList'
+          description: ''
+    post:
+      operationId: items_fashion_presentations_create
+      description: |-
+        Present an outfit + list presentations (#514).
+
+        POST /api/items/fashion-presentations/ — record the requesting account's
+        acting character presenting an outfit at an event.
+        GET  /api/items/fashion-presentations/?event=<id> — list presentations
+        (filterable by event) so the UI can show who is presenting there to judge.
+        GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FashionPresentationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FashionPresentation'
+          description: ''
+  /api/items/fashion-presentations/{id}/:
+    get:
+      operationId: items_fashion_presentations_retrieve
+      description: |-
+        Present an outfit + list presentations (#514).
+
+        POST /api/items/fashion-presentations/ — record the requesting account's
+        acting character presenting an outfit at an event.
+        GET  /api/items/fashion-presentations/?event=<id> — list presentations
+        (filterable by event) so the UI can show who is presenting there to judge.
+        GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this fashion presentation.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FashionPresentation'
+          description: ''
   /api/items/interaction-types/:
     get:
       operationId: items_interaction_types_list
@@ -26377,6 +26491,108 @@ components:
       description: |-
         * `commoner` - Commoner
         * `noble` - Noble
+    FashionJudgement:
+      type: object
+      description: |-
+        Serializer for judging a fashion presentation (#514).
+
+        Write: accepts ``presentation`` PK from the request body. The ``judge`` is
+        resolved from the requesting account in the view and injected via
+        ``serializer.save(judge=sheet)`` — never supplied by the client. On success
+        the created ``PresentationEndorsement`` is exposed via the
+        ``PresentationEndorsementSerializer`` read shape.
+      properties:
+        presentation:
+          type: integer
+      required:
+      - presentation
+    FashionJudgementRequest:
+      type: object
+      description: |-
+        Serializer for judging a fashion presentation (#514).
+
+        Write: accepts ``presentation`` PK from the request body. The ``judge`` is
+        resolved from the requesting account in the view and injected via
+        ``serializer.save(judge=sheet)`` — never supplied by the client. On success
+        the created ``PresentationEndorsement`` is exposed via the
+        ``PresentationEndorsementSerializer`` read shape.
+      properties:
+        presentation:
+          type: integer
+      required:
+      - presentation
+    FashionPresentation:
+      type: object
+      description: |-
+        Serializer for FashionPresentation create + read (#514).
+
+        Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
+        request body. The ``presenter`` is resolved from the requesting account in
+        the view (``FashionPresentationViewSet.perform_create``) and injected via
+        ``serializer.save(presenter=sheet)`` — never supplied by the client
+        (mirrors the endorsement views' ``endorser_sheet`` handling).
+
+        Read: all fields are present; read-only fields cannot be supplied.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        event:
+          type: integer
+        presenter:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        outfit:
+          type: integer
+          nullable: true
+          description: The outfit presented (record-keeping; the check reads equipped
+            items).
+        perceiving_society:
+          type: integer
+          readOnly: true
+        base_score:
+          type: integer
+          readOnly: true
+          description: Floor from the society-taste-shaped presentation check.
+        acclaim:
+          type: integer
+          readOnly: true
+          description: Final acclaim = base_score + heavily-weighted peer endorsements.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - acclaim
+      - base_score
+      - created_at
+      - event
+      - id
+      - perceiving_society
+      - presenter
+    FashionPresentationRequest:
+      type: object
+      description: |-
+        Serializer for FashionPresentation create + read (#514).
+
+        Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
+        request body. The ``presenter`` is resolved from the requesting account in
+        the view (``FashionPresentationViewSet.perform_create``) and injected via
+        ``serializer.save(presenter=sheet)`` — never supplied by the client
+        (mirrors the endorsement views' ``endorser_sheet`` handling).
+
+        Read: all fields are present; read-only fields cannot be supplied.
+      properties:
+        event:
+          type: integer
+        outfit:
+          type: integer
+          nullable: true
+          description: The outfit presented (record-keeping; the check reads equipped
+            items).
+      required:
+      - event
     FatiguePoolStatus:
       type: object
       description: One fatigue pool's status (shape produced by fatigue.services.get_full_status).
@@ -31125,6 +31341,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventList'
+    PaginatedFashionPresentationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FashionPresentation'
     PaginatedGMApplicationDetailList:
       type: object
       required:
@@ -35747,8 +35986,7 @@ components:
           type: integer
           readOnly: true
           nullable: true
-          description: Endorsee's persona at endorsement time — captures masquerade
-            for audit.
+          description: Endorsee's persona at endorsement time — masquerade audit.
         created_at:
           type: string
           format: date-time
@@ -37712,6 +37950,7 @@ components:
           type: integer
           readOnly: true
           nullable: true
+          description: Endorsee's persona at endorsement time — masquerade audit.
         granted_amount:
           type: integer
           readOnly: true
@@ -40805,7 +41044,7 @@ components:
       - upkeep_warning
     _PrestigeBreakdown:
       type: object
-      description: Four-axis breakdown of the persona's total_prestige.
+      description: Five-axis breakdown of the persona's total_prestige.
       properties:
         dwellings:
           type: integer
@@ -40815,11 +41054,14 @@ components:
           type: integer
         deeds:
           type: integer
+        fashion:
+          type: integer
         total:
           type: integer
       required:
       - deeds
       - dwellings
+      - fashion
       - items
       - orgs
       - total
