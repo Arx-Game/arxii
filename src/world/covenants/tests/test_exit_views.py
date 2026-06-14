@@ -18,6 +18,7 @@ from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
     CovenantRoleFactory,
+    LeaderCovenantRoleFactory,
 )
 from world.roster.factories import (
     PlayerDataFactory,
@@ -131,10 +132,7 @@ class KickActionTests(TestCase):
         self.nonleader_sheet = _setup_user_with_sheet(self.nonleader_user)
 
         self.cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
-        self.leader_role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE,
-            is_leadership=True,
-        )
+        self.leader_role = LeaderCovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.member_role = CovenantRoleFactory(
             covenant_type=CovenantType.DURANCE,
             is_leadership=False,
