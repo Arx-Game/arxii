@@ -106,6 +106,7 @@ class MissionOfferDetailsSerializer(serializers.ModelSerializer):
             "weight",
             "requirements_override",
             "role_cooldown_duration",
+            "draw_priority",
         ]
         read_only_fields = ["id", "role"]
 

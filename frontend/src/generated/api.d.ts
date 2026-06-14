@@ -15908,6 +15908,8 @@ export interface components {
       requirements_override?: unknown;
       /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
       role_cooldown_duration?: string | null;
+      /** @description POOL-draw priority tier (#726). The highest tier present is drawn first with guaranteed inclusion (up to the pool count); lower tiers fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes follow-up missions a positive value so they surface ahead of the general pool. 0 = general pool. */
+      draw_priority?: number;
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -15926,6 +15928,8 @@ export interface components {
       requirements_override?: unknown;
       /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
       role_cooldown_duration?: string | null;
+      /** @description POOL-draw priority tier (#726). The highest tier present is drawn first with guaranteed inclusion (up to the pool count); lower tiers fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes follow-up missions a positive value so they surface ahead of the general pool. 0 = general pool. */
+      draw_priority?: number;
     };
     /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
@@ -18773,6 +18777,8 @@ export interface components {
       requirements_override?: unknown;
       /** @description Duration written into NPCRoleCooldown on accept (blocks OTHER missions on the role for this persona). Null falls back to MissionTemplate.cooldown. */
       role_cooldown_duration?: string | null;
+      /** @description POOL-draw priority tier (#726). The highest tier present is drawn first with guaranteed inclusion (up to the pool count); lower tiers fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes follow-up missions a positive value so they surface ahead of the general pool. 0 = general pool. */
+      draw_priority?: number;
     };
     /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).

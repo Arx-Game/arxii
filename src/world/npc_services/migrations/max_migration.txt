@@ -1,1 +1,1 @@
-0004_npcrole_is_active_alter_npcserviceoffer_kind_and_more
+0005_mission_offer_draw_priority

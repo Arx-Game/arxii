@@ -35,6 +35,8 @@ from world.conditions.factories import (
 )
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory, ThreadFactory
+from world.missions.constants import MissionStatus
+from world.missions.factories import MissionInstanceFactory, MissionTemplateFactory
 from world.npc_services.factories import NPCStandingFactory
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.roster.factories import RosterEntryFactory
@@ -770,4 +772,74 @@ class SocietyMembershipResolverTests(TestCase):
 
     def test_evaluate_dispatches(self) -> None:
         rule = {"leaf": "is_member_of_society", "params": {"society": "Member Society"}}
+        self.assertTrue(evaluate(rule, self.ctx))
+
+
+class HasCompletedMissionResolverTests(TestCase):
+    """has_completed_mission: gates on a COMPLETE MissionInstance of a template.
+
+    Backs chained-mission unlocks (#726). Persona-scoped via
+    ``MissionInstance.accepted_as_persona`` — an ESTABLISHED persona doesn't
+    inherit a PRIMARY persona's history. Only ``MissionStatus.COMPLETE``
+    satisfies (ACTIVE / ABANDONED don't). No presented persona fails closed;
+    an unknown / not-yet-completed template fails closed naturally.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.pc_persona = cls.sheet.primary_persona
+        cls.other_persona = PersonaFactory()
+        cls.done_template = MissionTemplateFactory()
+        cls.undone_template = MissionTemplateFactory()
+        MissionInstanceFactory(
+            template=cls.done_template,
+            accepted_as_persona=cls.pc_persona,
+            status=MissionStatus.COMPLETE,
+        )
+
+    def setUp(self) -> None:
+        self.ctx = CharacterPredicateContext(self.character, presented_persona=self.pc_persona)
+
+    def test_true_when_persona_completed_template(self) -> None:
+        self.assertTrue(
+            self.ctx.has_leaf("has_completed_mission", template_id=self.done_template.pk)
+        )
+
+    def test_false_when_template_not_completed(self) -> None:
+        self.assertFalse(
+            self.ctx.has_leaf("has_completed_mission", template_id=self.undone_template.pk)
+        )
+
+    def test_false_when_completed_by_other_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character, presented_persona=self.other_persona)
+        self.assertFalse(ctx.has_leaf("has_completed_mission", template_id=self.done_template.pk))
+
+    def test_false_when_only_active(self) -> None:
+        active_template = MissionTemplateFactory()
+        MissionInstanceFactory(
+            template=active_template,
+            accepted_as_persona=self.pc_persona,
+            status=MissionStatus.ACTIVE,
+        )
+        self.assertFalse(self.ctx.has_leaf("has_completed_mission", template_id=active_template.pk))
+
+    def test_false_when_abandoned(self) -> None:
+        abandoned_template = MissionTemplateFactory()
+        MissionInstanceFactory(
+            template=abandoned_template,
+            accepted_as_persona=self.pc_persona,
+            status=MissionStatus.ABANDONED,
+        )
+        self.assertFalse(
+            self.ctx.has_leaf("has_completed_mission", template_id=abandoned_template.pk)
+        )
+
+    def test_false_when_no_presented_persona(self) -> None:
+        ctx = CharacterPredicateContext(self.character)
+        self.assertFalse(ctx.has_leaf("has_completed_mission", template_id=self.done_template.pk))
+
+    def test_evaluate_dispatches(self) -> None:
+        rule = {"leaf": "has_completed_mission", "params": {"template_id": self.done_template.pk}}
         self.assertTrue(evaluate(rule, self.ctx))
