@@ -5,12 +5,31 @@ from django.db import IntegrityError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from evennia_extensions.models import RoomProfile
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.exceptions import PositionError, PositionTransitionError
+from world.areas.positioning.factories import (
+    ObjectPositionFactory,
+    PositionEdgeFactory,
+    PositionFactory,
+)
 from world.areas.positioning.models import ObjectPosition, Position, PositionEdge
+from world.areas.positioning.services import (
+    connect_positions,
+    create_position,
+    disconnect_positions,
+    edge_between,
+    force_move_to_position,
+    move_to_position,
+    place_in_position,
+    position_of,
+    reachable_positions,
+    remove_position,
+)
 from world.areas.serializers import AreaBreadcrumbSerializer
 from world.areas.services import (
     get_ancestor_at_level,
@@ -21,6 +40,15 @@ from world.areas.services import (
     get_rooms_in_area,
     reparent_area,
 )
+from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.constants import FoundationalCapability
+from world.conditions.factories import (
+    ConditionCapabilityEffectFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.models import CapabilityType
+from world.conditions.services import apply_condition
+from world.mechanics.factories import ChallengeInstanceFactory
 from world.realms.models import Realm
 
 
@@ -476,3 +504,305 @@ class PositionModelTests(TestCase):
         # Swap so that position_a_id > position_b_id (wrong canonical order)
         with self.assertRaises(ValidationError):
             PositionEdge(position_a=b, position_b=a).full_clean()
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — authoring/query service tests
+# ---------------------------------------------------------------------------
+
+
+class PositionServiceAuthoringTests(TestCase):
+    """Tests for create_position, remove_position, connect_positions, disconnect_positions."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="ServiceRoom", nohome=True)
+
+    def test_create_position_defaults(self):
+        pos = create_position(self.room, "altar")
+        assert pos.room == self.room
+        assert pos.name == "altar"
+        assert pos.kind == PositionKind.FEATURE
+        assert pos.description == ""
+
+    def test_create_position_with_kind(self):
+        pos = create_position(self.room, "ground", kind=PositionKind.PRIMARY)
+        assert pos.kind == PositionKind.PRIMARY
+
+    def test_remove_position_deletes_it(self):
+        pos = create_position(self.room, "to_remove")
+        pk = pos.pk
+        remove_position(pos)
+        assert not Position.objects.filter(pk=pk).exists()
+
+    def test_connect_positions_canonical_order(self):
+        """connect_positions always puts smaller pk as position_a."""
+        a = create_position(self.room, "alpha")
+        b = create_position(self.room, "beta")
+        # Pass in reverse order; service must swap.
+        edge = connect_positions(b, a)
+        assert edge.position_a_id < edge.position_b_id
+        assert edge.position_a in (a, b)
+        # Canonical: smaller pk is position_a
+        lo, hi = (a, b) if a.pk < b.pk else (b, a)
+        assert edge.position_a == lo
+        assert edge.position_b == hi
+
+    def test_connect_positions_natural_order(self):
+        """connect_positions works when a already has a smaller pk."""
+        a = create_position(self.room, "first")
+        b = create_position(self.room, "second")
+        if a.pk > b.pk:
+            a, b = b, a
+        edge = connect_positions(a, b)
+        assert edge.position_a == a
+        assert edge.position_b == b
+
+    def test_disconnect_positions_removes_edge(self):
+        a = create_position(self.room, "da")
+        b = create_position(self.room, "db")
+        connect_positions(a, b)
+        disconnect_positions(a, b)
+        assert edge_between(a, b) is None
+
+    def test_disconnect_positions_order_independent(self):
+        a = create_position(self.room, "oa")
+        b = create_position(self.room, "ob")
+        connect_positions(a, b)
+        disconnect_positions(b, a)  # reversed args
+        assert edge_between(a, b) is None
+
+
+class PositionQueryServiceTests(TestCase):
+    """Tests for edge_between, position_of, reachable_positions."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="QueryRoom", nohome=True)
+        self.a = create_position(self.room, "node_a")
+        self.b = create_position(self.room, "node_b")
+        self.c = create_position(self.room, "node_c")
+        self.d = create_position(self.room, "node_d")  # impassable edge to a
+        self.e = create_position(self.room, "node_e")  # gated edge to a
+        # a–b open, b–c open → a can reach c via b
+        self.ab = connect_positions(self.a, self.b, is_passable=True)
+        self.bc = connect_positions(self.b, self.c, is_passable=True)
+        # a–d impassable
+        self.ad = connect_positions(self.a, self.d, is_passable=False)
+        # a–e gated
+        self.ae = connect_positions(self.a, self.e, is_passable=True)
+        self.challenge = ChallengeInstanceFactory(location=self.room, target_object=self.room)
+        self.ae.gating_challenge = self.challenge
+        self.ae.save()
+        # Character placed at a
+        self.char = CharacterFactory(location=self.room)
+        ObjectPosition.objects.create(objectdb=self.char, position=self.a)
+
+    def test_edge_between_canonical(self):
+        assert edge_between(self.a, self.b) == self.ab
+
+    def test_edge_between_reversed_args(self):
+        assert edge_between(self.b, self.a) == self.ab
+
+    def test_edge_between_none_when_not_connected(self):
+        assert edge_between(self.a, self.c) is None
+
+    def test_position_of_returns_current(self):
+        assert position_of(self.char) == self.a
+
+    def test_position_of_returns_none_when_unplaced(self):
+        other = CharacterFactory(location=self.room)
+        assert position_of(other) is None
+
+    def test_reachable_positions_multi_hop(self):
+        """a→b and b→c are open; c should be reachable from a."""
+        reachable = reachable_positions(self.char)
+        assert self.b in reachable
+        assert self.c in reachable
+
+    def test_reachable_positions_excludes_impassable(self):
+        reachable = reachable_positions(self.char)
+        assert self.d not in reachable
+
+    def test_reachable_positions_excludes_gated(self):
+        reachable = reachable_positions(self.char)
+        assert self.e not in reachable
+
+    def test_reachable_positions_empty_when_unplaced(self):
+        other = CharacterFactory(location=self.room)
+        assert reachable_positions(other) == set()
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — placement + movement service tests
+# ---------------------------------------------------------------------------
+
+
+class PlaceInPositionTests(TestCase):
+    """Tests for place_in_position."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="PlaceRoom", nohome=True)
+        self.room2 = create_object("typeclasses.rooms.Room", key="PlaceRoom2", nohome=True)
+        self.pos = create_position(self.room, "floor")
+        self.char = CharacterFactory(location=self.room)
+
+    def test_place_in_position_success(self):
+        op = place_in_position(self.char, self.pos)
+        assert op.position == self.pos
+        assert position_of(self.char) == self.pos
+
+    def test_place_in_position_cross_room_raises(self):
+        other_pos = create_position(self.room2, "altar")
+        with self.assertRaises(PositionError):
+            place_in_position(self.char, other_pos)
+
+    def test_place_in_position_is_idempotent(self):
+        """Calling twice moves the occupancy without error."""
+        pos2 = create_position(self.room, "balcony")
+        place_in_position(self.char, self.pos)
+        place_in_position(self.char, pos2)
+        assert position_of(self.char) == pos2
+
+
+class MoveToPositionTests(TestCase):
+    """Tests for move_to_position — all six failure paths + success."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="MoveRoom", nohome=True)
+        self.room2 = create_object("typeclasses.rooms.Room", key="MoveRoom2", nohome=True)
+        self.ground = create_position(self.room, "ground", kind=PositionKind.PRIMARY)
+        self.balcony = create_position(self.room, "balcony")
+        self.pit = create_position(self.room, "pit")
+        self.guarded = create_position(self.room, "guarded")
+        self.island = create_position(self.room, "island")  # no edge to ground
+        self.other_pos = create_position(self.room2, "other_room_pos")
+        # ground–balcony: open edge
+        self.gb_edge = connect_positions(self.ground, self.balcony, is_passable=True)
+        # ground–pit: impassable
+        self.gp_edge = connect_positions(self.ground, self.pit, is_passable=False)
+        # ground–guarded: gated
+        self.gg_edge = connect_positions(self.ground, self.guarded, is_passable=True)
+        self.challenge = ChallengeInstanceFactory(location=self.room, target_object=self.room)
+        self.gg_edge.gating_challenge = self.challenge
+        self.gg_edge.save()
+
+        self.char = CharacterFactory(location=self.room)
+        place_in_position(self.char, self.ground)
+
+    def test_move_success(self):
+        op = move_to_position(self.char, self.balcony)
+        assert op.position == self.balcony
+        assert position_of(self.char) == self.balcony
+
+    def test_move_fails_cross_room(self):
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char, self.other_pos)
+        assert "not in this room" in ctx.exception.user_message
+
+    def test_move_fails_when_unplaced(self):
+        unplaced = CharacterFactory(location=self.room)
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(unplaced, self.balcony)
+        assert "not placed" in ctx.exception.user_message
+
+    def test_move_fails_no_edge(self):
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char, self.island)
+        assert "no path" in ctx.exception.user_message
+
+    def test_move_fails_impassable(self):
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char, self.pit)
+        assert "blocked" in ctx.exception.user_message
+
+    def test_move_fails_gated(self):
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char, self.guarded)
+        assert "getting past" in ctx.exception.user_message
+
+    def test_move_fails_immobilized(self):
+        """A character with MOVEMENT = 0 cannot move voluntarily.
+
+        Sets up a CapabilityType named MOVEMENT (FoundationalCapability.MOVEMENT),
+        then zeroes it via a condition capability effect that applies -100.
+        """
+        # Ensure the MOVEMENT CapabilityType exists with innate_baseline=1
+        cap, _ = CapabilityType.objects.get_or_create(
+            name=FoundationalCapability.MOVEMENT,
+            defaults={"innate_baseline": 1, "description": "Locomotion capability"},
+        )
+        # Create a CharacterSheet for self.char (needed by conditions system)
+        CharacterSheetFactory(character=self.char)
+
+        # Condition that zeroes MOVEMENT
+        template = ConditionTemplateFactory(name="immobilized_test")
+        ConditionCapabilityEffectFactory(condition=template, capability=cap, value=-100)
+        apply_condition(target=self.char, condition=template)
+
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char, self.balcony)
+        assert "cannot move" in ctx.exception.user_message
+
+    def test_force_move_bypasses_gate(self):
+        """force_move_to_position succeeds on a gated edge."""
+        op = force_move_to_position(self.char, self.guarded)
+        assert op.position == self.guarded
+
+    def test_force_move_bypasses_impassable(self):
+        """force_move_to_position succeeds even on an impassable edge."""
+        op = force_move_to_position(self.char, self.pit)
+        assert op.position == self.pit
+
+    def test_force_move_no_edge_required(self):
+        """force_move_to_position works even when no edge exists."""
+        op = force_move_to_position(self.char, self.island)
+        assert op.position == self.island
+
+    def test_force_move_fails_cross_room(self):
+        with self.assertRaises(PositionError):
+            force_move_to_position(self.char, self.other_pos)
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — factory tests
+# ---------------------------------------------------------------------------
+
+
+class PositionFactoryTests(TestCase):
+    """Tests for PositionFactory, PositionEdgeFactory, ObjectPositionFactory."""
+
+    def test_position_factory_default(self):
+        pos = PositionFactory()
+        assert pos.pk is not None
+        assert pos.room is not None
+        assert pos.kind == PositionKind.FEATURE
+
+    def test_position_factory_shared_room(self):
+        from evennia import create_object
+
+        room = create_object("typeclasses.rooms.Room", key="SharedRoom", nohome=True)
+        a = PositionFactory(room=room, name="north")
+        b = PositionFactory(room=room, name="south")
+        assert a.room == b.room
+
+    def test_position_edge_factory_canonical_order(self):
+        """PositionEdgeFactory always saves with position_a.pk < position_b.pk."""
+        edge = PositionEdgeFactory()
+        assert edge.position_a_id < edge.position_b_id
+
+    def test_position_edge_factory_same_room(self):
+        edge = PositionEdgeFactory()
+        assert edge.position_a.room == edge.position_b.room
+
+    def test_object_position_factory(self):
+        op = ObjectPositionFactory()
+        assert op.pk is not None
+        assert op.position is not None
+        assert op.objectdb is not None
