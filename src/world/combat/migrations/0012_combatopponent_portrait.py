@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("combat", "0011_remove_clashconfig_delta_botch_and_more"),
         ("evennia_extensions", "0002_roomprofile_tenant_persona"),
