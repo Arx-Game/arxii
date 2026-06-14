@@ -5277,6 +5277,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/inventory/{id}/use/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Use a consumable item: apply its on-use effects (to self) and spend a charge.
+     *
+     *     Owner-or-staff gated. Business logic lives entirely in ``use_item``;
+     *     this view resolves the actor, enforces ownership, and maps
+     *     ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
+     *     surface does NOT accept a target — on-use effects apply to the holder
+     *     only. Targeted use belongs in the future use-item Action layer, which
+     *     carries proximity/prerequisite checks.
+     */
+    post: operations['items_inventory_use_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/item-facets/': {
     parameters: {
       query?: never;
@@ -22308,6 +22334,13 @@ export interface components {
     UpdateBulletinReplyInputRequest: {
       body: string;
     };
+    /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
+    UseItemResult: {
+      charges_remaining: number;
+      destroyed: boolean;
+      soft_deleted: boolean;
+      applied_effect_count: number;
+    };
     /** @description Full UserStoryMute representation. */
     UserStoryMute: {
       readonly id: number;
@@ -29462,6 +29495,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ItemInstanceRead'];
+        };
+      };
+    };
+  };
+  items_inventory_use_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UseItemResult'];
         };
       };
     };
