@@ -1074,4 +1074,3 @@ class KickMemberTests(TestCase):
         actor.refresh_from_db()
         self.assertIsNotNone(target.left_at)
         self.assertIsNotNone(actor.left_at)
-        # sheet_a3 and its membership are TestCase-scoped so they'll be rolled back

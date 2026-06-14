@@ -232,7 +232,8 @@ def leave_covenant(*, membership: CharacterCovenantRole) -> None:
 @transaction.atomic
 def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) -> None:
     """A leader removes another (non-leader) member. Soft-ends the target, then
-    auto-dissolves if active membership falls below the minimum."""
+    auto-dissolves if active membership falls below the minimum.
+    Idempotent: kicking an already-departed member is a no-op."""
     from world.covenants.exceptions import (  # noqa: PLC0415
         CannotKickLeaderError,
         CannotKickSelfError,
@@ -242,6 +243,7 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
     if actor.left_at is not None or not actor.covenant_role.is_leadership:
         raise NotACovenantLeaderError
     if actor.covenant_id != target.covenant_id:
+        # cross-covenant: defensive guard, UI-unreachable (targets are always same-covenant)
         raise NotACovenantLeaderError
     if actor.pk == target.pk:
         raise CannotKickSelfError
