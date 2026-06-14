@@ -7,9 +7,17 @@ import contextlib
 from django.db import transaction
 from django.utils import timezone
 
+from world.checks.consequence_resolution import (
+    apply_pool_deterministically,
+    apply_resolution,
+    resolve_pool_consequences,
+    select_consequence,
+)
+from world.checks.types import ResolutionContext
 from world.items.constants import OwnershipEventType
-from world.items.exceptions import NoChargesRemaining
+from world.items.exceptions import ItemNotUsable, NoChargesRemaining
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
+from world.items.types import UseItemResult
 
 
 def _invalidate_caches(item_instance: ItemInstance) -> None:
@@ -67,3 +75,39 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
             else:
                 locked.delete()
     return locked
+
+
+@transaction.atomic
+def use_item(*, item_instance: ItemInstance, user, target=None) -> UseItemResult:
+    """Use a consumable: apply its on-use pool's effects (deterministic when the
+    template has no on_use_check_type, else check-gated) and spend one charge.
+    The charge is spent regardless of check outcome. user/target are ObjectDBs."""
+    locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
+    template = locked.template
+    if not template.is_consumable or template.on_use_pool_id is None:
+        raise ItemNotUsable
+    if locked.charges <= 0:
+        raise NoChargesRemaining
+
+    context = ResolutionContext(character=user, target=target)
+    check_result = None
+    if template.on_use_check_type_id is None:
+        applied = apply_pool_deterministically(pool=template.on_use_pool, context=context)
+    else:
+        pending = select_consequence(
+            user,
+            template.on_use_check_type,
+            template.on_use_difficulty,
+            resolve_pool_consequences(template.on_use_pool),
+        )
+        applied = apply_resolution(pending, context)
+        check_result = pending.check_result
+
+    consumed = consume_item_charges(item_instance=locked, amount=1)
+    return UseItemResult(
+        applied_effects=applied,
+        charges_remaining=consumed.charges,
+        destroyed=(consumed.charges == 0),
+        soft_deleted=(consumed.charges == 0 and consumed.destroyed_at is not None),
+        check_result=check_result,
+    )
