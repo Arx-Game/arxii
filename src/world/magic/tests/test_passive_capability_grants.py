@@ -70,6 +70,44 @@ class PassiveCapabilityGrantsTests(TestCase):
         granted = character.threads.passive_capability_grants()
         self.assertIn(cap.pk, granted)
 
+    def test_grant_set_caches_and_busts_on_invalidate(self):
+        """The per-handler grant set is memoized and refreshed by ``invalidate()``.
+
+        Compute once while unengaged (cap absent), then engage the role and
+        recompute WITHOUT invalidating: the stale cache must still hide the cap.
+        After ``invalidate()`` the recomputed set must now include it — proving
+        the cache busts and re-derives.
+        """
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        role = CovenantRoleFactory()
+        resonance = ResonanceFactory()
+        cap = CapabilityTypeFactory()
+
+        self._make_covenant_role_thread(sheet=sheet, role=role, resonance=resonance)
+        self._make_tier0_capability_effect(resonance=resonance, capability=cap)
+
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+            engaged=False,
+            left_at=None,
+        )
+
+        handler = character.threads
+        # First read: unengaged → cap absent (and now cached).
+        self.assertNotIn(cap.pk, handler.passive_capability_grants())
+
+        # Engage the role but do NOT invalidate: the cached set is stale.
+        membership.engaged = True
+        membership.save(update_fields=["engaged"])
+        self.assertNotIn(cap.pk, handler.passive_capability_grants())
+
+        # Invalidate → recompute picks up the newly-engaged capability.
+        handler.invalidate()
+        self.assertIn(cap.pk, handler.passive_capability_grants())
+
     def test_unengaged_role_does_not_grant(self):
         sheet = CharacterSheetFactory()
         character = sheet.character

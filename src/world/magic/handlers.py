@@ -142,6 +142,18 @@ class CharacterThreadHandler:
     def passive_capability_grants(self) -> set[int]:
         """Return CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
 
+        Thin accessor over the per-handler cached grant set
+        (``_passive_capability_grants_cache``). Cleared by ``invalidate()``
+        alongside ``_all`` so a sweep over many techniques reuses one memoized
+        result (one set of queries per character per request, not per
+        requirement).
+        """
+        return self._passive_capability_grants_cache
+
+    @cached_property
+    def _passive_capability_grants_cache(self) -> set[int]:
+        """Compute CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+
         Derive-on-read mirror of ``passive_vital_bonuses``. For COVENANT_ROLE
         threads the grant only applies while the character holds an active,
         *engaged* CharacterCovenantRole for that role (Slice A §3.6 / #751).
@@ -200,6 +212,7 @@ class CharacterThreadHandler:
     def invalidate(self) -> None:
         """Clear the cached thread list. Called by mutation services."""
         self.__dict__.pop("_all", None)
+        self.__dict__.pop("_passive_capability_grants_cache", None)
 
 
 class CharacterResonanceHandler:

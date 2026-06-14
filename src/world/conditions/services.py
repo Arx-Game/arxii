@@ -1131,16 +1131,24 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> set[int]:
 
     Single source of thread-passive grants — delegates to the B1 handler
     (``CharacterThreadHandler.passive_capability_grants``), the canonical,
-    engagement-gated authority. Instantiated directly from the sheet's character
-    rather than via the ``character.threads`` typeclass property so it also works
-    when ``character_sheet.character`` is a bare ObjectDB (the test setup in
+    engagement-gated authority. Prefers the character's memoized ``.threads``
+    handler (a typeclass ``cached_property`` returning the same instance across
+    calls in a request), so a sweep over many techniques reuses one cached grant
+    set instead of re-querying per requirement (no N+1). Falls back to a fresh
+    ``CharacterThreadHandler`` only when ``.threads`` is unavailable — e.g. when
+    ``character_sheet.character`` is a bare ObjectDB (the test setup in
     test_services.py), where that lazy property is absent. The handler only needs
     ``character.sheet_data``, which a sheet-bearing ObjectDB always exposes.
     Magic is imported locally to avoid a circular import at module load.
     """
-    from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+    character = character_sheet.character
+    try:
+        handler = character.threads
+    except AttributeError:
+        from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
 
-    return CharacterThreadHandler(character_sheet.character).passive_capability_grants()
+        handler = CharacterThreadHandler(character)
+    return handler.passive_capability_grants()
 
 
 def get_capability_status(
