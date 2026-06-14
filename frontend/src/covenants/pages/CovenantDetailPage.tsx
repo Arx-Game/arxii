@@ -22,10 +22,23 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   useCovenantDetail,
   useCovenantMembers,
   useEngageMembership,
   useDisengageMembership,
+  useLeaveMembership,
+  useKickMember,
 } from '@/covenants/queries';
 import { useRituals } from '@/rituals/queries';
 import { RitualSessionDraftDialog } from '@/rituals/components/RitualSessionDraftDialog';
@@ -64,17 +77,22 @@ function DetailSkeleton() {
 interface MemberRowProps {
   membership: CharacterCovenantRole;
   isOwnMembership: boolean;
+  viewerIsLeader: boolean;
   covenantId: number;
 }
 
-function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) {
+function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: MemberRowProps) {
   const engage = useEngageMembership(covenantId);
   const disengage = useDisengageMembership(covenantId);
+  const leave = useLeaveMembership(covenantId);
+  const kick = useKickMember(covenantId);
   const isBusy = engage.isPending || disengage.isPending;
   const [promoteOpen, setPromoteOpen] = useState(false);
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
+  const canKick =
+    viewerIsLeader && !role.is_leadership && !isOwnMembership && membership.is_active;
 
   function handleEngage() {
     engage.mutate(membership.id);
@@ -82,6 +100,14 @@ function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) 
 
   function handleDisengage() {
     disengage.mutate(membership.id);
+  }
+
+  function handleLeave() {
+    leave.mutate(membership.id);
+  }
+
+  function handleKick() {
+    kick.mutate(membership.id);
   }
 
   return (
@@ -137,6 +163,30 @@ function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) 
             <Button size="sm" variant="outline" onClick={() => setPromoteOpen(true)}>
               Promote
             </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  data-testid="leave-button"
+                  disabled={leave.isPending}
+                >
+                  {leave.isPending ? 'Leaving…' : 'Leave'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Leave this covenant?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    If this drops the covenant below 2 members, it will dissolve.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleLeave}>Leave</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
           {!membership.can_engage && membership.engage_blocked_reason && !membership.engaged && (
             <p className="text-xs text-muted-foreground">{membership.engage_blocked_reason}</p>
@@ -147,6 +197,35 @@ function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) 
             open={promoteOpen}
             onOpenChange={setPromoteOpen}
           />
+        </div>
+      )}
+
+      {canKick && (
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="destructive"
+                data-testid="kick-button"
+                disabled={kick.isPending}
+              >
+                {kick.isPending ? 'Removing…' : 'Remove'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove this member?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Remove this {role.name} from the covenant.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleKick}>Remove</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>
@@ -198,6 +277,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
     : null;
 
   const isActiveMember = ownMembership !== null;
+  const viewerIsLeader = ownMembership?.covenant_role.is_leadership ?? false;
 
   // Find induction ritual
   const allRituals = !ritualsLoading ? ((ritualsData?.results ?? []) as RitualWithSchema[]) : [];
@@ -267,6 +347,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
                 key={membership.id}
                 membership={membership}
                 isOwnMembership={membership.character_sheet === characterSheetId}
+                viewerIsLeader={viewerIsLeader}
                 covenantId={covenantId}
               />
             ))}
