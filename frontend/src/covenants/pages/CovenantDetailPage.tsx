@@ -91,8 +91,7 @@ function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: 
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
-  const canKick =
-    viewerIsLeader && !role.is_leadership && !isOwnMembership && membership.is_active;
+  const canKick = viewerIsLeader && !role.is_leadership && !isOwnMembership && membership.is_active;
 
   function handleEngage() {
     engage.mutate(membership.id);
