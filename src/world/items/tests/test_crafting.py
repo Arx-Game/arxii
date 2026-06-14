@@ -41,3 +41,26 @@ class FacetCraftingConfigTests(TestCase):
         self.assertEqual(cfg1.pk, cfg2.pk)
         self.assertIsNone(cfg1.check_type)
         self.assertGreaterEqual(cfg1.min_success_level, 1)
+
+
+class ComputeQualityScoreTests(TestCase):
+    def _result(self, *, total_points: int, success_level: int):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(total_points=total_points, success_level=success_level)
+
+    def test_score_is_points_plus_stepped_success(self) -> None:
+        from world.items.services.crafting import compute_quality_score
+
+        score = compute_quality_score(
+            self._result(total_points=40, success_level=3), step=10, min_success_level=1
+        )
+        self.assertEqual(score, 40 + (3 - 1) * 10)  # 60
+
+    def test_success_at_minimum_adds_no_bonus(self) -> None:
+        from world.items.services.crafting import compute_quality_score
+
+        score = compute_quality_score(
+            self._result(total_points=40, success_level=1), step=10, min_success_level=1
+        )
+        self.assertEqual(score, 40)
