@@ -634,6 +634,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
+    resolution_order = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -674,6 +675,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_participant",
             "is_gm",
             "clashes",
+            "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
             "escalation_start_round",
@@ -705,6 +707,22 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
+        """PC participant PKs in initiative (resolution) order.
+
+        Mirrors ``services.get_resolution_order`` — the order the round resolves
+        PC actions. Only PCs who can act are included (dead/unconscious PCs and
+        NPCs are omitted). The frontend RoundFlow orders its initiative chips by
+        this and marks the first not-yet-acted participant as the current/on-deck
+        actor. Empty when no PC can act.
+        """
+        from world.combat.services import get_resolution_order  # noqa: PLC0415
+
+        order = get_resolution_order(obj)
+        return [
+            entity.pk for _entity_type, entity in order if isinstance(entity, CombatParticipant)
+        ]
 
     def _get_viewer_character_ids(self, request: object) -> set[int] | frozenset[int]:
         """Get character_sheet IDs for the requesting user.

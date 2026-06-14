@@ -53,6 +53,9 @@ class EffectRow:
     kind: str
     label: str
     deep_link: DeepLinkRef | None
+    # True for load-bearing outcomes (KO/death/defeat) the UI highlights and
+    # auto-expands on. Defaults False; set on the target-status rows. (#996)
+    is_critical: bool = False
 
 
 @dataclass
@@ -96,6 +99,7 @@ class DeepLinkRefSerializer(serializers.Serializer):
 class EffectRowSerializer(serializers.Serializer):
     kind = serializers.CharField()
     label = serializers.CharField()
+    is_critical = serializers.BooleanField()
     deep_link = serializers.SerializerMethodField()
 
     def get_deep_link(self, obj: EffectRow) -> dict[str, int | str] | None:
@@ -178,6 +182,7 @@ class _RoundActionEffects:
                     kind="status",
                     label=f"{target_opponent.name} defeated",
                     deep_link=DeepLinkRef(modal="opponent", id=target_opponent.pk),
+                    is_critical=True,
                 )
             )
         target_ally = self.action.focused_ally_target
@@ -200,6 +205,7 @@ class _RoundActionEffects:
                         kind="status",
                         label=f"{ally_character_sheet.character.db_key} {status_word}",
                         deep_link=DeepLinkRef(modal="participant", id=target_ally.pk),
+                        is_critical=True,
                     )
                 )
 

@@ -1,8 +1,9 @@
 /**
  * CombatantsList — rail section showing PC and NPC combatant rows.
  *
- * PC rows: PersonaAvatar (initial-letter only — fetching per-participant persona
- *   thumbnail would require a separate query per PC; deferred to a follow-up task).
+ * PC rows: PersonaAvatar resolving the participant's primary-persona thumbnail
+ *   (serializer `thumbnail_url` / `thumbnail_media_url`; resolved server-side with
+ *   select_related, no per-PC query), falling back to a name-derived initial letter.
  *   Source: EncounterDetail.participants.
  *
  * NPC rows: PersonaAvatar resolving the opponent's persona thumbnail (serializer

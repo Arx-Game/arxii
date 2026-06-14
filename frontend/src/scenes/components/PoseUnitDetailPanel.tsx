@@ -17,8 +17,12 @@ import { openDeepLink, type DeepLinkKind } from '@/store/deepLinkModalSlice';
 interface EffectRow {
   kind: string;
   label: string;
+  is_critical: boolean;
   deep_link: { modal: string; id: number } | null;
 }
+
+// Left-accent + tint applied to critical (KO/death/defeat) effect rows. (#996)
+const CRITICAL_ROW = 'border-l-2 border-rose-500 bg-rose-500/10 pl-1.5';
 
 interface PoseUnitDetailPanelProps {
   actionInteractionIds: number[];
@@ -85,14 +89,23 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
                   }
                   className={cn(
                     'flex w-full items-start gap-1.5 text-left text-xs',
-                    'cursor-pointer rounded hover:bg-muted/60'
+                    'cursor-pointer rounded hover:bg-muted/60',
+                    effect.is_critical && CRITICAL_ROW
                   )}
+                  data-critical={effect.is_critical || undefined}
                 >
                   <EffectKindBadge kind={effect.kind} />
                   <span>{effect.label}</span>
                 </button>
               ) : (
-                <div key={idx} className={cn('flex items-start gap-1.5 text-xs')}>
+                <div
+                  key={idx}
+                  className={cn(
+                    'flex items-start gap-1.5 text-xs',
+                    effect.is_critical && CRITICAL_ROW
+                  )}
+                  data-critical={effect.is_critical || undefined}
+                >
                   <EffectKindBadge kind={effect.kind} />
                   <span>{effect.label}</span>
                 </div>
