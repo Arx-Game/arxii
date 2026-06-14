@@ -23,6 +23,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+from django.utils import timezone
+
 from world.missions.constants import MissionStatus
 from world.missions.models import MissionDeedRecord, MissionOptionRoute, MissionParticipant
 from world.missions.services.resolution import build_option_list, resolve_option
@@ -51,8 +54,13 @@ class NotParticipantError(BeatActionError):
     """
 
 
+class AbandonMissionError(BeatActionError):
+    """An abandon request that can't proceed (not active / not contract holder)."""
+
+
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_NOT_ACTIVE = "That mission is no longer in progress."
+_ERR_NOT_CONTRACT_HOLDER = "Only the mission's contract holder can abandon it."
 _ERR_OPTION_NOT_LIVE = (
     "That option isn't available to you here — it may have moved on, or "
     "you may need to be somewhere else."
@@ -72,6 +80,40 @@ def participant_for(instance: MissionInstance, character: ObjectDB) -> MissionPa
     if participant is None:
         raise NotParticipantError(_ERR_NOT_PARTICIPANT)
     return participant
+
+
+def abandon_mission(instance: MissionInstance, character: ObjectDB) -> MissionInstance:
+    """Abandon an ACTIVE mission at the contract holder's request (#1023).
+
+    The player's deliberate walk-away. Mirrors the terminal write in
+    ``resolution._finish_terminal`` (status → ABANDONED, stamp ``completed_at``,
+    clear ``current_node``, tear down any spawned instanced room) but does NOT
+    fire the Beat-completion seam — abandoning is not completing — and applies
+    no standing penalty. The PC active-NPC-mission cap counts only ``ACTIVE``
+    runs, so the slot frees automatically; the giver's ``NPCRoleCooldown`` is
+    left intact so the same NPC can't be immediately re-rolled.
+
+    Contract-holder-only solo path; multiplayer vote-to-abandon rides the
+    multiplayer-engine API follow-up. Non-participant raises (404 at the view);
+    not-active / not-contract-holder raise ``AbandonMissionError`` (400).
+    """
+    participant = participant_for(instance, character)
+    if instance.status != MissionStatus.ACTIVE:
+        raise AbandonMissionError(_ERR_NOT_ACTIVE)
+    if not participant.is_contract_holder:
+        raise AbandonMissionError(_ERR_NOT_CONTRACT_HOLDER)
+    with transaction.atomic():
+        instance.status = MissionStatus.ABANDONED
+        instance.completed_at = timezone.now()
+        instance.current_node = None
+        instance.save()
+        if instance.spawned_room_id is not None:
+            # Reuse the instanced-room lifecycle service so an abandoned run
+            # doesn't strand its spawned room (mirrors resolution teardown).
+            from world.instances.services import complete_instanced_room  # noqa: PLC0415
+
+            complete_instanced_room(instance.spawned_room.objectdb)
+    return instance
 
 
 def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:

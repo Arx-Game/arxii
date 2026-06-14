@@ -411,3 +411,31 @@ class ItemFacetTests(TestCase):
                 facet=self.facet,
                 attachment_quality_tier=self.attach_q,
             )
+
+
+class ItemTemplateUseFieldsTests(TestCase):
+    """Tests for on-use fields on ItemTemplate and ItemInstance.destroyed_at."""
+
+    def test_difficulty_required_when_check_type_set(self):
+        from django.core.exceptions import ValidationError
+
+        from world.checks.factories import CheckTypeFactory
+        from world.items.factories import ItemTemplateFactory
+
+        tmpl = ItemTemplateFactory(on_use_check_type=CheckTypeFactory(), on_use_difficulty=None)
+        with self.assertRaises(ValidationError):
+            tmpl.full_clean()
+
+    def test_difficulty_forbidden_when_no_check_type(self):
+        from django.core.exceptions import ValidationError
+
+        from world.items.factories import ItemTemplateFactory
+
+        tmpl = ItemTemplateFactory(on_use_check_type=None, on_use_difficulty=5)
+        with self.assertRaises(ValidationError):
+            tmpl.full_clean()
+
+    def test_destroyed_at_defaults_null(self):
+        from world.items.factories import ItemInstanceFactory
+
+        self.assertIsNone(ItemInstanceFactory().destroyed_at)

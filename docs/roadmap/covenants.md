@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate and dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -13,9 +13,10 @@ oath grants power, and the roles shape how that power manifests.
 This domain owns the Covenant entity, character memberships (with engagement
 context), role definitions, gear compatibility, and combat speed integration.
 Slice A landed the foundational entity + membership FK + engagement gating in
-the modifier pipeline and Thread pull eligibility. The remaining work
-(formation ritual, progression, group abilities, sworn-objective tracking,
-dissolution paths) is the rest of the multi-slice buildout.
+the modifier pipeline and Thread pull eligibility. Later slices added the
+formation ritual, progression, group abilities/rites, and (in #519) the exit
+lifecycle — voluntary leave, leader-gated kick, and below-2 auto-dissolution
+(all soft).
 
 ## Key Design Points
 
@@ -49,8 +50,9 @@ require collaborative play to be significant — there will never, ever be a
 the service layer with typed exceptions (`InsufficientFoundersError`,
 `DuplicateFounderError`). The Slice B `CovenantFormationRitualFactory` gates
 participant selection so the API layer never receives fewer than two founders.
-Dissolution behavior when membership later drops below 2 is **not in MVP** —
-see the "Covenants Languish" design decision in "What Slice B Added".
+When active membership later drops below 2, the covenant auto-dissolves
+immediately (soft) — see the "Covenant Exit Lifecycle (#519)" design decision
+below.
 
 ### Membership is Non-Exclusive
 
@@ -259,7 +261,8 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     (read-only, no pagination — small lookup table). Filterable by
     `covenant_role` and `gear_archetype`.
   - Engage/disengage actions + `RitualSessionViewSet` landed in Slice B.
-    Full lifecycle CRUD (invite/leave/kick) is post-MVP.
+    Voluntary leave + leader-gated kick (with below-2 auto-dissolve) landed
+    in #519 (see the "Covenant Exit Lifecycle" design decision below).
 
 - **Tests** (`world/covenants/tests/`): exceptions, handler caching,
   models (incl. `Covenant` model + constraint + clean tests),
@@ -331,24 +334,27 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   (`covenant_picker`, `covenant_role_picker`, `soul_tether_role_picker`);
   `CovenantsListPage`, `CovenantDetailPage`; inbox notification badge in header.
 
-### Durable Design Decision: Covenants Languish, No Exit Lifecycle in MVP
+### Durable Design Decision: Covenant Exit Lifecycle (#519)
 
-Covenants do not have an exit lifecycle in MVP. There is no "leave covenant",
-"kick member", or "dissolve when membership drops below 2" flow. Members simply
-stop engaging; the covenant record persists indefinitely. This is an intentional
-design constraint:
+The covenant exit lifecycle now exists (issue #519 was the dedicated design
+session the earlier "languish" constraint reserved this for). All exits are
+**soft** — nothing is ever hard-deleted, so a covenant persists inactive and is
+resurrectable:
 
-- Dissolution paths (voluntary, automatic-on-objective, fractured betrayal) are
-  post-MVP and belong in a later Slice. All future slice designs must treat this
-  as a given — do not add exit mechanics unless explicitly specced.
-- If membership falls below 2, the covenant remains valid but effectively
-  dormant. There is no auto-flag, grace period, or auto-dissolve in MVP.
-- This keeps Slice B scope bounded and avoids speccing dissolution consequences
-  (magical fallout, Thread breakage, etc.) before the magic system is mature
-  enough to design them properly.
+- **Voluntary leave** — `leave_covenant` ends the calling member's active
+  membership (stamps `left_at`); the membership row is retained for history.
+- **Leader-gated kick** — `kick_member` lets a member holding a
+  `CovenantRole.is_leadership` role remove a non-leader member. A leader cannot
+  remove a fellow leader. The removed membership is soft-ended (`left_at`).
+- **Immediate auto-dissolution** — when active membership drops below 2 (whether
+  by leave or kick), the covenant auto-dissolves immediately: `dissolved_at` is
+  stamped and remaining active memberships are soft-ended. No grace period. The
+  covenant record persists (dormant, resurrectable), consistent with the
+  no-hard-delete rule.
 
-**Future slices must respect this constraint.** Do not add exit mechanics or
-dissolution triggers in Slice C–G without a dedicated design session.
+**Ranking among leaders is intentionally out of scope** — every leadership role
+is peer-equal for kick purposes (a leader cannot kick another leader). A future
+extension could introduce a leader hierarchy; that is not part of #519.
 
 ### Durable Design Decision: Sworn Objective Is an Enduring Mission Statement
 
@@ -385,7 +391,8 @@ slices, each with its own design+plan+implementation cycle:
 - Manual engage/disengage API — DONE
 - Covenant + RitualSession frontend pages — DONE
 - Soul Tether BILATERAL retrofit — DONE
-- No exit lifecycle in MVP (languish design decision) — DOCUMENTED
+- Exit lifecycle (voluntary leave, leader-gated kick, below-2 auto-dissolve) —
+  DONE (#519; soft-only)
 
 ### Slice C — Dropped (was: Sworn Objective + Stories)
 
@@ -514,7 +521,9 @@ additively while combat speed precedence goes to the Battle role.
   and `Story.status`/`completed_at` exist as the hook; auto-dissolve on
   story completion is not wired.
 - Battle auto-engage on roster join (Slice B §629 hook).
-- Advanced dissolution flows.
+- CAMPAIGN auto-dissolve on Story completion (the generic exit lifecycle —
+  leave/kick/below-2 auto-dissolve — shipped in #519; the Story-driven trigger
+  for CAMPAIGN battle covenants remains a future seam).
 - Battle covenant frontend (#518).
 - Group abilities (#516, Slice F).
 

@@ -76,6 +76,7 @@ const makeSubrole = (overrides: Partial<CovenantRoleWithParent> = {}): CovenantR
   archetype_display: 'Sword',
   speed_rank: 1,
   description: 'Carries the host into the breach.',
+  is_leadership: false,
   parent_role: 7,
   ...overrides,
 });

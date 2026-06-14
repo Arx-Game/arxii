@@ -99,6 +99,28 @@ export function useDisengageMembership(covenantId: number) {
   });
 }
 
+export function useLeaveMembership(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (membershipId: number) => api.leaveMembership(membershipId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useKickMember(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (membershipId: number) => api.kickMember(membershipId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}
+
 export function usePromoteMembership(covenantId: number) {
   const qc = useQueryClient();
   return useMutation({

@@ -32,6 +32,7 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "archetype",
             "archetype_display",
             "speed_rank",
+            "is_leadership",
             "description",
             "parent_role",
         ]

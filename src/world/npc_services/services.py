@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import random
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -392,37 +393,33 @@ class _WeightedOffer:
 
 
 def _draw_pool_offers(offers: list[NPCServiceOffer], count: int) -> list[NPCServiceOffer]:
-    """Priority-tiered weighted draw of up to ``count`` offers, no replacement.
+    """Ordered, weighted draw of up to ``count`` offers, without replacement.
 
-    Offers are grouped into ``draw_priority`` tiers (#726); the highest tier is
-    exhausted first with guaranteed inclusion (drawn until it empties or the
-    count is hit) before any lower tier is considered, so chain-unlock /
-    high-stakes follow-up missions surface ahead of the general pool. Within a
-    tier the draw is weighted-without-replacement on ``_weight_for_offer`` —
-    identical to the historical single-tier behaviour when every offer sits at
-    priority 0. Zero-weight offers are excluded so a row never silently
-    vanishes due to a null/zero weight.
-
-    Per-slot arc-replace (``MissionTemplate.percent_replace`` against an
-    active-Era arc pool) remains deferred — see the #726 follow-up.
+    Offers are drawn in ordered groups (see ``_ordered_draw_groups``): explicit
+    ``draw_priority`` tiers (chains / high-stakes, #726) first with guaranteed
+    inclusion, then active-Era arc-replace winners (#1020), then the general
+    pool. Each group is drawn weighted-without-replacement on
+    ``_weight_for_offer``; a group is only reached once the groups above it are
+    exhausted or the count is filled. With no priority offers and no active Era
+    this collapses to the historical single weighted draw. Zero-weight offers
+    are excluded so a row never silently vanishes due to a null/zero weight.
     """
     from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
 
     if count <= 0 or not offers:
         return []
 
-    by_tier: dict[int, list[_WeightedOffer]] = {}
+    weighted: list[_WeightedOffer] = []
     for offer in offers:
         weight = _weight_for_offer(offer)
-        if weight <= 0:
-            continue
-        by_tier.setdefault(_draw_priority_for_offer(offer), []).append(
-            _WeightedOffer(offer=offer, weight=weight)
-        )
+        if weight > 0:
+            weighted.append(_WeightedOffer(offer=offer, weight=weight))
+    if not weighted:
+        return []
 
     drawn: list[NPCServiceOffer] = []
-    for tier in sorted(by_tier, reverse=True):
-        remaining = by_tier[tier]
+    for group in _ordered_draw_groups(weighted):
+        remaining = list(group)
         while remaining and len(drawn) < count:
             pick = select_weighted(remaining)
             drawn.append(pick.offer)
@@ -430,6 +427,80 @@ def _draw_pool_offers(offers: list[NPCServiceOffer], count: int) -> list[NPCServ
         if len(drawn) >= count:
             break
     return drawn
+
+
+def _ordered_draw_groups(weighted: list[_WeightedOffer]) -> list[list[_WeightedOffer]]:
+    """Order the eligible POOL offers into draw groups (#726, #1020).
+
+    1. Explicit ``draw_priority`` tiers (chains / high-stakes), highest first —
+       guaranteed inclusion.
+    2. Active-Era arc-replace winners — priority-0 offers whose
+       ``percent_replace`` roll won this render (ambient seasonal lift).
+    3. The remaining general (priority-0) pool.
+
+    Ordering is deliberately chains > arc > general: authored chains are
+    deliberate narrative wiring and must not be bumped by a season roll, while
+    arc content outranks the generic pool. The split is data-light (see
+    ``constants``) so the ordering can be retuned after playtesting.
+    """
+    priority_tiers: dict[int, list[_WeightedOffer]] = {}
+    general: list[_WeightedOffer] = []
+    for weighted_offer in weighted:
+        tier = _draw_priority_for_offer(weighted_offer.offer)
+        if tier > 0:
+            priority_tiers.setdefault(tier, []).append(weighted_offer)
+        else:
+            general.append(weighted_offer)
+
+    arc_winners, general_rest = _split_arc_winners(general)
+
+    groups = [priority_tiers[tier] for tier in sorted(priority_tiers, reverse=True)]
+    groups.append(arc_winners)
+    groups.append(general_rest)
+    return groups
+
+
+def _split_arc_winners(
+    general: list[_WeightedOffer],
+) -> tuple[list[_WeightedOffer], list[_WeightedOffer]]:
+    """Partition the general pool into active-Era arc winners and the rest (#1020).
+
+    "Arc offers" are MISSION offers whose template's ``created_in_era`` is the
+    single ACTIVE Era; each rolls its ``percent_replace`` once per render and,
+    on a win, is promoted ahead of the general pool. No active Era → no winners
+    (the #726 behaviour, at the cost of one ``Era.objects.get_active()`` probe).
+    The arc check rides the ``mission_offer_details__mission_template``
+    select_related in ``available_offers``, so it adds no per-offer query.
+    """
+    from world.stories.models import Era  # noqa: PLC0415
+
+    active_era = Era.objects.get_active()
+    if active_era is None:
+        return [], general
+    winners: list[_WeightedOffer] = []
+    rest: list[_WeightedOffer] = []
+    for weighted_offer in general:
+        bucket = winners if _arc_offer_wins(weighted_offer.offer, active_era.pk) else rest
+        bucket.append(weighted_offer)
+    return winners, rest
+
+
+def _arc_offer_wins(offer: NPCServiceOffer, active_era_pk: int) -> bool:
+    """True if ``offer`` is an active-Era arc mission that won its replace roll (#1020).
+
+    Non-MISSION offers, missing details, and templates not authored in the
+    active Era never win. ``percent_replace`` is the 0–100 win chance:
+    0 → never (``randint(1, 100) <= 0`` is always False), 100 → always.
+    """
+    if offer.kind != OfferKind.MISSION.value:
+        return False
+    try:
+        template = offer.mission_offer_details.mission_template
+    except MissionOfferDetails.DoesNotExist:
+        return False
+    if template.created_in_era_id != active_era_pk:
+        return False
+    return random.randint(1, 100) <= template.percent_replace  # noqa: S311
 
 
 def _draw_priority_for_offer(offer: NPCServiceOffer) -> int:
