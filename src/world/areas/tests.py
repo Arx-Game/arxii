@@ -1,13 +1,17 @@
 from unittest.mock import MagicMock
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
+from evennia import create_object
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.models import ObjectPosition, Position, PositionEdge
 from world.areas.serializers import AreaBreadcrumbSerializer
 from world.areas.services import (
     get_ancestor_at_level,
@@ -426,3 +430,27 @@ class PayloadIntegrationTests(TestCase):
         assert ancestry[1]["name"] == "Arx"
         assert realm["name"] == "Arx"
         assert realm["theme"] == "arx"
+
+
+class PositionModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.room = create_object("typeclasses.rooms.Room", key="Plaza", nohome=True)
+
+    def test_position_unique_per_room(self):
+        Position.objects.create(room=self.room, name="ground", kind=PositionKind.PRIMARY)
+        with self.assertRaises(IntegrityError):
+            Position.objects.create(room=self.room, name="ground", kind=PositionKind.FEATURE)
+
+    def test_edge_rejects_self_loop(self):
+        a = Position.objects.create(room=self.room, name="a_loop", kind=PositionKind.FEATURE)
+        with self.assertRaises(ValidationError):
+            PositionEdge(position_a=a, position_b=a).full_clean()
+
+    def test_object_position_is_one_to_one(self):
+        a = Position.objects.create(room=self.room, name="a_oto", kind=PositionKind.FEATURE)
+        obj = create_object("typeclasses.characters.Character", key="Pat", location=self.room)
+        ObjectPosition.objects.create(objectdb=obj, position=a)
+        b = Position.objects.create(room=self.room, name="b_oto", kind=PositionKind.FEATURE)
+        with self.assertRaises(IntegrityError):
+            ObjectPosition.objects.create(objectdb=obj, position=b)
