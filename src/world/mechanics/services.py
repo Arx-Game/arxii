@@ -402,6 +402,18 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
     Returns:
         Integer total of the engaged-covenant level bonus for ``target``.
     """
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) lack the
+    # Character typeclass handlers. Skip gracefully.
+    if not hasattr(char, "covenant_roles"):
+        return 0
+    # Engagement gate FIRST, via the (already-warm) cached handler — adds no
+    # new query when the character isn't engaged, so get_modifier_total's query
+    # budget stays flat for the common case. The authored-config lookup only
+    # fires for engaged members. Mirrors covenant_role_bonus's early-out.
+    if not char.covenant_roles.currently_engaged_roles():
+        return 0
+
     from world.covenants.models import (  # noqa: PLC0415
         CharacterCovenantRole,
         CovenantLevelBonus,
