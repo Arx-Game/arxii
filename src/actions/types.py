@@ -141,6 +141,9 @@ class ActionRef:
     clash_id: int | None = None
     clash_action_slot: str | None = None
     action_slot: str | None = None
+    # Non-ObjectDB target pk for REGISTRY actions that operate on non-ObjectDB models
+    # (e.g. move_to_position uses position_id to identify the target Position).
+    position_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:

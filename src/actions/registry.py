@@ -26,6 +26,7 @@ from actions.definitions.movement import (
 )
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
+from actions.definitions.positioning import MoveToPositionAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -50,6 +51,7 @@ _ALL_ACTIONS: list[Action] = [
     UndressAction(),
     TraverseExitAction(),
     HomeAction(),
+    MoveToPositionAction(),
 ]
 
 # Lookup by key
