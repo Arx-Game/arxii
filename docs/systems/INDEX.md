@@ -201,6 +201,23 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
+
+### Positioning (Phase 1 — #530)
+Room-anchored spatial graph: named position nodes, traversable edges, per-object
+occupancy, and capability-gated movement. Works in combat, social scenes, and events.
+
+- **Models:** `Position` (named room region, `PositionKind` discriminator),
+  `PositionEdge` (adjacency; optional `gating_challenge` FK + `is_passable`),
+  `ObjectPosition` (OneToOne occupancy)
+- **Key Services:** `create_position` / `remove_position` / `connect_positions` /
+  `disconnect_positions` / `edge_between` / `place_in_position` /
+  `move_to_position` (adjacency + passability + MOVEMENT capability + active-gating) /
+  `force_move_to_position` / `position_of` / `reachable_positions` /
+  `adjacent_open_positions`
+- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model
+- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
+  mechanics (Challenge/gating), actions (`MoveToPositionAction` via unified dispatch)
+- **Source:** `src/world/areas/positioning/`
 ### Instances
 Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
 

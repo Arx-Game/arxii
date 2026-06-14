@@ -578,3 +578,109 @@ describe('ActionDeclarationCard — Task 6.4 ThreadPullPicker section', () => {
     expect(screen.getByTestId('thread-pull-picker-stub')).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1001a — single-target focused picker
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — #1001a combatant target picker', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
+    mockUseTechnique(null);
+    mockPickerHooks();
+  });
+
+  const TARGETS = [
+    { id: 7, kind: 'opponent' as const, name: 'Bandit Captain', objectId: 42 },
+    { id: 9, kind: 'ally' as const, name: 'Sir Alaric' },
+  ];
+
+  it('falls back to the kind-only selector when no targets are provided', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('combatant-target-picker')).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /no target/i })).toBeInTheDocument();
+  });
+
+  it('lists opponents and allies when targets are provided', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+        targets={TARGETS}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('combatant-target-picker')).toBeInTheDocument();
+    expect(screen.getByText('Bandit Captain')).toBeInTheDocument();
+    expect(screen.getByText('Sir Alaric')).toBeInTheDocument();
+  });
+
+  it('emits the picked opponent kind + dispatch PK on selection', async () => {
+    const onContextChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={onContextChange}
+        targets={TARGETS}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await userEvent.click(screen.getByText('Bandit Captain'));
+    expect(onContextChange).toHaveBeenCalledWith(
+      expect.objectContaining({ targetKind: 'opponent', targetId: 7 })
+    );
+  });
+
+  it('emits the picked ally kind + participant PK on selection', async () => {
+    const onContextChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={onContextChange}
+        targets={TARGETS}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await userEvent.click(screen.getByText('Sir Alaric'));
+    expect(onContextChange).toHaveBeenCalledWith(
+      expect.objectContaining({ targetKind: 'ally', targetId: 9 })
+    );
+  });
+
+  it('clears the selected target', async () => {
+    const onContextChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext({ targetKind: 'opponent', targetId: 7 })}
+        onContextChange={onContextChange}
+        targets={TARGETS}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await userEvent.click(screen.getByText(/clear target/i));
+    expect(onContextChange).toHaveBeenCalledWith(
+      expect.objectContaining({ targetKind: undefined, targetId: undefined })
+    );
+  });
+});

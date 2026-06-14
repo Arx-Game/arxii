@@ -186,6 +186,64 @@ describe('PoseUnit', () => {
     expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
   });
 
+  it('auto-expands the detail panel on first paint when a link is critical (#996)', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      content: 'A decisive blow.',
+      action_links: [
+        {
+          id: 100,
+          ordering: 0,
+          has_critical_effect: true,
+          action_interaction: {
+            id: 201,
+            content: '[Strike] using Tidal Fury -- Critical',
+            mode: 'action',
+            timestamp: '2026-01-01T00:00:01Z',
+          },
+        },
+      ],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    // Panel is visible WITHOUT any click.
+    expect(screen.getByTestId('pose-unit-detail-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('pose-unit-detail-panel')).toHaveTextContent('201');
+  });
+
+  it('stays collapsed on first paint when no link is critical', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      content: 'A glancing blow.',
+      action_links: [
+        {
+          id: 100,
+          ordering: 0,
+          has_critical_effect: false,
+          action_interaction: {
+            id: 201,
+            content: '[Strike] using Tidal Fury -- Partial',
+            mode: 'action',
+            timestamp: '2026-01-01T00:00:01Z',
+          },
+        },
+      ],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
+  });
+
   it('calls onAddTarget on double-click of persona name', () => {
     const onAddTarget = vi.fn();
     const interaction = makeInteraction({ mode: 'pose' });

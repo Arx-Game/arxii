@@ -525,11 +525,13 @@ Shipped since the original list:
 - Focused-category resolution — **DONE** (#558/#614): sourced from the technique's authored `action_category`; the `passive-physical` stub is gone.
 - `ClashStateSerializer` — **DONE**: exposes `contributors` and `side_favored`.
 - `lend-to-clash` / `CLASH_SUPPORT` — **REJECTED BY DESIGN (#559)**: a clash binds to the focused action only; there is no passive-contribution concept. Do not re-add a Lend surface.
+- Single-target focused attacks — **#1001a DONE**: the focused slot's `TargetPicker` (was a Phase-5 kind-`<select>` placeholder) now lists real combatants from the encounter; `YourTurn` threads the chosen target into the focused dispatch as `focused_opponent_target_id` (CombatOpponent PK) / `focused_ally_target_id` (CombatParticipant PK). `CombatRoundContext.record_declaration` resolves those ids to instances scoped to the encounter (forged-id safety) and persists them via `declare_action`. `OpponentSerializer` exposes `objectdb_id` so the card maps the applicable-pulls `target_object_id` correctly.
+- Auto-expand pose units on critical events — **#996 DONE**: `InteractionActionLinkSerializer` exposes `has_critical_effect` (cheap, N+1-safe signal: the linked `CombatRoundAction`'s `focused_opponent_target` is DEFEATED, derived from a prefetch — no condition queries); `PoseUnit` initialises its expanded state from `action_links.some(l => l.has_critical_effect)`. The `is_critical` row highlight shipped earlier in #1004.
 
 Still open (tracked):
 
 - `submit_pose` REST endpoint does not broadcast via WebSocket — #878
-- Auto-expand pose units on critical events (KO, death) — pending player-preference toggle (no issue yet)
+- Per-player preference toggle for critical-event auto-expand (#996 ships it always-on) — no issue yet
 - `CombatOpponent` portrait FK — NPC avatars are initial-letter-only (no issue yet)
 - Outcome-panel scoping/visibility polish — #866
 - Scene-side adoption of `<ActionDeclarationCard>` (no `ScenePull` envelope) — out of this spec's scope
@@ -718,6 +720,44 @@ Out of scope for the visible-worn-equipment slice — that one only adds
 visible equipment to the look output; the appearance template gets a
 `{status}` slot ready for this work but renders empty until this
 follow-up lands.
+
+### Positioning Model — Phase 1 (SHIPPED — #530)
+
+Room-anchored spatial graph with capability-gated movement, occupancy tracking, and a
+playable move action. Works across combat, social scenes, and non-combat events — not
+tied to the combat subsystem.
+
+**Location:** `src/world/areas/positioning/`
+
+**What ships:**
+
+- **Models:** `Position` (named region anchored to a room, discriminated by `PositionKind`),
+  `PositionEdge` (traversable adjacency between two `Position` nodes; optional
+  `gating_challenge` FK → `mechanics.ChallengeInstance`, `is_passable` flag),
+  `ObjectPosition` (OneToOne occupancy record mirroring `db_location`)
+- **Authoring/query services:** `create_position` / `remove_position` /
+  `connect_positions` / `disconnect_positions` / `edge_between` /
+  `reachable_positions` / `adjacent_open_positions`
+- **Placement + movement services:** `place_in_position` (unconditional placement),
+  `move_to_position` (validates adjacency, passability, active-gating via Challenge
+  system, and MOVEMENT capability via `get_effective_capability_value`),
+  `force_move_to_position` (staff/consequence bypass), `position_of`
+- **Challenge reuse:** spatial obstacles (locked gates, difficult terrain) use the
+  existing `ChallengeInstance` system — no parallel obstacle model built
+- **Combat integration:** derived `current_position` property on `CombatParticipant`
+  and `CombatOpponent` (reads `ObjectPosition` for the underlying ObjectDB)
+- **Playable action:** `MoveToPositionAction` surfaced through `get_player_actions`
+  and dispatched via `ActionRef` with a `position_id` token — slots into the
+  unified player-action interface shipped in Phase 7
+
+**Deferred to follow-up issues:**
+
+- Cross-a-gated-edge-via-approach resolution (approach-resolver + Challenge spawn)
+- GM room terrain-blueprint authoring + non-combat positioning UI
+- Dynamic-reshaping consequence `EffectType`s
+- Implicit aerial positions
+- Occupancy-screening reachability (crowded-position filtering)
+- Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management

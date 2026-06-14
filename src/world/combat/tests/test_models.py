@@ -514,3 +514,109 @@ class FleeConfigTests(TestCase):
 
         config = FleeConfig(pk=1)
         self.assertEqual(str(config), "FleeConfig(pk=1)")
+
+
+class CombatParticipantCurrentPositionTests(EvenniaTestCase):
+    """Tests for CombatParticipant.current_position derived property (#530)."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.positioning.factories import PositionFactory
+        from world.areas.positioning.models import Position
+        from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+
+        # Create a room and position in the same room.
+        self.room = create_object("typeclasses.rooms.Room", key="Position Test Room", nohome=True)
+        self.position: Position = PositionFactory(room=self.room, name="test_pos")
+
+        # Build a participant whose character is located in that room.
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.sheet = CharacterSheetFactory()
+        # Move the character into the room so place_in_position doesn't raise.
+        self.sheet.character.location = self.room
+        self.sheet.character.save()
+
+        encounter = CombatEncounterFactory(room=self.room)
+        self.participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+
+    def test_current_position_when_placed(self) -> None:
+        """Returns the Position when the character occupies one."""
+        from world.areas.positioning.services import place_in_position
+
+        place_in_position(self.sheet.character, self.position)
+        # Fresh instance (cached_property must not be inherited from setUp instance).
+        from world.combat.models import CombatParticipant
+
+        fresh = CombatParticipant.objects.get(pk=self.participant.pk)
+        self.assertEqual(fresh.current_position, self.position)
+
+    def test_current_position_when_unplaced(self) -> None:
+        """Returns None when the character has no ObjectPosition row."""
+        from world.combat.models import CombatParticipant
+
+        fresh = CombatParticipant.objects.get(pk=self.participant.pk)
+        self.assertIsNone(fresh.current_position)
+
+
+class CombatOpponentCurrentPositionTests(EvenniaTestCase):
+    """Tests for CombatOpponent.current_position derived property (#530)."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.positioning.factories import PositionFactory
+        from world.areas.positioning.models import Position
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatOpponent
+        from world.combat.typeclasses.combat_npc import CombatNPC
+
+        # Create a room and position in the same room.
+        self.room = create_object("typeclasses.rooms.Room", key="Opp Position Room", nohome=True)
+        self.position: Position = PositionFactory(room=self.room, name="opp_pos")
+
+        # Build an encounter and an NPC opponent in that room.
+        self.encounter = CombatEncounterFactory(room=self.room)
+        self.npc = create_object(CombatNPC, key="Test NPC", location=self.room, nohome=True)
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Test Mook",
+            health=50,
+            max_health=50,
+            objectdb=self.npc,
+            objectdb_is_ephemeral=True,
+        )
+
+    def test_current_position_when_placed(self) -> None:
+        """Returns the Position when the NPC's ObjectDB occupies one."""
+        from world.areas.positioning.services import place_in_position
+        from world.combat.models import CombatOpponent
+
+        place_in_position(self.npc, self.position)
+        fresh = CombatOpponent.objects.get(pk=self.opponent.pk)
+        self.assertEqual(fresh.current_position, self.position)
+
+    def test_current_position_when_unplaced(self) -> None:
+        """Returns None when the NPC has no ObjectPosition row."""
+        from world.combat.models import CombatOpponent
+
+        fresh = CombatOpponent.objects.get(pk=self.opponent.pk)
+        self.assertIsNone(fresh.current_position)
+
+    def test_current_position_when_objectdb_null(self) -> None:
+        """Returns None when objectdb FK is null (externally destroyed NPC)."""
+        from world.combat.models import CombatOpponent
+
+        # Create an opponent with no objectdb (non-ephemeral to satisfy clean()).
+        opponent_no_obj = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Ghostly Mook",
+            health=10,
+            max_health=10,
+            objectdb=None,
+            objectdb_is_ephemeral=False,
+        )
+        self.assertIsNone(opponent_no_obj.current_position)

@@ -10,6 +10,7 @@ from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantLevelBonus,
     CovenantLevelThreshold,
     CovenantRite,
     CovenantRiteRolePackage,
@@ -379,6 +380,46 @@ def wire_covenant_rite_content() -> CovenantRite:
     )
 
     return rite
+
+
+def wire_covenant_level_bonus_catalog() -> CovenantLevelBonus:
+    """Idempotent seed: the authored covenant-level passive bonus catalog (#762).
+
+    Ensures the 'stat' ModifierCategory and the canonical willpower stat target
+    exist (linked to the willpower Trait), then authors a CovenantLevelBonus
+    granting engaged members +1 willpower per covenant level. Derive-on-read —
+    no CharacterModifier rows are persisted.
+
+    Safe as both integration-test setUp and staff/seed scripts (get_or_create at
+    each step). Returns the CovenantLevelBonus instance.
+    """
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.traits.models import Trait
+
+    stat_cat, _ = ModifierCategory.objects.get_or_create(
+        name="stat",
+        defaults={"description": "Primary character statistics.", "display_order": 10},
+    )
+    trait = Trait.get_by_name("willpower")
+    target, _ = ModifierTarget.objects.get_or_create(
+        category=stat_cat,
+        name="willpower",
+        defaults={
+            "description": "Willpower stat modifier target.",
+            "is_active": True,
+            "target_trait": trait,
+        },
+    )
+    # Backfill linkage on a pre-existing orphan row.
+    if target.target_trait_id is None and trait is not None:
+        target.target_trait = trait
+        target.save(update_fields=["target_trait"])
+
+    config, _ = CovenantLevelBonus.objects.get_or_create(
+        modifier_target=target,
+        defaults={"bonus_per_level": 1},
+    )
+    return config
 
 
 def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityType]]":

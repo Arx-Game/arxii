@@ -123,3 +123,80 @@ class OrgBooksApiTests(TestCase):
             response = self.client.get("/api/currency/org-books/")
         assert response.status_code == 200
         assert response.json() == []
+
+
+class OrgBooksRansomTests(TestCase):
+    """#931 — ransom demands surface on the books and pay from the treasury."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        cls.user = AccountFactory(username="ransom_user")
+        cls.org = OrganizationFactory()
+        cls.member = PersonaFactory()
+        cls.outsider = PersonaFactory()
+        OrganizationMembershipFactory(persona=cls.member, organization=cls.org, rank=1)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _held_member(self, *, fund: int = 0):
+        from world.captivity.ransom import _RANSOM_FLOOR_COPPERS, demand_ransom
+        from world.captivity.services import capture_character
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.currency.services import get_or_create_treasury, transfer
+        from world.societies.factories import OrganizationFactory
+
+        captor = OrganizationFactory()
+        captivity = capture_character(captive=CharacterSheetFactory(), captor_organization=captor)
+        demand_ransom(captivity, paying_organization=self.org)
+        if fund:
+            transfer(amount=fund, reason="seed", to_treasury=get_or_create_treasury(self.org))
+        return captivity, captor, _RANSOM_FLOOR_COPPERS
+
+    def test_demands_appear_on_the_books(self) -> None:
+        captivity, captor, floor = self._held_member()
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            data = self.client.get(f"/api/currency/org-books/{self.org.pk}/").json()
+        assert len(data["demands"]) == 1
+        row = data["demands"][0]
+        assert row["captivity_id"] == captivity.pk
+        assert row["captor"] == captor.name
+        assert row["amount"] == floor
+
+    def test_pay_ransom_frees_the_captive_and_clears_the_demand(self) -> None:
+        from world.captivity.constants import CaptivityStatus
+
+        captivity, _captor, _floor = self._held_member(fund=100_000)
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            resp = self.client.post(
+                f"/api/currency/org-books/{self.org.pk}/pay-ransom/",
+                {"captivity_id": captivity.pk},
+                format="json",
+            )
+        assert resp.status_code == 200
+        assert resp.json()["demands"] == []  # cleared from the books
+        captivity.refresh_from_db()
+        assert captivity.status == CaptivityStatus.RANSOMED
+
+    def test_pay_ransom_non_member_denied(self) -> None:
+        captivity, _captor, _floor = self._held_member(fund=100_000)
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.outsider):
+            resp = self.client.post(
+                f"/api/currency/org-books/{self.org.pk}/pay-ransom/",
+                {"captivity_id": captivity.pk},
+                format="json",
+            )
+        assert resp.status_code == 403
+
+    def test_pay_ransom_insufficient_treasury_is_400(self) -> None:
+        captivity, _captor, _floor = self._held_member(fund=0)
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            resp = self.client.post(
+                f"/api/currency/org-books/{self.org.pk}/pay-ransom/",
+                {"captivity_id": captivity.pk},
+                format="json",
+            )
+        assert resp.status_code == 400

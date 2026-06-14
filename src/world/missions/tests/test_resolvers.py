@@ -149,6 +149,13 @@ class ConditionCapabilityResolverTests(TestCase):
     def test_has_capability_false_when_unknown(self) -> None:
         self.assertFalse(self.ctx.has_leaf("has_capability", name="flight"))
 
+    def test_has_capability_true_from_non_condition_source(self) -> None:
+        """#1010: a capability possessed via a non-condition source (here an
+        innate baseline; also covers distinction/equipment/role-passive grants)
+        satisfies has_capability via the effective read, not just conditions."""
+        CapabilityTypeFactory(name="winged", innate_baseline=1)
+        self.assertTrue(self.ctx.has_leaf("has_capability", name="winged"))
+
 
 class ThreadResolverTests(TestCase):
     """has_thread / min_thread_level — owner is a CharacterSheet."""

@@ -127,7 +127,7 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 "**/tests.py" = [
     "PLR2004", # magic values are common in test data
     "S101",    # asserts are expected in tests
-
+    "PLC0415", # imports inside setUp/test methods for Evennia test isolation
 ]
 
 
@@ -317,6 +317,14 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 
 "src/world/magic/audere.py" = [
     "PLC0415", # service functions import from conditions/mechanics to avoid circular deps
+]
+
+"src/world/areas/positioning/services.py" = [
+    "PLC0415", # lazy imports from conditions/character_sheets to avoid circular dependencies
+]
+
+"src/world/areas/positioning/factories.py" = [
+    "PLC0415", # lazy imports inside factory lazy_attribute methods for optional dependencies
 ]
 
 "src/server/conf/at_server_startstop.py" = [

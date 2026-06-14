@@ -120,3 +120,10 @@ def refresh_area_closure() -> None:
     """Refresh the areas_areaclosure materialized view."""
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW areas_areaclosure")
+
+
+from world.areas.positioning.models import (  # noqa: E402,F401
+    ObjectPosition,
+    Position,
+    PositionEdge,
+)

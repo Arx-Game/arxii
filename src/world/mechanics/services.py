@@ -178,7 +178,7 @@ def get_modifier_total(
 
 
 def equipment_walk_total(character: object, target: ModifierTarget) -> int:
-    """Sum facet + covenant-role + mantle passive bonuses for ``target`` (Spec D §5.5).
+    """Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).
 
     Returns 0 unless target.category is equipment-relevant. The eager CharacterModifier
     total is NOT included here — callers add that separately (avoids double counting).
@@ -188,6 +188,7 @@ def equipment_walk_total(character: object, target: ModifierTarget) -> int:
     return (
         passive_facet_bonuses(character, target)
         + covenant_role_bonus(character, target)
+        + covenant_level_bonus(character, target)
         + passive_mantle_bonuses(character, target)
     )
 
@@ -437,6 +438,52 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
             else:
                 total += max(role_bonus, gear_stat)
     return total
+
+
+def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum the authored covenant-level passive bonus across engaged memberships (#762).
+
+    A ``CovenantLevelBonus`` row authored against ``target`` grants each engaged
+    member a derive-on-read modifier of ``covenant.level * bonus_per_level``.
+    Bonuses stack additively across the character's engaged covenants, mirroring
+    ``covenant_role_bonus`` (spec 2026-05-09 §3.6). No CharacterModifier rows are
+    persisted. Most targets have no row → returns 0.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate the level bonus for.
+
+    Returns:
+        Integer total of the engaged-covenant level bonus for ``target``.
+    """
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) lack the
+    # Character typeclass handlers. Skip gracefully.
+    if not hasattr(char, "covenant_roles"):
+        return 0
+    # Engagement gate FIRST, via the (already-warm) cached handler — adds no
+    # new query when the character isn't engaged, so get_modifier_total's query
+    # budget stays flat for the common case. The authored-config lookup only
+    # fires for engaged members. Mirrors covenant_role_bonus's early-out.
+    if not char.covenant_roles.currently_engaged_roles():
+        return 0
+
+    from world.covenants.models import (  # noqa: PLC0415
+        CharacterCovenantRole,
+        CovenantLevelBonus,
+    )
+
+    config = CovenantLevelBonus.objects.filter(modifier_target=target).first()
+    if config is None:
+        return 0
+
+    # Batched query — no per-membership round trips (no-queries-in-loops standard).
+    memberships = CharacterCovenantRole.objects.filter(
+        character_sheet=sheet,
+        engaged=True,
+        left_at__isnull=True,
+    ).select_related("covenant")
+    return sum(m.covenant.level * config.bonus_per_level for m in memberships)
 
 
 def role_base_bonus_for_target(

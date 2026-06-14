@@ -109,11 +109,17 @@ class CharacterThreadHandler:
         if not threads:
             return 0
 
-        # Build lookup: (target_kind, resonance_id) → thread level, so we can
-        # apply the right multiplier after the batched query.
-        thread_level: dict[tuple[str, int], int] = {
-            (t.target_kind, t.resonance_id): t.level for t in threads
-        }
+        # Build lookup: (target_kind, resonance_id) → HIGHEST thread level for
+        # that key, so we apply the right multiplier after the batched query.
+        # Two threads of one kind on the same resonance (e.g. two COVENANT_ROLE
+        # roles, or two TRAIT anchors) share a key; the bonus applies once,
+        # scaled by the best qualifying thread (#1009). A plain dict
+        # comprehension would let the last-iterated thread win
+        # nondeterministically (Thread has no Meta.ordering).
+        thread_level: dict[tuple[str, int], int] = {}
+        for t in threads:
+            key = (t.target_kind, t.resonance_id)
+            thread_level[key] = max(thread_level.get(key, 0), t.level)
 
         # One query for all tier-0 VITAL_BONUS rows that match any of this
         # character's (target_kind, resonance_id) pairs.

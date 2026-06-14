@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("areas", "0003_area_allowed_building_kinds_and_more"),
+        ("areas", "0005_alter_positionedge_options"),
         ("societies", "0016_spreadingconfig_spread_assist_fraction_and_more"),
     ]
 

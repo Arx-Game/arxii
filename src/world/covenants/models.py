@@ -403,6 +403,43 @@ class CovenantLevelThreshold(SharedMemoryModel):
         return f"Level {self.level} (≥ {self.required_legend} legend)"
 
 
+class CovenantLevelBonus(SharedMemoryModel):
+    """Authored config: a permanent, engagement-gated member buff that scales with
+    covenant level (#762).
+
+    One row per ModifierTarget. An engaged member of a covenant receives a
+    derive-on-read modifier of ``covenant.level * bonus_per_level`` for the
+    target. Bonuses stack additively across a character's engaged covenants
+    (mirrors covenant_role_bonus, spec 2026-05-09 §3.6). No CharacterModifier
+    rows are persisted — the value is computed on read in
+    ``world.mechanics.services.covenant_level_bonus``.
+    """
+
+    modifier_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="covenant_level_bonuses",
+    )
+    bonus_per_level = models.SmallIntegerField(
+        help_text=(
+            "Per-level coefficient. Final bonus for an engaged member = "
+            "covenant.level * bonus_per_level, summed across engaged covenants."
+        ),
+    )
+
+    class Meta:
+        ordering = ["modifier_target"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["modifier_target"],
+                name="covenant_level_bonus_unique_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
+
+
 class CovenantRite(SharedMemoryModel):
     """Authored definition: a covenant-scoped group ritual ('rite') with an
     activation gate and a turnout-scaled shared buff. Sidecar on a Ritual so the

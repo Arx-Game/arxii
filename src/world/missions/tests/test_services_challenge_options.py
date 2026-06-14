@@ -82,6 +82,21 @@ class ChallengeOptionsForCharacterTests(TestCase):
         options = challenge_options_for_character(self.challenge, self.char_without)
         self.assertEqual([o.approach.pk for o in options], [self.approach_default.pk])
 
+    def test_qualifies_via_non_condition_capability_source(self) -> None:
+        """#1010: qualification uses the effective capability value, so a
+        capability possessed via a non-condition source (here an innate
+        baseline; also covers distinction/equipment/role-passive grants)
+        qualifies an approach — not only condition-granted capabilities."""
+        cap_swim = CapabilityTypeFactory(name="co-swim", innate_baseline=1)
+        approach_swim = ChallengeApproachFactory(
+            challenge_template=self.challenge,
+            application=ApplicationFactory(name="co-app-swim", capability=cap_swim),
+            display_name="Swim across",
+        )
+        # char_without holds no conditions; the innate baseline qualifies it.
+        options = challenge_options_for_character(self.challenge, self.char_without)
+        self.assertIn(approach_swim.pk, {o.approach.pk for o in options})
+
     def test_auto_succeeds_is_carried_and_gated_by_capability(self) -> None:
         # auto_succeeds rides onto the option; it does NOT bypass the
         # capability gate — only is_default does.

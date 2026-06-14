@@ -3234,6 +3234,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/pay-ransom/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pay a held member's ransom from this org's treasury (#931).
+     *
+     *     Body: ``{"captivity_id": <int>}``. Member-gated like the books read;
+     *     the demand must be owed by this org. Returns the refreshed books.
+     */
+    post: operations['currency_org_books_pay_ransom_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -12098,6 +12120,7 @@ export interface components {
       clash_id?: number | null;
       clash_action_slot?: string | null;
       action_slot?: string | null;
+      position_id?: number | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -13816,6 +13839,13 @@ export interface components {
      * @enum {string}
      */
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
+    /** @description A ransom demand owed by this org for one of its captured members (#931). */
+    DemandRow: {
+      captivity_id: number;
+      captive_name: string;
+      captor: string;
+      amount: number;
+    };
     /**
      * @description * `trivial` - Trivial
      *     * `easy` - Easy
@@ -15257,6 +15287,20 @@ export interface components {
       /** @description Display order within the pose (low values render first). */
       ordering?: number;
       readonly action_interaction: components['schemas']['InlineActionInteraction'];
+      /**
+       * @description Cheap critical signal for first-paint auto-expand (#996).
+       *
+       *     ``True`` when this action's linked ``CombatRoundAction`` targeted an
+       *     opponent that is now ``DEFEATED`` — the dominant load-bearing outcome the
+       *     detail panel highlights. Reads ONLY prefetched data (the linked action's
+       *     ``cached_round_actions`` + ``focused_opponent_target``); no condition or
+       *     vitals queries, so it stays N+1-safe. The prefetch is set up in
+       *     ``interaction_views`` as
+       *     ``action_links__action_interaction__combat_round_actions`` with
+       *     ``to_attr="cached_round_actions"`` and ``focused_opponent_target``
+       *     select_related, so reading ``cached_round_actions`` never queries.
+       */
+      readonly has_critical_effect: boolean;
     };
     /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
     InteractionActionLinkRequest: {
@@ -16594,6 +16638,7 @@ export interface components {
      */
     Opponent: {
       readonly id: number;
+      readonly objectdb_id: number | null;
       name: string;
       description?: string;
       tier: components['schemas']['OpponentTierEnum'];
@@ -16685,6 +16730,7 @@ export interface components {
       obligations: components['schemas']['ObligationRow'][];
       contributions: components['schemas']['ContributionRow'][];
       ledger: components['schemas']['LedgerRow'][];
+      demands: components['schemas']['DemandRow'][];
     };
     OrganizationSearch: {
       id: number;
@@ -26291,6 +26337,48 @@ export interface operations {
         content: {
           'application/json': components['schemas']['OrgBooks'];
         };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  currency_org_books_pay_ransom_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description The ransom could not be paid. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Not a member of the organization. */
       403: {

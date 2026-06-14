@@ -50,6 +50,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     opponents: [
       {
         id: 10,
+        objectdb_id: null,
         name: 'Mire Knight',
         tier: 'elite',
         health: 10,

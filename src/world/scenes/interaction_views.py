@@ -91,6 +91,10 @@ class InteractionViewSet(
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:
+        # Deferred: world.combat imports world.scenes at module scope elsewhere;
+        # importing CombatRoundAction lazily keeps this view free of an import cycle.
+        from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
             "persona__character_sheet__roster_entry",
@@ -122,6 +126,18 @@ class InteractionViewSet(
                 "action_links",
                 queryset=InteractionAction.objects.select_related("action_interaction"),
                 to_attr="cached_action_links",
+            ),
+            # has_critical_effect (#996): attach each linked ACTION's
+            # CombatRoundAction(s) + focused opponent to the action_interaction
+            # instances as `cached_round_actions`. A separate top-level path
+            # prefetch (not nested inside the to_attr queryset above, where a
+            # two-hop prefetch through the select_related forward FK fails to
+            # attach). SharedMemoryModel shares instances by pk, so this lands on
+            # the very same action_interaction objects cached_action_links exposes.
+            Prefetch(
+                "action_links__action_interaction__combat_round_actions",
+                queryset=CombatRoundAction.objects.select_related("focused_opponent_target"),
+                to_attr="cached_round_actions",
             ),
             Prefetch(
                 "reaction_windows",
