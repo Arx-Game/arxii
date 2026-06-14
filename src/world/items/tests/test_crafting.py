@@ -1,5 +1,7 @@
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
 from world.items.factories import (
     ItemFacetFactory,
@@ -7,6 +9,7 @@ from world.items.factories import (
     ItemTemplateFactory,
     QualityTierFactory,
 )
+from world.traits.factories import CharacterTraitValueFactory
 
 
 class QualityTierForScoreTests(TestCase):
@@ -103,3 +106,73 @@ class WireEnchantingTests(TestCase):
         self.assertEqual(cfg.pk, 1)
         self.assertIsNotNone(cfg.check_type)
         self.assertEqual(get_facet_crafting_config().check_type, cfg.check_type)
+
+
+class CraftAttachFacetTests(TestCase):
+    def setUp(self) -> None:
+        from world.items.factories import wire_enchanting_crafting
+        from world.magic.factories import FacetFactory
+        from world.traits.models import Trait
+
+        self.config = wire_enchanting_crafting(base_difficulty=0)
+        QualityTierFactory(name="Common", numeric_min=0, numeric_max=9999, sort_order=0)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        CharacterTraitValueFactory(
+            character=self.sheet.character,
+            trait=Trait.objects.get(name="Enchanting"),
+            value=50,
+        )
+        template = ItemTemplateFactory(facet_capacity=3)
+        self.item = ItemInstanceFactory(template=template)
+        self.facet = FacetFactory()
+
+    def test_success_attaches_with_resolved_tier(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.models import ItemFacet
+        from world.items.services.crafting import craft_attach_facet
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="CraftSuccess", success_level=2)):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.sheet.character,
+                item_instance=self.item,
+                facet=self.facet,
+            )
+        self.assertTrue(result.attached)
+        self.assertIsNotNone(result.item_facet)
+        self.assertIsNotNone(result.quality_tier)
+        self.assertEqual(
+            ItemFacet.objects.filter(item_instance=self.item, facet=self.facet).count(), 1
+        )
+
+    def test_failed_roll_attaches_nothing(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.models import ItemFacet
+        from world.items.services.crafting import craft_attach_facet
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="CraftBotch", success_level=-1)):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.sheet.character,
+                item_instance=self.item,
+                facet=self.facet,
+            )
+        self.assertFalse(result.attached)
+        self.assertIsNone(result.item_facet)
+        self.assertFalse(ItemFacet.objects.filter(item_instance=self.item).exists())
+
+    def test_capacity_full_raises_before_rolling(self) -> None:
+        from world.items.exceptions import FacetCapacityExceeded
+        from world.items.services.crafting import craft_attach_facet
+
+        full = ItemInstanceFactory(template=ItemTemplateFactory(facet_capacity=0))
+        with self.assertRaises(FacetCapacityExceeded):
+            craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.sheet.character,
+                item_instance=full,
+                facet=self.facet,
+            )
