@@ -1,6 +1,12 @@
 from django.test import TestCase
 
-from world.items.factories import QualityTierFactory
+from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
+from world.items.factories import (
+    ItemFacetFactory,
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+    QualityTierFactory,
+)
 
 
 class QualityTierForScoreTests(TestCase):
@@ -64,3 +70,25 @@ class ComputeQualityScoreTests(TestCase):
             self._result(total_points=40, success_level=1), step=10, min_success_level=1
         )
         self.assertEqual(score, 40)
+
+
+class AssertFacetAttachableTests(TestCase):
+    def test_raises_when_capacity_full(self) -> None:
+        from world.items.services.facets import assert_facet_attachable
+        from world.magic.factories import FacetFactory
+
+        template = ItemTemplateFactory(facet_capacity=0)
+        item = ItemInstanceFactory(template=template)
+        with self.assertRaises(FacetCapacityExceeded):
+            assert_facet_attachable(item, FacetFactory())
+
+    def test_raises_when_duplicate(self) -> None:
+        from world.items.services.facets import assert_facet_attachable
+        from world.magic.factories import FacetFactory
+
+        template = ItemTemplateFactory(facet_capacity=3)
+        item = ItemInstanceFactory(template=template)
+        facet = FacetFactory()
+        ItemFacetFactory(item_instance=item, facet=facet)
+        with self.assertRaises(FacetAlreadyAttached):
+            assert_facet_attachable(item, facet)
