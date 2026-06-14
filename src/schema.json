@@ -8067,6 +8067,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemInstanceRead'
           description: ''
+  /api/items/inventory/{id}/use/:
+    post:
+      operationId: items_inventory_use_create
+      description: |-
+        Use a consumable item: apply its on-use effects and spend a charge.
+
+        Owner-or-staff gated. Business logic lives entirely in ``use_item``;
+        this view resolves actor/target, enforces ownership, and maps
+        ``ItemError`` to HTTP 400 (mirroring the facet write path).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UseItemRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UseItemResult'
+          description: ''
   /api/items/item-facets/:
     get:
       operationId: items_item_facets_list
@@ -40581,6 +40612,30 @@ components:
           minLength: 1
       required:
       - body
+    UseItemRequest:
+      type: object
+      description: Request body for the inventory ``use`` action.
+      properties:
+        target:
+          type: integer
+          nullable: true
+    UseItemResult:
+      type: object
+      description: 'Response shape mirroring ``UseItemResult`` (issue #509).'
+      properties:
+        charges_remaining:
+          type: integer
+        destroyed:
+          type: boolean
+        soft_deleted:
+          type: boolean
+        applied_effect_count:
+          type: integer
+      required:
+      - applied_effect_count
+      - charges_remaining
+      - destroyed
+      - soft_deleted
     UserStoryMute:
       type: object
       description: Full UserStoryMute representation.
