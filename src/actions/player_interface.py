@@ -110,7 +110,7 @@ def dispatch_player_action(
         # that operate on non-ObjectDB models (e.g. move_to_position) receive them.
         merged_kwargs = dict(kwargs)
         if ref.position_id is not None:
-            merged_kwargs.setdefault("position_id", ref.position_id)
+            merged_kwargs["position_id"] = ref.position_id
         result = action_obj.run(actor=character, **merged_kwargs)
         return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
 
@@ -619,7 +619,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     in the room), returns an empty list — no error is raised.
     """
     from world.areas.positioning.services import (  # noqa: PLC0415
-        _passable_open_edges,
+        adjacent_open_positions,
         position_of,
     )
 
@@ -628,7 +628,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         return []
 
     result: list[PlayerAction] = []
-    for edge in _passable_open_edges(current):
+    for edge in adjacent_open_positions(current):
         # Determine which side of the edge is the destination (not current).
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
         ref = ActionRef(

@@ -97,8 +97,8 @@ def position_of(objectdb: ObjectDB) -> Position | None:
         return None
 
 
-def _passable_open_edges(position: Position) -> list[PositionEdge]:
-    """Return edges touching *position* that are passable and unblocked.
+def adjacent_open_positions(position: Position) -> list[PositionEdge]:
+    """Return edges to adjacent passable, unblocked positions.
 
     An edge is blocked only by an ACTIVE gating challenge; an edge whose gating
     challenge is inactive (or absent) is freely crossable. Fetches all touching
@@ -133,7 +133,7 @@ def reachable_positions(objectdb: ObjectDB) -> set[Position]:
     result: set[Position] = set()
     while frontier:
         current = frontier.popleft()
-        for edge in _passable_open_edges(current):
+        for edge in adjacent_open_positions(current):
             other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
             if other.pk not in seen:
                 seen.add(other.pk)
