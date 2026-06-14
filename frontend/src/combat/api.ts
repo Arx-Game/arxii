@@ -207,6 +207,9 @@ export async function postCover(
 export interface OutcomeEffectRow {
   kind: string;
   label: string;
+  // True for load-bearing outcomes (KO/death/defeat); the detail panel
+  // highlights these. (#996)
+  is_critical: boolean;
   deep_link: { modal: string; id: number } | null;
 }
 

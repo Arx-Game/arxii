@@ -13970,6 +13970,7 @@ export interface components {
     EffectRow: {
       kind: string;
       label: string;
+      is_critical: boolean;
       readonly deep_link: {
         [key: string]: number | string;
       } | null;
@@ -14058,6 +14059,21 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
+       *
+       *     Computed in-memory from ``participants_cached`` (which already
+       *     ``select_related("covenant_role")``) so serialization issues **no extra
+       *     query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
+       *     for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
+       *     initiative chips by this and marks the first not-yet-acted participant as the
+       *     on-deck actor.
+       *
+       *     The resolution path additionally applies a ``can_act`` filter (excluding a
+       *     downed-but-not-removed PC); that is omitted here to stay query-free, so such
+       *     a PC may still appear in the display order. Acceptable for a display field.
+       */
+      readonly resolution_order: number[];
       escalation_curve?: number | null;
       readonly escalation_curve_name: string | null;
       readonly escalation_start_round: number | null;
@@ -16531,11 +16547,12 @@ export interface components {
        */
       readonly thumbnail_url: string | null;
       /**
-       * @description PlayerMedia portrait URL, resolved through the opponent's persona.
+       * @description PlayerMedia portrait URL.
        *
-       *     Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
-       *     linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
-       *     has no thumbnail (or the opponent has no persona).
+       *     Resolved through the opponent's persona when present (mirrors
+       *     ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
+       *     (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
+       *     FK. ``None`` when neither supplies a thumbnail.
        */
       readonly thumbnail_media_url: string | null;
     };

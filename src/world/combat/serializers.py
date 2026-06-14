@@ -10,7 +10,14 @@ from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
-from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
+from world.combat.constants import (
+    NO_ROLE_SPEED_RANK,
+    ActionCategory,
+    ClashActionSlot,
+    ClashStatus,
+    OpponentTier,
+    ParticipantStatus,
+)
 from world.combat.models import (
     Clash,
     CombatEncounter,
@@ -160,15 +167,18 @@ class OpponentSerializer(serializers.ModelSerializer):
         return obj.persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
-        """PlayerMedia portrait URL, resolved through the opponent's persona.
+        """PlayerMedia portrait URL.
 
-        Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
-        linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
-        has no thumbnail (or the opponent has no persona).
+        Resolved through the opponent's persona when present (mirrors
+        ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
+        (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
+        FK. ``None`` when neither supplies a thumbnail.
         """
-        if obj.persona_id is None or obj.persona.thumbnail_id is None:
-            return None
-        return obj.persona.thumbnail.cloudinary_url
+        if obj.persona_id is not None and obj.persona.thumbnail_id is not None:
+            return obj.persona.thumbnail.cloudinary_url
+        if obj.portrait_id is not None:
+            return obj.portrait.cloudinary_url
+        return None
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -631,6 +641,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
+    resolution_order = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -671,6 +682,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_participant",
             "is_gm",
             "clashes",
+            "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
             "escalation_start_round",
@@ -702,6 +714,29 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
+        """ACTIVE PC participant PKs in initiative (speed-rank) order.
+
+        Computed in-memory from ``participants_cached`` (which already
+        ``select_related("covenant_role")``) so serialization issues **no extra
+        query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
+        for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
+        initiative chips by this and marks the first not-yet-acted participant as the
+        on-deck actor.
+
+        The resolution path additionally applies a ``can_act`` filter (excluding a
+        downed-but-not-removed PC); that is omitted here to stay query-free, so such
+        a PC may still appear in the display order. Acceptable for a display field.
+        """
+        active = [p for p in obj.participants_cached if p.status == ParticipantStatus.ACTIVE]
+        active.sort(
+            key=lambda p: (
+                p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK,
+                p.pk,
+            )
+        )
+        return [p.pk for p in active]
 
     def _get_viewer_character_ids(self, request: object) -> set[int] | frozenset[int]:
         """Get character_sheet IDs for the requesting user.

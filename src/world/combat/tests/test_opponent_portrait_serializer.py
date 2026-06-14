@@ -56,3 +56,25 @@ class OpponentPortraitSerializerTests(TestCase):
         data = OpponentSerializer(opponent).data
         self.assertIsNone(data["thumbnail_media_url"])
         self.assertIsNone(data["thumbnail_url"])
+
+    def test_persona_less_opponent_with_portrait_falls_back_to_portrait_media(self) -> None:
+        # Generic/ephemeral NPC with no persona but a direct portrait FK (#997).
+        media = PlayerMediaFactory()
+        opponent = CombatOpponentFactory(encounter=self.encounter, portrait=media)
+
+        data = OpponentSerializer(opponent).data
+        self.assertEqual(data["thumbnail_media_url"], media.cloudinary_url)
+        # No direct-URL fallback field on the opponent; persona-less → None.
+        self.assertIsNone(data["thumbnail_url"])
+
+    def test_persona_thumbnail_takes_precedence_over_direct_portrait(self) -> None:
+        persona_media = PlayerMediaFactory()
+        portrait_media = PlayerMediaFactory()
+        persona = PersonaFactory(thumbnail=persona_media, thumbnail_url="")
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter, persona=persona, portrait=portrait_media
+        )
+
+        data = OpponentSerializer(opponent).data
+        # Persona-backed portrait wins; the direct FK is only a persona-less fallback.
+        self.assertEqual(data["thumbnail_media_url"], persona_media.cloudinary_url)

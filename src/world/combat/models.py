@@ -332,6 +332,16 @@ class CombatOpponent(SharedMemoryModel):
         related_name="combat_opponents",
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
+    portrait = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="combat_opponent_portraits",
+        help_text="Direct portrait for persona-less (generic/ephemeral) NPCs. "
+        "Persona-backed opponents resolve their portrait through the persona "
+        "instead; this is the fallback when persona is None.",
+    )
     objectdb = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,

@@ -7,15 +7,12 @@
  * - participants[]
  * - current_round_actions[] — participants with an action entry have acted
  *
+ * Chips are ordered by `resolution_order` (the server's PC initiative order).
  * Initiative chip states:
  * - Acted (✓): participant has a row in current_round_actions
- * - Pending (…): participant has no row in current_round_actions
- *
- * NOTE: "Current" (currently acting) state is not derivable from EncounterDetail
- * alone — it would require a richer server-side indicator. For Phase 8, chips
- * show "acted" vs "pending" only. Current-acting state can be added when the
- * server exposes it.
- * TODO(round-flow): add "current" chip state when backend exposes active actor.
+ * - On deck (▶): the first not-yet-acted participant in resolution order while
+ *   the round is declaring — the next PC to resolve
+ * - Pending (…): a later not-yet-acted participant
  *
  * Phase 8, Task 8.5 — unified-combat-ui plan.
  * GM end-encounter control (#876): when the viewer is the scene GM and the
@@ -110,24 +107,37 @@ function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
 // InitiativeChip — one participant's acted/pending indicator
 // ---------------------------------------------------------------------------
 
+type ChipState = 'acted' | 'current' | 'pending';
+
 interface ChipProps {
   participant: Participant;
-  hasActed: boolean;
+  state: ChipState;
 }
 
-function InitiativeChip({ participant, hasActed }: ChipProps) {
+const CHIP_STYLES: Record<ChipState, string> = {
+  acted: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400',
+  current: 'border-primary/60 bg-primary/15 text-primary',
+  pending: 'border-border bg-muted text-muted-foreground',
+};
+const CHIP_GLYPH: Record<ChipState, string> = { acted: '✓', current: '▶', pending: '…' };
+const CHIP_TITLE: Record<ChipState, string> = {
+  acted: 'Acted this round',
+  current: 'On deck — next PC to resolve',
+  pending: 'Pending',
+};
+
+function InitiativeChip({ participant, state }: ChipProps) {
   return (
     <div
       className={cn(
         'flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-medium',
-        hasActed
-          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-          : 'border-border bg-muted text-muted-foreground'
+        CHIP_STYLES[state]
       )}
       data-testid={`initiative-chip-${participant.id}`}
-      title={hasActed ? 'Acted this round' : 'Pending'}
+      data-state={state}
+      title={CHIP_TITLE[state]}
     >
-      <span className="shrink-0">{hasActed ? '✓' : '…'}</span>
+      <span className="shrink-0">{CHIP_GLYPH[state]}</span>
       <span className="max-w-[80px] truncate">{participant.character_name}</span>
     </div>
   );
@@ -147,6 +157,27 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
   const actedSet = buildActedSet(roundActions);
   const actedCount = participants.filter((p) => actedSet.has(p.id)).length;
   const totalCount = participants.length;
+
+  // Order chips by server initiative (resolution_order); participants not in it
+  // (e.g. dead/unconscious — they can't act) trail in their original order.
+  const resolutionOrder = encounter.resolution_order ?? [];
+  const byId = new Map(participants.map((p) => [p.id, p]));
+  const orderedParticipants: Participant[] = [
+    ...resolutionOrder.map((id) => byId.get(id)).filter((p): p is Participant => p !== undefined),
+    ...participants.filter((p) => !resolutionOrder.includes(p.id)),
+  ];
+  // On-deck actor: the first not-yet-acted participant in initiative order,
+  // only meaningful while the round is still declaring.
+  const currentActorId =
+    encounter.status === 'declaring'
+      ? (resolutionOrder.find((id) => !actedSet.has(id)) ?? null)
+      : null;
+
+  function chipState(p: Participant): ChipState {
+    if (actedSet.has(p.id)) return 'acted';
+    if (p.id === currentActorId) return 'current';
+    return 'pending';
+  }
 
   // GM end-encounter control (#876).
   const endEncounter = useEndEncounter(encounter.id);
@@ -209,8 +240,8 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
           {/* Initiative order chips */}
           {participants.length > 0 && (
             <div className="flex flex-wrap gap-1.5" data-testid="initiative-chips">
-              {participants.map((p) => (
-                <InitiativeChip key={p.id} participant={p} hasActed={actedSet.has(p.id)} />
+              {orderedParticipants.map((p) => (
+                <InitiativeChip key={p.id} participant={p} state={chipState(p)} />
               ))}
             </div>
           )}

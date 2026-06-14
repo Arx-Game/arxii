@@ -79,6 +79,7 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     escalation_start_round: null,
     escalation_tick_narration: null,
     forced_escape: false,
+    resolution_order: [],
   };
 }
 

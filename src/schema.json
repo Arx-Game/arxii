@@ -24792,6 +24792,8 @@ components:
           type: string
         label:
           type: string
+        is_critical:
+          type: boolean
         deep_link:
           type: object
           additionalProperties:
@@ -24802,6 +24804,7 @@ components:
           readOnly: true
       required:
       - deep_link
+      - is_critical
       - kind
       - label
     EffectType:
@@ -24955,6 +24958,24 @@ components:
             Falls back to a direct filter for callers that don't use the viewset
             (e.g. unit tests that call the serializer directly).
           readOnly: true
+        resolution_order:
+          type: array
+          items:
+            type: integer
+          description: |-
+            ACTIVE PC participant PKs in initiative (speed-rank) order.
+
+            Computed in-memory from ``participants_cached`` (which already
+            ``select_related("covenant_role")``) so serialization issues **no extra
+            query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
+            for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
+            initiative chips by this and marks the first not-yet-acted participant as the
+            on-deck actor.
+
+            The resolution path additionally applies a ``can_act`` filter (excluding a
+            downed-but-not-removed PC); that is omitted here to stay query-free, so such
+            a PC may still appear in the display order. Acceptable for a display field.
+          readOnly: true
         escalation_curve:
           type: integer
           nullable: true
@@ -24988,6 +25009,7 @@ components:
       - opponents
       - outcome
       - participants
+      - resolution_order
     EncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -30025,11 +30047,12 @@ components:
           type: string
           nullable: true
           description: |-
-            PlayerMedia portrait URL, resolved through the opponent's persona.
+            PlayerMedia portrait URL.
 
-            Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
-            linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
-            has no thumbnail (or the opponent has no persona).
+            Resolved through the opponent's persona when present (mirrors
+            ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
+            (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
+            FK. ``None`` when neither supplies a thumbnail.
           readOnly: true
       required:
       - active_conditions
