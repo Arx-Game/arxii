@@ -153,6 +153,37 @@ class EventInvitationModelTest(TestCase):
         self.assertEqual(field.remote_field.on_delete.__name__, "SET_NULL")
 
 
+class EventHostSocietyTest(TestCase):
+    """Tests for Event.host_society — the fashion-perceiving society for an event."""
+
+    def test_host_society_default_is_none(self) -> None:
+        event = EventFactory()
+        self.assertIsNone(event.host_society)
+
+    def test_host_society_can_be_set_and_retrieved(self) -> None:
+        society = SocietyFactory()
+        event = EventFactory(host_society=society)
+        event.refresh_from_db()
+        self.assertEqual(event.host_society, society)
+
+    def test_host_society_reverse_accessor(self) -> None:
+        """Society.hosted_events should return events where that society is host."""
+        society = SocietyFactory()
+        event = EventFactory(host_society=society)
+        self.assertIn(event, society.hosted_events.all())
+
+    def test_host_society_null_on_society_delete(self) -> None:
+        """Deleting the society nullifies the FK (SET_NULL)."""
+        from world.events.models import Event
+
+        society = SocietyFactory()
+        event = EventFactory(host_society=society)
+        society.delete()
+        # Use values() to bypass the SharedMemoryModel identity-map cache
+        row = Event.objects.filter(pk=event.pk).values("host_society_id").get()
+        self.assertIsNone(row["host_society_id"])
+
+
 class EventModificationModelTest(TestCase):
     def test_str(self) -> None:
         mod = EventModificationFactory()

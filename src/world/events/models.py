@@ -32,6 +32,18 @@ class Event(SharedMemoryModel):
         default=True,
         help_text="Public events are visible on the calendar to everyone",
     )
+    host_society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hosted_events",
+        help_text=(
+            "The society whose taste judges fashion presentations at this event "
+            "(#514). Null => no fashion judging here. #750 handles the general "
+            "perceiving-society derivation for non-event scenes."
+        ),
+    )
 
     # Scheduling — real time is primary, IC time derived then adjustable
     scheduled_real_time = models.DateTimeField(
