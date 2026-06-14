@@ -13,9 +13,22 @@ import sys
 import threading
 from typing import Any, ClassVar
 
-from django.core.management.commands.makemigrations import Command as BaseCommand
 from django.db import connection
 from django.db.migrations.loader import MigrationLoader
+
+# Inherit from django-linear-migrations' makemigrations (NOT Django's base) so
+# this command keeps both behaviors: our phantom-Evennia-migration filtering
+# (write_migration_files, below) AND linear-migrations' max_migration.txt
+# sentinel update (#991). Both core_management and django_linear_migrations
+# register a `makemigrations` command; Django picks the one from the app listed
+# last in INSTALLED_APPS (core_management), so this subclass MUST be the one
+# that carries the sentinel logic — hence the reparent. linear-migrations
+# overrides handle() and spies on the migrations actually written, so our
+# filtering (which drops excluded apps before they're written) composes
+# correctly: only the first-party migrations we keep get a sentinel.
+from django_linear_migrations.management.commands.makemigrations import (
+    Command as BaseCommand,
+)
 
 logger = logging.getLogger(__name__)
 
