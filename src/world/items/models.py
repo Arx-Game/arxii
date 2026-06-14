@@ -1015,5 +1015,123 @@ class FashionStyleBonus(SharedMemoryModel):
             ),
         ]
 
+
+class Mantle(SharedMemoryModel):
+    """An attunable artifact with a story.
+
+    Each Mantle is one specific ItemInstance in the world (a particular
+    sword, amulet, banner, etc.) — not a category. The OneToOne FK to
+    ItemInstance makes that explicit: at most one Mantle per item, at most
+    one item per Mantle. Multiple mantles can share an ItemTemplate (two
+    mantles that are both swords are two different ItemInstances of the
+    "Sword" template), with no conflict.
+
+    PROTECT on the FK prevents accidental deletion of an ItemInstance that
+    has mantle metadata; staff would need to explicitly retire the Mantle
+    first.
+
+    Each Mantle has 1..N authored levels (MantleLevelDefinition rows). Characters
+    progress by clearing each level's research (CodexEntry) + mission gates
+    in order, recording MantleLevelClearance rows. Attunement to a mantle is
+    represented as a Thread of kind=MANTLE anchored on the Mantle; the
+    thread's level cannot exceed the character's max-cleared mantle level.
+    Each character must clear gates and weave their own thread separately.
+    """
+
+    item_instance = models.OneToOneField(
+        "items.ItemInstance",
+        on_delete=models.PROTECT,
+        related_name="mantle",
+        help_text="The unique ItemInstance that is this Mantle.",
+    )
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField(
+        help_text="The flavor lore visible to authors and (selectively) players.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="If false, attunement weaving is blocked.",
+    )
+    max_level = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="How many attunement levels exist for this mantle.",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(max_level__gte=1) & models.Q(max_level__lte=10),
+                name="items_mantle_max_level_range",
+            ),
+        ]
+
+
+class MantleLevelDefinition(SharedMemoryModel):
+    """Authored content for a single mantle level.
+
+    Each level requires both a Codex entry to be researched and a mission
+    to be completed before the level's clearance can be recorded.
+    """
+
+    mantle = models.ForeignKey(
+        Mantle,
+        on_delete=models.CASCADE,
+        related_name="level_defs",
+    )
+    level = models.PositiveSmallIntegerField()
+    codex_entry_required = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        related_name="mantle_level_gates",
+        help_text="Lore the character must research before this level can clear.",
+    )
+
+    # No `mission_required` FK in this spec. Mission system is a future
+    # spec; once it ships, that spec adds a `mission_required` FK to
+    # MantleLevelDefinition via migration and updates the clearance logic
+    # to require both gates. PR2 of this spec gates mantle clearances by
+    # Codex research alone.
+    unlock_description = models.TextField(
+        help_text="Player-facing description of what this level grants.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mantle", "level"],
+                name="items_unique_mantle_level",
+            ),
+        ]
+
+
+class MantleLevelClearance(SharedMemoryModel):
+    """Per-character record that a mantle's level N gates have been cleared.
+
+    Created when both research and mission gates are met. Existence of a
+    clearance row at level N raises the character's effective MANTLE thread
+    cap on that mantle to N × 10 (subject to path cap min).
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="mantle_clearances",
+    )
+    mantle = models.ForeignKey(
+        Mantle,
+        on_delete=models.CASCADE,
+        related_name="clearances",
+    )
+    level = models.PositiveSmallIntegerField()
+    cleared_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "mantle", "level"],
+                name="items_unique_mantle_clearance_per_character",
+            ),
+        ]
+
     def __str__(self) -> str:
         return f"{self.fashion_style.name} → {self.target.name} (x{self.weight})"

@@ -1,1 +1,1 @@
-0009_iteminstance_durability_itemtemplate_base_armor_soak_and_more
+0010_mantle_mantlelevelclearance_mantleleveldefinition_and_more
