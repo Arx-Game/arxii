@@ -389,7 +389,7 @@ class Thread(SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="threads",
+        related_name="anchored_threads",
         help_text="Set when target_kind=MANTLE; null otherwise.",
     )
     target_sanctum_details = models.ForeignKey(
@@ -587,7 +587,7 @@ class Thread(SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["owner", "target_mantle"],
                 condition=models.Q(target_kind=TargetKind.MANTLE, retired_at__isnull=True),
-                name="magic_thread_unique_mantle_per_owner",
+                name="uniq_thread_mantle_active",
             ),
             models.CheckConstraint(
                 name="thread_mantle_payload",
