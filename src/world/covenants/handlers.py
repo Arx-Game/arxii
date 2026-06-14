@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
+
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
@@ -46,6 +49,20 @@ class CharacterCovenantRoleHandler:
         """
         levels = [r.covenant.level for r in self._rows if r.covenant_role_id == role.pk]
         return max(levels, default=0)
+
+    def days_held_in_role(self, role: CovenantRole) -> int:
+        """Return total whole days this character has held ``role``, summed across covenants.
+
+        Active rows (left_at IS NULL) accrue time continuously up to now; historical
+        rows count their [joined_at, left_at] span. Cumulative across every row for
+        the role — mirrors max_covenant_level_for_role keying off the same all-time set.
+        """
+        now = timezone.now()
+        total = timedelta()
+        for r in self._rows:
+            if r.covenant_role_id == role.pk:
+                total += (r.left_at or now) - r.joined_at
+        return total.days
 
     def currently_held_role_in(self, covenant: Covenant) -> CovenantRole | None:
         """Return the active role in the specified covenant, or None.
