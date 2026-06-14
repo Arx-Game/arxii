@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from world.covenants.exceptions import (
     CovenantEngagementPrerequisiteNotMetError,
+    NotAStandingBattleCovenantError,
     SubrolePromotionError,
 )
 from world.covenants.filters import (
@@ -46,6 +47,7 @@ from world.covenants.services import (
     clear_engaged_membership,
     promote_to_subrole,
     set_engaged_membership,
+    stand_down_battle_covenant,
 )
 
 
@@ -313,6 +315,39 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             rite_data.append(entry)
 
         return Response({"rites": rite_data, "role_powers": role_power_data})
+
+    @action(detail=True, methods=["POST"])
+    def stand_down(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/covenants/{id}/stand_down/
+
+        Stand a risen STANDING battle covenant back down to dormant, clearing
+        engagement on its members. The "rise" path is ritual-fired; this is the
+        plain inverse the covenant detail UI POSTs to.
+
+        Visibility/membership is enforced by ``get_object()`` (the
+        membership-scoped ``get_queryset``): a non-staff user with no active
+        membership gets 404. Returns 400 with a ``detail`` message when the
+        target is not a standing battle covenant.
+
+        Returns a minimal confirmation dict rather than ``CovenantSerializer``
+        (which touches the Postgres-only legend materialized view); the
+        frontend re-fetches the covenant detail separately.
+        """
+        covenant = self.get_object()
+        try:
+            stand_down_battle_covenant(covenant=covenant)
+        except NotAStandingBattleCovenantError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "id": covenant.id,
+                "is_dormant": covenant.is_dormant,
+                "battle_binding": covenant.battle_binding,
+            }
+        )
 
 
 class CovenantRiteViewSet(viewsets.ReadOnlyModelViewSet):
