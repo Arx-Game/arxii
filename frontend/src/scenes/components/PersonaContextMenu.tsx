@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
@@ -16,6 +16,14 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
+import type { SceneDetail } from '../types';
+import { WhisperReceiverPicker } from './WhisperReceiverPicker';
+
+/** The whisper action awaiting a recipient choice (#907). */
+interface PendingWhisper {
+  actionKey: string;
+  techniqueId?: number;
+}
 
 interface Props {
   personaId: number;
@@ -47,12 +55,23 @@ export function PersonaContextMenu({
   // The ActionAttachment component populates this cache when opened.
   const data = queryClient.getQueryData<PlayerActionsResponse>(['available-actions', characterId]);
 
+  // #907: present scene personas (excluding the target) are the extra-listener
+  // pool. Read from the already-loaded scene cache; empty if not yet present.
+  const scene = queryClient.getQueryData<SceneDetail>(['scene', sceneId]);
+  const whisperCandidates = useMemo(
+    () => (scene?.personas ?? []).filter((p) => p.id !== personaId),
+    [scene, personaId]
+  );
+
+  const [pendingWhisper, setPendingWhisper] = useState<PendingWhisper | null>(null);
+
   const performAction = useMutation({
     mutationFn: (params: {
       action_key: string;
       target_persona_id: number;
       technique_id?: number;
       delivery?: string;
+      delivery_receiver_ids?: number[];
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
@@ -68,96 +87,125 @@ export function PersonaContextMenu({
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="cursor-pointer font-medium hover:underline">{children}</button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {/* Direct execute: fires the action immediately via REST, independent of
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="cursor-pointer font-medium hover:underline">{children}</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {/* Direct execute: fires the action immediately via REST, independent of
             any pose in the composer. This is a "quick action" path. The submenu
             picks the audience (#903); the plain "Default" entry sends NO delivery
             so the backend's template default stays the single fallback authority. */}
-        {targetedActions.map((action) => {
-          const techniqueId = action.ref.technique_id ?? undefined;
-          const actionKey =
-            action.ref.registry_key ??
-            action.action_template?.name.toLowerCase() ??
-            action.display_name.toLowerCase();
-          const fire = (delivery?: string) =>
-            performAction.mutate({
-              action_key: actionKey,
-              target_persona_id: personaId,
-              technique_id: techniqueId,
-              delivery,
-            });
-          const defaultDelivery = action.action_template?.default_delivery ?? 'pose';
-          return (
-            <DropdownMenuSub
-              key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
-            >
-              <DropdownMenuSubTrigger disabled={performAction.isPending}>
-                <Zap className="mr-2 h-4 w-4" />
-                {action.display_name}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire()}>
-                  Default ({defaultDelivery.replace('_', ' ')})
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire('pose')}>
-                  Openly (whole room)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={performAction.isPending}
-                  onClick={() => fire('whisper')}
-                >
-                  Subtly (target only)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={performAction.isPending}
-                  onClick={() => fire('table_talk')}
-                >
-                  At your table
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          );
-        })}
-        {/* Attach to Pose: stores the action in the composer so it is submitted
-            alongside the next pose. Visually separated from the direct execute items. */}
-        {onAttachAction && targetedActions.length > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
-            {targetedActions.map((action) => {
-              const techniqueId = action.ref.technique_id ?? undefined;
-              const actionKey =
-                action.ref.registry_key ??
-                action.action_template?.name.toLowerCase() ??
-                action.display_name.toLowerCase();
-              return (
-                <DropdownMenuItem
-                  key={`attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
-                  onClick={() =>
-                    onAttachAction({
-                      actionKey,
-                      name: action.display_name,
-                      target: personaName,
-                      requiresTarget: true,
-                      techniqueId,
-                      targetPersonaId: personaId,
-                    })
-                  }
-                >
+          {targetedActions.map((action) => {
+            const techniqueId = action.ref.technique_id ?? undefined;
+            const actionKey =
+              action.ref.registry_key ??
+              action.action_template?.name.toLowerCase() ??
+              action.display_name.toLowerCase();
+            const fire = (delivery?: string) =>
+              performAction.mutate({
+                action_key: actionKey,
+                target_persona_id: personaId,
+                technique_id: techniqueId,
+                delivery,
+              });
+            const defaultDelivery = action.action_template?.default_delivery ?? 'pose';
+            return (
+              <DropdownMenuSub
+                key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
+              >
+                <DropdownMenuSubTrigger disabled={performAction.isPending}>
                   <Zap className="mr-2 h-4 w-4" />
                   {action.display_name}
-                </DropdownMenuItem>
-              );
-            })}
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire()}>
+                    Default ({defaultDelivery.replace('_', ' ')})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={performAction.isPending} onClick={() => fire('pose')}>
+                    Openly (whole room)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={performAction.isPending}
+                    onClick={() => fire('whisper')}
+                  >
+                    Subtly (target only)
+                  </DropdownMenuItem>
+                  {whisperCandidates.length > 0 && (
+                    <DropdownMenuItem
+                      disabled={performAction.isPending}
+                      onClick={() => setPendingWhisper({ actionKey, techniqueId })}
+                    >
+                      Subtly (choose listeners…)
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    disabled={performAction.isPending}
+                    onClick={() => fire('table_talk')}
+                  >
+                    At your table
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            );
+          })}
+          {/* Attach to Pose: stores the action in the composer so it is submitted
+            alongside the next pose. Visually separated from the direct execute items. */}
+          {onAttachAction && targetedActions.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
+              {targetedActions.map((action) => {
+                const techniqueId = action.ref.technique_id ?? undefined;
+                const actionKey =
+                  action.ref.registry_key ??
+                  action.action_template?.name.toLowerCase() ??
+                  action.display_name.toLowerCase();
+                return (
+                  <DropdownMenuItem
+                    key={`attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
+                    onClick={() =>
+                      onAttachAction({
+                        actionKey,
+                        name: action.display_name,
+                        target: personaName,
+                        requiresTarget: true,
+                        techniqueId,
+                        targetPersonaId: personaId,
+                      })
+                    }
+                  >
+                    <Zap className="mr-2 h-4 w-4" />
+                    {action.display_name}
+                  </DropdownMenuItem>
+                );
+              })}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <WhisperReceiverPicker
+        open={pendingWhisper !== null}
+        onClose={() => setPendingWhisper(null)}
+        targetName={personaName}
+        candidates={whisperCandidates}
+        onConfirm={(receiverIds) => {
+          if (pendingWhisper !== null) {
+            performAction.mutate({
+              action_key: pendingWhisper.actionKey,
+              target_persona_id: personaId,
+              technique_id: pendingWhisper.techniqueId,
+              delivery: 'whisper',
+              // Include the target so it still hears, plus the chosen listeners.
+              delivery_receiver_ids: [personaId, ...receiverIds],
+            });
+          }
+          setPendingWhisper(null);
+        }}
+      />
+    </>
   );
 }
