@@ -39,7 +39,12 @@ from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import EncounterStatus, ParticipantStatus
-from world.combat.models import CombatParticipant, CombatRoundAction, RoundChallengeDeclaration
+from world.combat.models import (
+    CombatOpponent,
+    CombatParticipant,
+    CombatRoundAction,
+    RoundChallengeDeclaration,
+)
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
 _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
@@ -177,8 +182,7 @@ class CombatRoundContext(RoundContext):
 
         if slot == CombatActionSlot.FOCUSED:
             focused = technique
-            opponent_target = kwargs.get("focused_opponent_target")
-            ally_target = kwargs.get("focused_ally_target")
+            opponent_target, ally_target = self._resolve_focused_targets(kwargs)
             # XOR authority lives on the backend: the just-declared focused action
             # WINS over any previously-declared passive in the same category, so we
             # clear that colliding passive before declare_action validates. This
@@ -215,6 +219,48 @@ class CombatRoundContext(RoundContext):
             social_passive=social,
             mental_passive=mental,
         )
+
+    def _resolve_focused_targets(
+        self,
+        kwargs: dict[str, Any],
+    ) -> tuple[CombatOpponent | None, CombatParticipant | None]:
+        """Resolve the focused target ids supplied by the player dispatch.
+
+        The frontend sends ``focused_opponent_target_id`` (a ``CombatOpponent`` PK)
+        or ``focused_ally_target_id`` (a ``CombatParticipant`` PK) in the COMBAT
+        dispatch kwargs.  Both are resolved **scoped to this context's encounter**
+        so a forged/stale id from another encounter cannot be targeted.  Already-
+        resolved instance kwargs (``focused_opponent_target`` /
+        ``focused_ally_target``) take precedence when present, so direct callers
+        can pass instances.
+
+        Raises:
+            ActionDispatchError: ``UNKNOWN_ACTION_REF`` if a supplied id does not
+                resolve to an entity in this encounter.
+        """
+        opponent: CombatOpponent | None = kwargs.get("focused_opponent_target")
+        opponent_id = kwargs.get("focused_opponent_target_id")
+        if opponent is None and opponent_id is not None:
+            try:
+                opponent = CombatOpponent.objects.get(
+                    pk=opponent_id,
+                    encounter=self._encounter,
+                )
+            except CombatOpponent.DoesNotExist as exc:
+                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+        ally: CombatParticipant | None = kwargs.get("focused_ally_target")
+        ally_id = kwargs.get("focused_ally_target_id")
+        if ally is None and ally_id is not None:
+            try:
+                ally = CombatParticipant.objects.get(
+                    pk=ally_id,
+                    encounter=self._encounter,
+                )
+            except CombatParticipant.DoesNotExist as exc:
+                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+        return opponent, ally
 
     @transaction.atomic
     def _record_challenge_declaration(

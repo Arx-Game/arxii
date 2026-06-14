@@ -64,6 +64,12 @@ export interface ActionLink {
   id: number;
   ordering: number;
   action_interaction: InlineActionInteraction;
+  /**
+   * Cheap critical-outcome signal (#996): true when the linked action defeated
+   * its focused opponent. Drives first-paint auto-expand of the detail panel.
+   * Optional for fixture/cache leniency — absent is treated as non-critical.
+   */
+  has_critical_effect?: boolean;
 }
 
 /** One selectable reaction chip on a window (#904). */

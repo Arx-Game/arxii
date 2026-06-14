@@ -92,11 +92,13 @@ export interface PoseUnitProps {
 }
 
 export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: PoseUnitProps) {
-  const [expanded, setExpanded] = useState(false);
-
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
   const hasLinks = actionLinks.length > 0;
+
+  // Auto-expand on first paint when a linked action had a critical outcome
+  // (e.g. it defeated its focused opponent) so players don't miss it (#996).
+  const [expanded, setExpanded] = useState(() => actionLinks.some((l) => l.has_critical_effect));
 
   const actionInteractionIds = actionLinks.map((l) => l.action_interaction.id);
 

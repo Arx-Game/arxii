@@ -102,11 +102,18 @@ class OpponentSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
+    # ``id`` is the CombatOpponent PK the focused-target dispatch sends as
+    # ``focused_opponent_target_id``; ``objectdb_id`` is the ObjectDB pk the
+    # applicable-pulls API consumes as ``target_object_id``. Plain FK column —
+    # no query. Null for opponents with no backing ObjectDB.
+    objectdb_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = CombatOpponent
         fields = [
             "id",
+            "objectdb_id",
             "name",
             "description",
             "tier",

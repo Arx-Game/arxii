@@ -938,6 +938,94 @@ describe('YourTurn — cover declaration', () => {
 // Robustness — own-action resolution is position-independent
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// #1001a — single-target focused attacks
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — #1001a focused target', () => {
+  function encounterWithCombatants(): EncounterDetail {
+    return makeEncounter({
+      status: 'declaring',
+      // Self (id=5, sheet=100) + one ally (id=7).
+      participants: [makeSelfParticipant(5), makeParticipant(7, 'Shield Bearer')],
+      opponents: [
+        {
+          id: 11,
+          objectdb_id: 42,
+          name: 'Bandit Captain',
+          status: 'active',
+        },
+      ],
+    } as unknown as EncounterDetail);
+  }
+
+  it('passes active opponents + allies as targets to the focused card', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ encounter: encounterWithCombatants() })} />, {
+      wrapper: createWrapper(),
+    });
+
+    const focusedCall = mockActionDeclarationCard.mock.calls.find(
+      (c) => (c[0] as { actionContext: { slot: string } }).actionContext.slot === 'focused'
+    );
+    expect(focusedCall).toBeDefined();
+    const targets = (focusedCall![0] as { targets?: Array<{ id: number; kind: string }> }).targets;
+    expect(targets).toEqual([
+      { id: 11, kind: 'opponent', name: 'Bandit Captain', objectId: 42 },
+      { id: 7, kind: 'ally', name: 'Shield Bearer' },
+    ]);
+  });
+
+  it('threads focused_opponent_target_id into the focused dispatch kwargs', async () => {
+    setupMocks();
+
+    // Stub the focused card so "select" emits a technique AND an opponent target.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = (actionContext as { slot: string }).slot;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 50,
+                ...(slot === 'focused' ? { targetKind: 'opponent', targetId: 11 } : {}),
+              } as never)
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ encounter: encounterWithCombatants() })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({
+      effort_level: 'medium',
+      focused_opponent_target_id: 11,
+    });
+    expect(calls[0][0].kwargs).not.toHaveProperty('focused_ally_target_id');
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+});
+
 describe('YourTurn — own-action resolved by participant PK, not position', () => {
   it('shows flee badge even when another participant action appears first in the list (GM view)', () => {
     // Simulates the GM/staff scenario where current_round_actions contains

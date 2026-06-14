@@ -15178,6 +15178,18 @@ export interface components {
       /** @description Display order within the pose (low values render first). */
       ordering?: number;
       readonly action_interaction: components['schemas']['InlineActionInteraction'];
+      /**
+       * @description Cheap critical signal for first-paint auto-expand (#996).
+       *
+       *     ``True`` when this action's linked ``CombatRoundAction`` targeted an
+       *     opponent that is now ``DEFEATED`` — the dominant load-bearing outcome the
+       *     detail panel highlights. Reads ONLY prefetched data (the linked action's
+       *     ``combat_round_actions`` + ``focused_opponent_target``); no condition or
+       *     vitals queries, so it stays N+1-safe. The prefetch is set up in
+       *     ``interaction_views`` (``action_interaction__combat_round_actions`` with
+       *     ``focused_opponent_target`` select_related).
+       */
+      readonly has_critical_effect: boolean;
     };
     /** @description Serializes the InteractionAction bridge for the action_links field on a POSE. */
     InteractionActionLinkRequest: {
@@ -16515,6 +16527,7 @@ export interface components {
      */
     Opponent: {
       readonly id: number;
+      readonly objectdb_id: number | null;
       name: string;
       description?: string;
       tier: components['schemas']['OpponentTierEnum'];

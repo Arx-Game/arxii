@@ -27301,8 +27301,22 @@ components:
           allOf:
           - $ref: '#/components/schemas/InlineActionInteraction'
           readOnly: true
+        has_critical_effect:
+          type: boolean
+          description: |-
+            Cheap critical signal for first-paint auto-expand (#996).
+
+            ``True`` when this action's linked ``CombatRoundAction`` targeted an
+            opponent that is now ``DEFEATED`` — the dominant load-bearing outcome the
+            detail panel highlights. Reads ONLY prefetched data (the linked action's
+            ``combat_round_actions`` + ``focused_opponent_target``); no condition or
+            vitals queries, so it stays N+1-safe. The prefetch is set up in
+            ``interaction_views`` (``action_interaction__combat_round_actions`` with
+            ``focused_opponent_target`` select_related).
+          readOnly: true
       required:
       - action_interaction
+      - has_critical_effect
       - id
     InteractionActionLinkRequest:
       type: object
@@ -29985,6 +29999,10 @@ components:
         id:
           type: integer
           readOnly: true
+        objectdb_id:
+          type: integer
+          readOnly: true
+          nullable: true
         name:
           type: string
           maxLength: 200
@@ -30060,6 +30078,7 @@ components:
       - id
       - max_health
       - name
+      - objectdb_id
       - probing_threshold
       - soak_value
       - thumbnail_media_url

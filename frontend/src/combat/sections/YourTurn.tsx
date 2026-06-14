@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
-import type { ActionContext, ActionSlot, EffortLevel } from '@/actions/types';
+import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
 import {
@@ -340,6 +340,25 @@ export function YourTurn({
     (p) => p.status === 'active' && p.id !== myParticipantId
   );
 
+  // Focused-target options (#1001a): active opponents + allies. Opponents carry
+  // their ObjectDB id for the applicable-pulls API; the dispatch uses the
+  // CombatOpponent / CombatParticipant PK (`id`).
+  const focusedTargets: TargetOption[] = [
+    ...(encounter?.opponents ?? [])
+      .filter((o) => o.status === 'active')
+      .map((o) => ({
+        id: o.id,
+        kind: 'opponent' as const,
+        name: o.name,
+        objectId: o.objectdb_id,
+      })),
+    ...coverableAllies.map((p) => ({
+      id: p.id,
+      kind: 'ally' as const,
+      name: p.character_name,
+    })),
+  ];
+
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
 
@@ -376,6 +395,16 @@ export function YourTurn({
 
     // 1. Focused action (if technique selected)
     if (focusedContext.techniqueId !== undefined) {
+      // Thread the chosen single target onto the focused declaration (#1001a).
+      // The backend resolves these PKs to instances scoped to the encounter.
+      const targetKwargs: Record<string, number> = {};
+      if (focusedContext.targetId !== undefined) {
+        if (focusedContext.targetKind === 'opponent') {
+          targetKwargs.focused_opponent_target_id = focusedContext.targetId;
+        } else if (focusedContext.targetKind === 'ally') {
+          targetKwargs.focused_ally_target_id = focusedContext.targetId;
+        }
+      }
       dispatchJobs.push(() =>
         dispatchAction({
           ref: {
@@ -383,7 +412,7 @@ export function YourTurn({
             technique_id: focusedContext.techniqueId ?? null,
             action_slot: 'focused',
           },
-          kwargs: { effort_level: effortLevel },
+          kwargs: { effort_level: effortLevel, ...targetKwargs },
         })
       );
     }
@@ -501,6 +530,7 @@ export function YourTurn({
             setFocusedContext(next);
           }}
           readOnly={isLocked}
+          targets={focusedTargets}
         />
       </div>
 
