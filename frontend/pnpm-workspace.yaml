@@ -18,7 +18,7 @@ allowBuilds:
 # selectors (e.g. `minimatch@9`) are used because compound `>=X <Y` selectors
 # are not supported by pnpm v11 overrides.
 overrides:
-  '@remix-run/router': '1.23.2'
+  '@remix-run/router': '1.23.3'
   'ajv@6': '6.14.0'
   'brace-expansion@1': '1.1.15'
   'brace-expansion@2': '2.0.3'
@@ -33,7 +33,7 @@ overrides:
   'minimatch@9': '9.0.9'
   'picomatch@4': '4.0.4'
   'postcss@8': '8.5.15'
-  'react-router@6': '6.30.2'
+  'react-router@6': '6.30.4'
   'ws@8': '8.20.1'
   'yaml@1': '1.10.3'
   'yaml@2': '2.8.3'
