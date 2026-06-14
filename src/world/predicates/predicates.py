@@ -23,8 +23,9 @@ Phase C (2026-05-24) extended the resolver signature to take
 ``ResolverContext`` instead of a bare ``ObjectDB``. The context carries
 ``character`` (always present) plus ``presented_persona`` (the persona the
 character is currently presenting as, or None). Persona-aware resolvers
-(``min_society_standing``, ``min_org_reputation``, ``is_member_of_org``)
-consult ``presented_persona``; non-persona resolvers ignore it. The caller
+(``min_society_standing``, ``min_org_reputation``, ``is_member_of_org``,
+``has_completed_mission``) consult ``presented_persona``; non-persona
+resolvers ignore it. The caller
 of ``CharacterPredicateContext`` provides the presented persona — for the
 front-door availability surface that means ``offer_missions`` accepts and
 forwards it.
@@ -328,6 +329,31 @@ def _resolve_min_character_level(ctx: ResolverContext, *, level: int) -> bool:
     return int(ctx.sheet.current_level) >= level
 
 
+def _resolve_has_completed_mission(ctx: ResolverContext, *, template_id: int) -> bool:
+    """True if the presented persona has completed a mission of this template (#726).
+
+    Backs chained-mission unlocks: a follow-up offer B carries
+    ``{"has_completed_mission": {"template_id": <A>}}`` in its
+    ``eligibility_rule`` so it only surfaces once the PC has finished A — no
+    new mission model, just AND-composed into the offer's existing gate.
+
+    Persona-scoped via ``MissionInstance.accepted_as_persona`` (consistent
+    with ``min_npc_standing``) so an ESTABLISHED persona doesn't inherit a
+    PRIMARY persona's mission history. No presented persona fails closed; an
+    unknown / not-yet-completed template fails closed naturally (no row).
+    """
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+
+    if ctx.presented_persona is None:
+        return False
+    return MissionInstance.objects.filter(
+        accepted_as_persona=ctx.presented_persona,
+        template_id=template_id,
+        status=MissionStatus.COMPLETE,
+    ).exists()
+
+
 # Ordered low → high — see world.societies.types.ReputationTier. Index in
 # this tuple IS the rank for ``>=`` comparison in min_org_reputation /
 # min_society_standing. Synced manually with societies.types; if a new tier
@@ -503,6 +529,7 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_trait": _resolve_min_trait,
     "has_skill": _resolve_has_skill,
     "min_character_level": _resolve_min_character_level,
+    "has_completed_mission": _resolve_has_completed_mission,
     "has_codex_entry": _resolve_has_codex_entry,
     "has_resonance": _resolve_has_resonance,
     "min_npc_standing": _resolve_min_npc_standing,
