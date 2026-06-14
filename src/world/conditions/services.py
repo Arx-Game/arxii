@@ -1126,6 +1126,23 @@ def process_damage_interactions(
 # =============================================================================
 
 
+def _passive_capability_grants(character_sheet: "CharacterSheet") -> set[int]:
+    """Thread-passive CapabilityType PKs granted to ``character_sheet`` (#751 B2).
+
+    Single source of thread-passive grants — delegates to the B1 handler
+    (``CharacterThreadHandler.passive_capability_grants``), the canonical,
+    engagement-gated authority. Instantiated directly from the sheet's character
+    rather than via the ``character.threads`` typeclass property so it also works
+    when ``character_sheet.character`` is a bare ObjectDB (the test setup in
+    test_services.py), where that lazy property is absent. The handler only needs
+    ``character.sheet_data``, which a sheet-bearing ObjectDB always exposes.
+    Magic is imported locally to avoid a circular import at module load.
+    """
+    from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+
+    return CharacterThreadHandler(character_sheet.character).passive_capability_grants()
+
+
 def get_capability_status(
     character_sheet: "CharacterSheet",
     capability: CapabilityType,
@@ -1287,7 +1304,16 @@ def get_effective_capability_value(
     # boundary. Refactoring its signature is Phase 2 follow-up.
     status = get_capability_status(character_sheet, capability)
     condition_total = sum(modifier for _instance, modifier in status.condition_contributions)
-    return max(0, baseline + modifier_total + condition_total)
+    # Thread-passive grants (#751 B2): an engaged tier-0 role CAPABILITY_GRANT
+    # means the capability is POSSESSED → contribute an additive floor of 1
+    # (intrinsic capacity, not a condition). Folded here rather than in
+    # get_capability_status because that chokepoint is shared with
+    # get_capability_value, whose condition-only semantics must stay intact.
+    # The handler caches threads and runs ~2 queries; this is a per-capability
+    # read, not a loop, so the cost is acceptable.
+    granted = _passive_capability_grants(character_sheet)
+    grant_floor = 1 if capability.pk in granted else 0
+    return max(0, baseline + modifier_total + condition_total + grant_floor)
 
 
 def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
@@ -1306,41 +1332,50 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     """
     target = character_sheet.character
     active_instances = list(get_active_conditions(target))
-    if not active_instances:
-        return {}
 
-    # Build batch filter
-    condition_ids = [i.condition_id for i in active_instances]
-    query = Q(condition_id__in=condition_ids)
-    stage_ids = [i.current_stage_id for i in active_instances if i.current_stage_id]
-    if stage_ids:
-        query |= Q(stage_id__in=stage_ids)
-
-    effects = ConditionCapabilityEffect.objects.filter(query).select_related("capability")
-
-    # Build instance lookup maps
-    instance_by_condition: dict[int, ConditionInstance] = {
-        i.condition_id: i for i in active_instances
-    }
-    instance_by_stage: dict[int, ConditionInstance] = {
-        i.current_stage_id: i for i in active_instances if i.current_stage_id
-    }
-
-    # Aggregate
+    # Aggregate condition-derived values (may be empty with no active conditions).
     totals: dict[int, int] = {}
-    for effect in effects:
-        instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
-            effect.stage_id
-        )
-        if not instance:
-            continue
+    if active_instances:
+        # Build batch filter
+        condition_ids = [i.condition_id for i in active_instances]
+        query = Q(condition_id__in=condition_ids)
+        stage_ids = [i.current_stage_id for i in active_instances if i.current_stage_id]
+        if stage_ids:
+            query |= Q(stage_id__in=stage_ids)
 
-        modifier = effect.value
-        if instance.current_stage:
-            modifier = int(modifier * instance.current_stage.severity_multiplier)
+        effects = ConditionCapabilityEffect.objects.filter(query).select_related("capability")
 
-        cap_id = effect.capability_id
-        totals[cap_id] = totals.get(cap_id, 0) + modifier
+        # Build instance lookup maps
+        instance_by_condition: dict[int, ConditionInstance] = {
+            i.condition_id: i for i in active_instances
+        }
+        instance_by_stage: dict[int, ConditionInstance] = {
+            i.current_stage_id: i for i in active_instances if i.current_stage_id
+        }
+
+        for effect in effects:
+            instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
+                effect.stage_id
+            )
+            if not instance:
+                continue
+
+            modifier = effect.value
+            if instance.current_stage:
+                modifier = int(modifier * instance.current_stage.severity_multiplier)
+
+            cap_id = effect.capability_id
+            totals[cap_id] = totals.get(cap_id, 0) + modifier
+
+    # Thread-passive grants (#751 B2): fold engaged tier-0 role CAPABILITY_GRANT
+    # PKs in with an additive floor of 1 so the obstacle/action-generation
+    # consumer (mechanics._get_condition_sources) sees them. Called ONCE; the
+    # handler caches threads. The early-return for the no-active-conditions case
+    # was removed above so grants surface even when the character has no
+    # conditions at all.
+    granted = _passive_capability_grants(character_sheet)
+    for cap_id in granted:
+        totals[cap_id] = totals.get(cap_id, 0) + 1
 
     # Floor at 0
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
