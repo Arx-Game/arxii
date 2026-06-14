@@ -38,6 +38,17 @@ development machine. Key points:
   versa.
 - `.venv` and `frontend/node_modules` are **named volumes** (container-local). This
   prevents Windows-format binaries from leaking into the Linux environment.
+- `.claude/worktrees` is a named volume (`arxii-worktrees`) for the same reason it
+  matters even more there: a git worktree gets its own ~245 MB `uv` venv, and on the
+  bind-mounted Windows path (`D:\` over WSL2's 9p) that venv is full-copied
+  file-by-file — ~10 min to create or delete. With the worktree tree on a
+  Linux-native volume **and `UV_CACHE_DIR` pointed at the same volume**
+  (`.claude/worktrees/.uv-cache`), `uv` hardlinks from cache instead, so a fresh
+  worktree's `uv sync` is under a second. Verify with `stat -c %h` on a sampled venv
+  file showing links > 1. Worktrees are ephemeral, so wiping this volume is safe.
+  (One-time migration note: an existing worktree under `.claude/worktrees` is shadowed
+  by the empty volume on the first rebuild after this lands — finish or remove it
+  first; its files remain on the host disk underneath the mount.) See #1037.
 - The database lives in the `arxii-pgdata` named volume. It is test-only and safe to
   wipe.
 - Your Claude Code login persists in the `arxii-claude-home` named volume (mounted at
@@ -178,6 +189,7 @@ use terminal Path B for anything that needs to run inside the container.
 | Windows filesystem | Isolated — only `/workspaces/arxii` is visible inside the container |
 | `.venv` | Container-local named volume — Linux binaries, not Windows |
 | `frontend/node_modules` | Container-local named volume — same reason |
+| `.claude/worktrees` | Named volume (`arxii-worktrees`) — keeps worktree venvs off the slow 9p mount; `UV_CACHE_DIR` colocated so `uv` hardlinks. Ephemeral, safe to wipe |
 | Database (`arxii-pgdata`) | Named volume — persists across `dc-down`, safe to wipe |
 | Claude Code login (`~/.claude`) | Named volume (`arxii-claude-home`) — auth/config persists across rebuilds; log in once |
 | Network | Default-deny egress — see firewall section below |
