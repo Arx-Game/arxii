@@ -34,9 +34,18 @@ export interface SceneListItem {
   participants: SceneParticipant[];
 }
 
+/** A persona present in a scene (has posed/participated) — the whisper-audience pool (#907). */
+export interface ScenePersona {
+  id: number;
+  name: string;
+  persona_type?: string;
+}
+
 export interface SceneDetail extends SceneListItem {
   is_active: boolean;
   is_owner: boolean;
+  /** Personas reachable via the scene's interactions; the delivery-receiver pool. */
+  personas?: ScenePersona[];
 }
 
 export interface InteractionPersona {
