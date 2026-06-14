@@ -3987,6 +3987,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
+  /api/covenants/character-roles/{id}/kick/:
+    post:
+      operationId: covenants_character_roles_kick_create
+      description: |-
+        POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+
+        The target may be outside the requester's own-scoped get_queryset, so fetch it
+        via the full manager and run object permissions explicitly rather than get_object().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterCovenantRole'
+          description: ''
+  /api/covenants/character-roles/{id}/leave/:
+    post:
+      operationId: covenants_character_roles_leave_create
+      description: POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterCovenantRole'
+          description: ''
   /api/covenants/character-roles/{id}/promote/:
     post:
       operationId: covenants_character_roles_promote_create
@@ -24054,6 +24100,11 @@ components:
           type: integer
           readOnly: true
           description: Combat resolution order. Lower is faster (1 = fastest).
+        is_leadership:
+          type: boolean
+          readOnly: true
+          description: 'Staff-authored. Members holding a leadership role may kick
+            non-leader members. Leaders cannot kick other leaders. See issue #519.'
         description:
           type: string
           readOnly: true
@@ -24071,6 +24122,7 @@ components:
       - covenant_type_display
       - description
       - id
+      - is_leadership
       - name
       - parent_role
       - slug
