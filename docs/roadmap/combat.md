@@ -719,6 +719,44 @@ visible equipment to the look output; the appearance template gets a
 `{status}` slot ready for this work but renders empty until this
 follow-up lands.
 
+### Positioning Model — Phase 1 (SHIPPED — #530)
+
+Room-anchored spatial graph with capability-gated movement, occupancy tracking, and a
+playable move action. Works across combat, social scenes, and non-combat events — not
+tied to the combat subsystem.
+
+**Location:** `src/world/areas/positioning/`
+
+**What ships:**
+
+- **Models:** `Position` (named region anchored to a room, discriminated by `PositionKind`),
+  `PositionEdge` (traversable adjacency between two `Position` nodes; optional
+  `gating_challenge` FK → `mechanics.ChallengeInstance`, `is_passable` flag),
+  `ObjectPosition` (OneToOne occupancy record mirroring `db_location`)
+- **Authoring/query services:** `create_position` / `remove_position` /
+  `connect_positions` / `disconnect_positions` / `edge_between` /
+  `reachable_positions` / `adjacent_open_positions`
+- **Placement + movement services:** `place_in_position` (unconditional placement),
+  `move_to_position` (validates adjacency, passability, active-gating via Challenge
+  system, and MOVEMENT capability via `get_effective_capability_value`),
+  `force_move_to_position` (staff/consequence bypass), `position_of`
+- **Challenge reuse:** spatial obstacles (locked gates, difficult terrain) use the
+  existing `ChallengeInstance` system — no parallel obstacle model built
+- **Combat integration:** derived `current_position` property on `CombatParticipant`
+  and `CombatOpponent` (reads `ObjectPosition` for the underlying ObjectDB)
+- **Playable action:** `MoveToPositionAction` surfaced through `get_player_actions`
+  and dispatched via `ActionRef` with a `position_id` token — slots into the
+  unified player-action interface shipped in Phase 7
+
+**Deferred to follow-up issues:**
+
+- Cross-a-gated-edge-via-approach resolution (approach-resolver + Challenge spawn)
+- GM room terrain-blueprint authoring + non-combat positioning UI
+- Dynamic-reshaping consequence `EffectType`s
+- Implicit aerial positions
+- Occupancy-screening reachability (crowded-position filtering)
+- Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
+
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
 - **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps). Built (#521): VitalsPanel on the character sheet + owner/staff-gated `GET /api/vitals/<id>/` read endpoint
