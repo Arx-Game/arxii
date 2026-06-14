@@ -330,11 +330,11 @@ def available_offers(
     all eligible offers are returned regardless of ``draw_mode`` — matches
     the historical MENU-only behaviour. When ``pool_count`` is provided,
     every MENU offer is still returned in full, but POOL-mode offers are
-    sampled down to at most ``pool_count`` via a weighted draw without
-    replacement (``_draw_pool_offers``). The mission state machine passes
-    ``pool_count`` derived from the placeholder
-    ``random.randint(1, min(4, eligible_count))`` — see #726 for the
-    standing-/level-/chain-driven policy that replaces the placeholder.
+    sampled down to at most ``pool_count`` via a priority-tiered weighted draw
+    without replacement (``_draw_pool_offers``). The live HTTP caller
+    (``views._serialize_state``) derives ``pool_count`` from the PC's standing
+    via ``offer_policy.mission_pool_count`` (#726); ``None`` is retained for
+    callers/tests that want the full eligible set.
     """
     if session.closed:
         return []
@@ -392,30 +392,60 @@ class _WeightedOffer:
 
 
 def _draw_pool_offers(offers: list[NPCServiceOffer], count: int) -> list[NPCServiceOffer]:
-    """Weighted draw of up to ``count`` offers from ``offers`` without replacement.
+    """Priority-tiered weighted draw of up to ``count`` offers, no replacement.
 
-    Weight source is kind-specific (see ``_weight_for_offer``). Per-slot
-    arc-replace logic (``MissionTemplate.percent_replace`` against an
-    active-Era arc pool) is deferred to **#726** along with the
-    standing-/level-/chain-driven count policy — both are part of the
-    same rich-policy follow-up.
+    Offers are grouped into ``draw_priority`` tiers (#726); the highest tier is
+    exhausted first with guaranteed inclusion (drawn until it empties or the
+    count is hit) before any lower tier is considered, so chain-unlock /
+    high-stakes follow-up missions surface ahead of the general pool. Within a
+    tier the draw is weighted-without-replacement on ``_weight_for_offer`` —
+    identical to the historical single-tier behaviour when every offer sits at
+    priority 0. Zero-weight offers are excluded so a row never silently
+    vanishes due to a null/zero weight.
+
+    Per-slot arc-replace (``MissionTemplate.percent_replace`` against an
+    active-Era arc pool) remains deferred — see the #726 follow-up.
     """
     from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
 
     if count <= 0 or not offers:
         return []
 
-    remaining = [_WeightedOffer(offer=o, weight=_weight_for_offer(o)) for o in offers]
-    remaining = [w for w in remaining if w.weight > 0]
-    if not remaining:
-        return []
+    by_tier: dict[int, list[_WeightedOffer]] = {}
+    for offer in offers:
+        weight = _weight_for_offer(offer)
+        if weight <= 0:
+            continue
+        by_tier.setdefault(_draw_priority_for_offer(offer), []).append(
+            _WeightedOffer(offer=offer, weight=weight)
+        )
 
     drawn: list[NPCServiceOffer] = []
-    while remaining and len(drawn) < count:
-        pick = select_weighted(remaining)
-        drawn.append(pick.offer)
-        remaining.remove(pick)
+    for tier in sorted(by_tier, reverse=True):
+        remaining = by_tier[tier]
+        while remaining and len(drawn) < count:
+            pick = select_weighted(remaining)
+            drawn.append(pick.offer)
+            remaining.remove(pick)
+        if len(drawn) >= count:
+            break
     return drawn
+
+
+def _draw_priority_for_offer(offer: NPCServiceOffer) -> int:
+    """POOL-draw priority tier for an offer (#726).
+
+    MISSION offers carry it on ``MissionOfferDetails.draw_priority``; other
+    kinds have no priority surface today and sit in the general (0) tier. The
+    ``mission_offer_details`` row is ``select_related`` upstream in
+    ``available_offers``, so this adds no query.
+    """
+    if offer.kind == OfferKind.MISSION.value:
+        try:
+            return offer.mission_offer_details.draw_priority
+        except MissionOfferDetails.DoesNotExist:
+            return 0
+    return 0
 
 
 def _weight_for_offer(offer: NPCServiceOffer) -> int:

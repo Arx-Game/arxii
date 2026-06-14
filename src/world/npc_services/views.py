@@ -36,6 +36,7 @@ from world.npc_services.models import (
     OfferCooldown,
     PermitOfferDetails,
 )
+from world.npc_services.offer_policy import mission_pool_count
 from world.npc_services.serializers import (
     InteractionOfferSerializer,
     InteractionResolveRequestSerializer,
@@ -164,7 +165,20 @@ def _serialize_state(
     last_result_message: str = "",
 ) -> dict:
     """Compose the response payload from a (live or freshly-closed) session."""
-    offers = available_offers(session) if not session.closed else []
+    # #726: surface a standing-driven number of POOL offers (strangers see one
+    # trial job, trusted contacts a full slate). MENU offers are unaffected —
+    # ``available_offers`` always returns every eligible MENU option in full.
+    offers = (
+        available_offers(
+            session,
+            pool_count=mission_pool_count(
+                persona=session.persona,
+                npc_persona=session.npc_persona,
+            ),
+        )
+        if not session.closed
+        else []
+    )
     serialized_offers = InteractionOfferSerializer(
         [
             {
