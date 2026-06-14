@@ -8168,7 +8168,7 @@ paths:
           description: ''
     post:
       operationId: items_item_facets_create
-      description: Attach a facet via the serializer (which calls the service).
+      description: Roll the crafting check and (on success) attach the facet.
       tags:
       - items
       requestBody:
@@ -8184,7 +8184,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ItemFacetRead'
+                $ref: '#/components/schemas/FacetCraftResult'
           description: ''
   /api/items/item-facets/{id}/:
     get:
@@ -26272,6 +26272,35 @@ components:
       - id
       - name
       - parent_name
+    FacetCraftResult:
+      type: object
+      description: 'Response for a facet-craft attempt: rolled outcome + resolved
+        tier + the row.'
+      properties:
+        attached:
+          type: boolean
+        outcome_name:
+          type: string
+          nullable: true
+          readOnly: true
+        success_level:
+          type: integer
+          nullable: true
+          readOnly: true
+        quality_tier:
+          allOf:
+          - $ref: '#/components/schemas/QualityTier'
+          nullable: true
+        item_facet:
+          allOf:
+          - $ref: '#/components/schemas/ItemFacetRead'
+          nullable: true
+      required:
+      - attached
+      - item_facet
+      - outcome_name
+      - quality_tier
+      - success_level
     FacetTree:
       type: object
       description: Serializer for Facet with nested children for tree display.
@@ -28089,16 +28118,17 @@ components:
       - item_instance
     ItemFacetWriteRequest:
       type: object
-      description: Write serializer for ItemFacet (POST create).
+      description: |-
+        Write serializer for ItemFacet (POST create) — input validation only.
+
+        The viewset drives the crafting service directly; this serializer parses
+        and validates the ``item_instance`` and ``facet`` foreign keys.
       properties:
         item_instance:
           type: integer
         facet:
           type: integer
-        attachment_quality_tier:
-          type: integer
       required:
-      - attachment_quality_tier
       - facet
       - item_instance
     ItemInstanceRead:

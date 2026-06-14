@@ -24,6 +24,17 @@ class ItemError(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Configuration errors (misconfigured game systems)
+# ---------------------------------------------------------------------------
+
+
+class CraftingNotConfigured(Exception):
+    """Raised when facet crafting is attempted before a CheckType is configured."""
+
+    user_message = "Facet crafting is not available yet."
+
+
+# ---------------------------------------------------------------------------
 # Data-layer errors (slot validity, facet capacity, etc.)
 # ---------------------------------------------------------------------------
 

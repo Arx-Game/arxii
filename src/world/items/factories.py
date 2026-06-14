@@ -1,10 +1,13 @@
 """FactoryBoy factories for item test data."""
 
+from decimal import Decimal
+
 import factory
 
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.models import (
     EquippedItem,
+    FacetCraftingConfig,
     FashionStyle,
     FashionStyleBonus,
     InteractionType,
@@ -212,3 +215,48 @@ class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     mantle = factory.SubFactory(MantleFactory)
     level = 1
+
+
+class FacetCraftingConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for the FacetCraftingConfig singleton (pk=1).
+
+    Prefer wire_enchanting_crafting() when you also need a wired CheckType.
+    """
+
+    class Meta:
+        model = FacetCraftingConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+    base_difficulty = 0
+    success_level_step = 10
+    min_success_level = 1
+
+
+def wire_enchanting_crafting(*, base_difficulty: int = 0) -> FacetCraftingConfig:
+    """Author the Enchanting skill + crafting CheckType + config singleton.
+
+    FactoryBoy chain doubling as integration-test setUp and seed data.
+    Returns the configured FacetCraftingConfig. Idempotent: uses update_or_create
+    for the singleton so re-runs update base_difficulty and check_type rather than
+    silently keeping the original row (which django_get_or_create would do).
+    """
+    from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+    from world.traits.factories import TraitFactory
+    from world.traits.models import TraitCategory, TraitType
+
+    enchanting = TraitFactory(
+        name="Enchanting", trait_type=TraitType.SKILL, category=TraitCategory.CRAFTING
+    )
+    check_type = CheckTypeFactory(name="Enchanting")
+    CheckTypeTraitFactory(check_type=check_type, trait=enchanting, weight=Decimal("1.0"))
+    config, _ = FacetCraftingConfig.objects.update_or_create(
+        pk=1,
+        defaults={
+            "base_difficulty": base_difficulty,
+            "check_type": check_type,
+            "success_level_step": 10,
+            "min_success_level": 1,
+        },
+    )
+    return config

@@ -9,6 +9,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
 import type {
   BodyRegion,
   CreateOutfitPayload,
@@ -21,6 +22,10 @@ import type {
   PaginatedResponse,
   UpdateOutfitPayload,
 } from './types';
+
+type ItemFacetRead = components['schemas']['ItemFacetRead'];
+type QualityTier = components['schemas']['QualityTier'];
+type FacetCraftResult = components['schemas']['FacetCraftResult'];
 
 const BASE_URL = '/api/items';
 
@@ -193,4 +198,38 @@ export async function getVisibleItemDetail(
     throw new Error(await readError(res, 'Failed to load item details'));
   }
   return (await res.json()) as ItemInstance;
+}
+
+// ---------------------------------------------------------------------------
+// Item facets (crafting)
+// ---------------------------------------------------------------------------
+
+export async function listItemFacets(itemInstanceId: number): Promise<ItemFacetRead[]> {
+  const res = await apiFetch(`${BASE_URL}/item-facets/?item_instance=${itemInstanceId}`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load facets'));
+  const data = (await res.json()) as PaginatedResponse<ItemFacetRead>;
+  return data.results;
+}
+
+export async function craftAttachFacet(payload: {
+  item_instance: number;
+  facet: number;
+}): Promise<FacetCraftResult> {
+  const res = await apiFetch(`${BASE_URL}/item-facets/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to attach facet'));
+  return res.json();
+}
+
+export async function removeItemFacet(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/item-facets/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to remove facet'));
+}
+
+export async function getQualityTiers(): Promise<QualityTier[]> {
+  const res = await apiFetch(`${BASE_URL}/quality-tiers/`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load quality tiers'));
+  return res.json();
 }

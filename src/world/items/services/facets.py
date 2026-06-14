@@ -3,20 +3,39 @@
 from __future__ import annotations
 
 import contextlib
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 
 from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
-from world.items.models import EquippedItem, ItemFacet, ItemInstance
+from world.items.models import EquippedItem, ItemFacet, ItemInstance, QualityTier
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
+    from world.magic.models import Facet
+
+
+def assert_facet_attachable(item_instance: ItemInstance, facet: Facet) -> None:
+    """Raise if ``facet`` cannot be attached to ``item_instance``.
+
+    Raises:
+        FacetAlreadyAttached: already present on the item.
+        FacetCapacityExceeded: item is at its template's facet_capacity.
+    """
+    if item_instance.item_facets.filter(facet=facet).exists():
+        raise FacetAlreadyAttached
+    if item_instance.item_facets.count() >= item_instance.template.facet_capacity:
+        raise FacetCapacityExceeded
 
 
 @transaction.atomic
 def attach_facet_to_item(
     *,
-    crafter,  # AccountDB — the account applying the facet
+    crafter: AccountDB,
     item_instance: ItemInstance,
-    facet,  # world.magic.models.Facet
-    attachment_quality_tier,  # QualityTier
+    facet: Facet,
+    attachment_quality_tier: QualityTier,
 ) -> ItemFacet:
     """Attach ``facet`` to ``item_instance``.
 
@@ -33,10 +52,7 @@ def attach_facet_to_item(
         FacetAlreadyAttached: This facet is already attached to the item.
         FacetCapacityExceeded: The item is at the template's facet_capacity.
     """
-    if item_instance.item_facets.filter(facet=facet).exists():
-        raise FacetAlreadyAttached
-    if item_instance.item_facets.count() >= item_instance.template.facet_capacity:
-        raise FacetCapacityExceeded
+    assert_facet_attachable(item_instance, facet)
     row = ItemFacet.objects.create(
         item_instance=item_instance,
         facet=facet,

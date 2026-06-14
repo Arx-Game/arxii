@@ -7,7 +7,19 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
+    from world.items.models import ItemFacet, QualityTier
     from world.mechanics.types import AppliedEffect
+    from world.traits.models import CheckOutcome
+
+
+@dataclass(frozen=True)
+class FacetCraftResult:
+    """Outcome of a facet-crafting attempt."""
+
+    attached: bool
+    outcome: CheckOutcome | None
+    item_facet: ItemFacet | None
+    quality_tier: QualityTier | None
 
 
 @dataclass(frozen=True)

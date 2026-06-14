@@ -70,6 +70,22 @@ class QualityTier(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @classmethod
+    def for_score(cls, score: int) -> QualityTier | None:
+        """Resolve a numeric quality score to the tier whose [min, max] contains it.
+
+        Below the lowest range clamps to the lowest tier; above the highest
+        clamps to the highest. Returns None only when no tiers exist.
+        """
+        match = cls.objects.filter(numeric_min__lte=score, numeric_max__gte=score).first()
+        if match is not None:
+            return match
+        ordered = cls.objects.order_by("sort_order")
+        first = ordered.first()
+        if first is not None and score < first.numeric_min:
+            return first
+        return ordered.last()
+
 
 class InteractionType(SharedMemoryModel):
     """
@@ -1011,6 +1027,37 @@ class ItemCheckModifier(SharedMemoryModel):
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         return f"{self.template.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+
+class FacetCraftingConfig(SharedMemoryModel):
+    """Singleton (pk=1) tuning the facet-crafting check.
+
+    ``check_type`` is nullable so the row can be lazily created before content
+    authors wire a CheckType; the crafting service raises CraftingNotConfigured
+    until it is set. Difficulty/score knobs are real columns (no JSON).
+    """
+
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check rolled when attaching a facet. Unset = crafting disabled.",
+    )
+    base_difficulty = models.PositiveIntegerField(
+        default=0, help_text="target_difficulty (points) passed to perform_check."
+    )
+    success_level_step = models.PositiveIntegerField(
+        default=10,
+        help_text="Quality-score points added per success_level above min_success_level.",
+    )
+    min_success_level = models.IntegerField(
+        default=1, help_text="Outcome success_level below this = craft fails, no facet."
+    )
+
+    def __str__(self) -> str:
+        return "FacetCraftingConfig"  # noqa: STRING_LITERAL - display literal, not an identifier
 
 
 class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
