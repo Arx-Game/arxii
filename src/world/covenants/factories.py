@@ -1,5 +1,7 @@
 """FactoryBoy factories for covenant models."""
 
+from typing import TYPE_CHECKING
+
 import factory
 from factory import django as factory_django
 
@@ -15,6 +17,9 @@ from world.covenants.models import (
     GearArchetypeCompatibility,
 )
 from world.items.constants import GearArchetype
+
+if TYPE_CHECKING:
+    from world.conditions.models import CapabilityType
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -374,6 +379,158 @@ def wire_covenant_rite_content() -> CovenantRite:
     )
 
     return rite
+
+
+def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityType]]":
+    """Idempotent seed: an authored per-(role, resonance) role-powers catalog.
+
+    Authors ONE Sword (offense) archetype CovenantRole for the Covenant of Battle
+    and, for each of two distinct authored resonances channelling that role, the
+    pair of pull effects that make the role mechanically real:
+
+    - A **tier-0 CAPABILITY_GRANT** — the covenant's always-on *gift* to an engaged
+      holder who has woven their role-thread on that resonance. Two holders of the
+      same role anchoring DIFFERENT resonances thereby unlock DIFFERENT capabilities
+      (the #751 individualization lever — identity is across characters, not within
+      one).
+    - A **tier-1 active pull** — a paid in-the-moment surge (FLAT_BONUS for the first
+      resonance, INTENSITY_BUMP for the second) showing the active-pull half of the
+      catalog alongside the passive gift.
+
+    Doubles as integration-test setUp AND staff/new-player seed data (per the
+    factories-as-seed-data convention). Every create is a ``get_or_create`` keyed on
+    its natural/unique key, so a second call is a no-op — no data migration.
+
+    Returns ``(role, [cap_for_res_a, cap_for_res_b])``.
+    """
+    from world.conditions.models import CapabilityType
+    from world.magic.constants import EffectKind, TargetKind
+    from world.magic.models import Affinity, Resonance, ThreadPullEffect
+
+    # ------------------------------------------------------------------
+    # The Sword (offense) role — PRIMARY (no parent_role/resonance, level 0).
+    # ------------------------------------------------------------------
+    role, _ = CovenantRole.objects.get_or_create(
+        slug="battle-warblade",
+        defaults={
+            "name": "Warblade",
+            "covenant_type": CovenantType.BATTLE,
+            "archetype": RoleArchetype.SWORD,
+            "speed_rank": 2,
+            "description": (
+                "The covenant's drawn edge — those who carry the oath into the killing "
+                "press and answer threat with threat."
+            ),
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # Two authored resonances (each needs an Affinity FK).
+    # ------------------------------------------------------------------
+    affinity, _ = Affinity.objects.get_or_create(
+        name="Primal",
+        defaults={"description": "The wild, untamed source of magical power."},
+    )
+    res_ember, _ = Resonance.objects.get_or_create(
+        name="Ember Wrath",
+        defaults={
+            "description": (
+                "A resonance of blazing, forward fury — the war-fire that does not retreat."
+            ),
+            "affinity": affinity,
+        },
+    )
+    res_keening, _ = Resonance.objects.get_or_create(
+        name="Keening Edge",
+        defaults={
+            "description": (
+                "A resonance of honed, singing precision — the blade that finds the seam."
+            ),
+            "affinity": affinity,
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # One distinct capability per resonance (the gift each unlocks).
+    # ------------------------------------------------------------------
+    cap_ember, _ = CapabilityType.objects.get_or_create(
+        name="Warblade: Sundering Strike",
+        defaults={
+            "description": "Channel the covenant's war-fire to shatter a foe's guard.",
+            "innate_baseline": 0,
+        },
+    )
+    cap_keening, _ = CapabilityType.objects.get_or_create(
+        name="Warblade: Seam-Finder",
+        defaults={
+            "description": "Read the singing edge to strike unerringly through any gap.",
+            "innate_baseline": 0,
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # Per resonance: tier-0 passive CAPABILITY_GRANT + a tier-1 active pull.
+    # Keyed (target_kind, resonance, tier, min_thread_level) — the unique lookup.
+    # ------------------------------------------------------------------
+    ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.COVENANT_ROLE,
+        resonance=res_ember,
+        tier=0,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.CAPABILITY_GRANT,
+            "capability_grant": cap_ember,
+            "narrative_snippet": (
+                "The Ember Wrath you carry for the covenant kindles in your grip; the "
+                "oath answers, and your strikes learn to shatter what stands against them."
+            ),
+        },
+    )
+    ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.COVENANT_ROLE,
+        resonance=res_ember,
+        tier=1,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.FLAT_BONUS,
+            "flat_bonus_amount": 3,
+            "narrative_snippet": (
+                "You pull harder on the war-fire and it surges — a blaze of borrowed "
+                "fury behind the blow."
+            ),
+        },
+    )
+
+    ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.COVENANT_ROLE,
+        resonance=res_keening,
+        tier=0,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.CAPABILITY_GRANT,
+            "capability_grant": cap_keening,
+            "narrative_snippet": (
+                "The Keening Edge you bear for the covenant sings low in the bones of "
+                "your hand; the oath answers, and your eye finds the seam before the cut."
+            ),
+        },
+    )
+    ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.COVENANT_ROLE,
+        resonance=res_keening,
+        tier=1,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.INTENSITY_BUMP,
+            "intensity_bump_amount": 1,
+            "narrative_snippet": (
+                "You draw the singing edge taut and it answers — every line of the "
+                "strike sharpened a degree past mortal keenness."
+            ),
+        },
+    )
+
+    return role, [cap_ember, cap_keening]
 
 
 def make_engaged_member(
