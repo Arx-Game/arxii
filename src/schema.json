@@ -28766,6 +28766,15 @@ components:
           nullable: true
           description: Duration written into NPCRoleCooldown on accept (blocks OTHER
             missions on the role for this persona). Null falls back to MissionTemplate.cooldown.
+        draw_priority:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: POOL-draw priority tier (#726). The highest tier present is
+            drawn first with guaranteed inclusion (up to the pool count); lower tiers
+            fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes
+            follow-up missions a positive value so they surface ahead of the general
+            pool. 0 = general pool.
       required:
       - id
       - mission_template
@@ -28801,6 +28810,15 @@ components:
           nullable: true
           description: Duration written into NPCRoleCooldown on accept (blocks OTHER
             missions on the role for this persona). Null falls back to MissionTemplate.cooldown.
+        draw_priority:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: POOL-draw priority tier (#726). The highest tier present is
+            drawn first with guaranteed inclusion (up to the pool count); lower tiers
+            fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes
+            follow-up missions a positive value so they surface ahead of the general
+            pool. 0 = general pool.
       required:
       - mission_template
       - offer
@@ -33699,6 +33717,15 @@ components:
           nullable: true
           description: Duration written into NPCRoleCooldown on accept (blocks OTHER
             missions on the role for this persona). Null falls back to MissionTemplate.cooldown.
+        draw_priority:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: POOL-draw priority tier (#726). The highest tier present is
+            drawn first with guaranteed inclusion (up to the pool count); lower tiers
+            fill any remaining slots via the weighted draw. Give chain-unlock / high-stakes
+            follow-up missions a positive value so they surface ahead of the general
+            pool. 0 = general pool.
     PatchedMissionOptionRequest:
       type: object
       description: |-
