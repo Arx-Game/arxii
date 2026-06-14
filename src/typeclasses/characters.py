@@ -186,6 +186,13 @@ class Character(ObjectParent, DefaultCharacter):
 
         return CharacterCovenantRoleHandler(self)
 
+    @cached_property
+    def mantle_clearances(self):
+        """Cached handler for this character's recorded mantle-level clearances (Spec D, #512)."""
+        from world.items.handlers import CharacterMantleClearanceHandler
+
+        return CharacterMantleClearanceHandler(self)
+
     @property
     def active_account(self):
         """Return the account currently linked to this character.

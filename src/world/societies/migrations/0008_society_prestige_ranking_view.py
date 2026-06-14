@@ -22,6 +22,11 @@ def _read_sql(filename: str) -> str:
 class Migration(migrations.Migration):
     dependencies = [
         ("societies", "0007_societyprestigeranking_rankingdisplay"),
+        # The view's SQL joins scenes_persona and reads p.fame_tier / p.total_prestige,
+        # which scenes.0008 adds. Without this explicit edge the topological sort can
+        # place this migration before scenes.0008 (it does once other apps add
+        # migrations — surfaced by #512), failing with "column p.fame_tier does not exist".
+        ("scenes", "0008_persona_fame_points_persona_fame_tier_and_more"),
     ]
 
     operations = [

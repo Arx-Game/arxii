@@ -170,15 +170,27 @@ def get_modifier_total(
         amplification/immunity applied to the eager portion)
     """
     eager_total = get_modifier_breakdown(character, modifier_target).total
-    equipment_total = 0
-    if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
-        equipment_total = passive_facet_bonuses(character, modifier_target)
-        equipment_total += covenant_role_bonus(character, modifier_target)
-        equipment_total += covenant_level_bonus(character, modifier_target)
+    equipment_total = equipment_walk_total(character, modifier_target)
     fashion_total = 0
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
     return eager_total + equipment_total + fashion_total
+
+
+def equipment_walk_total(character: object, target: ModifierTarget) -> int:
+    """Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).
+
+    Returns 0 unless target.category is equipment-relevant. The eager CharacterModifier
+    total is NOT included here — callers add that separately (avoids double counting).
+    """
+    if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
+        return 0
+    return (
+        passive_facet_bonuses(character, target)
+        + covenant_role_bonus(character, target)
+        + covenant_level_bonus(character, target)
+        + passive_mantle_bonuses(character, target)
+    )
 
 
 # =============================================================================
@@ -216,7 +228,9 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
         matching = char.equipped_items.item_facets_for(thread.target_facet)
         if not matching:
             continue
-        effects = _facet_pull_effects_for(thread.resonance, target, tier=0)
+        effects = _thread_pull_effects_for(
+            thread.resonance, target, target_kind=TargetKind.FACET, tier=0
+        )
         for effect in effects:
             for item_facet in matching:
                 total += _facet_effect_contribution(
@@ -226,6 +240,79 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
                     item_facet=item_facet,
                 )
     return total
+
+
+def passive_mantle_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).
+
+    The MANTLE analogue of ``passive_facet_bonuses``. For each MANTLE-kind thread
+    the character owns, look up every tier-0 FLAT_BONUS ThreadPullEffect that maps
+    the thread's resonance to ``target`` via the ModifierTarget.target_resonance
+    OneToOne, then sum the contributions.
+
+    Unlike facets, a mantle thread has no ItemFacet / equipped item to join — the
+    bonus comes from the thread itself. The contribution is therefore
+    ``flat_bonus_amount × max(1, thread.level)`` with NO item-quality or
+    attachment-quality multipliers.
+
+    Args:
+        sheet: CharacterSheet instance (the character whose threads are walked).
+        target: The ModifierTarget to aggregate bonuses for.
+
+    Returns:
+        Integer total of all passive mantle contributions for ``target``.
+    """
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "threads"):
+        return 0
+    total = 0
+    for thread in char.threads.threads_of_kind(TargetKind.MANTLE):
+        effects = _thread_pull_effects_for(
+            thread.resonance, target, target_kind=TargetKind.MANTLE, tier=0
+        )
+        for effect in effects:
+            base = effect.flat_bonus_amount or 0
+            total += base * max(1, thread.level)
+    return total
+
+
+def _thread_pull_effects_for(
+    resonance: object,
+    target: ModifierTarget,
+    *,
+    target_kind: str,
+    tier: int,
+) -> list[ThreadPullEffect]:
+    """Return tier FLAT_BONUS pull effects for an anchor kind, gated by resonance→target link.
+
+    Gate: a ModifierTarget contributes only when its ``target_resonance`` OneToOne
+    points to ``resonance``. Targets in the stat/magic/affinity categories lack this
+    link and return [] — other linking mechanisms may be added later. Shared by the
+    FACET and MANTLE passive walks (``target_kind`` selects which).
+
+    Args:
+        resonance: The Resonance instance from the thread.
+        target: The ModifierTarget being aggregated.
+        target_kind: The TargetKind to filter on (FACET or MANTLE).
+        tier: Effect tier to filter on (0 = passive always-on).
+
+    Returns:
+        List of ThreadPullEffect rows (may be empty).
+    """
+    # ModifierTarget owns the FK; .target_resonance_id is the FK column, so
+    # this is a direct PK compare with no extra query.
+    if target.target_resonance_id is None or target.target_resonance_id != resonance.pk:
+        return []
+    return list(
+        ThreadPullEffect.objects.filter(
+            target_kind=target_kind,
+            resonance=resonance,
+            tier=tier,
+            effect_kind=EffectKind.FLAT_BONUS,
+        ).exclude(flat_bonus_amount__isnull=True)
+    )
 
 
 def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object) -> int:
@@ -262,39 +349,6 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
             attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
             match_value += Decimal(FASHION_MATCH_BASE) * item_mult * attach_mult
     return int(match_value * Decimal(str(bonus.weight)))
-
-
-def _facet_pull_effects_for(
-    resonance: object,
-    target: ModifierTarget,
-    tier: int,
-) -> list[ThreadPullEffect]:
-    """Return tier-0 FACET FLAT_BONUS effects gated by resonance→target link.
-
-    Gate: a ModifierTarget contributes only when its ``target_resonance`` OneToOne
-    points to ``resonance``. Targets in the stat/magic/affinity categories lack
-    this link and return [] — PR3 may add other linking mechanisms.
-
-    Args:
-        resonance: The Resonance instance from the thread.
-        target: The ModifierTarget being aggregated.
-        tier: Effect tier to filter on (0 = passive always-on).
-
-    Returns:
-        List of ThreadPullEffect rows (may be empty).
-    """
-    # ModifierTarget owns the FK; .target_resonance_id is the FK column, so
-    # this is a direct PK compare with no extra query.
-    if target.target_resonance_id is None or target.target_resonance_id != resonance.pk:
-        return []
-    return list(
-        ThreadPullEffect.objects.filter(
-            target_kind=TargetKind.FACET,
-            resonance=resonance,
-            tier=tier,
-            effect_kind=EffectKind.FLAT_BONUS,
-        ).exclude(flat_bonus_amount__isnull=True)
-    )
 
 
 def _facet_effect_contribution(

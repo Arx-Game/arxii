@@ -23812,6 +23812,7 @@ components:
       - rollmod
       - scene
       - equipment
+      - fashion
       - character
       - effort
       - fatigue
@@ -23824,6 +23825,7 @@ components:
         * `rollmod` - Roll Modifier
         * `scene` - Surroundings
         * `equipment` - Equipment
+        * `fashion` - Fashion
         * `character` - Character
         * `effort` - Effort
         * `fatigue` - Fatigue
@@ -34425,6 +34427,7 @@ components:
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
+            * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
         target_id:
           type: integer
@@ -39277,6 +39280,7 @@ components:
       - RELATIONSHIP_TRACK
       - RELATIONSHIP_CAPSTONE
       - COVENANT_ROLE
+      - MANTLE
       - SANCTUM
       type: string
       description: |-
@@ -39287,6 +39291,7 @@ components:
         * `RELATIONSHIP_TRACK` - Relationship Track
         * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
         * `COVENANT_ROLE` - Covenant Role
+        * `MANTLE` - Mantle
         * `SANCTUM` - Sanctum
     TargetSpec:
       type: object
@@ -39678,6 +39683,7 @@ components:
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
+            * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
         name:
           type: string
@@ -39938,6 +39944,7 @@ components:
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
+            * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
         target_id:
           type: integer

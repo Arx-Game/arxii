@@ -36,8 +36,16 @@ from django.db.models import Prefetch
 from evennia.objects.models import ObjectDB
 
 if TYPE_CHECKING:
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
-    from world.items.models import EquippedItem, ItemFacet, ItemInstance, Outfit
+    from world.items.models import (
+        EquippedItem,
+        ItemFacet,
+        ItemInstance,
+        Mantle,
+        MantleLevelClearance,
+        Outfit,
+    )
     from world.magic.models import Facet
 
 
@@ -225,6 +233,47 @@ class CharacterSheetOutfitsHandler:
             if outfit.pk == pk:
                 return outfit
         return None
+
+    def invalidate(self) -> None:
+        self._cached = None
+
+
+class CharacterMantleClearanceHandler:
+    """Cached handler for a character's recorded mantle-level clearances.
+
+    Walks the character's CharacterSheet ``mantle_clearances`` reverse relation
+    once and caches the rows. ``max_cleared_level(mantle)`` reports the highest
+    cleared level for a given mantle (0 if none). Mutators that record or grant
+    clearances (``record_mantle_clearances`` / ``grant_mantle_clearance``) must
+    call ``character.mantle_clearances.invalidate()`` so the next read
+    re-fetches.
+    """
+
+    def __init__(self, character: Character) -> None:
+        self._character = character
+        self._cached: list[MantleLevelClearance] | None = None
+
+    @property
+    def _clearances(self) -> list[MantleLevelClearance]:
+        if self._cached is None:
+            from world.items.models import MantleLevelClearance  # noqa: PLC0415
+
+            sheet = self._character.sheet_data
+            qs = (
+                MantleLevelClearance.objects.filter(character_sheet=sheet)
+                .select_related("mantle")
+                .order_by("mantle_id", "level")
+            )
+            self._cached = list(qs)
+        return self._cached
+
+    def __iter__(self) -> Iterator[MantleLevelClearance]:
+        return iter(self._clearances)
+
+    def max_cleared_level(self, mantle: Mantle) -> int:
+        """Return the highest cleared level for ``mantle``, or 0 if none."""
+        levels = [c.level for c in self._clearances if c.mantle_id == mantle.pk]
+        return max(levels, default=0)
 
     def invalidate(self) -> None:
         self._cached = None

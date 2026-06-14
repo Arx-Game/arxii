@@ -11,6 +11,9 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemTemplate,
+    Mantle,
+    MantleLevelClearance,
+    MantleLevelDefinition,
     Outfit,
     OutfitSlot,
     QualityTier,
@@ -170,3 +173,42 @@ class FashionStyleBonusFactory(factory.django.DjangoModelFactory):
     fashion_style = factory.SubFactory(FashionStyleFactory)
     target = factory.SubFactory(ModifierTargetFactory)
     weight = 1
+
+
+class MantleFactory(factory.django.DjangoModelFactory):
+    """Factory for Mantle."""
+
+    class Meta:
+        model = Mantle
+        django_get_or_create = ("name",)
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    name = factory.Sequence(lambda n: f"Mantle {n}")
+    description = ""
+    is_active = True
+    max_level = 5
+
+
+class MantleLevelDefinitionFactory(factory.django.DjangoModelFactory):
+    """Factory for MantleLevelDefinition."""
+
+    class Meta:
+        model = MantleLevelDefinition
+        django_get_or_create = ("mantle", "level")
+
+    mantle = factory.SubFactory(MantleFactory)
+    level = factory.Sequence(lambda n: n + 1)
+    codex_entry_required = factory.SubFactory("world.codex.factories.CodexEntryFactory")
+    unlock_description = ""
+
+
+class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
+    """Factory for MantleLevelClearance."""
+
+    class Meta:
+        model = MantleLevelClearance
+        django_get_or_create = ("character_sheet", "mantle", "level")
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    mantle = factory.SubFactory(MantleFactory)
+    level = 1

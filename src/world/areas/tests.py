@@ -39,6 +39,7 @@ from world.areas.services import (
     get_room_profile,
     get_rooms_in_area,
     reparent_area,
+    societies_for_scene,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import FoundationalCapability
@@ -50,6 +51,8 @@ from world.conditions.models import CapabilityType
 from world.conditions.services import apply_condition
 from world.mechanics.factories import ChallengeInstanceFactory
 from world.realms.models import Realm
+from world.scenes.factories import SceneFactory
+from world.societies.factories import SocietyFactory
 
 
 class AreaModelTests(TestCase):
@@ -457,6 +460,92 @@ class PayloadIntegrationTests(TestCase):
         assert ancestry[1]["name"] == "Arx"
         assert realm["name"] == "Arx"
         assert realm["theme"] == "arx"
+
+
+def _make_room_in_area(area):
+    """Create a room ObjectDB and point its RoomProfile at the given area."""
+    room_obj = ObjectDB.objects.create(
+        db_key="Test Room",
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+    RoomProfile.objects.update_or_create(objectdb=room_obj, defaults={"area": area})
+    return room_obj
+
+
+class SocietiesForSceneTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = Realm.objects.create(name="Compact Realm")
+        cls.other_realm = Realm.objects.create(name="Umbros Realm")
+        cls.society_a = SocietyFactory(name="Peerage", realm=cls.realm)
+        cls.society_b = SocietyFactory(name="Crownlands", realm=cls.realm)
+        # A society in a different realm should never be returned.
+        cls.society_other = SocietyFactory(name="Abyssal", realm=cls.other_realm)
+
+    def setUp(self):
+        RoomProfile.flush_instance_cache()
+
+    def test_dominant_society_overrides_realm_sharers(self):
+        area = AreaFactory(
+            name="Dominated Ward",
+            level=AreaLevel.WARD,
+            realm=self.realm,
+            dominant_society=self.society_a,
+        )
+        room = _make_room_in_area(area)
+        scene = SceneFactory(location=room)
+
+        result = societies_for_scene(scene)
+
+        assert result == [self.society_a]
+
+    def test_all_realm_sharers_when_no_dominant_society(self):
+        area = AreaFactory(
+            name="Open Ward",
+            level=AreaLevel.WARD,
+            realm=self.realm,
+            dominant_society=None,
+        )
+        room = _make_room_in_area(area)
+        scene = SceneFactory(location=room)
+
+        result = societies_for_scene(scene)
+
+        assert set(result) == {self.society_a, self.society_b}
+        assert self.society_other not in result
+
+    def test_no_area_returns_empty(self):
+        room_obj = ObjectDB.objects.create(
+            db_key="Placeless Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        RoomProfile.objects.update_or_create(objectdb=room_obj, defaults={"area": None})
+        scene = SceneFactory(location=room_obj)
+
+        result = societies_for_scene(scene)
+
+        assert result == []
+
+    def test_realmless_area_returns_empty(self):
+        area = AreaFactory(
+            name="Realmless Ward",
+            level=AreaLevel.WARD,
+            realm=None,
+            dominant_society=None,
+        )
+        room = _make_room_in_area(area)
+        scene = SceneFactory(location=room)
+
+        result = societies_for_scene(scene)
+
+        assert result == []
+
+    def test_no_location_returns_empty(self):
+        scene = SceneFactory(location=None)
+
+        result = societies_for_scene(scene)
+
+        assert result == []
 
 
 class PositionModelTests(TestCase):

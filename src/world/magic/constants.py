@@ -82,6 +82,7 @@ class TargetKind(models.TextChoices):
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
+    MANTLE = "MANTLE", "Mantle"
     SANCTUM = "SANCTUM", "Sanctum"
 
 

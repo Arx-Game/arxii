@@ -68,6 +68,43 @@ What shipped:
   `SlotIncompatible` in `world.items.exceptions`; `CovenantRoleNeverHeldError` in
   `world.covenants.exceptions`; `NoMatchingWornFacetItemsError` in `world.magic.exceptions`
 
+## Spec D PR4 — Mantle System + Fashion Combat Integration (DONE)
+
+**Spec:** `docs/architecture/items-fashion-mantles.md` §4.3, §5.4, §6.2 (issue #512)
+
+What shipped:
+
+- **Mantle models** (`world.items`) — `Mantle` (OneToOne→`ItemInstance`; a specific
+  attunable artifact, not a category), `MantleLevelDefinition` (per-level Codex gate via
+  `codex_entry_required`), `MantleLevelClearance` (per-character gate-join row)
+- **Mantle clearance services** — `record_mantle_clearances(sheet, mantle)` (idempotent;
+  records a clearance per level whose required `CharacterCodexKnowledge` is KNOWN, in
+  order), `grant_mantle_clearance(...)` (staff override), `get_max_cleared_mantle_level(...)`;
+  `CharacterMantleClearanceHandler` (`character.mantle_clearances.max_cleared_level(mantle)`).
+  Mission gate deferred to the future Mission spec
+- **MANTLE `TargetKind`** on `Thread` with typed FK `target_mantle` (per-kind
+  CheckConstraint + partial UniqueConstraint, mirroring FACET/COVENANT_ROLE);
+  `weave_thread` gates MANTLE weaves on ≥ level-1 clearance (`MantleNotClearedError`);
+  `compute_anchor_cap` MANTLE arm = `max_cleared_level × 10` (Spec D §6.2); wired into
+  the thread-weave serializer (resolve + 400 on gate error)
+- **Mantle combat bonus** — `passive_mantle_bonuses(sheet, target)` (per-thread tier-0
+  FLAT_BONUS pulls, `base × max(1, level)`, no item/quality multipliers — the bonus is
+  the attunement itself); the facet/mantle pull-effect lookups unified into
+  `_thread_pull_effects_for(..., target_kind=)`
+- **Equipment walk surfaced in combat** — `equipment_walk_total(character, target)`
+  (facet + covenant-role + mantle) extracted from `get_modifier_total` and surfaced in
+  `collect_check_modifiers` (the central check seam combat funnels through), so
+  facet/covenant/mantle/fashion now reach combat and every check — previously the walk
+  surfaced in no real check. Eager `CharacterModifier` rows counted exactly once (no
+  double-count)
+- **Scene-derived perceiving society** — `Area.dominant_society` FK +
+  `societies_for_scene(scene)` (permissive: all societies sharing the area's realm,
+  unless the area names one); combat takes the **max** `fashion_outfit_bonus` across
+  relevant societies; `ModifierSourceKind.FASHION` provenance value
+- **Integration test** — craft → wear → combat for a mantle-bearing item, end-to-end
+  through the real services (clearance → gated weave → equip → `collect_check_modifiers`)
+- **Typed exception** — `MantleNotClearedError` in `world.magic.exceptions`
+
 ## Inventory Service Functions (DONE)
 
 **Branch:** `inventory-service-functions-design`
@@ -311,9 +348,13 @@ Explicitly NOT in this slice (parked):
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - Item interaction service functions — using items, consuming charges (not started)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
-- ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; follow-up #750 for scene-derived society)
+- ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; scene-derived society + combat surfacing delivered in Spec D PR4 / #512 via `societies_for_scene` + `collect_check_modifiers`)
 - Outfits Phase C (Modeling) — present an outfit at events, peer judging, leaderboards (not started)
-- Outfits Phase D (Legendary + Mantle) — outfit legend accrual, outfit-bound mantles, famous outfits as referenceable artifacts in the magic / story layer (not started)
+- ~~Mantle attunement layer~~ — **done** (Spec D PR4 / #512: `Mantle` artifacts, Codex-gated
+  per-character `MANTLE`-thread attunement, mantle combat bonuses; see the PR4 section above)
+- Outfits Phase D (Legendary) — outfit legend accrual and famous outfits as referenceable
+  artifacts in the magic / story layer (not started; mantle *attunement* shipped in PR4,
+  but outfit-*bound* legendary mantles remain)
 - Servant retrieval — fetching items from off-character storage; parked in `docs/roadmap/rooms-and-estates.md` (not started)
 
 ## Magic Integration (Spec A)
