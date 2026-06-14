@@ -420,11 +420,14 @@ class ItemInstanceViewSet(viewsets.ViewSet):
     @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="use")
     def use(self, request: Request, pk: str | None = None) -> Response:
-        """Use a consumable item: apply its on-use effects and spend a charge.
+        """Use a consumable item: apply its on-use effects (to self) and spend a charge.
 
         Owner-or-staff gated. Business logic lives entirely in ``use_item``;
-        this view resolves actor/target, enforces ownership, and maps
-        ``ItemError`` to HTTP 400 (mirroring the facet write path).
+        this view resolves the actor, enforces ownership, and maps
+        ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
+        surface does NOT accept a target — on-use effects apply to the holder
+        only. Targeted use belongs in the future use-item Action layer, which
+        carries proximity/prerequisite checks.
         """
         user = cast(AccountDB, request.user)
         item_pk = _parse_int_param(pk)
@@ -445,15 +448,13 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             raise NotFound from exc
         if not user.is_staff and not _user_holds_item(user, item):
             raise NotFound
-        in_ser = UseItemSerializer(data=request.data)
-        in_ser.is_valid(raise_exception=True)
-        target = None
-        target_pk = in_ser.validated_data.get("target")
-        if target_pk is not None:
-            target = ObjectDB.objects.filter(pk=target_pk).first()
+        if item.game_object is None:
+            # A held consumable always has a game_object; guard against the
+            # AttributeError→500 if that invariant is ever violated.
+            raise NotFound
         actor = item.game_object.db_location  # the holder character (its game object)
         try:
-            result = use_item(item_instance=item, user=actor, target=target)
+            result = use_item(item_instance=item, user=actor)
         except ItemError as exc:
             raise serializers.ValidationError(
                 {"non_field_errors": [exc.user_message]}

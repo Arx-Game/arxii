@@ -55,6 +55,10 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
             locked.save(update_fields=["destroyed_at"])
             game_object = locked.game_object
             if game_object is not None:
+                # Deliberately relocate-but-not-delete the game_object: the
+                # ItemInstance is preserved (soft-delete) for its per-instance
+                # data/provenance, so we keep the row and just pull it out of
+                # play (mirrors the hard-delete branch, which DOES delete).
                 game_object.location = None
                 game_object.save()
             OwnershipEvent.objects.create(

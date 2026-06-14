@@ -49,9 +49,30 @@ class ConsumeItemChargesTests(TestCase):
         pk = inst.pk
         consume_item_charges(item_instance=inst, amount=1)
         self.assertFalse(ItemInstance.objects.filter(pk=pk).exists())
-        self.assertTrue(
-            OwnershipEvent.objects.filter(event_type=OwnershipEventType.CONSUMED).exists()
+        # The CONSUMED event survives the hard-delete via SET_NULL: its
+        # item_instance FK is nulled, but the ledger row persists. Read the
+        # FK column straight from the DB via .values() — the idmapper-cached
+        # event object isn't touched by the DB-side cascade.
+        fk = (
+            OwnershipEvent.objects.filter(event_type=OwnershipEventType.CONSUMED)
+            .values_list("item_instance_id", flat=True)
+            .get()
         )
+        self.assertIsNone(fk)
+
+    def test_soft_delete_when_prior_ownership_event_exists(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance, OwnershipEvent
+        from world.items.services.usage import consume_item_charges
+
+        inst = self._consumable(charges=1)  # bare otherwise
+        OwnershipEvent.objects.create(
+            item_instance=inst, event_type=OwnershipEventType.GIVEN
+        )
+        pk = inst.pk
+        consume_item_charges(item_instance=inst, amount=1)
+        row = ItemInstance.objects.get(pk=pk)  # must still exist (soft-deleted via provenance)
+        self.assertIsNotNone(row.destroyed_at)
 
     def test_soft_delete_special_instance_at_zero(self):
         from world.items.models import ItemInstance

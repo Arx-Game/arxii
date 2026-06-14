@@ -56,9 +56,13 @@ class InteractionTypeSerializer(serializers.ModelSerializer):
 
 
 class UseItemSerializer(serializers.Serializer):
-    """Request body for the inventory ``use`` action."""
+    """Request body for the inventory ``use`` action.
 
-    target = serializers.IntegerField(required=False, allow_null=True)  # target ObjectDB pk
+    Intentionally empty: the REST endpoint applies on-use effects to the
+    holder (self) only. Targeted use belongs in the future use-item Action
+    layer, which has proximity/prerequisite checks; accepting a target pk
+    here would let a player apply on-use effects to any character by pk.
+    """
 
 
 class UseItemResultSerializer(serializers.Serializer):
