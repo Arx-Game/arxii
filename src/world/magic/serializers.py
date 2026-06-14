@@ -795,6 +795,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
         from world.covenants.models import CovenantRole  # noqa: PLC0415
+        from world.items.models import Mantle  # noqa: PLC0415
         from world.magic.models import (  # noqa: PLC0415
             Facet,
             Technique as TechniqueModel,
@@ -813,6 +814,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
             TargetKind.FACET: Facet,
             TargetKind.COVENANT_ROLE: CovenantRole,
+            TargetKind.MANTLE: Mantle,
         }
         model = model_map.get(target_kind)
         if model is None:
@@ -826,7 +828,10 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: dict) -> Thread:
         """Delegate thread creation to ``weave_thread``."""
-        from world.magic.exceptions import WeavingUnlockMissing  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            MantleNotClearedError,
+            WeavingUnlockMissing,
+        )
         from world.magic.services import weave_thread  # noqa: PLC0415
 
         # character_sheet_id was replaced by the CharacterSheet instance in
@@ -846,7 +851,7 @@ class ThreadSerializer(serializers.ModelSerializer):
                 name=validated_data.get("name", ""),
                 description=validated_data.get("description", ""),
             )
-        except (WeavingUnlockMissing, CovenantRoleNeverHeldError) as exc:
+        except (WeavingUnlockMissing, CovenantRoleNeverHeldError, MantleNotClearedError) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 

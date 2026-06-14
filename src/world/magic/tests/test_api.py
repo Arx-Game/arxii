@@ -336,6 +336,68 @@ class ThreadViewSetTests(APITestCase):
         self.assertIn("COVENANT_ROLE", str(response.data))
 
     # ------------------------------------------------------------------
+    # MANTLE threads (#512)
+    # ------------------------------------------------------------------
+
+    def test_create_mantle_thread_without_clearance_returns_400(self) -> None:
+        """Weaving a MANTLE thread without level-1 clearance gets a 400 with user_message."""
+        from world.items.factories import MantleFactory
+        from world.magic.exceptions import MantleNotClearedError
+
+        mantle = MantleFactory()
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.MANTLE,
+                "target_id": mantle.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(MantleNotClearedError.user_message, str(response.data))
+
+    def test_create_mantle_thread_succeeds_with_clearance(self) -> None:
+        """A character who has cleared the mantle's first rank can weave a MANTLE thread."""
+        from world.items.factories import MantleFactory
+        from world.items.services.mantle import grant_mantle_clearance
+
+        # Fresh account+character+sheet to avoid cached_property state from setUpTestData.
+        account = AccountFactory(username="mantle_thread_cleared")
+        character = CharacterFactory(db_key="MantleThreadCleared")
+        sheet = CharacterSheetFactory(character=character)
+        _link_account_to_sheet(account, character, sheet)
+
+        mantle = MantleFactory()
+        grant_mantle_clearance(sheet, mantle, 1)
+        sheet.character.mantle_clearances.invalidate()
+
+        self.client.force_authenticate(user=account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.MANTLE,
+                "target_id": mantle.pk,
+                "character_sheet_id": sheet.pk,
+                "name": "Banner Thread",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(
+                owner=sheet,
+                resonance=self.resonance,
+                target_mantle=mantle,
+                target_kind=TargetKind.MANTLE,
+            ).exists()
+        )
+
+    # ------------------------------------------------------------------
     # Cap fields: path_cap, anchor_cap, effective_cap (Task 16)
     # ------------------------------------------------------------------
 
