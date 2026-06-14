@@ -666,17 +666,17 @@ class MissionOptionRoute(SharedMemoryModel):
         blank=True,
         help_text=(
             "Player-facing outcome text shown when this route's tier is "
-            "rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the "
-            "resolution engine doesn't surface outcome_text today; Phase D "
-            "wires it into the player message."
+            "rolled (design §8.3). WIRED by #885 — the resolution engine "
+            "surfaces it as the actor's STORY message (a random-set route "
+            "prefers the chosen candidate's outcome_text, #941)."
         ),
     )
     outcome_text_needs_rewrite = models.BooleanField(
         default=False,
         help_text=(
-            "Phase-D copy service sets True; the Phase-D edit service "
-            "clears it on save. NOT cleared automatically at the model "
-            "layer — service responsibility."
+            "The copy service sets True on cloned text; the editor serializer "
+            "clears it when the text is rewritten (#941). NOT cleared "
+            "automatically at the model layer — service/serializer responsibility."
         ),
     )
 
@@ -1186,6 +1186,18 @@ class MissionDeedRecord(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Resolved outcome tier; null for a BRANCH deed.",
+    )
+    route_candidate = models.ForeignKey(
+        "missions.MissionOptionRouteCandidate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The random-set candidate that fired for this deed, if any (#941). "
+            "Carries the per-candidate consequence / outcome_text / rewards the "
+            "engine used; null for non-random routes and BRANCH deeds."
+        ),
     )
     applied_at = models.DateTimeField(auto_now_add=True)
 

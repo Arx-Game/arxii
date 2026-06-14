@@ -72,11 +72,12 @@ from world.missions.models import (
     MissionDeedRecord,
     MissionNodeSnapshot,
     MissionOptionRoute,
+    MissionOptionRouteCandidate,
 )
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.renown_emission import emit_terminal_renown_awards
-from world.missions.services.rewards import emit_terminal_rewards
+from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.missions.types import PresentedOption
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 from world.traits.models import CheckOutcome
@@ -344,13 +345,18 @@ def _resolve_challenge_check(
 def _select_route_consequence(
     route: MissionOptionRoute,
     result: CheckResult,
+    candidate: MissionOptionRouteCandidate | None = None,
 ) -> Consequence:
-    """Authored route consequence if set, else a synthetic UNSAVED fallback.
+    """Authored consequence if set, else a synthetic UNSAVED fallback.
 
-    Mirrors ``world.mechanics.challenge_resolution._select_consequence``: an
-    unsaved Consequence makes ``apply_resolution`` a uniform no-op (returns
-    []), so callers never special-case "this route has no effect".
+    A fired random-set ``candidate`` overrides with its own consequence when
+    it carries one (#941); otherwise the route's consequence applies. Mirrors
+    ``world.mechanics.challenge_resolution._select_consequence``: an unsaved
+    Consequence makes ``apply_resolution`` a uniform no-op (returns []), so
+    callers never special-case "this route has no effect".
     """
+    if candidate is not None and candidate.consequence_id is not None:
+        return candidate.consequence
     if route.consequence_id is not None:
         return route.consequence
     outcome = result.outcome
@@ -362,15 +368,23 @@ def _select_route_consequence(
     )
 
 
-def _route_next_node(route: MissionOptionRoute) -> MissionNode | None:
-    """Destination for ``route``: a weighted candidate when randomized,
-    else ``target_node`` (which may be null = terminal)."""
+def _route_next_node(
+    route: MissionOptionRoute,
+) -> tuple[MissionNode | None, MissionOptionRouteCandidate | None]:
+    """Destination for ``route`` plus the candidate that chose it (#941).
+
+    Randomized routes weight-pick a candidate and return its ``target_node``
+    along with the candidate itself (so the engine can use its per-candidate
+    consequence / outcome_text / rewards). Plain routes return
+    ``(target_node, None)`` — ``target_node`` may be null = terminal.
+    """
     if route.is_random_set:
         candidates = list(route.candidates.all())
         if candidates:
-            return select_weighted(candidates).target_node
-        return None
-    return route.target_node
+            chosen = select_weighted(candidates)
+            return chosen.target_node, chosen
+        return None, None
+    return route.target_node, None
 
 
 def _spawn_mission_instance_room(
@@ -503,13 +517,21 @@ def resolve_option(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
-    consequence = _select_route_consequence(route, result)
+    # Pick the random-set destination (and its candidate) up front so the
+    # candidate's per-candidate consequence/text/rewards drive this resolution
+    # (#941). advance=False is the routing-free mode — no candidate is chosen,
+    # so the route-level consequence applies.
+    next_node: MissionNode | None = None
+    candidate: MissionOptionRouteCandidate | None = None
+    if advance:
+        next_node, candidate = _route_next_node(route)
+
+    consequence = _select_route_consequence(route, result, candidate)
     context = ResolutionContext(character=character)
     apply_resolution(PendingResolution(result, consequence), context)
 
     is_terminal = False
     if advance:
-        next_node = _route_next_node(route)
         if next_node is None:
             _finish_terminal(instance)
             is_terminal = True
@@ -523,13 +545,16 @@ def resolve_option(  # noqa: PLR0913
         node=node,
         option=option,
         outcome=result.outcome,
+        route_candidate=candidate,
     )
+    # #941: a fired random-set candidate's own reward bundle emits on selection
+    # (it always advances, so it is never the terminal route).
+    if candidate is not None:
+        emit_candidate_rewards(instance, candidate, deed)
     if is_terminal:
-        # Phase 5b.0: emit authored reward lines from MissionOptionRouteReward
-        # rows attached to this terminal route. Non-terminal routes still
-        # emit no reward lines (the gate is the local is_terminal flag, set
-        # ABOVE the deed.create — _finish_terminal runs before the deed
-        # exists, so capture it locally and act after).
+        # Phase 5b.0: emit the terminal route's authored reward lines. The gate
+        # is the local is_terminal flag, set ABOVE the deed.create
+        # (_finish_terminal runs before the deed exists, so act after).
         emit_terminal_rewards(instance, route, deed)
         # #735: fire any MissionRenownAward rows attached to the route.
         emit_terminal_renown_awards(instance, route, deed)
@@ -552,6 +577,7 @@ def _resolve_branch(
     emitted but the instance position/status is not touched."""
     is_terminal = False
     terminal_route: MissionOptionRoute | None = None
+    candidate: MissionOptionRouteCandidate | None = None
     if advance:
         next_node: MissionNode | None
         route: MissionOptionRoute | None = None
@@ -562,7 +588,10 @@ def _resolve_branch(
                 option=option,
                 outcome_tier__isnull=True,
             ).first()
-            next_node = _route_next_node(route) if route is not None else None
+            if route is not None:
+                next_node, candidate = _route_next_node(route)
+            else:
+                next_node = None
 
         if next_node is None:
             _finish_terminal(instance)
@@ -579,15 +608,16 @@ def _resolve_branch(
         node=node,
         option=option,
         outcome=None,
+        route_candidate=candidate,
     )
+    # #941: a fired random-set candidate's reward bundle emits on selection.
+    if candidate is not None:
+        emit_candidate_rewards(instance, candidate, deed)
     if is_terminal and terminal_route is not None:
-        # Phase 5b.0: emit authored reward lines. A BRANCH option that
-        # terminates without an authored route (no branch_target AND no
-        # null-tier route) has no MissionOptionRoute to author rewards on
-        # — there is simply nowhere for the author to attach reward
-        # templates, so we skip emission cleanly. Templates intentionally
-        # live on MissionOptionRoute rows; an authored terminal needs an
-        # explicit null-target route.
+        # Phase 5b.0: emit the terminal route's authored reward lines. A BRANCH
+        # option that terminates without an authored route (no branch_target
+        # AND no null-tier route) has nowhere to attach reward templates, so
+        # emission is skipped cleanly.
         emit_terminal_rewards(instance, terminal_route, deed)
         # #735: fire any MissionRenownAward rows attached to the branch's
         # terminal route. Branch terminals without an authored route emit

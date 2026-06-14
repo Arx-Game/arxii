@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         MissionDeedRecord,
         MissionInstance,
         MissionOptionRoute,
+        MissionOptionRouteCandidate,
         MissionOptionRouteReward,
         MissionParticipant,
     )
@@ -144,9 +145,11 @@ def emit_terminal_rewards(
     """Emit one :class:`MissionDeedRewardLine` per (template × recipient).
 
     Called by the resolution engine after a terminal :class:`MissionDeedRecord`
-    has been created (``next_node is None``). Walks ``route.reward_templates``
-    and distributes per the template's ``contract_holder_only`` toggle and
-    the instance's ``template.reward_group_rule``:
+    has been created (``next_node is None``). Walks the terminal route's
+    ``reward_templates`` (a fired random-set candidate's own rewards fire
+    separately, on selection — see :func:`emit_candidate_rewards`). Each
+    template distributes per its ``contract_holder_only`` toggle and the
+    instance's ``template.reward_group_rule``:
 
       * ``contract_holder_only=True`` rows → exactly one line, recipient =
         the instance's contract-holding participant's character (regardless
@@ -181,17 +184,43 @@ def emit_terminal_rewards(
     """
     if route.target_node_id is not None:
         raise ValueError(_ERR_NON_TERMINAL_ROUTE.format(target_node_id=route.target_node_id))
+    return _distribute_reward_templates(instance, list(route.reward_templates.all()), deed)
 
-    templates = list(route.reward_templates.all())
+
+def emit_candidate_rewards(
+    instance: MissionInstance,
+    candidate: MissionOptionRouteCandidate,
+    deed: MissionDeedRecord,
+) -> list[MissionDeedRewardLine]:
+    """Emit a fired random-set candidate's own reward bundle (#941).
+
+    Unlike route rewards (terminal-gated), a candidate's reward lines fire when
+    the candidate is chosen — a candidate always advances (its ``target_node``
+    is required), so it is never the terminal route. Same per-template
+    distribution as :func:`emit_terminal_rewards`. No-op when the candidate
+    carries no reward templates.
+    """
+    return _distribute_reward_templates(instance, list(candidate.reward_templates.all()), deed)
+
+
+def _distribute_reward_templates(
+    instance: MissionInstance,
+    templates: list[MissionOptionRouteReward],
+    deed: MissionDeedRecord,
+) -> list[MissionDeedRewardLine]:
+    """Turn authored reward templates into persisted lines (shared core).
+
+    Distribution: ``contract_holder_only`` rows → one line to the holder;
+    broadcast rows → per ``instance.template.reward_group_rule`` (ALL_EQUAL
+    implemented; BY_ROLE / BY_PARTICIPATION stub-sealed). All rows are built
+    before any write so a stub-sealed rule aborts cleanly (no partial writes).
+    """
     if not templates:
         return []
 
     participants = _ordered_participants(instance)
     rule = instance.template.reward_group_rule
 
-    # Build all rows BEFORE any DB write — so a stub-sealed rule aborts the
-    # whole emission cleanly (no partial writes), even when the route also
-    # carries contract_holder_only rows that would otherwise succeed.
     rows: list[MissionDeedRewardLine] = []
     holder: MissionParticipant | None = None
     for template in templates:
@@ -200,11 +229,9 @@ def emit_terminal_rewards(
                 holder = _contract_holder(participants)
             rows.append(_line_for(deed, template, holder))
             continue
-        # Broadcast row — distribute by reward_group_rule.
         if rule == RewardGroupRule.ALL_EQUAL:
             rows.extend(_line_for(deed, template, p) for p in participants)
         else:
-            # RewardGroupRule.BY_ROLE / BY_PARTICIPATION — stub-sealed.
             raise NotImplementedError(_ERR_UNIMPLEMENTED_RULE.format(rule=rule))
 
     with transaction.atomic():
