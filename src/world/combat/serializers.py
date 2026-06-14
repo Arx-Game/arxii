@@ -160,15 +160,18 @@ class OpponentSerializer(serializers.ModelSerializer):
         return obj.persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
-        """PlayerMedia portrait URL, resolved through the opponent's persona.
+        """PlayerMedia portrait URL.
 
-        Mirrors ``PersonaSerializer.get_thumbnail_media_url``: returns the
-        linked ``PlayerMedia.cloudinary_url``, or ``None`` when the persona
-        has no thumbnail (or the opponent has no persona).
+        Resolved through the opponent's persona when present (mirrors
+        ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
+        (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
+        FK. ``None`` when neither supplies a thumbnail.
         """
-        if obj.persona_id is None or obj.persona.thumbnail_id is None:
-            return None
-        return obj.persona.thumbnail.cloudinary_url
+        if obj.persona_id is not None and obj.persona.thumbnail_id is not None:
+            return obj.persona.thumbnail.cloudinary_url
+        if obj.portrait_id is not None:
+            return obj.portrait.cloudinary_url
+        return None
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
