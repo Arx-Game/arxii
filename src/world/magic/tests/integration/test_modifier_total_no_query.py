@@ -289,11 +289,16 @@ class ModifierTotalQueryBudgetTests(TestCase):
 
 
 class CovenantRoleAnchorCapQueryBudgetTests(TestCase):
-    """Regression guard for the _rows select_related("covenant") requirement.
+    """Query-budget guard for the COVENANT_ROLE anchor cap (Slice G / #517).
 
-    After the handler cache is warmed, compute_anchor_cap on a COVENANT_ROLE
-    thread must fire ZERO queries — proves max_covenant_level_for_role walks
-    the cache without re-fetching covenant rows.
+    The covenant and tenure components must read the warmed
+    CharacterCovenantRoleHandler cache with ZERO queries (the _rows
+    select_related("covenant") requirement — max_covenant_level_for_role and
+    days_held_in_role walk the cache, never re-fetching covenant rows). The
+    legend component (get_character_role_legend) is a derive-on-read lookup
+    against CovenantLegendCredit and costs exactly one query; covenant
+    membership is supplied from the cache (covenant_ids_for_role), so the cap
+    does NOT re-query the role's covenants.
     """
 
     @classmethod
@@ -310,10 +315,24 @@ class CovenantRoleAnchorCapQueryBudgetTests(TestCase):
             target_trait=None,
         )
 
-    def test_compute_anchor_cap_covenant_role_zero_queries(self) -> None:
+    def test_covenant_and_tenure_components_zero_queries(self) -> None:
+        """Covenant level, tenure, and covenant-id lookups walk the cache — no queries."""
+        handler = self.membership.character_sheet.character.covenant_roles
+        role = self.membership.covenant_role
+        list(handler.currently_engaged_roles())  # warm
+        with self.assertNumQueries(0):
+            handler.max_covenant_level_for_role(role)
+            handler.days_held_in_role(role)
+            handler.covenant_ids_for_role(role)
+
+    def test_compute_anchor_cap_covenant_role_single_legend_query(self) -> None:
+        """The whole cap fires exactly one query: the legend-credit lookup.
+
+        Covenant + tenure components are cache-only and covenant_ids come from the
+        warmed handler, so the only DB hit is the CovenantLegendCredit query.
+        """
         from world.magic.services.threads import compute_anchor_cap
 
-        # Warm the handler.
         list(self.membership.character_sheet.character.covenant_roles.currently_engaged_roles())
-        with self.assertNumQueries(0):
+        with self.assertNumQueries(1):
             compute_anchor_cap(self.thread)

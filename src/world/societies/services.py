@@ -4,9 +4,13 @@ Provides functions for creating and spreading legendary deeds,
 and querying legend totals from materialized views.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Sum
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
@@ -28,6 +32,10 @@ from world.societies.models import (
     refresh_legend_views,
 )
 from world.stories.models import Story
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.covenants.models import CovenantRole
 
 
 @transaction.atomic
@@ -370,3 +378,50 @@ def get_covenant_legend_total(covenant: Covenant) -> int:
     )
     result = list(row)
     return result[0] if result else 0
+
+
+def get_character_role_legend(
+    *,
+    character_sheet: CharacterSheet,
+    role: CovenantRole,
+    covenant_ids: list[int] | None = None,
+) -> int:
+    """Sum the legend this character earned that was credited to covenants where they held ``role``.
+
+    "Legend earned in role" signal for the COVENANT_ROLE anchor cap (issue #517).
+    Counts each LegendEntry once (distinct-entry) to avoid the spread-join /
+    multi-covenant-credit fan-out double-count. Active entries only.
+
+    ``covenant_ids`` may be supplied by a caller that already has the character's
+    held-role covenants cached (the anchor-cap path reads them from the
+    ``CharacterCovenantRoleHandler`` cache) to skip the membership query.
+    """
+    if covenant_ids is None:
+        from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+        covenant_ids = list(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=character_sheet, covenant_role=role
+            ).values_list("covenant_id", flat=True)
+        )
+    if not covenant_ids:
+        return 0
+
+    entry_ids = set(
+        CovenantLegendCredit.objects.filter(
+            covenant_id__in=covenant_ids,
+            entry__persona__character_sheet=character_sheet,
+            entry__is_active=True,
+        ).values_list("entry_id", flat=True)
+    )
+    if not entry_ids:
+        return 0
+
+    base = LegendEntry.objects.filter(id__in=entry_ids).aggregate(t=Sum("base_value"))["t"] or 0
+    spreads = (
+        LegendSpread.objects.filter(legend_entry_id__in=entry_ids).aggregate(t=Sum("value_added"))[
+            "t"
+        ]
+        or 0
+    )
+    return int(base + spreads)

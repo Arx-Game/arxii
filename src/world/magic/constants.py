@@ -163,6 +163,13 @@ class GainSource(models.TextChoices):
     )
 
 
+# COVENANT_ROLE anchor cap tuning (use-based; issue #517).
+# Additive: covenant component + legend-in-role // legend_divisor + days-held // days_divisor.
+ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER: int = 10
+ANCHOR_CAP_COVENANT_LEGEND_DIVISOR: int = 50
+ANCHOR_CAP_COVENANT_DAYS_DIVISOR: int = 30
+
+
 # FACET anchor cap tuning (Spec D §6.1)
 ANCHOR_CAP_FACET_DIVISOR: int = 50
 """Divisor applied to lifetime_earned(resonance) to derive FACET anchor cap.

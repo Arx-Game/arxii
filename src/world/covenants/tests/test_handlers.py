@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -303,3 +305,48 @@ class CovenantMembershipHandlerTests(TestCase):
         self.m1.save()
         self.cov.member_roster.invalidate()
         self.assertEqual(set(self.cov.member_roster.active_memberships), {self.m2})
+
+
+class DaysHeldInRoleTests(TestCase):
+    def _backdate(self, ccr, *, days_ago_joined, days_ago_left=None):
+        ccr.joined_at = timezone.now() - timedelta(days=days_ago_joined)
+        if days_ago_left is not None:
+            ccr.left_at = timezone.now() - timedelta(days=days_ago_left)
+        ccr.save(update_fields=["joined_at", "left_at"])
+        return ccr
+
+    def test_zero_when_never_held(self) -> None:
+        role = CovenantRoleFactory()
+        sheet = CharacterCovenantRoleFactory().character_sheet  # holds a *different* role
+        character = sheet.character
+        self.assertEqual(character.covenant_roles.days_held_in_role(role), 0)
+
+    def test_active_row_counts_elapsed_time(self) -> None:
+        role = CovenantRoleFactory()
+        ccr = CharacterCovenantRoleFactory(covenant_role=role)
+        self._backdate(ccr, days_ago_joined=60)
+        character = ccr.character_sheet.character
+        self.assertEqual(character.covenant_roles.days_held_in_role(role), 60)
+
+    def test_historical_row_counts_span(self) -> None:
+        role = CovenantRoleFactory()
+        ccr = CharacterCovenantRoleFactory(covenant_role=role)
+        # joined 100d ago, left 40d ago -> span = 60 days
+        self._backdate(ccr, days_ago_joined=100, days_ago_left=40)
+        character = ccr.character_sheet.character
+        self.assertEqual(character.covenant_roles.days_held_in_role(role), 60)
+
+    def test_sums_across_covenants_for_same_role(self) -> None:
+        role = CovenantRoleFactory()
+        ccr_a = CharacterCovenantRoleFactory(covenant_role=role)
+        self._backdate(ccr_a, days_ago_joined=30)
+        sheet = ccr_a.character_sheet
+        ccr_b = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=CovenantFactory(covenant_type=role.covenant_type),
+            covenant_role=role,
+        )
+        self._backdate(ccr_b, days_ago_joined=20)
+        # invalidate so the handler re-reads both rows in one cached list
+        sheet.character.covenant_roles.invalidate()
+        self.assertEqual(sheet.character.covenant_roles.days_held_in_role(role), 50)
