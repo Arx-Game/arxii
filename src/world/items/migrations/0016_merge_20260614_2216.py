@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("items", "0013_facetcraftingconfig"),
         ("items", "0015_merge_20260614_2144"),
