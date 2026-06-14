@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("areas", "0003_area_allowed_building_kinds_and_more"),
         ("mechanics", "0002_initial"),
-        ("objects", "0014_defaultobject_defaultcharacter_defaultexit_and_more"),
+        ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 
     operations = [
