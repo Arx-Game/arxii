@@ -2,7 +2,7 @@
 
 Read-only view of a persona's renown:
 
-* Four prestige axes (dwellings, items, orgs, deeds) + total + fame
+* Five prestige axes (dwellings, items, orgs, deeds, fashion) + total + fame
   buffer + fame tier.
 * Per-society reputation tiers (named labels, not numeric values).
 * Recent deeds (LegendEntry rows) — title + base_value + created date.
@@ -29,12 +29,13 @@ from world.societies.types import ReputationTier
 
 
 class _PrestigeBreakdownSerializer(serializers.Serializer):
-    """Four-axis breakdown of the persona's total_prestige."""
+    """Five-axis breakdown of the persona's total_prestige."""
 
     dwellings = serializers.IntegerField()
     items = serializers.IntegerField()
     orgs = serializers.IntegerField()
     deeds = serializers.IntegerField()
+    fashion = serializers.IntegerField()
     total = serializers.IntegerField()
 
 
@@ -149,6 +150,7 @@ def _build_prestige(persona: Persona) -> dict:
         "items": persona.prestige_from_items,
         "orgs": persona.prestige_from_orgs,
         "deeds": persona.prestige_from_deeds,
+        "fashion": persona.prestige_from_fashion,
         "total": persona.total_prestige,
     }
 

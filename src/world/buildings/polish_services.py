@@ -196,6 +196,7 @@ def recompute_persona_prestige_from_dwellings(persona) -> int:
         + persona.prestige_from_items
         + persona.prestige_from_orgs
         + persona.prestige_from_deeds
+        + persona.prestige_from_fashion
     )
     persona.save(update_fields=["prestige_from_dwellings", "total_prestige"])
     return total

@@ -232,7 +232,7 @@ class Persona(SharedMemoryModel):
         "abyssal), used by reactive examine-filters via has_property.",
     )
 
-    # #676 Phase A: Renown system fields. Four prestige sources (denormalized
+    # #676 Phase A: Renown system fields. Five prestige sources (denormalized
     # for cheap read), plus the cached total. Sources are updated event-driven
     # in subsequent phases (B+); Phase A just establishes the schema and the
     # cron decay infrastructure for fame. All fields default to 0; existing
@@ -265,10 +265,17 @@ class Persona(SharedMemoryModel):
             "wires the event-fire awards). Signed — rare scandal awards subtract."
         ),
     )
+    prestige_from_fashion = models.BigIntegerField(
+        default=0,
+        help_text=(
+            "Denormalized prestige from fashion presentations at events (#514). "
+            "Recomputed from FashionPresentation acclaim. Signed."
+        ),
+    )
     total_prestige = models.BigIntegerField(
         default=0,
         help_text=(
-            "Denormalized sum of the four prestige source fields. Updated "
+            "Denormalized sum of the five prestige source fields. Updated "
             "whenever any source field is written. Signed."
         ),
     )
