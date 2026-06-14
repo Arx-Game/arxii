@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.missions.constants import MissionStatus
-from world.missions.models import MissionOptionRoute, MissionParticipant
+from world.missions.models import MissionDeedRecord, MissionOptionRoute, MissionParticipant
 from world.missions.services.resolution import build_option_list, resolve_option
 from world.missions.types import BeatOption, BeatView, PresentedOption, ResolvedBeat
 from world.narrative.constants import NarrativeCategory
@@ -147,7 +147,7 @@ def resolve_beat_option(
     )
 
     outcome_name = deed.outcome.name if deed.outcome_id else None
-    story_text = _story_text_for(presented, outcome_name, instance.template.name)
+    story_text = _story_text_for(presented, deed, instance.template.name)
     is_terminal = instance.current_node_id is None
 
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
@@ -172,15 +172,19 @@ def resolve_beat_option(
     )
 
 
-def _story_text_for(
-    presented: PresentedOption, outcome_name: str | None, template_name: str
-) -> str:
-    """The actor's STORY prose: authored route outcome_text when it exists.
+def _story_text_for(presented: PresentedOption, deed: MissionDeedRecord, template_name: str) -> str:
+    """The actor's STORY prose: authored outcome_text when it exists.
 
-    The route is re-derived the same way the engine matched it (option +
-    rolled tier); BRANCH deeds have no outcome tier and fall through to
-    the PLACEHOLDER template.
+    A fired random-set candidate's outcome_text wins (#941 — the engine
+    recorded which candidate fired on the deed); else the route's text,
+    re-derived the same way the engine matched it (option + rolled tier).
+    BRANCH deeds with neither fall through to the PLACEHOLDER template.
     """
+    candidate = deed.route_candidate
+    if candidate is not None and candidate.outcome_text:
+        return candidate.outcome_text
+
+    outcome_name = deed.outcome.name if deed.outcome_id else None
     if outcome_name is not None:
         route = (
             MissionOptionRoute.objects.filter(

@@ -29,13 +29,14 @@ from world.missions.factories import (
     MissionInstanceFactory,
     MissionNodeFactory,
     MissionOptionFactory,
+    MissionOptionRouteCandidateFactory,
     MissionOptionRouteFactory,
     MissionOptionRouteRewardFactory,
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
 from world.missions.models import MissionDeedRewardLine
-from world.missions.services import emit_terminal_rewards
+from world.missions.services import emit_candidate_rewards, emit_terminal_rewards
 
 
 def _make_terminal_route(option: object) -> object:
@@ -365,3 +366,69 @@ class EmitTerminalRewardsGuardTests(TestCase):
         )
         with self.assertRaises(ValueError):
             emit_terminal_rewards(instance, route, deed)
+
+
+class EmitCandidateRewardsTests(TestCase):
+    """#941: a fired random-set candidate's own reward bundle emits on selection."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = MissionTemplateFactory(
+            name="emit-candidate-tmpl",
+            reward_group_rule=RewardGroupRule.ALL_EQUAL,
+        )
+        cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.dest = MissionNodeFactory(template=cls.template, key="dest")
+        cls.option = MissionOptionFactory(
+            node=cls.node,
+            order=0,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+        )
+
+    def _instance_with_holder(self):
+        instance = MissionInstanceFactory(template=self.template)
+        holder_char = CharacterFactory(db_key="CandRewardHolder")
+        MissionParticipantFactory(instance=instance, character=holder_char, is_contract_holder=True)
+        return instance, holder_char
+
+    def _candidate(self):
+        route = _make_terminal_route(self.option)
+        # A candidate always advances — target_node is required (never terminal).
+        return MissionOptionRouteCandidateFactory(route=route, target_node=self.dest, weight=1)
+
+    def test_candidate_reward_bundle_emits(self) -> None:
+        instance, holder_char = self._instance_with_holder()
+        candidate = self._candidate()
+        MissionOptionRouteRewardFactory(
+            route=None,
+            candidate=candidate,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=42,
+        )
+        deed = MissionDeedRecordFactory(
+            instance=instance,
+            actor=holder_char,
+            node=self.node,
+            option=self.option,
+            route_candidate=candidate,
+        )
+
+        created = emit_candidate_rewards(instance, candidate, deed)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].amount, 42)
+
+    def test_candidate_without_rewards_emits_nothing(self) -> None:
+        instance, holder_char = self._instance_with_holder()
+        candidate = self._candidate()
+        deed = MissionDeedRecordFactory(
+            instance=instance,
+            actor=holder_char,
+            node=self.node,
+            option=self.option,
+            route_candidate=candidate,
+        )
+
+        created = emit_candidate_rewards(instance, candidate, deed)
+        self.assertEqual(created, [])

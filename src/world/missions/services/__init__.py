@@ -50,6 +50,7 @@ from world.missions.services.resolution import (
 from world.missions.services.rewards import (
     MissionRewardRoutingError,
     apply_deed_rewards,
+    emit_candidate_rewards,
     emit_terminal_rewards,
 )
 from world.missions.services.run import share_mission, staff_assign_mission
@@ -62,6 +63,7 @@ __all__ = [
     "build_group_option_list",
     "build_option_list",
     "contract_holder",
+    "emit_candidate_rewards",
     "emit_terminal_rewards",
     "enter_node",
     "group_resolve_node",

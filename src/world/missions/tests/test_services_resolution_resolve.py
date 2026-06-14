@@ -145,6 +145,70 @@ class ResolveCheckOptionTests(TestCase):
             deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.assertEqual(deed.actor, self.actor.character)
 
+    def test_random_set_persists_chosen_candidate_on_deed(self) -> None:
+        # #941: the engine records which random candidate fired, so per-candidate
+        # outcome_text / rewards can reference it after the fact.
+        rand_outcome = CheckOutcomeFactory(name="PartialPersist", success_level=1)
+        rand_route = MissionOptionRouteFactory(
+            option=self.check_option,
+            outcome_tier=rand_outcome,
+            target_node=None,
+            is_random_set=True,
+        )
+        cand_a = MissionOptionRouteCandidateFactory(
+            route=rand_route, target_node=self.node_a, weight=1
+        )
+        cand_b = MissionOptionRouteCandidateFactory(
+            route=rand_route, target_node=self.node_b, weight=1
+        )
+        with force_check_outcome(rand_outcome):
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
+        self.assertIn(deed.route_candidate, {cand_a, cand_b})
+
+    def test_candidate_consequence_overrides_route(self) -> None:
+        # #941: a fired candidate's own consequence is applied over the route's.
+        rand_outcome = CheckOutcomeFactory(name="PartialConseq", success_level=1)
+        route_conseq = ConsequenceFactory(outcome_tier=rand_outcome)
+        cand_conseq = ConsequenceFactory(outcome_tier=rand_outcome)
+        rand_route = MissionOptionRouteFactory(
+            option=self.check_option,
+            outcome_tier=rand_outcome,
+            target_node=None,
+            is_random_set=True,
+            consequence=route_conseq,
+        )
+        # Single candidate → deterministic pick; it carries its own consequence.
+        cand = MissionOptionRouteCandidateFactory(
+            route=rand_route, target_node=self.node_a, weight=1, consequence=cand_conseq
+        )
+        with force_check_outcome(rand_outcome), patch(_APPLY) as mocked:
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
+        self.assertEqual(deed.route_candidate, cand)
+        pending = mocked.call_args_list[0].args[0]
+        self.assertEqual(pending.selected_consequence, cand_conseq)
+
+    def test_candidate_falls_back_to_route_consequence(self) -> None:
+        # A candidate without its own consequence uses the route's (#941 fallback).
+        rand_outcome = CheckOutcomeFactory(name="PartialFallback", success_level=1)
+        route_conseq = ConsequenceFactory(outcome_tier=rand_outcome)
+        rand_route = MissionOptionRouteFactory(
+            option=self.check_option,
+            outcome_tier=rand_outcome,
+            target_node=None,
+            is_random_set=True,
+            consequence=route_conseq,
+        )
+        MissionOptionRouteCandidateFactory(route=rand_route, target_node=self.node_a, weight=1)
+        with force_check_outcome(rand_outcome), patch(_APPLY) as mocked:
+            resolve_option(self.instance, self.entry, self.check_option, self.actor)
+        pending = mocked.call_args_list[0].args[0]
+        self.assertEqual(pending.selected_consequence, route_conseq)
+
+    def test_non_random_route_leaves_candidate_null(self) -> None:
+        with force_check_outcome(self.success):
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
+        self.assertIsNone(deed.route_candidate)
+
 
 class ResolveChallengeOptionTests(TestCase):
     """CHALLENGE option: approach check (or auto-success) → route on outcome.

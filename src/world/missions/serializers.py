@@ -317,7 +317,29 @@ class MissionOptionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
-class MissionOptionRouteSerializer(serializers.ModelSerializer):
+_OUTCOME_TEXT_FIELD = "outcome_text"
+_OUTCOME_TEXT_NEEDS_REWRITE_FIELD = "outcome_text_needs_rewrite"
+
+
+class _ClearOutcomeRewriteOnEditMixin:
+    """Auto-clear ``outcome_text_needs_rewrite`` when the text is rewritten (#941).
+
+    The copy service flags cloned outcome text as needing a rewrite; that flag
+    must clear once an author actually rewrites it (otherwise copied missions
+    stay flagged forever). When an edit changes ``outcome_text`` and does NOT
+    set the flag explicitly, we clear it. An explicit flag value is respected.
+    """
+
+    def update(self, instance, validated_data):
+        if (
+            _OUTCOME_TEXT_FIELD in validated_data
+            and _OUTCOME_TEXT_NEEDS_REWRITE_FIELD not in self.initial_data
+        ):
+            validated_data[_OUTCOME_TEXT_NEEDS_REWRITE_FIELD] = False
+        return super().update(instance, validated_data)
+
+
+class MissionOptionRouteSerializer(_ClearOutcomeRewriteOnEditMixin, serializers.ModelSerializer):
     """Editor CRUD for MissionOptionRoute rows (one per outcome tier per option)."""
 
     class Meta:
@@ -335,7 +357,9 @@ class MissionOptionRouteSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
-class MissionOptionRouteCandidateSerializer(serializers.ModelSerializer):
+class MissionOptionRouteCandidateSerializer(
+    _ClearOutcomeRewriteOnEditMixin, serializers.ModelSerializer
+):
     """Editor CRUD for MissionOptionRouteCandidate (random-set rolls)."""
 
     class Meta:

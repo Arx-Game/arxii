@@ -44,7 +44,7 @@ from world.missions.services.resolution import (
     present_options_for_character,
     resolve_option,
 )
-from world.missions.services.rewards import emit_terminal_rewards
+from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.missions.types import GroupChoice
 
 if TYPE_CHECKING:
@@ -418,17 +418,21 @@ def group_resolve_node(
     # transient terminal is no longer needed.
     combined_success = _joint_combined_success(node, deeds)
     route = _combined_route(holder_option, combined_success)
-    next_node = _route_next_node(route)
+    next_node, candidate = _route_next_node(route)
+    # The JOINT decision's anchor is the contract holder's deed (the holder's
+    # option route-set drives _combined_route). Per-attempt deeds carried
+    # advance=False, so no candidate/reward emission happened mid-loop — this
+    # is the single combined-decision emission.
+    holder_deed = next(d for d in deeds if d.actor_id == holder.character_id)
+    if candidate is not None:
+        # #941: record the fired random-set candidate on the anchor deed and
+        # emit its reward bundle once (on selection, like the solo path).
+        holder_deed.route_candidate = candidate
+        holder_deed.save(update_fields=["route_candidate"])
+        emit_candidate_rewards(instance, candidate, holder_deed)
     if next_node is None:
         _finish_terminal(instance)
-        # Phase 5b.0: JOINT terminal emits reward lines ONCE (not
-        # per-attempt). The natural anchor is the contract holder's deed
-        # (the holder's option's route-set drives _combined_route, so the
-        # holder's deed is the JOINT decision's deed). Per-attempt deeds
-        # carried advance=False, so no rewards were emitted by
-        # resolve_option for any participant — this is the single
-        # combined-decision emission.
-        holder_deed = next(d for d in deeds if d.actor_id == holder.character_id)
+        # Phase 5b.0: JOINT terminal emits the route's reward lines ONCE.
         emit_terminal_rewards(instance, route, holder_deed)
     else:
         instance.current_node = next_node
