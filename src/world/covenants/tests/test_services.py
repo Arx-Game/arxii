@@ -7,7 +7,13 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
-from world.covenants.exceptions import DuplicateFounderError, InsufficientFoundersError
+from world.covenants.exceptions import (
+    CannotKickLeaderError,
+    CannotKickSelfError,
+    DuplicateFounderError,
+    InsufficientFoundersError,
+    NotACovenantLeaderError,
+)
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -25,6 +31,8 @@ from world.covenants.services import (
     dissolve_covenant,
     end_covenant_role,
     is_gear_compatible,
+    kick_member,
+    leave_covenant,
     set_engaged_membership,
 )
 from world.covenants.types import CovenantFounder
@@ -929,4 +937,141 @@ class EvaluateSceneEngagementTests(TestCase):
             self.mem_a1.engaged = False
             self.mem_a1.save(update_fields=["engaged"])
             mem_a1_in_b.delete()
-            # sheet_a3 and its membership are TestCase-scoped so they'll be rolled back
+
+
+class LeaveCovenantTests(TestCase):
+    def _member(self, cov, role=None):
+        sheet = CharacterSheetFactory()
+        role = role or CovenantRoleFactory(covenant_type=cov.covenant_type)
+        return CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
+
+    def test_leave_covenant_soft_ends_membership(self) -> None:
+        # 3-member covenant so 2 remain after one leaves → no dissolve.
+        cov = CovenantFactory()
+        m1 = self._member(cov)
+        self._member(cov)
+        self._member(cov)
+
+        leave_covenant(membership=m1)
+
+        m1.refresh_from_db()
+        self.assertIsNotNone(m1.left_at)
+        self.assertFalse(m1.engaged)
+        cov.refresh_from_db()
+        self.assertIsNone(cov.dissolved_at)
+
+    def test_leave_dropping_below_two_auto_dissolves(self) -> None:
+        cov = CovenantFactory()
+        m1 = self._member(cov)
+        m2 = self._member(cov)
+
+        leave_covenant(membership=m1)
+
+        cov.refresh_from_db()
+        self.assertIsNotNone(cov.dissolved_at)
+        m1.refresh_from_db()
+        m2.refresh_from_db()
+        self.assertIsNotNone(m1.left_at)
+        self.assertIsNotNone(m2.left_at)
+
+    def test_leave_is_idempotent(self) -> None:
+        cov = CovenantFactory()
+        m1 = self._member(cov)
+        self._member(cov)
+        self._member(cov)
+        leave_covenant(membership=m1)
+        m1.refresh_from_db()
+        first_left = m1.left_at
+        # Leaving again is a no-op (no error, timestamp unchanged).
+        leave_covenant(membership=m1)
+        m1.refresh_from_db()
+        self.assertEqual(m1.left_at, first_left)
+
+
+class KickMemberTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.leader_role = CovenantRoleFactory(slug="kick-leader", is_leadership=True)
+        cls.member_role = CovenantRoleFactory(slug="kick-member", is_leadership=False)
+
+    def _row(self, cov, role):
+        return CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov, covenant_role=role
+        )
+
+    def test_kick_member_by_leader(self) -> None:
+        cov = CovenantFactory()
+        actor = self._row(cov, self.leader_role)
+        target = self._row(cov, self.member_role)
+        self._row(cov, self.member_role)  # third member keeps covenant alive
+
+        kick_member(target=target, actor=actor)
+
+        target.refresh_from_db()
+        self.assertIsNotNone(target.left_at)
+        cov.refresh_from_db()
+        self.assertIsNone(cov.dissolved_at)
+
+    def test_kick_by_non_leader_rejected(self) -> None:
+        cov = CovenantFactory()
+        actor = self._row(cov, self.member_role)
+        target = self._row(cov, self.member_role)
+        self._row(cov, self.member_role)
+
+        with self.assertRaises(NotACovenantLeaderError):
+            kick_member(target=target, actor=actor)
+
+        target.refresh_from_db()
+        self.assertIsNone(target.left_at)
+
+    def test_kick_leader_by_leader_rejected(self) -> None:
+        cov = CovenantFactory()
+        actor = self._row(cov, self.leader_role)
+        target = self._row(cov, self.leader_role)
+        self._row(cov, self.member_role)
+
+        with self.assertRaises(CannotKickLeaderError):
+            kick_member(target=target, actor=actor)
+
+        target.refresh_from_db()
+        self.assertIsNone(target.left_at)
+
+    def test_kick_self_rejected(self) -> None:
+        cov = CovenantFactory()
+        actor = self._row(cov, self.leader_role)
+        self._row(cov, self.member_role)
+
+        with self.assertRaises(CannotKickSelfError):
+            kick_member(target=actor, actor=actor)
+
+        actor.refresh_from_db()
+        self.assertIsNone(actor.left_at)
+
+    def test_kick_cross_covenant_rejected(self) -> None:
+        # An actor leading covenant A cannot kick a member of covenant B.
+        cov_a = CovenantFactory()
+        cov_b = CovenantFactory()
+        actor = self._row(cov_a, self.leader_role)
+        target = self._row(cov_b, self.member_role)
+        self._row(cov_b, self.member_role)
+
+        with self.assertRaises(NotACovenantLeaderError):
+            kick_member(target=target, actor=actor)
+
+        target.refresh_from_db()
+        self.assertIsNone(target.left_at)
+
+    def test_kick_dropping_below_two_auto_dissolves(self) -> None:
+        cov = CovenantFactory()
+        actor = self._row(cov, self.leader_role)
+        target = self._row(cov, self.member_role)
+
+        kick_member(target=target, actor=actor)
+
+        cov.refresh_from_db()
+        self.assertIsNotNone(cov.dissolved_at)
+        target.refresh_from_db()
+        actor.refresh_from_db()
+        self.assertIsNotNone(target.left_at)
+        self.assertIsNotNone(actor.left_at)
+        # sheet_a3 and its membership are TestCase-scoped so they'll be rolled back
