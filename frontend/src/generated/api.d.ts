@@ -5389,7 +5389,7 @@ export interface paths {
     /** @description Return ItemFacet rows for ``?item_instance=<pk>``. */
     get: operations['items_item_facets_list'];
     put?: never;
-    /** @description Attach a facet via the serializer (which calls the service). */
+    /** @description Roll the crafting check and (on success) attach the facet. */
     post: operations['items_item_facets_create'];
     delete?: never;
     options?: never;
@@ -14841,6 +14841,14 @@ export interface components {
       readonly depth: number;
       readonly full_path: string;
     };
+    /** @description Response for a facet-craft attempt: rolled outcome + resolved tier + the row. */
+    FacetCraftResult: {
+      attached: boolean;
+      readonly outcome_name: string | null;
+      readonly success_level: number | null;
+      quality_tier: components['schemas']['QualityTier'] | null;
+      item_facet: components['schemas']['ItemFacetRead'] | null;
+    };
     /** @description Serializer for Facet with nested children for tree display. */
     FacetTree: {
       readonly id: number;
@@ -15763,11 +15771,15 @@ export interface components {
       /** Format: date-time */
       readonly applied_at: string;
     };
-    /** @description Write serializer for ItemFacet (POST create). */
+    /**
+     * @description Write serializer for ItemFacet (POST create) — input validation only.
+     *
+     *     The viewset drives the crafting service directly; this serializer parses
+     *     and validates the ``item_instance`` and ``facet`` foreign keys.
+     */
     ItemFacetWriteRequest: {
       item_instance: number;
       facet: number;
-      attachment_quality_tier: number;
     };
     /** @description Read serializer for ItemInstance — used by the inventory listing. */
     ItemInstanceRead: {
@@ -29845,7 +29857,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ItemFacetRead'];
+          'application/json': components['schemas']['FacetCraftResult'];
         };
       };
     };

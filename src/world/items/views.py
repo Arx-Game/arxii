@@ -27,7 +27,12 @@ from rest_framework.viewsets import GenericViewSet
 from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
-from world.items.exceptions import ItemError
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+    ItemError,
+)
 from world.items.filters import (
     FashionPresentationFilter,
     InteractionTypeFilter,
@@ -50,6 +55,7 @@ from world.items.models import (
 )
 from world.items.serializers import (
     EquippedItemReadSerializer,
+    FacetCraftResultSerializer,
     FashionJudgementSerializer,
     FashionPresentationSerializer,
     InteractionTypeSerializer,
@@ -70,6 +76,7 @@ from world.items.serializers import (
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
+from world.items.services.crafting import craft_attach_facet
 from world.items.services.facets import remove_facet_from_item
 from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
@@ -306,14 +313,25 @@ class ItemFacetViewSet(viewsets.ViewSet):
         serializer = ItemFacetReadSerializer(row)
         return Response(serializer.data)
 
-    @extend_schema(request=ItemFacetWriteSerializer, responses=ItemFacetReadSerializer)
+    @extend_schema(request=ItemFacetWriteSerializer, responses=FacetCraftResultSerializer)
     def create(self, request: Request) -> Response:
-        """Attach a facet via the serializer (which calls the service)."""
+        """Roll the crafting check and (on success) attach the facet."""
         serializer = ItemFacetWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        row = serializer.save()
-        read = ItemFacetReadSerializer(row)
-        return Response(read.data, status=201)
+        item_instance = serializer.validated_data["item_instance"]
+        facet = serializer.validated_data["facet"]
+        crafter_character = item_instance.holder_character_sheet.character
+        try:
+            result = craft_attach_facet(
+                crafter_account=cast(AccountDB, request.user),
+                crafter_character=crafter_character,
+                item_instance=item_instance,
+                facet=facet,
+            )
+        except (FacetAlreadyAttached, FacetCapacityExceeded, CraftingNotConfigured) as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        status_code = 201 if result.attached else 200
+        return Response(FacetCraftResultSerializer(result).data, status=status_code)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
