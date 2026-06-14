@@ -153,13 +153,13 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
 }
 
 /**
- * Viewer participant fixture: non-null health marks it as the puppeted row
- * (same owner-vitals heuristic findViewerParticipant uses).
+ * Viewer participant fixture. The viewer's own row is matched by character_sheet_id
+ * (= the characterSheetId prop passed in these tests), not by health presence. (#918)
  */
 function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
-    character_sheet_id: 1001,
+    character_sheet_id: 100,
     character_name: 'Aerande',
     status: 'active',
     health: 8,
@@ -366,6 +366,60 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
     });
 
     expect(screen.queryByTestId('audere-active-strip')).not.toBeInTheDocument();
+  });
+
+  it('keys the Audere strip off the viewer own row, not the first participant', () => {
+    // A non-viewer participant listed first carries Audere; the viewer's own row
+    // does not. The strip reflects the VIEWER's conditions (matched by sheet id),
+    // so it stays hidden — the old health-presence heuristic would have picked the
+    // first row and shown it. (#918)
+    mockEncounter({
+      is_participant: true,
+      participants: [
+        makeParticipant({
+          id: 2,
+          character_sheet_id: 2002,
+          character_name: 'Other',
+          active_conditions: [
+            { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
+              [key: string]: unknown;
+            },
+          ],
+        }),
+        makeParticipant({ id: 1, character_sheet_id: 100, character_name: 'Self' }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('audere-active-strip')).not.toBeInTheDocument();
+  });
+
+  it('shows the Audere strip when the viewer own row carries Audere even if listed last', () => {
+    mockEncounter({
+      is_participant: true,
+      participants: [
+        makeParticipant({ id: 2, character_sheet_id: 2002, character_name: 'Other' }),
+        makeParticipant({
+          id: 1,
+          character_sheet_id: 100,
+          character_name: 'Self',
+          active_conditions: [
+            { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
+              [key: string]: unknown;
+            },
+          ],
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
   });
 
   it('all sections start expanded by default', () => {

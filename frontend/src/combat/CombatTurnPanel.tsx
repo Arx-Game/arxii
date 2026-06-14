@@ -18,7 +18,7 @@ import { AudereMajoraOfferGate } from '@/magic/components/AudereMajoraOfferGate'
 import { useAvailableActions, useCombatEncounter, useConsequenceOutcomes } from './queries';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
-import { VitalPools, findViewerParticipant } from './sections/VitalPools';
+import { VitalPools, findOwnParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
@@ -148,12 +148,11 @@ export function CombatTurnPanel({
   const isParticipant = encounter.is_participant;
   const roundNumber = encounter.round_number ?? 0;
 
-  // Audere active strip — the puppeted participant's row (Participant exposes
-  // no character/sheet id, so reuse VitalPools' owner-vitals heuristic) carries
-  // the Audere condition in active_conditions while the breakthrough is live.
-  // active_conditions entries are ConditionInstances typed loosely on the
-  // generated schema (SerializerMethodField); cast at the boundary.
-  const viewerParticipant = findViewerParticipant(encounter.participants);
+  // Audere active strip — the viewer's own participant row (matched by
+  // character_sheet_id) carries the Audere condition in active_conditions while
+  // the breakthrough is live. active_conditions entries are ConditionInstances
+  // typed loosely on the generated schema (SerializerMethodField); cast at the boundary.
+  const viewerParticipant = findOwnParticipant(encounter.participants, characterSheetId);
   const isAudereActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
     (c) => c.name === 'Audere'
   );
@@ -231,6 +230,7 @@ export function CombatTurnPanel({
       <VitalPools
         encounter={encounter}
         characterId={characterId}
+        characterSheetId={characterSheetId}
         collapsed={collapsed.vitalPools}
         onToggleCollapse={() => toggleSection('vitalPools')}
         data-testid="section-vital-pools"
