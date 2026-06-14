@@ -165,14 +165,53 @@ class CraftAttachFacetTests(TestCase):
         self.assertFalse(ItemFacet.objects.filter(item_instance=self.item).exists())
 
     def test_capacity_full_raises_before_rolling(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
         from world.items.exceptions import FacetCapacityExceeded
         from world.items.services.crafting import craft_attach_facet
+        from world.traits.factories import CheckOutcomeFactory
 
         full = ItemInstanceFactory(template=ItemTemplateFactory(facet_capacity=0))
-        with self.assertRaises(FacetCapacityExceeded):
+        with force_check_outcome(
+            CheckOutcomeFactory(name="ShouldNotRoll", success_level=2)
+        ) as capture:
+            with self.assertRaises(FacetCapacityExceeded):
+                craft_attach_facet(
+                    crafter_account=self.account,
+                    crafter_character=self.sheet.character,
+                    item_instance=full,
+                    facet=self.facet,
+                )
+        self.assertIsNone(capture.check_type)  # perform_check never reached
+
+    def test_unconfigured_check_type_raises(self) -> None:
+        from world.items.exceptions import CraftingNotConfigured
+        from world.items.services.crafting import craft_attach_facet
+
+        self.config.check_type = None
+        self.config.save()
+        with self.assertRaises(CraftingNotConfigured):
             craft_attach_facet(
                 crafter_account=self.account,
                 crafter_character=self.sheet.character,
-                item_instance=full,
+                item_instance=self.item,
                 facet=self.facet,
             )
+
+    def test_duplicate_facet_raises_before_rolling(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.exceptions import FacetAlreadyAttached
+        from world.items.services.crafting import craft_attach_facet
+        from world.traits.factories import CheckOutcomeFactory
+
+        ItemFacetFactory(item_instance=self.item, facet=self.facet)
+        with force_check_outcome(
+            CheckOutcomeFactory(name="ShouldNotRoll", success_level=2)
+        ) as capture:
+            with self.assertRaises(FacetAlreadyAttached):
+                craft_attach_facet(
+                    crafter_account=self.account,
+                    crafter_character=self.sheet.character,
+                    item_instance=self.item,
+                    facet=self.facet,
+                )
+        self.assertIsNone(capture.check_type)  # perform_check never reached

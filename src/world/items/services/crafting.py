@@ -62,7 +62,7 @@ def craft_attach_facet(
         or attached=False with item_facet=None and quality_tier=None on failure.
 
     Raises:
-        CraftingNotConfigured: No CheckType is wired to the crafting config.
+        CraftingNotConfigured: No CheckType is wired, or no QualityTier rows are seeded.
         FacetCapacityExceeded: The item is at its template's facet_capacity.
         FacetAlreadyAttached: That facet is already present on the item.
     """
@@ -89,6 +89,8 @@ def craft_attach_facet(
     )
     tier = QualityTier.for_score(score)
     if tier is None:
+        # for_score returns None only when no QualityTier rows exist at all —
+        # an unconfigured deployment. Surfaced as CraftingNotConfigured.
         raise CraftingNotConfigured
     item_facet = attach_facet_to_item(
         crafter=crafter_account,
