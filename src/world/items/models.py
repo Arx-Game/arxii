@@ -1211,3 +1211,30 @@ class MantleLevelClearance(SharedMemoryModel):
                 name="items_unique_mantle_clearance_per_character",
             ),
         ]
+
+
+class Trendsetter(SharedMemoryModel):
+    """A crowned 'toast of the season' whose look set a society's trend (#514)."""
+
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.CASCADE,
+        related_name="trendsetters",
+    )
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="trendsetter_crownings",
+    )
+    fashion_style = models.ForeignKey(
+        "items.FashionStyle",
+        on_delete=models.CASCADE,
+        related_name="trendsetter_crownings",
+    )
+    crowned_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-crowned_at"]
+
+    def __str__(self) -> str:
+        return f"Trendsetter({self.persona_id} for society {self.society_id})"

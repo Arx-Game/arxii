@@ -20,6 +20,7 @@ from world.items.models import (
     OutfitSlot,
     QualityTier,
     TemplateSlot,
+    Trendsetter,
 )
 from world.mechanics.factories import ModifierTargetFactory
 
@@ -243,3 +244,14 @@ class FashionPresentationFactory(factory.django.DjangoModelFactory):
     perceiving_society = factory.SubFactory("world.societies.factories.SocietyFactory")
     base_score = 0
     acclaim = 0
+
+
+class TrendsetterFactory(factory.django.DjangoModelFactory):
+    """Factory for Trendsetter (#514)."""
+
+    class Meta:
+        model = Trendsetter
+
+    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    fashion_style = factory.SubFactory(FashionStyleFactory)

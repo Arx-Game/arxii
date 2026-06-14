@@ -357,6 +357,11 @@ def register_all_tasks() -> None:
 
     register_renown_tasks()
 
+    # #514 Outfits Phase C: seasonal trendsetter ceremony + vogue-momentum decay
+    from world.items.tasks import register_all_tasks as register_fashion_tasks
+
+    register_fashion_tasks()
+
     # #676 Phase E: Weekly building-polish upkeep sweep — deducts upkeep
     # from owner wallets; on miss, decays outermost active feature.
     from world.buildings.upkeep_services import apply_weekly_upkeep_all_buildings

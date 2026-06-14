@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.db import models
@@ -116,6 +117,13 @@ FASHION_PRESENTATION_BASE_DIFFICULTY = 10
 FASHION_VOGUE_MOMENTUM_STEP = 1  # momentum added to each worn facet per peer judgment
 FASHION_VOGUE_DECAY_FLAT = 1  # flat momentum lost per decay tick
 FASHION_VOGUE_DECAY_RATE = 0.05  # proportional momentum lost per decay tick (floored at 0)
+
+
+# Seasonal trendsetter ceremony (#514)
+FASHION_TREND_FACET_COUNT = 3  # how many top facets define the new vogue
+FASHION_LIVING_STYLE_NAME_TEMPLATE = "{society} — Current Vogue"
+FASHION_SEASON_INTERVAL = timedelta(days=30)  # seasonal ceremony cadence (real time)
+FASHION_VOGUE_DECAY_INTERVAL = timedelta(hours=8)  # momentum decay cadence (matches renown decay)
 
 
 def get_fashion_modifier_target() -> ModifierTarget:
