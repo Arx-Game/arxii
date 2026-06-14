@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from world.societies.models import RankingDisplay
 from world.societies.ranking_services import (
     get_academy_legend_top_n,
+    get_society_fashion_top_n,
     get_society_prestige_top_n,
     viewer_is_member_of_society,
 )
@@ -114,11 +115,16 @@ def _board_payload(display: RankingDisplay, viewer_persona) -> dict:
             "cloaked": True,
             "rows": [],
         }
-    rows = get_society_prestige_top_n(society, n=display.top_n)
+    if display.ranking_type == RankingDisplay.RankingType.FASHION:
+        rows = get_society_fashion_top_n(society, n=display.top_n)
+        title = f"PLACEHOLDER Those {society.name} holds best-dressed"
+    else:
+        rows = get_society_prestige_top_n(society, n=display.top_n)
+        title = f"PLACEHOLDER Those {society.name} holds highest"
     return {
         "display_id": display.pk,
         "ranking_type": display.ranking_type,
-        "title": f"PLACEHOLDER Those {society.name} holds highest",
+        "title": title,
         "cloaked": False,
         "rows": [{"persona_name": r.persona_name, "band_label": r.band_label} for r in rows],
     }

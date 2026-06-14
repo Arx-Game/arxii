@@ -1189,6 +1189,7 @@ class RankingDisplay(SharedMemoryModel):
     class RankingType(models.TextChoices):
         SOCIETY_PRESTIGE = "society_prestige", "Society Prestige"
         ACADEMY_LEGEND = "academy_legend", "Academy Legend"
+        FASHION = "society_fashion", "Society Fashion"
 
     display_object = models.OneToOneField(
         "objects.ObjectDB",
@@ -1223,8 +1224,8 @@ class RankingDisplay(SharedMemoryModel):
 
     class Meta:
         constraints = [
-            # SOCIETY_PRESTIGE rankings must scope to a specific society;
-            # ACADEMY_LEGEND rankings are global (society must be null).
+            # SOCIETY_PRESTIGE and FASHION rankings must scope to a specific
+            # society; ACADEMY_LEGEND rankings are global (society must be null).
             models.CheckConstraint(
                 check=(
                     models.Q(
@@ -1234,6 +1235,10 @@ class RankingDisplay(SharedMemoryModel):
                     | models.Q(
                         ranking_type="academy_legend",
                         scope_society__isnull=True,
+                    )
+                    | models.Q(
+                        ranking_type="society_fashion",
+                        scope_society__isnull=False,
                     )
                 ),
                 name="societies_ranking_display_scope_matches_type",

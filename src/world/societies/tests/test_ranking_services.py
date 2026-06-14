@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
@@ -24,6 +25,7 @@ from world.societies.models import RankingDisplay
 from world.societies.ranking_services import (
     RankingRow,
     get_academy_legend_top_n,
+    get_society_fashion_top_n,
     get_society_prestige_top_n,
     render_ranking_display,
     viewer_is_member_of_society,
@@ -48,6 +50,19 @@ def _make_society_display(society, *, top_n: int = 10):
     return RankingDisplay.objects.create(
         display_object=display_object,
         ranking_type=RankingDisplay.RankingType.SOCIETY_PRESTIGE,
+        scope_society=society,
+        top_n=top_n,
+    )
+
+
+def _make_fashion_display(society, *, top_n: int = 10):
+    """Build a RankingDisplay scoped to ``society`` (FASHION)."""
+    from evennia_extensions.factories import ObjectDBFactory
+
+    display_object = ObjectDBFactory()
+    return RankingDisplay.objects.create(
+        display_object=display_object,
+        ranking_type=RankingDisplay.RankingType.FASHION,
         scope_society=society,
         top_n=top_n,
     )
@@ -192,3 +207,83 @@ class AcademyLegendTopNTests(TestCase):
     def test_returns_empty_on_sqlite_or_fresh_pg(self) -> None:
         rows = get_academy_legend_top_n(n=5)
         self.assertIsInstance(rows, list)
+
+
+class SocietyFashionTopNRuntimeTests(TestCase):
+    """#514 — fashion standing ranks members by perceived fashion prestige."""
+
+    def test_empty_society_returns_empty_list(self) -> None:
+        society = SocietyFactory(name="House No-Fashion")
+        rows = get_society_fashion_top_n(society, n=10)
+        self.assertEqual(rows, [])
+
+    def test_returns_members_ordered_by_prestige_from_fashion_desc(self) -> None:
+        society = SocietyFactory(name="House Couture")
+        org = OrganizationFactory(society=society)
+        trendsetter = _make_primary_persona("Trendsetter")
+        follower = _make_primary_persona("Follower")
+        OrganizationMembershipFactory(persona=trendsetter, organization=org)
+        OrganizationMembershipFactory(persona=follower, organization=org)
+        # Invert the total_prestige ordering to prove fashion drives this board.
+        trendsetter.prestige_from_fashion = 8_000
+        trendsetter.total_prestige = 1_000
+        trendsetter.save(update_fields=["prestige_from_fashion", "total_prestige"])
+        follower.prestige_from_fashion = 2_000
+        follower.total_prestige = 9_000
+        follower.save(update_fields=["prestige_from_fashion", "total_prestige"])
+
+        rows = get_society_fashion_top_n(society, n=10)
+
+        self.assertEqual([r.persona_name for r in rows], ["Trendsetter", "Follower"])
+        self.assertEqual(rows[0].value, 8_000)
+        self.assertEqual(rows[0].rank, 1)
+        self.assertEqual(rows[1].rank, 2)
+
+
+class FashionRenderGatingTests(TestCase):
+    """#514 — fashion board mirrors society-prestige member gating + cloaking."""
+
+    def test_non_member_gets_cloaked_message(self) -> None:
+        viewer = _make_primary_persona()
+        society = SocietyFactory(name="House Veiled")
+        display = _make_fashion_display(society)
+        text = render_ranking_display(display, viewer)
+        self.assertIn("PLACEHOLDER", text)
+        self.assertIn("would know none", text)
+
+    def test_member_with_rows_gets_ranking(self) -> None:
+        viewer = _make_primary_persona()
+        society = SocietyFactory(name="House Couture")
+        org = OrganizationFactory(society=society)
+        OrganizationMembershipFactory(persona=viewer, organization=org)
+        display = _make_fashion_display(society, top_n=2)
+        fake_rows = [
+            RankingRow(rank=1, persona_name="Vogue", value=9_000),
+            RankingRow(rank=2, persona_name="Drab", value=100),
+        ]
+        with patch(
+            "world.societies.ranking_services.get_society_fashion_top_n",
+            return_value=fake_rows,
+        ) as mock_top_n:
+            text = render_ranking_display(display, viewer)
+        mock_top_n.assert_called_once_with(society, n=2)
+        self.assertIn("House Couture", text)
+        self.assertIn("Vogue", text)
+        self.assertIn("Drab", text)
+        self.assertIn("PLACEHOLDER", text)
+
+
+class FashionScopeConstraintTests(TestCase):
+    """#514 — FASHION requires a scoped society (mirrors SOCIETY_PRESTIGE)."""
+
+    def test_null_scope_society_rejected(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+
+        display_object = ObjectDBFactory()
+        with self.assertRaises(IntegrityError):
+            RankingDisplay.objects.create(
+                display_object=display_object,
+                ranking_type=RankingDisplay.RankingType.FASHION,
+                scope_society=None,
+                top_n=10,
+            )
