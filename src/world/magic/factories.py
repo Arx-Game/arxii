@@ -2566,3 +2566,155 @@ class MagicProgressionMilestoneFactory(factory.django.DjangoModelFactory):
     kind = MagicMilestoneKind.THREAD_WEAVING
     codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
     sort_order = 0
+
+
+def seed_magic_progression(prospect_paths=None):
+    """Idempotent seed for the magic progression dashboard.
+
+    Authors the codex category/subject, 11 CodexEntry rows, 14
+    MagicProgressionMilestone rows ((stage, kind) unique), and PathCodexGrant
+    rows for every active Prospect path (or ``prospect_paths`` if given).
+
+    Doubles as integration-test setUp and staff/new-player seed data; safe to
+    call repeatedly. Both entry copy (name, summary, lore_content, is_public)
+    AND milestone fields (route_name, sort_order, codex_entry) re-apply on
+    re-seed via update_or_create (idmapper-safe; loaddata would not update).
+    """
+    from world.classes.models import Path, PathStage
+    from world.codex.factories import (
+        CodexCategoryFactory,
+        CodexSubjectFactory,
+        PathCodexGrantFactory,
+    )
+    from world.codex.models import CodexEntry
+    from world.magic.constants import MagicMilestoneKind as K
+    from world.magic.models import MagicProgressionMilestone
+
+    category = CodexCategoryFactory(name="Magic")
+    subject = CodexSubjectFactory(category=category, parent=None, name="The Mage's Journey")
+
+    # entry_key -> (name, is_public, summary, lore_content)
+    ENTRIES = {
+        "resonance": (
+            "Your Resonance",
+            True,
+            "Every mage carries a resonance — the signature of their magic."
+            " Discovering yours is the first step.",
+            "A resonance is the elemental and emotional signature"
+            " that colours a mage's every working.",
+        ),
+        "threads": (
+            "Weaving Threads",
+            False,
+            "Threads bind your magic to people, places, and ideas, deepening what you can affect.",
+            "Thread-weaving is the craft of tying a working to a target"
+            " so its power deepens over time.",
+        ),
+        "motif": (
+            "Your Motif",
+            True,
+            "Your motif is the personal aesthetic your magic wears"
+            " — how your power looks and feels.",
+            "A motif is the through-line of a mage's self-expression,"
+            " the consistent style of their workings.",
+        ),
+        "techniques": (
+            "Developing Techniques",
+            False,
+            "Techniques are the shaped workings you develop and refine over a magical career.",
+            "Where a cantrip is a first spark, a developed technique is a deliberate,"
+            " honed working.",
+        ),
+        "anima": (
+            "Anima Rituals",
+            False,
+            "Anima rituals let you spend your inner reserve to power deeper magic.",
+            "Anima is the wellspring a mage draws on for ritual work,"
+            " replenished through rest and meaning.",
+        ),
+        "second_gift": (
+            "Awakening Another Gift",
+            False,
+            "As you grow, you can awaken an additional Gift — a new wellspring of power.",
+            "A Gift is an innate channel for magic. Most mages awaken to one;"
+            " the gifted few open more as they ascend.",
+        ),
+        "cross_potential": (
+            "Crossing to Potential",
+            False,
+            "Crossing from Prospect to Potential is the first true threshold of a mage's path.",
+            "When a Prospect has learned what magic is and can do, they become ready"
+            " to cross into Potential. The crossing is marked by ceremony.",
+        ),
+        "cross_puissant": (
+            "Crossing to Puissant",
+            False,
+            "Crossing the threshold to Puissant opens a more powerful Path.",
+            "The crossing to Puissant is a major threshold, attended by ceremony,"
+            " that opens a more powerful Path.",
+        ),
+        "cross_true": (
+            "Crossing to True",
+            False,
+            "Crossing to True is a major ascension of a mage's path.",
+            "The crossing to True is a major threshold, attended by ceremony.",
+        ),
+        "cross_grand": (
+            "Crossing to Grand",
+            False,
+            "Crossing to Grand is among the rarest ascensions a mage achieves.",
+            "The crossing to Grand is a major threshold, attended by ceremony.",
+        ),
+        "cross_transcendent": (
+            "Crossing to Transcendent",
+            False,
+            "Crossing to Transcendent carries a mage beyond mortal limits.",
+            "The crossing to Transcendent is the final threshold, attended by ceremony.",
+        ),
+    }
+
+    # (stage, kind, entry_key, route_name, sort_order)
+    MATRIX = [
+        (PathStage.PROSPECT, K.RESONANCE_DISCOVERY, "resonance", "", 0),
+        (PathStage.PROSPECT, K.THREAD_WEAVING, "threads", "/threads", 1),
+        (PathStage.PROSPECT, K.MOTIF, "motif", "", 2),
+        (PathStage.PROSPECT, K.TECHNIQUE_DEVELOPMENT, "techniques", "/techniques/build", 3),
+        (PathStage.PROSPECT, K.ANIMA_RITUAL, "anima", "/rituals", 4),
+        (PathStage.POTENTIAL, K.SECOND_GIFT, "second_gift", "", 0),
+        (PathStage.POTENTIAL, K.STAGE_CROSSING, "cross_potential", "/magic/progression", 1),
+        (PathStage.PUISSANT, K.SECOND_GIFT, "second_gift", "", 0),
+        (PathStage.PUISSANT, K.STAGE_CROSSING, "cross_puissant", "/magic/progression", 1),
+        (PathStage.TRUE, K.SECOND_GIFT, "second_gift", "", 0),
+        (PathStage.TRUE, K.STAGE_CROSSING, "cross_true", "/magic/progression", 1),
+        (PathStage.GRAND, K.SECOND_GIFT, "second_gift", "", 0),
+        (PathStage.GRAND, K.STAGE_CROSSING, "cross_grand", "/magic/progression", 1),
+        (PathStage.TRANSCENDENT, K.STAGE_CROSSING, "cross_transcendent", "/magic/progression", 0),
+    ]
+
+    entries = {}
+    for key, (name, is_public, summary, lore) in ENTRIES.items():
+        entry, _ = CodexEntry.objects.update_or_create(
+            subject=subject,
+            name=name,
+            defaults={"summary": summary, "lore_content": lore, "is_public": is_public},
+        )
+        entries[key] = entry
+
+    for stage, kind, entry_key, route, order in MATRIX:
+        MagicProgressionMilestone.objects.update_or_create(
+            stage=stage,
+            kind=kind,
+            defaults={
+                "codex_entry": entries[entry_key],
+                "route_name": route,
+                "sort_order": order,
+            },
+        )
+
+    gated_keys = [k for k, v in ENTRIES.items() if not v[1]]
+    paths = prospect_paths
+    if paths is None:
+        paths = Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
+    for path in paths:
+        for key in gated_keys:
+            PathCodexGrantFactory(path=path, entry=entries[key])
