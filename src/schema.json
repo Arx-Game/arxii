@@ -20608,6 +20608,9 @@ components:
         action_slot:
           type: string
           nullable: true
+        position_id:
+          type: integer
+          nullable: true
       required:
       - backend
     ActionTemplateMinimal:

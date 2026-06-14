@@ -106,7 +106,12 @@ def dispatch_player_action(
         action_obj = get_action(ref.registry_key or "")
         if action_obj is None:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-        result = action_obj.run(actor=character, **kwargs)
+        # Merge non-ObjectDB target ids from the ref into kwargs so REGISTRY actions
+        # that operate on non-ObjectDB models (e.g. move_to_position) receive them.
+        merged_kwargs = dict(kwargs)
+        if ref.position_id is not None:
+            merged_kwargs["position_id"] = ref.position_id
+        result = action_obj.run(actor=character, **merged_kwargs)
         return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
 
     # Step 2: recover authoritative resolution inputs (validates ref against current availability).
@@ -198,6 +203,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_combat_actions(character))
     actions.extend(_clash_contribution_actions(character))
     actions.extend(_scene_actions(character))
+    actions.extend(_positioning_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
     # — see module docstring.  When registry actions gain ActionTemplate backing,
     # uncomment and implement _registry_actions(character).
@@ -594,6 +600,52 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
         # Bare `except Exception` was wrong: it masked DB errors (OperationalError etc.)
         # as "no sheet → empty list".
         return None
+
+
+# ---------------------------------------------------------------------------
+# Positioning-action adapter (move_to_position for directly adjacent positions)
+# ---------------------------------------------------------------------------
+
+
+def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface a move_to_position ``PlayerAction`` for each directly adjacent passable position.
+
+    "Directly adjacent" means a single-hop open edge (passable + no active gating
+    challenge) from the character's current position.  Multi-hop reachability is
+    handled by the service's ``reachable_positions`` function (BFS), but this
+    action picker only offers single-hop moves so the player makes one step at a time.
+
+    If the character is not placed in any position (unplaced or no positioning graph
+    in the room), returns an empty list — no error is raised.
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        adjacent_open_positions,
+        position_of,
+    )
+
+    current = position_of(character)
+    if current is None:
+        return []
+
+    result: list[PlayerAction] = []
+    for edge in adjacent_open_positions(current):
+        # Determine which side of the edge is the destination (not current).
+        neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        ref = ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key="move_to_position",
+            position_id=neighbor.pk,
+        )
+        result.append(
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=f"Move to {neighbor.name}",
+                ref=ref,
+                description=neighbor.description,
+                action_category=ActionCategory.PHYSICAL,
+            )
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
