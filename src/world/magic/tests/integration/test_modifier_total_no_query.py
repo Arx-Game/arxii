@@ -12,7 +12,7 @@ Query budget analysis (as of Spec D PR1):
        CharacterModifier.objects.filter(...).exists()
        → Always fires 1 query regardless of row count. Returns early if empty.
 
-  2. _facet_pull_effects_for (passive facet bonuses):
+  2. _thread_pull_effects_for (passive facet bonuses):
        ThreadPullEffect.objects.filter(target_kind=FACET, resonance=..., tier=0, ...)
        → SharedMemoryModel caches instances by PK, NOT filter results.
        → Fires 1 query per unique (resonance, target, tier) call.
@@ -188,7 +188,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
           Query 1: CharacterModifier.exists() — always fires in get_modifier_breakdown,
                    returns early because no CharacterModifier rows exist for this sheet.
           Query 2: ThreadPullEffect.filter(target_kind=FACET, resonance=..., tier=0, ...) —
-                   _facet_pull_effects_for always queries the DB; SharedMemoryModel
+                   _thread_pull_effects_for always queries the DB; SharedMemoryModel
                    identity-map caches model instances by PK, not arbitrary filter results.
           Query 3: CharacterClassLevel select_related — CharacterSheet.current_level is a
                    @cached_property read by covenant_role_bonus → role_base_bonus_for_target.
