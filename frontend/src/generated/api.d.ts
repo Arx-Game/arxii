@@ -13543,6 +13543,7 @@ export interface components {
      *     * `rollmod` - Roll Modifier
      *     * `scene` - Surroundings
      *     * `equipment` - Equipment
+     *     * `fashion` - Fashion
      *     * `character` - Character
      *     * `effort` - Effort
      *     * `fatigue` - Fatigue
@@ -13556,6 +13557,7 @@ export interface components {
       | 'rollmod'
       | 'scene'
       | 'equipment'
+      | 'fashion'
       | 'character'
       | 'effort'
       | 'fatigue'
@@ -19161,6 +19163,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
       target_kind?: components['schemas']['TargetKindEnum'];
@@ -21511,6 +21514,7 @@ export interface components {
      *     * `RELATIONSHIP_TRACK` - Relationship Track
      *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
      *     * `COVENANT_ROLE` - Covenant Role
+     *     * `MANTLE` - Mantle
      *     * `SANCTUM` - Sanctum
      * @enum {string}
      */
@@ -21522,6 +21526,7 @@ export interface components {
       | 'RELATIONSHIP_TRACK'
       | 'RELATIONSHIP_CAPSTONE'
       | 'COVENANT_ROLE'
+      | 'MANTLE'
       | 'SANCTUM';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
@@ -21709,6 +21714,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
       target_kind: components['schemas']['TargetKindEnum'];
@@ -21835,6 +21841,7 @@ export interface components {
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
+       *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
       target_kind: components['schemas']['TargetKindEnum'];

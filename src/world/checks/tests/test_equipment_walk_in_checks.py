@@ -240,7 +240,10 @@ class EquipmentWalkInChecksTests(TestCase):
         equipment_contribs = self._contribs(breakdown, ModifierSourceKind.EQUIPMENT)
         labels = {c.source_label: c.value for c in equipment_contribs}
         self.assertEqual(labels.get("Equipment & attunement"), self.expected_walk)
-        self.assertEqual(labels.get("Fashion"), self.expected_fashion)
+
+        fashion_contribs = self._contribs(breakdown, ModifierSourceKind.FASHION)
+        self.assertEqual(len(fashion_contribs), 1)
+        self.assertEqual(fashion_contribs[0].value, self.expected_fashion)
 
     def test_scene_none_omits_fashion_but_keeps_walk(self) -> None:
         """scene=None: fashion not added; equipment walk + eager still added."""
@@ -253,7 +256,9 @@ class EquipmentWalkInChecksTests(TestCase):
         equipment_contribs = self._contribs(breakdown, ModifierSourceKind.EQUIPMENT)
         labels = {c.source_label: c.value for c in equipment_contribs}
         self.assertEqual(labels.get("Equipment & attunement"), self.expected_walk)
-        self.assertNotIn("Fashion", labels)
+
+        fashion_contribs = self._contribs(breakdown, ModifierSourceKind.FASHION)
+        self.assertEqual(fashion_contribs, [])
 
 
 class EquipmentWalkMockCheckTypeTests(TestCase):

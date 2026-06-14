@@ -602,7 +602,7 @@ def _character_and_equipment_contributions(
         if fashion:
             contributions.append(
                 ModifierContribution(
-                    source_kind=ModifierSourceKind.EQUIPMENT,
+                    source_kind=ModifierSourceKind.FASHION,
                     source_label="Fashion",
                     value=fashion,
                 )
