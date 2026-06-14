@@ -1015,6 +1015,9 @@ class FashionStyleBonus(SharedMemoryModel):
             ),
         ]
 
+    def __str__(self) -> str:
+        return f"{self.fashion_style.name} → {self.target.name} (x{self.weight})"
+
 
 class Mantle(SharedMemoryModel):
     """An attunable artifact with a story.
@@ -1132,6 +1135,3 @@ class MantleLevelClearance(SharedMemoryModel):
                 name="items_unique_mantle_clearance_per_character",
             ),
         ]
-
-    def __str__(self) -> str:
-        return f"{self.fashion_style.name} → {self.target.name} (x{self.weight})"
