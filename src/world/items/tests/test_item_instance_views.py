@@ -17,6 +17,7 @@ from world.items.factories import (
     ItemTemplateFactory,
     QualityTierFactory,
 )
+from world.items.models import ItemInstance
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
@@ -232,3 +233,102 @@ class ItemInstanceViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         result_ids = {row["id"] for row in response.data["results"]}
         self.assertIn(other_item.pk, result_ids)
+
+
+class UseItemActionTests(TestCase):
+    """Tests for POST /api/items/inventory/<pk>/use/."""
+
+    def setUp(self) -> None:
+        self.user = AccountFactory(username="use_item_owner")
+
+        self.room = ObjectDBFactory(
+            db_key="UseItemRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="UseItemOwnerChar",
+            location=self.room,
+        )
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.player_data = PlayerDataFactory(account=self.user)
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet),
+            player_data=self.player_data,
+            end_date=None,
+        )
+
+        self.template = ItemTemplateFactory(
+            name="UseItem Potion",
+            is_consumable=True,
+            max_charges=2,
+            on_use_pool=self._pool_with_condition_effect(),
+            on_use_check_type=None,
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _pool_with_condition_effect(self):
+        """Build a ConsequencePool with one apply_condition effect (target=self).
+
+        Mirrors test_usage_service.UseItemTests._pool_with_condition_effect so
+        use_item finds a usable on-use pool.
+        """
+        from actions.factories import (
+            ConsequencePoolEntryFactory,
+            ConsequencePoolFactory,
+        )
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.conditions.factories import ConditionTemplateFactory
+
+        pool = ConsequencePoolFactory()
+        consequence = ConsequenceFactory(label="UseItemPotionEffect")
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type="apply_condition",
+            target="self",
+            condition_template=ConditionTemplateFactory(),
+        )
+        return pool
+
+    def _make_held_item(self, *, charges: int = 1) -> ItemInstance:
+        """Create a consumable instance located on (and owned by) the character."""
+        obj = ObjectDBFactory(
+            db_key="UseItemPotionObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        obj.location = self.character
+        obj.save()
+        return ItemInstanceFactory(
+            template=self.template,
+            game_object=obj,
+            quality_tier=None,
+            charges=charges,
+            holder_character_sheet=self.sheet,
+        )
+
+    def test_owner_can_use(self) -> None:
+        """Owner POST -> 200 with charges_remaining in the response."""
+        item = self._make_held_item(charges=2)
+        response = self.client.post(f"/api/items/inventory/{item.pk}/use/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("charges_remaining", response.data)
+        self.assertEqual(response.data["charges_remaining"], 1)
+
+    def test_non_owner_forbidden(self) -> None:
+        """A stranger account cannot use the item (403 or 404)."""
+        item = self._make_held_item(charges=2)
+        stranger = AccountFactory(username="use_item_stranger")
+        self.client.force_authenticate(user=stranger)
+        response = self.client.post(f"/api/items/inventory/{item.pk}/use/", {}, format="json")
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND),
+        )
+
+    def test_no_charges_returns_400(self) -> None:
+        """Using an item with zero charges -> 400."""
+        item = self._make_held_item(charges=0)
+        response = self.client.post(f"/api/items/inventory/{item.pk}/use/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

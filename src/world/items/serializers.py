@@ -55,6 +55,21 @@ class InteractionTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UseItemSerializer(serializers.Serializer):
+    """Request body for the inventory ``use`` action."""
+
+    target = serializers.IntegerField(required=False, allow_null=True)  # target ObjectDB pk
+
+
+class UseItemResultSerializer(serializers.Serializer):
+    """Response shape mirroring ``UseItemResult`` (issue #509)."""
+
+    charges_remaining = serializers.IntegerField()
+    destroyed = serializers.BooleanField()
+    soft_deleted = serializers.BooleanField()
+    applied_effect_count = serializers.IntegerField()
+
+
 class TemplateSlotSerializer(serializers.ModelSerializer):
     """Serializer for TemplateSlot (region/layer assignment)."""
 
