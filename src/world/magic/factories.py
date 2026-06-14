@@ -2576,8 +2576,9 @@ def seed_magic_progression(prospect_paths=None):
     rows for every active Prospect path (or ``prospect_paths`` if given).
 
     Doubles as integration-test setUp and staff/new-player seed data; safe to
-    call repeatedly. Entry content upserts via update_or_create so edited copy
-    re-applies on re-seed (idmapper-safe; loaddata would not update).
+    call repeatedly. Both entry copy (name, summary, lore_content, is_public)
+    AND milestone fields (route_name, sort_order, codex_entry) re-apply on
+    re-seed via update_or_create (idmapper-safe; loaddata would not update).
     """
     from world.classes.models import Path, PathStage
     from world.codex.factories import (
@@ -2587,6 +2588,7 @@ def seed_magic_progression(prospect_paths=None):
     )
     from world.codex.models import CodexEntry
     from world.magic.constants import MagicMilestoneKind as K
+    from world.magic.models import MagicProgressionMilestone
 
     category = CodexCategoryFactory(name="Magic")
     subject = CodexSubjectFactory(category=category, parent=None, name="The Mage's Journey")
@@ -2604,8 +2606,7 @@ def seed_magic_progression(prospect_paths=None):
         "threads": (
             "Weaving Threads",
             False,
-            "Threads bind your magic to people, places, and ideas,"
-            " deepening what you can affect.",
+            "Threads bind your magic to people, places, and ideas, deepening what you can affect.",
             "Thread-weaving is the craft of tying a working to a target"
             " so its power deepens over time.",
         ),
@@ -2700,12 +2701,14 @@ def seed_magic_progression(prospect_paths=None):
         entries[key] = entry
 
     for stage, kind, entry_key, route, order in MATRIX:
-        MagicProgressionMilestoneFactory(
+        MagicProgressionMilestone.objects.update_or_create(
             stage=stage,
             kind=kind,
-            codex_entry=entries[entry_key],
-            route_name=route,
-            sort_order=order,
+            defaults={
+                "codex_entry": entries[entry_key],
+                "route_name": route,
+                "sort_order": order,
+            },
         )
 
     gated_keys = [k for k, v in ENTRIES.items() if not v[1]]

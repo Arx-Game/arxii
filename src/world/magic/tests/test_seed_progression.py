@@ -37,8 +37,12 @@ class SeedMagicProgressionTests(TestCase):
     def test_creates_11_entries_and_public_flags(self):
         seed_magic_progression()
         assert CodexEntry.objects.filter(subject__name="The Mage's Journey").count() == 11
-        public = set(CodexEntry.objects.filter(is_public=True).values_list("name", flat=True))
-        assert {"Your Resonance", "Your Motif"} <= public
+        public = set(
+            CodexEntry.objects.filter(
+                subject__name="The Mage's Journey", is_public=True
+            ).values_list("name", flat=True)
+        )
+        assert public == {"Your Resonance", "Your Motif"}
         assert "Weaving Threads" not in public
 
     def test_second_gift_shares_one_entry(self):
@@ -59,3 +63,14 @@ class SeedMagicProgressionTests(TestCase):
         assert MagicProgressionMilestone.objects.count() == 14
         assert CodexEntry.objects.filter(subject__name="The Mage's Journey").count() == 11
         assert PathCodexGrant.objects.filter(path=self.prospect).count() == 9
+
+    def test_reseed_updates_milestone_route(self):
+        seed_magic_progression()
+        m = MagicProgressionMilestone.objects.get(
+            stage=PathStage.PROSPECT, kind=MagicMilestoneKind.THREAD_WEAVING
+        )
+        m.route_name = "/stale"
+        m.save()
+        seed_magic_progression()
+        m.refresh_from_db()
+        assert m.route_name == "/threads"
