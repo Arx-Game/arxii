@@ -410,6 +410,14 @@ class TemplateSlot(SharedMemoryModel):
         )
 
 
+class ItemInstanceManager(NaturalKeyManager):
+    """Manager for ItemInstance with natural-key support + in-play filtering."""
+
+    def in_play(self) -> models.QuerySet[ItemInstance]:
+        """Rows still in play (not consumed/destroyed)."""
+        return self.get_queryset().filter(destroyed_at__isnull=True)
+
+
 class ItemInstance(SharedMemoryModel):
     """
     A specific item that exists in the game world.
@@ -537,6 +545,8 @@ class ItemInstance(SharedMemoryModel):
         help_text="Set when the item is consumed/destroyed and removed from play. Null = in play.",
     )
 
+    objects = ItemInstanceManager()
+
     class Meta:
         indexes = [
             models.Index(fields=["template"]),
@@ -576,6 +586,18 @@ class ItemInstance(SharedMemoryModel):
     @property
     def is_broken(self) -> bool:
         return self.durability is not None and self.durability == 0
+
+    @property
+    def differs_from_template(self) -> bool:
+        """True if this instance carries per-instance data worth preserving on
+        destruction (soft-delete). Bare template-identical throwaways return False."""
+        if self.custom_name or self.custom_description or self.lore_value or self.quality_tier_id:
+            return True
+        if self.cached_item_facets:
+            return True
+        return self.ownership_events.exclude(
+            event_type=OwnershipEventType.CREATED
+        ).exists()
 
     def _quality_multiplier(self) -> Decimal:
         if self.quality_tier is None:
