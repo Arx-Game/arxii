@@ -131,9 +131,7 @@ function createWrapper() {
 
 const COVENANT_ID = 7;
 
-const makeCovenant = (
-  overrides: Partial<CovenantWithBattleState> = {}
-): CovenantWithBattleState =>
+const makeCovenant = (overrides: Partial<CovenantWithBattleState> = {}): CovenantWithBattleState =>
   ({
     id: COVENANT_ID,
     name: 'The Iron Banner',
@@ -149,9 +147,7 @@ const makeCovenant = (
     ...overrides,
   }) as CovenantWithBattleState;
 
-const makeMembership = (
-  overrides: Partial<CharacterCovenantRole> = {}
-): CharacterCovenantRole =>
+const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): CharacterCovenantRole =>
   ({
     id: 100,
     character_sheet: OWN_SHEET_ID,
@@ -230,7 +226,7 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.getByTestId('rites-panel')).toHaveAttribute('data-active', 'true');
   });
 
-  it('shows a Promote button on the viewer\'s own active membership row only', () => {
+  it("shows a Promote button on the viewer's own active membership row only", () => {
     mockDetail(makeCovenant());
     mockMembers([
       makeMembership({ id: 100, character_sheet: OWN_SHEET_ID }),

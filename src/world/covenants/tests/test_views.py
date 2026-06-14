@@ -705,12 +705,8 @@ class CovenantRoleViewTests(CovenantsViewTestCase):
         from world.covenants.factories import SubroleCovenantRoleFactory
 
         cls.parent_role = CovenantRoleFactory(name="RoleFilter Parent")
-        cls.sub_a = SubroleCovenantRoleFactory(
-            name="RoleFilter Sub A", parent_role=cls.parent_role
-        )
-        cls.sub_b = SubroleCovenantRoleFactory(
-            name="RoleFilter Sub B", parent_role=cls.parent_role
-        )
+        cls.sub_a = SubroleCovenantRoleFactory(name="RoleFilter Sub A", parent_role=cls.parent_role)
+        cls.sub_b = SubroleCovenantRoleFactory(name="RoleFilter Sub B", parent_role=cls.parent_role)
         cls.other_parent = CovenantRoleFactory(name="RoleFilter Other Parent")
         cls.other_sub = SubroleCovenantRoleFactory(
             name="RoleFilter Other Sub", parent_role=cls.other_parent
