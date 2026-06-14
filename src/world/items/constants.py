@@ -1,6 +1,13 @@
 """Constants and TextChoices for the items app."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import models
+
+if TYPE_CHECKING:
+    from world.mechanics.models import ModifierTarget
 
 
 class BodyRegion(models.TextChoices):
@@ -93,3 +100,25 @@ ARMOR_ARCHETYPES = frozenset(
 # Base points contributed per worn in-vogue facet match, before quality and
 # the FashionStyleBonus.weight multiplier are applied (Outfits Phase B, #513).
 FASHION_MATCH_BASE = 1
+
+
+# Fashion presentation (#514). The CheckType and ModifierTarget are authored
+# rows fetched by name (no slug fields, no data migration); tests author them
+# via factories. The endorsement weight is deliberately large so peer judging
+# dominates the graded check floor.
+FASHION_PRESENTATION_CHECK_TYPE_NAME = "Fashion Presentation"
+FASHION_PRESENTATION_MODIFIER_TARGET_NAME = "Fashion Presentation"
+FASHION_PRESENTATION_ENDORSEMENT_WEIGHT = 5  # peer endorsements dominate acclaim
+FASHION_PRESENTATION_BASE_DIFFICULTY = 10
+
+
+def get_fashion_modifier_target() -> ModifierTarget:
+    """Return the authored ``ModifierTarget`` for fashion presentation.
+
+    Fetched by name from the mechanics registry. Raises
+    ``ModifierTarget.DoesNotExist`` if the row has not been authored — that is
+    a loud configuration error, not a silent fallback.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    return ModifierTarget.objects.get(name=FASHION_PRESENTATION_MODIFIER_TARGET_NAME)

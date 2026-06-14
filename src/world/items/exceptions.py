@@ -73,6 +73,32 @@ class FacetAlreadyAttached(ItemError):
     )
 
 
+class FashionPresentationError(ItemError):
+    """A fashion presentation or peer judging could not be completed (#514).
+
+    Raised for a missing host society, self/alt judging, and duplicate judging.
+    The specific ``user_message`` is supplied per raise site via the
+    constructor; every such message is enumerated in ``SAFE_MESSAGES`` so the
+    API layer may surface it.
+    """
+
+    user_message = "That fashion action could not be completed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That fashion action could not be completed.",
+            "This event has no host society to judge fashion.",
+            "You cannot judge your own presentation.",
+            "You cannot judge a presentation by your own character.",
+            "You have already judged this presentation.",
+        },
+    )
+
+    def __init__(self, message: str | None = None) -> None:
+        if message is not None:
+            self.user_message = message
+        super().__init__(message or self.user_message)
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------
