@@ -141,6 +141,40 @@ class MaxHealthVitalBonusTests(TestCase):
         self.assertEqual(self.vitals.max_health, 116)
 
 
+class SameResonanceLevelMultiplierTests(TestCase):
+    """#1009: two same-resonance threads of one kind must not collapse the
+    level multiplier nondeterministically. The bonus applies ONCE per
+    (kind, resonance), scaled by the HIGHEST-level qualifying thread."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+
+    def test_uses_highest_level_among_same_resonance_threads(self) -> None:
+        resonance = ResonanceFactory()
+        # Two TRAIT threads on the SAME resonance, different traits, share the
+        # (TRAIT, resonance_id) key. Create the HIGH-level thread first (lower
+        # pk) and the LOW-level thread last, so the old last-writer-wins dict
+        # would deterministically pick the low level (5 → ×1 → 5). The fix uses
+        # the max (25 → ×2 → 10), independent of insertion order.
+        high = ThreadFactory(owner=self.sheet, resonance=resonance, level=25)
+        ThreadFactory(owner=self.sheet, resonance=resonance, level=5)
+        ThreadPullEffectFactory(
+            target_kind=high.target_kind,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=5,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+
+        total = self.sheet.character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
+        # Once, highest level: 5 × max(1, 25 // 10) = 10.
+        # NOT 5 (low-level multiplier 1) and NOT 15 (stacking 5×1 + 5×2).
+        self.assertEqual(total, 10)
+
+
 class ClampNotInjureTests(TestCase):
     """Shrinking max_health never pushes current_health below its prior level."""
 
