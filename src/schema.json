@@ -12394,6 +12394,42 @@ paths:
                 items:
                   $ref: '#/components/schemas/PaginatedJournalEntryList'
           description: ''
+  /api/missions/journal/{id}/abandon/:
+    post:
+      operationId: missions_journal_abandon_create
+      description: |-
+        #885 — the player's mission journal + beat play loop.
+
+        list: every mission the puppeted character participates in (compass +
+        deeds + bookends). beat: the current node as the character sees it —
+        LIVE options only (location ∧ visibility; visibility=eligibility, no
+        greyed-out entries). resolve: take an option; the engine rolls and
+        routes; the actor gets clear STORY prose, the room gets a
+        source-ambiguous ambient stir.
+
+        Participant gating: a non-participant probing instance ids gets 404
+        (never 403 — existence must not leak).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionAbandonResult'
+          description: ''
+        '400':
+          description: Run not active / not the contract holder.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/journal/{id}/beat/:
     get:
       operationId: missions_journal_beat_retrieve
@@ -28455,6 +28491,19 @@ components:
         * `character` - Character
         * `placeholder` - Placeholder
         * `npc` - NPC
+    MissionAbandonResult:
+      type: object
+      description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - status
     MissionCategory:
       type: object
       description: |-

@@ -8085,6 +8085,35 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/abandon/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #885 — the player's mission journal + beat play loop.
+     *
+     *     list: every mission the puppeted character participates in (compass +
+     *     deeds + bookends). beat: the current node as the character sees it —
+     *     LIVE options only (location ∧ visibility; visibility=eligibility, no
+     *     greyed-out entries). resolve: take an option; the engine rolls and
+     *     routes; the actor gets clear STORY prose, the room gets a
+     *     source-ambiguous ambient stir.
+     *
+     *     Participant gating: a non-participant probing instance ids gets 404
+     *     (never 403 — existence must not leak).
+     */
+    post: operations['missions_journal_abandon_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/{id}/beat/': {
     parameters: {
       query?: never;
@@ -15760,6 +15789,11 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
+    MissionAbandonResult: {
+      readonly id: number;
+      readonly status: string;
+    };
     /**
      * @description List + detail serializer for MissionCategory browse.
      *
@@ -33122,6 +33156,41 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PaginatedJournalEntryList'][];
         };
+      };
+    };
+  };
+  missions_journal_abandon_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionAbandonResult'];
+        };
+      };
+      /** @description Run not active / not the contract holder. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

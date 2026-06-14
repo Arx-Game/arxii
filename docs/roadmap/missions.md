@@ -26,7 +26,7 @@ Missions are branching narrative quest chains — the primary way characters int
 ## Open Gaps (from the 2026-06-10 code audit; #923 economy work closes the money one)
 - **Reward sinks are stubs**: `world/missions/integrations/` — money/beat record in-memory; rumor/crime_watch raise. Money lands via economy sub-issue #932; renown is already real.
 - **No discovery surface**: no browse/board endpoint — players find missions only via NPC interaction or room triggers.
-- **No abandon/expire**: `ABANDONED`/`EXPIRED` enum values exist; nothing sets them.
+- **Abandon**: #1023 ✅ shipped — `play.abandon_mission` + `MissionJournalViewSet.abandon` let the contract holder walk away from an `ACTIVE` run (→ `ABANDONED`, frees the cap slot, keeps the giver cooldown). Auto-**expiry** was intentionally dropped (missions are private; persisting until abandoned is fine) — `EXPIRED` stays a defined-but-unused status for a possible future GM action.
 - **Multiplayer engine unwired**: JOINT/VOTE/COINFLIP orchestration is built + tested but not attached to the API — solo-only live (invite/party surface: #887).
 - **Per-candidate overrides STORED BUT UNCONSUMED** (Phase D wires per-candidate emission; the mission roulette reveal #933 couples to it).
 - **Instanced play**: `spawn_instanced_room` wiring is #886 (prison/ransom #931 is its flagship consumer).
