@@ -96,3 +96,4 @@ class ReactionWindowKind(models.TextChoices):
 
     ENTRANCE = "entrance", "Make an Entrance"
     KUDOS = "kudos", "Kudos"
+    SPREAD_ASSIST = "spread_assist", "Acclaim the Telling"  # PLACEHOLDER label
