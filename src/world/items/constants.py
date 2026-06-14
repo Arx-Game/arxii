@@ -112,6 +112,12 @@ FASHION_PRESENTATION_ENDORSEMENT_WEIGHT = 5  # peer endorsements dominate acclai
 FASHION_PRESENTATION_BASE_DIFFICULTY = 10
 
 
+# Vogue momentum (#514)
+FASHION_VOGUE_MOMENTUM_STEP = 1  # momentum added to each worn facet per peer judgment
+FASHION_VOGUE_DECAY_FLAT = 1  # flat momentum lost per decay tick
+FASHION_VOGUE_DECAY_RATE = 0.05  # proportional momentum lost per decay tick (floored at 0)
+
+
 def get_fashion_modifier_target() -> ModifierTarget:
     """Return the authored ``ModifierTarget`` for fashion presentation.
 

@@ -31,6 +31,7 @@ from world.items.constants import (
 )
 from world.items.exceptions import FashionPresentationError
 from world.items.models import FashionPresentation
+from world.items.services.trendsetter import bump_vogue_momentum
 from world.magic.models.endorsement import PresentationEndorsement
 from world.magic.services.gain import account_for_sheet
 from world.mechanics.services import get_modifier_total
@@ -167,6 +168,7 @@ def judge_presentation(
 
     recompute_acclaim(presentation)
     recompute_persona_prestige_from_fashion(persona)
+    bump_vogue_momentum(presentation)
     return endorsement
 
 
