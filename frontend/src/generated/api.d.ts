@@ -5248,11 +5248,14 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Use a consumable item: apply its on-use effects and spend a charge.
+     * @description Use a consumable item: apply its on-use effects (to self) and spend a charge.
      *
      *     Owner-or-staff gated. Business logic lives entirely in ``use_item``;
-     *     this view resolves actor/target, enforces ownership, and maps
-     *     ``ItemError`` to HTTP 400 (mirroring the facet write path).
+     *     this view resolves the actor, enforces ownership, and maps
+     *     ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
+     *     surface does NOT accept a target — on-use effects apply to the holder
+     *     only. Targeted use belongs in the future use-item Action layer, which
+     *     carries proximity/prerequisite checks.
      */
     post: operations['items_inventory_use_create'];
     delete?: never;
@@ -22290,10 +22293,6 @@ export interface components {
     UpdateBulletinReplyInputRequest: {
       body: string;
     };
-    /** @description Request body for the inventory ``use`` action. */
-    UseItemRequest: {
-      target?: number | null;
-    };
     /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
     UseItemResult: {
       charges_remaining: number;
@@ -29426,11 +29425,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['UseItemRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {
