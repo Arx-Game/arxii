@@ -66,9 +66,7 @@ class ConsumeItemChargesTests(TestCase):
         from world.items.services.usage import consume_item_charges
 
         inst = self._consumable(charges=1)  # bare otherwise
-        OwnershipEvent.objects.create(
-            item_instance=inst, event_type=OwnershipEventType.GIVEN
-        )
+        OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.GIVEN)
         pk = inst.pk
         consume_item_charges(item_instance=inst, amount=1)
         row = ItemInstance.objects.get(pk=pk)  # must still exist (soft-deleted via provenance)

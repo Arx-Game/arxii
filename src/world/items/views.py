@@ -456,9 +456,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         try:
             result = use_item(item_instance=item, user=actor)
         except ItemError as exc:
-            raise serializers.ValidationError(
-                {"non_field_errors": [exc.user_message]}
-            ) from exc
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(
             UseItemResultSerializer(
                 {

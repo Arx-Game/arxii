@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("actions", "0007_alter_actiontemplate_default_delivery"),
         ("checks", "0011_alter_consequenceoutcomemodifier_source_kind"),

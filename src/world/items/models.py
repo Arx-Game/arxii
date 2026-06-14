@@ -192,8 +192,7 @@ class ItemTemplate(SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "Authored target difficulty for the on-use check. "
-            "Required iff on_use_check_type set."
+            "Authored target difficulty for the on-use check. Required iff on_use_check_type set."
         ),
     )
     is_craftable = models.BooleanField(
@@ -333,9 +332,7 @@ class ItemTemplate(SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         if self.on_use_check_type_id is not None and self.on_use_difficulty is None:
-            raise ValidationError(
-                {"on_use_difficulty": "Required when on_use_check_type is set."}
-            )
+            raise ValidationError({"on_use_difficulty": "Required when on_use_check_type is set."})
         if self.on_use_check_type_id is None and self.on_use_difficulty is not None:
             raise ValidationError(
                 {"on_use_difficulty": "Only valid when on_use_check_type is set."}
@@ -595,9 +592,7 @@ class ItemInstance(SharedMemoryModel):
             return True
         if self.cached_item_facets:
             return True
-        return self.ownership_events.exclude(
-            event_type=OwnershipEventType.CREATED
-        ).exists()
+        return self.ownership_events.exclude(event_type=OwnershipEventType.CREATED).exists()
 
     def _quality_multiplier(self) -> Decimal:
         if self.quality_tier is None:
