@@ -65,7 +65,11 @@ from world.magic.models.aura import (
 from world.magic.models.cantrips import Cantrip
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
-from world.magic.models.endorsement import PoseEndorsement, SceneEntryEndorsement
+from world.magic.models.endorsement import (
+    PoseEndorsement,
+    PresentationEndorsement,
+    SceneEntryEndorsement,
+)
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
     CharacterGift,
@@ -222,6 +226,8 @@ __all__ = [
     "PendingStageAdvanceOffer",
     # endorsement (Spec C §2.2)
     "PoseEndorsement",
+    # endorsement (Outfits Phase C §2.2 — #514)
+    "PresentationEndorsement",
     # reincarnation
     "Reincarnation",
     "Resonance",

@@ -140,3 +140,32 @@ class SceneEntryEndorsement(EndorsementBase):
             f"{self.endorser_sheet_id}->{self.endorsee_sheet_id}"
             f"@{self.scene_id})"
         )
+
+
+class PresentationEndorsement(EndorsementBase):
+    """A peer judging a fashion presentation (#514).
+
+    Carries no resonance grant; it feeds the presentation's acclaim
+    (heavily weighted) via the fashion-presentation service.
+    """
+
+    presentation = models.ForeignKey(
+        "items.FashionPresentation",
+        on_delete=models.CASCADE,
+        related_name="endorsements",
+    )
+    weight = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Per-judge weight (reserved for taste-authority scaling).",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["endorser_sheet", "presentation"],
+                name="unique_presentation_endorsement_per_judge",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"PresentationEndorsement({self.endorser_sheet_id}->{self.presentation_id})"

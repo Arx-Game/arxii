@@ -1457,6 +1457,16 @@ class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     granted_amount = 4
 
 
+class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.PresentationEndorsement"
+
+    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    presentation = factory.SubFactory("world.items.factories.FashionPresentationFactory")
+    weight = 1
+
+
 def with_corruption_at_stage(sheet, resonance, stage: int):
     """Test helper: set up a corrupted character at a given stage.
 
