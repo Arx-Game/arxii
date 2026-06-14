@@ -218,15 +218,24 @@ def wire_covenant_rite_content() -> CovenantRite:
         defaults={"description": "Primary character statistics.", "display_order": 10},
     )
 
+    from world.traits.models import Trait
+
     def _stat(name: str) -> ModifierTarget:
+        trait = Trait.get_by_name(name)
         target, _ = ModifierTarget.objects.get_or_create(
             category=stat_cat,
             name=name,
             defaults={
                 "description": f"{name.capitalize()} stat modifier target.",
                 "is_active": True,
+                "target_trait": trait,
             },
         )
+        # Backfill linkage on a pre-existing orphan row (get_or_create only
+        # sets defaults on create).
+        if target.target_trait_id is None and trait is not None:
+            target.target_trait = trait
+            target.save(update_fields=["target_trait"])
         return target
 
     # ------------------------------------------------------------------
