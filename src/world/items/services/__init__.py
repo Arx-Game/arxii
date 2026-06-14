@@ -8,15 +8,18 @@ from world.items.services.mantle import (
     grant_mantle_clearance,
     record_mantle_clearances,
 )
+from world.items.services.usage import consume_item_charges, use_item
 
 __all__ = [
     "VisibleWornItem",
     "attach_facet_to_item",
+    "consume_item_charges",
     "equip_item",
     "get_max_cleared_mantle_level",
     "grant_mantle_clearance",
     "record_mantle_clearances",
     "remove_facet_from_item",
     "unequip_item",
+    "use_item",
     "visible_worn_items_for",
 ]
