@@ -504,35 +504,15 @@ def collect_check_modifiers(
             for mod in item_mods
         )
 
-    # --- CHARACTER contributions (#767) ---
-    # Persistent CharacterModifier rows scoped to this check via a
-    # ModifierTarget whose target_check_type points at it (e.g. a
-    # distinction-granted "+penetration vs warded foes" buff). Generic: any
-    # check gains "+X to <check>" support by authoring a ModifierTarget row.
-    # Reuses the isinstance guard above: mocked check types must not hit the
-    # ORM, and a reverse OneToOne lookup on a MagicMock would raise anyway.
+    # --- CHARACTER + EQUIPMENT-WALK + FASHION contributions (#767, #512) ---
+    # All keyed off the same scoped ModifierTarget (the check's reverse
+    # ``modifier_target`` OneToOne).  Reuses the isinstance guard above: mocked
+    # check types must not hit the ORM, and a reverse OneToOne lookup on a
+    # MagicMock would raise anyway.
     if isinstance(check_type, _DjangoModel):
-        # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct
-        # from this module's checks ModifierBreakdown — import aliased.
-        from world.mechanics.services import (  # noqa: PLC0415
-            get_modifier_breakdown as get_character_modifier_breakdown,
+        contributions.extend(
+            _character_and_equipment_contributions(character_sheet, check_type, scene)
         )
-
-        try:
-            scoped_target = check_type.modifier_target
-        except ObjectDoesNotExist:
-            scoped_target = None
-        if scoped_target is not None and scoped_target.is_active:
-            character_breakdown = get_character_modifier_breakdown(character_sheet, scoped_target)
-            contributions.extend(
-                ModifierContribution(
-                    source_kind=ModifierSourceKind.CHARACTER,
-                    source_label=detail.source_name,
-                    value=detail.final_value,
-                )
-                for detail in character_breakdown.sources
-                if not detail.blocked_by_immunity and detail.final_value != 0
-            )
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
@@ -540,3 +520,92 @@ def collect_check_modifiers(
         contributions.extend(extra_contributions)
 
     return ModifierBreakdown(contributions=contributions)
+
+
+def _character_and_equipment_contributions(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    scene: "Scene | None",
+) -> list[ModifierContribution]:
+    """Contributions keyed off the check's scoped ModifierTarget (#767, #512).
+
+    Resolves ``check_type.modifier_target`` ONCE and shares it between three
+    sources that all target the same scoped ModifierTarget:
+
+    * CHARACTER — persistent CharacterModifier rows (e.g. a distinction-granted
+      "+penetration vs warded foes" buff). The EAGER ``get_modifier_breakdown``
+      rows.
+    * EQUIPMENT walk (Spec D §5.5) — facet + covenant-role + mantle passive
+      bonuses via ``equipment_walk_total``.
+    * FASHION — the perception-relative outfit bonus for the scene's societies
+      (max across them), added only when a ``scene`` is supplied.
+
+    **No double count:** ``equipment_walk_total`` / ``fashion_outfit_bonus`` are
+    called DIRECTLY, never ``get_modifier_total`` (which would re-add the eager
+    breakdown total already emitted as CHARACTER contributions).
+
+    The caller guards this with ``isinstance(check_type, Model)``; the reverse
+    OneToOne lookup here would raise on a MagicMock.
+    """
+    # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct from
+    # this module's checks ModifierBreakdown — import aliased.
+    from world.mechanics.services import (  # noqa: PLC0415
+        equipment_walk_total,
+        fashion_outfit_bonus,
+        get_modifier_breakdown as get_character_modifier_breakdown,
+    )
+
+    try:
+        scoped_target = check_type.modifier_target
+    except ObjectDoesNotExist:
+        scoped_target = None
+    if scoped_target is None or not scoped_target.is_active:
+        return []
+
+    contributions: list[ModifierContribution] = []
+
+    # CHARACTER — eager CharacterModifier rows.
+    character_breakdown = get_character_modifier_breakdown(character_sheet, scoped_target)
+    contributions.extend(
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label=detail.source_name,
+            value=detail.final_value,
+        )
+        for detail in character_breakdown.sources
+        if not detail.blocked_by_immunity and detail.final_value != 0
+    )
+
+    # EQUIPMENT walk — facet + covenant-role + mantle passive bonuses.
+    walk = equipment_walk_total(character_sheet, scoped_target)
+    if walk:
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label="Equipment & attunement",
+                value=walk,
+            )
+        )
+
+    # FASHION — perception-relative outfit bonus (best across scene societies).
+    if scene is not None:
+        from world.areas.services import societies_for_scene  # noqa: PLC0415
+
+        societies = societies_for_scene(scene)
+        fashion = max(
+            (
+                fashion_outfit_bonus(character_sheet, scoped_target, society)
+                for society in societies
+            ),
+            default=0,
+        )
+        if fashion:
+            contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.EQUIPMENT,
+                    source_label="Fashion",
+                    value=fashion,
+                )
+            )
+
+    return contributions

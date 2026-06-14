@@ -170,15 +170,26 @@ def get_modifier_total(
         amplification/immunity applied to the eager portion)
     """
     eager_total = get_modifier_breakdown(character, modifier_target).total
-    equipment_total = 0
-    if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
-        equipment_total = passive_facet_bonuses(character, modifier_target)
-        equipment_total += covenant_role_bonus(character, modifier_target)
-        equipment_total += passive_mantle_bonuses(character, modifier_target)
+    equipment_total = equipment_walk_total(character, modifier_target)
     fashion_total = 0
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
     return eager_total + equipment_total + fashion_total
+
+
+def equipment_walk_total(character: object, target: ModifierTarget) -> int:
+    """Sum facet + covenant-role + mantle passive bonuses for ``target`` (Spec D §5.5).
+
+    Returns 0 unless target.category is equipment-relevant. The eager CharacterModifier
+    total is NOT included here — callers add that separately (avoids double counting).
+    """
+    if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
+        return 0
+    return (
+        passive_facet_bonuses(character, target)
+        + covenant_role_bonus(character, target)
+        + passive_mantle_bonuses(character, target)
+    )
 
 
 # =============================================================================
