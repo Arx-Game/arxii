@@ -808,6 +808,34 @@ def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterShee
         )
 
 
+def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Apply Path codex grants. No-op without a selected path.
+
+    Mirrors _finalize_tradition_codex_grants: the chosen Path teaches the
+    character which magic milestones exist (drives the dashboard discovery
+    tiers). Idempotent via get_or_create.
+    """
+    if not draft.selected_path:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge, PathCodexGrant  # noqa: PLC0415
+
+    grant_entry_ids = list(
+        PathCodexGrant.objects.filter(path=draft.selected_path).values_list("entry_id", flat=True)
+    )
+    if not grant_entry_ids:
+        return
+
+    roster_entry = sheet.roster_entry
+    for entry_id in grant_entry_ids:
+        CharacterCodexKnowledge.objects.get_or_create(
+            roster_entry=roster_entry,
+            entry_id=entry_id,
+            defaults={"status": CodexKnowledgeStatus.KNOWN},
+        )
+
+
 def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 5: create player anima Ritual + sidecar + CharacterRitualKnowledge.
 
@@ -863,6 +891,9 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     # 3. Apply tradition codex grants
     _finalize_tradition_codex_grants(draft, sheet)
+
+    # 3b. Apply path codex grants (teaches which magic milestones exist)
+    _finalize_path_codex_grants(draft, sheet)
 
     # 4. Create CharacterAura with defaults
     glimpse_story = draft.draft_data.get("glimpse_story", "")
