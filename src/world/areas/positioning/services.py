@@ -93,24 +93,32 @@ def position_of(objectdb: ObjectDB) -> Position | None:
 
 
 def _passable_open_edges(position: Position) -> list[PositionEdge]:
-    """Return edges touching *position* that are passable and have no gating challenge.
+    """Return edges touching *position* that are passable and unblocked.
 
-    Fetches all touching edges in one query (no queries in loops). In Phase 1
-    any gating challenge (active or not) blocks crossing.
+    An edge is blocked only by an ACTIVE gating challenge; an edge whose gating
+    challenge is inactive (or absent) is freely crossable. Fetches all touching
+    edges in one query (no queries in loops).
     """
-    edges = PositionEdge.objects.filter(
-        Q(position_a=position) | Q(position_b=position),
-        is_passable=True,
-        gating_challenge__isnull=True,
-    ).select_related("position_a", "position_b")
+    edges = (
+        PositionEdge.objects.filter(
+            Q(position_a=position) | Q(position_b=position),
+            is_passable=True,
+        )
+        .exclude(
+            gating_challenge__isnull=False,
+            gating_challenge__is_active=True,
+        )
+        .select_related("position_a", "position_b", "gating_challenge")
+    )
     return list(edges)
 
 
 def reachable_positions(objectdb: ObjectDB) -> set[Position]:
     """Return the set of positions reachable from objectdb's current position.
 
-    Multi-hop BFS over passable, ungated edges. Edges with a gating challenge
-    (any, in Phase 1) are NOT crossed. The starting position is not included.
+    Multi-hop BFS over passable edges. Edges blocked by an ACTIVE gating
+    challenge are not crossed; edges with no gating challenge or an inactive
+    one are freely traversable. The starting position is not included.
     """
     start = position_of(objectdb)
     if start is None:

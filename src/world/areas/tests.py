@@ -627,8 +627,34 @@ class PositionQueryServiceTests(TestCase):
         assert self.d not in reachable
 
     def test_reachable_positions_excludes_gated(self):
+        """An edge with an ACTIVE gating challenge is not crossable."""
+        # self.challenge has is_active=True (ChallengeInstanceFactory default)
         reachable = reachable_positions(self.char)
         assert self.e not in reachable
+
+    def test_reachable_positions_includes_inactive_gating_challenge(self):
+        """An edge with an INACTIVE gating challenge IS crossable (spec: only active blocks)."""
+        f = create_position(self.room, "node_f")
+        af_edge = connect_positions(self.a, f, is_passable=True)
+        inactive_challenge = ChallengeInstanceFactory(
+            location=self.room, target_object=self.room, is_active=False
+        )
+        af_edge.gating_challenge = inactive_challenge
+        af_edge.save()
+        reachable = reachable_positions(self.char)
+        assert f in reachable
+
+    def test_reachable_positions_excludes_active_gating_challenge(self):
+        """Confirm: when is_active flips True on an edge's challenge, that edge is blocked."""
+        g = create_position(self.room, "node_g")
+        ag_edge = connect_positions(self.a, g, is_passable=True)
+        active_challenge = ChallengeInstanceFactory(
+            location=self.room, target_object=self.room, is_active=True
+        )
+        ag_edge.gating_challenge = active_challenge
+        ag_edge.save()
+        reachable = reachable_positions(self.char)
+        assert g not in reachable
 
     def test_reachable_positions_empty_when_unplaced(self):
         other = CharacterFactory(location=self.room)
