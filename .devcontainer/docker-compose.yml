@@ -16,6 +16,14 @@ services:
       # Shadow Windows-side artefacts with Linux-native named volumes.
       - arxii-venv:/workspaces/arxii/.venv
       - arxii-fe-node-modules:/workspaces/arxii/frontend/node_modules
+      # Git worktrees live under .claude/worktrees. On the bind-mounted
+      # workspace that path is D:\ (a Windows drive over the WSL2 9p mount),
+      # where each worktree's ~245 MB uv venv is FULL-COPIED file-by-file
+      # (cache is cross-filesystem, so uv can't hardlink) — ~10 min to
+      # create/delete. A Linux-native volume here (paired with UV_CACHE_DIR
+      # below, on the SAME volume) lets uv hardlink instead: create drops to
+      # <1 s. fix-volume-perms.sh chowns this mountpoint. See #1037.
+      - arxii-worktrees:/workspaces/arxii/.claude/worktrees
       # Persist Claude Code auth/config so login survives container rebuilds.
       - arxii-claude-home:/home/vscode/.claude
       # Shadow the host's src/.env (which points DATABASE_URL at a bare-metal
@@ -46,6 +54,14 @@ services:
       # post-create.sh migrates an existing ~/.claude.json the first time
       # this env var takes effect. See #505 for full root-cause analysis.
       CLAUDE_CONFIG_DIR: /home/vscode/.claude
+      # Put uv's cache on the SAME filesystem as worktree venvs (the
+      # arxii-worktrees volume above) so `uv sync` in a fresh worktree
+      # HARDLINKS from cache instead of full-copying ~245 MB of tiny files.
+      # uv only hardlinks within one filesystem; cache-on-overlay vs
+      # venv-on-9p was the root cause of ~10 min worktree create/delete.
+      # Verify after a rebuild: a sampled worktree venv file shows links>1
+      # (`stat -c %h .claude/worktrees/<wt>/.venv/bin/activate_this.py`). #1037
+      UV_CACHE_DIR: /workspaces/arxii/.claude/worktrees/.uv-cache
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
@@ -84,4 +100,5 @@ volumes:
   arxii-pgdata:
   arxii-venv:
   arxii-fe-node-modules:
+  arxii-worktrees:
   arxii-claude-home:
