@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("scenes", "0020_alter_reactionwindow_kind"),
     ]

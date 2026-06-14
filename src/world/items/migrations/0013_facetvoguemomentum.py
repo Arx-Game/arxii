@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("items", "0012_fashionpresentation"),
         ("magic", "0024_presentationendorsement"),

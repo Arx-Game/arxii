@@ -1020,10 +1020,14 @@ class FacetVogueMomentum(SharedMemoryModel):
     """
 
     society = models.ForeignKey(
-        "societies.Society", on_delete=models.CASCADE, related_name="facet_momentum",
+        "societies.Society",
+        on_delete=models.CASCADE,
+        related_name="facet_momentum",
     )
     facet = models.ForeignKey(
-        "magic.Facet", on_delete=models.CASCADE, related_name="vogue_momentum",
+        "magic.Facet",
+        on_delete=models.CASCADE,
+        related_name="vogue_momentum",
     )
     points = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)

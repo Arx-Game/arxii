@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("events", "0003_initial"),
         ("societies", "0016_spreadingconfig_spread_assist_fraction_and_more"),

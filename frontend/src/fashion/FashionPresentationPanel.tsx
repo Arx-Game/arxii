@@ -39,11 +39,7 @@ export function FashionPresentationPanel({ eventId }: FashionPresentationPanelPr
   // CharacterSheet pk == roster character_id (CharacterSheet uses primary_key=True).
   const mySheetId = activeEntry?.character_id ?? null;
 
-  const {
-    data: presentations,
-    isLoading,
-    isError,
-  } = useEventPresentationsQuery(eventId);
+  const { data: presentations, isLoading, isError } = useEventPresentationsQuery(eventId);
 
   const { data: myOutfits = [] } = useOutfits(mySheetId ?? undefined);
 

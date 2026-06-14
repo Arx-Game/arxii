@@ -56,9 +56,9 @@ def bump_vogue_momentum(presentation: FashionPresentation) -> None:
     """
     society = presentation.perceiving_society
     character = presentation.presenter.character
-    handler = getattr(character, "equipped_items", None)
-    if handler is None:
+    if not hasattr(character, "equipped_items"):
         return
+    handler = character.equipped_items
 
     facet_ids: set[int] = set()
     facets = []
@@ -143,7 +143,9 @@ def run_trendsetter_ceremony(society: Society) -> Trendsetter | None:
     try:
         target = get_fashion_modifier_target()
         FashionStyleBonus.objects.get_or_create(
-            fashion_style=style, target=target, defaults={"weight": 1},
+            fashion_style=style,
+            target=target,
+            defaults={"weight": 1},
         )
     except ModifierTarget.DoesNotExist:
         logger.warning(
@@ -156,7 +158,9 @@ def run_trendsetter_ceremony(society: Society) -> Trendsetter | None:
     society.save(update_fields=["current_fashion_style"])
 
     trendsetter = Trendsetter.objects.create(
-        society=society, persona=crowned_persona, fashion_style=style,
+        society=society,
+        persona=crowned_persona,
+        fashion_style=style,
     )
     # TODO(#514): broadcast a celebratory IC announcement of the crowning.
     logger.info("Trendsetter crowned: %s sets the vogue in %s", crowned_persona, society)

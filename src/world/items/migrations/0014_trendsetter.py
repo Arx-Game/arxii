@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("items", "0013_facetvoguemomentum"),
         ("scenes", "0021_persona_prestige_from_fashion_and_more"),

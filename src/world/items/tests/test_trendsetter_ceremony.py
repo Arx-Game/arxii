@@ -45,13 +45,19 @@ class TrendsetterCeremonyTests(TestCase):
         cls.winner = CharacterSheetFactory()
         cls.loser = CharacterSheetFactory()
         FashionPresentationFactory(
-            presenter=cls.winner, perceiving_society=cls.society, acclaim=50,
+            presenter=cls.winner,
+            perceiving_society=cls.society,
+            acclaim=50,
         )
         FashionPresentationFactory(
-            presenter=cls.winner, perceiving_society=cls.society, acclaim=10,
+            presenter=cls.winner,
+            perceiving_society=cls.society,
+            acclaim=10,
         )
         FashionPresentationFactory(
-            presenter=cls.loser, perceiving_society=cls.society, acclaim=30,
+            presenter=cls.loser,
+            perceiving_society=cls.society,
+            acclaim=30,
         )
 
     def test_crowns_top_acclaim_presenter_and_rewrites_living_style(self) -> None:
@@ -83,17 +89,13 @@ class TrendsetterCeremonyTests(TestCase):
         self.assertEqual(trendsetter.fashion_style, style)
 
         # A bonus was created since the ModifierTarget exists.
-        self.assertTrue(
-            FashionStyleBonus.objects.filter(fashion_style=style).exists()
-        )
+        self.assertTrue(FashionStyleBonus.objects.filter(fashion_style=style).exists())
 
     def test_no_momentum_returns_none_and_leaves_style_unchanged(self) -> None:
         empty_society = SocietyFactory()
         result = run_trendsetter_ceremony(empty_society)
         self.assertIsNone(result)
-        self.assertEqual(
-            Trendsetter.objects.filter(society=empty_society).count(), 0
-        )
+        self.assertEqual(Trendsetter.objects.filter(society=empty_society).count(), 0)
         empty_society.refresh_from_db()
         self.assertIsNone(empty_society.current_fashion_style)
 
@@ -110,9 +112,7 @@ class TrendsetterCeremonyTests(TestCase):
             set(style.in_vogue_facets.all()),
             set(self.facets[:FASHION_TREND_FACET_COUNT]),
         )
-        self.assertFalse(
-            FashionStyleBonus.objects.filter(fashion_style=style).exists()
-        )
+        self.assertFalse(FashionStyleBonus.objects.filter(fashion_style=style).exists())
 
     def test_no_presentations_returns_none(self) -> None:
         # Momentum but no presentations -> nobody to crown.
@@ -129,7 +129,9 @@ class TrendsetterCeremonyTests(TestCase):
         FacetVogueMomentumFactory(society=other, facet=other_facet, points=5)
         presenter = CharacterSheetFactory()
         FashionPresentationFactory(
-            presenter=presenter, perceiving_society=other, acclaim=7,
+            presenter=presenter,
+            perceiving_society=other,
+            acclaim=7,
         )
         # A third society with NO momentum is ignored.
         SocietyFactory()

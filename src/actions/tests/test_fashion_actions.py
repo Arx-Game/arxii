@@ -127,9 +127,7 @@ class JudgePresentationActionTests(TestCase):
         self.presenter_room, self.presenter_actor, self.presenter_sheet = _make_actor(
             "JudgePresentationPresenter"
         )
-        self.judge_room, self.judge_actor, self.judge_sheet = _make_actor(
-            "JudgePresentationJudge"
-        )
+        self.judge_room, self.judge_actor, self.judge_sheet = _make_actor("JudgePresentationJudge")
         # Build a presentation to judge.
         self.presentation = FashionPresentationFactory(
             event=self.event,

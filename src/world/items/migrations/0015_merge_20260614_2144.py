@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("items", "0012_iteminstance_destroyed_at_and_more"),
         ("items", "0014_trendsetter"),

@@ -28,7 +28,15 @@ vi.mock('@/store/hooks', () => ({
 
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: () => ({
-    data: [{ id: 1, name: 'Alice', character_id: 3, profile_picture_url: null, primary_persona_id: null }],
+    data: [
+      {
+        id: 1,
+        name: 'Alice',
+        character_id: 3,
+        profile_picture_url: null,
+        primary_persona_id: null,
+      },
+    ],
   }),
 }));
 
@@ -116,7 +124,10 @@ describe('FashionPresentationPanel', () => {
   it('surfaces an API error message', () => {
     useEventPresentationsQueryMock.mockReturnValue({ data: PRESENTATIONS, isLoading: false });
     useJudgePresentationMutationMock.mockReturnValue(
-      mutationStub({ mutate: judgeMutate, error: new Error('You cannot judge your own presentation.') })
+      mutationStub({
+        mutate: judgeMutate,
+        error: new Error('You cannot judge your own presentation.'),
+      })
     );
     render(<FashionPresentationPanel eventId={9} />);
     expect(screen.getByTestId('fashion-error')).toHaveTextContent(

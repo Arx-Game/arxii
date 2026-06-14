@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("character_sheets", "0005_charactersheet_max_active_npc_missions"),
         ("items", "0012_fashionpresentation"),
