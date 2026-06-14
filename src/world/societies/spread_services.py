@@ -299,12 +299,34 @@ def _resolve_spread_tale(action_request, result) -> None:
             personas=scene_witness_personas(action_request.scene),
             source=DeedKnowledgeSource.HEARD_TOLD,
         )
+    _open_spread_assist_window(action_request, deed, value)
     tier_changed = apply_spread_fame_bump(
         deed,
         npc_audience=int(band.multiplier * _FAME_AUDIENCE_PER_MULTIPLIER),
         success_level=success_level,
     )
     notify_spread_event(deed, fame_tier_changed=tier_changed)
+
+
+def _open_spread_assist_window(action_request, deed, value: int) -> None:
+    """Open a SPREAD_ASSIST window on the telling so present PCs can acclaim it (#915).
+
+    The window's deed + original spread value live on a SpreadAssistTarget,
+    read at scene close. No-op without a result interaction or scene.
+    """
+    interaction = action_request.result_interaction
+    if interaction is None or action_request.scene is None:
+        return
+
+    from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+    from world.scenes.reaction_services import open_reaction_window  # noqa: PLC0415
+    from world.societies.models import SpreadAssistTarget  # noqa: PLC0415
+
+    window = open_reaction_window(interaction=interaction, kind=ReactionWindowKind.SPREAD_ASSIST)
+    SpreadAssistTarget.objects.get_or_create(
+        window=window,
+        defaults={"legend_entry": deed, "original_value": value},
+    )
 
 
 register_resolver(SPREAD_TALE_ACTION_KEY, _resolve_spread_tale)

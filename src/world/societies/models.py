@@ -709,6 +709,23 @@ class SpreadingConfig(SharedMemoryModel):
         default=Decimal("1.0"),
         help_text="Base factor applied to audience calculations for spreading",
     )
+    spread_assist_fraction = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("0.10"),
+        help_text=(
+            "Bonus spread per PC acclaim of a telling (#915), as a fraction of "
+            "the original telling's value. PC assists are deliberately minor; "
+            "the NPC traffic band stays the primary spread vector."
+        ),
+    )
+    spread_assist_per_scene_cap = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Hard cap on the total spread-assist bonus from one telling (#915). "
+            "0 = no separate cap (still clamped by the deed's remaining capacity)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Spreading Configuration"
@@ -730,6 +747,35 @@ class SpreadingConfig(SharedMemoryModel):
             f"SpreadingConfig(cap_multiplier={self.default_spread_multiplier}, "
             f"audience_factor={self.base_audience_factor})"
         )
+
+
+class SpreadAssistTarget(SharedMemoryModel):
+    """Links a SPREAD_ASSIST reaction window to the deed it can boost (#915).
+
+    Written when a telling opens its reaction window — the generic
+    ReactionWindow can't carry kind-specific data, so this is the per-kind
+    "settlement target" (the SceneEntryEndorsement pattern). At scene close the
+    SPREAD_ASSIST handler reads it to size the bonus spread (a fraction of
+    ``original_value`` per acclaim) and reward the acclaiming reactors.
+    """
+
+    window = models.OneToOneField(
+        "scenes.ReactionWindow",
+        on_delete=models.CASCADE,
+        related_name="spread_assist_target",
+    )
+    legend_entry = models.ForeignKey(
+        "societies.LegendEntry",
+        on_delete=models.CASCADE,
+        related_name="spread_assist_targets",
+        help_text="The deed the telling spread; acclaim adds a minor bonus to it.",
+    )
+    original_value = models.PositiveIntegerField(
+        help_text="The telling's own spread value; the bonus is a fraction of this.",
+    )
+
+    def __str__(self) -> str:
+        return f"SpreadAssistTarget(window={self.window_id}, deed={self.legend_entry_id})"
 
 
 class AbstractLegendRecord(models.Model):
