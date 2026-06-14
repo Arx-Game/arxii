@@ -6,10 +6,12 @@ from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import Area, AreaClosure
+from world.societies.models import Society
 
 if TYPE_CHECKING:
     from world.areas.constants import AreaLevel
     from world.realms.models import Realm
+    from world.scenes.models import Scene
 
 
 def get_ancestry(area: Area) -> list[Area]:
@@ -86,3 +88,32 @@ def get_room_profile(room_obj: ObjectDB) -> RoomProfile:
     """Get or create the RoomProfile for a room ObjectDB instance."""
     profile, _ = RoomProfile.objects.get_or_create(objectdb=room_obj)
     return profile
+
+
+def societies_for_scene(scene: Scene) -> list[Society]:
+    """Resolve which societies' fashion is perceived in a scene's location.
+
+    Permissive by default: ANY society sharing the location's area's realm is
+    relevant. If the area names an explicit ``dominant_society``, only that one
+    is relevant. Returns ``[]`` when the location, its RoomProfile, its area, or
+    the area's realm cannot be resolved.
+    """
+    location = getattr(scene, "location", None)
+    if location is None:
+        return []
+
+    profile = getattr(location, "room_profile", None)
+    if profile is None:
+        return []
+
+    area = profile.area
+    if area is None:
+        return []
+
+    if area.dominant_society_id is not None:
+        return [area.dominant_society]
+
+    if area.realm_id is None:
+        return []
+
+    return list(Society.objects.filter(realm_id=area.realm_id))

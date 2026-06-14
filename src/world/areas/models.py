@@ -25,6 +25,17 @@ class Area(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="areas",
     )
+    dominant_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="dominant_areas",
+        help_text=(
+            "When set, only this society's fashion is perceived in this area; "
+            "otherwise all societies sharing the area's realm are relevant."
+        ),
+    )
     description = models.TextField(blank=True)
 
     # Ward-level permit configuration. Only meaningful at level WARD;
