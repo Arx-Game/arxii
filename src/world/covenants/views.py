@@ -36,6 +36,7 @@ from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
     CovenantLevelThresholdSerializer,
     CovenantRiteSerializer,
+    CovenantRolePassivePowerSerializer,
     CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
@@ -184,6 +185,41 @@ class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GearArchetypeCompatibilityFilter
 
 
+def _build_role_power_row(
+    membership: CharacterCovenantRole,
+    threads_by_key: dict,
+    effects_by_resonance: dict,
+) -> dict:
+    """Join one active membership to its current passive role power (no queries).
+
+    ``threads_by_key`` is keyed (owner_id, covenant_role_id);
+    ``effects_by_resonance`` maps resonance_id → tier-0 CAPABILITY_GRANT effect.
+    A member with no woven role-thread (or a thread below the effect's
+    ``min_thread_level``) has null capability fields.
+    """
+    thread = threads_by_key.get((membership.character_sheet_id, membership.covenant_role_id))
+    resonance_name = None
+    capability_name = None
+    narrative_snippet = None
+    if thread is not None and thread.resonance_id is not None:
+        resonance_name = thread.resonance.name
+        effect = effects_by_resonance.get(thread.resonance_id)
+        if effect is not None and thread.level >= effect.min_thread_level:
+            if effect.capability_grant is not None:
+                capability_name = effect.capability_grant.name
+            narrative_snippet = effect.narrative_snippet or None
+    return {
+        "membership_id": membership.pk,
+        "character_sheet": membership.character_sheet_id,
+        "covenant_role_id": membership.covenant_role_id,
+        "covenant_role_name": membership.covenant_role.name,
+        "resonance_name": resonance_name,
+        "capability_name": capability_name,
+        "narrative_snippet": narrative_snippet,
+        "engaged": membership.engaged,
+    }
+
+
 class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for Covenant.
 
@@ -207,6 +243,76 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
             memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+    @action(detail=True, methods=["GET"])
+    def powers(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/covenants/covenants/{id}/powers/
+
+        Return the covenant's available rites (with per-covenant gate flags) and
+        per-member passive role powers in one payload, for the React detail page.
+
+        Visibility is enforced by ``get_object()`` (the membership-scoped
+        ``get_queryset``): a non-staff user with no active membership gets 404.
+        Deliberately does NOT serialize the Covenant via ``CovenantSerializer``
+        (that touches the Postgres-only legend materialized view).
+        """
+        from world.magic.constants import EffectKind, TargetKind  # noqa: PLC0415
+        from world.magic.models import Thread, ThreadPullEffect  # noqa: PLC0415
+
+        covenant = self.get_object()
+
+        # --- Active memberships (one query, role pre-joined) -----------------
+        memberships = list(
+            covenant.memberships.filter(left_at__isnull=True).select_related("covenant_role")
+        )
+        active_member_count = len(memberships)
+
+        sheet_ids = {m.character_sheet_id for m in memberships}
+        role_ids = {m.covenant_role_id for m in memberships}
+
+        # --- Threads: one query keyed (owner, role) -------------------------
+        threads_by_key: dict[tuple[int, int], Thread] = {}
+        resonance_ids: set[int] = set()
+        if sheet_ids and role_ids:
+            for thread in Thread.objects.filter(
+                owner_id__in=sheet_ids,
+                target_kind=TargetKind.COVENANT_ROLE,
+                target_covenant_role_id__in=role_ids,
+                retired_at__isnull=True,
+            ).select_related("resonance"):
+                threads_by_key[(thread.owner_id, thread.target_covenant_role_id)] = thread
+                if thread.resonance_id is not None:
+                    resonance_ids.add(thread.resonance_id)
+
+        # --- Tier-0 CAPABILITY_GRANT effects: one query keyed by resonance ---
+        effects_by_resonance: dict[int, ThreadPullEffect] = {}
+        if resonance_ids:
+            for effect in ThreadPullEffect.objects.filter(
+                target_kind=TargetKind.COVENANT_ROLE,
+                tier=0,
+                effect_kind=EffectKind.CAPABILITY_GRANT,
+                resonance_id__in=resonance_ids,
+            ).select_related("capability_grant"):
+                effects_by_resonance[effect.resonance_id] = effect
+
+        # --- Join in Python --------------------------------------------------
+        role_power_rows = [
+            _build_role_power_row(membership, threads_by_key, effects_by_resonance)
+            for membership in memberships
+        ]
+        role_power_data = CovenantRolePassivePowerSerializer(role_power_rows, many=True).data
+
+        # --- Rites: authored per covenant_type, with gate flags --------------
+        rite_data = []
+        for rite in CovenantRite.objects.filter(
+            covenant_type=covenant.covenant_type
+        ).select_related("ritual", "granted_condition"):
+            entry = dict(CovenantRiteSerializer(rite).data)
+            entry["level_met"] = covenant.level >= rite.min_covenant_level
+            entry["members_present_met"] = active_member_count >= rite.min_members_present
+            rite_data.append(entry)
+
+        return Response({"rites": rite_data, "role_powers": role_power_data})
 
 
 class CovenantRiteViewSet(viewsets.ReadOnlyModelViewSet):

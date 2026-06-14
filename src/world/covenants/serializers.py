@@ -178,6 +178,26 @@ class CovenantRiteSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class CovenantRolePassivePowerSerializer(serializers.Serializer):
+    """Read-only shape for one active membership's current passive role power.
+
+    A member's passive power is the tier-0 CAPABILITY_GRANT ThreadPullEffect for
+    the resonance their COVENANT_ROLE thread channels. Members without a woven
+    role-thread (or whose thread level is below the effect's min_thread_level)
+    have null capability fields; resonance_name may still be populated when a
+    thread exists.
+    """
+
+    membership_id = serializers.IntegerField(read_only=True)
+    character_sheet = serializers.IntegerField(read_only=True)
+    covenant_role_id = serializers.IntegerField(read_only=True)
+    covenant_role_name = serializers.CharField(read_only=True)
+    resonance_name = serializers.CharField(read_only=True, allow_null=True)
+    capability_name = serializers.CharField(read_only=True, allow_null=True)
+    narrative_snippet = serializers.CharField(read_only=True, allow_null=True)
+    engaged = serializers.BooleanField(read_only=True)
+
+
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
     """Read-only serializer for GearArchetypeCompatibility join rows."""
 
