@@ -542,9 +542,49 @@ Decoupling: Depends on Items (EquippedItem + ItemFacet models) and Covenants
 (CharacterCovenantRole). Does NOT depend on Spec B. Shipped on the
 `spec-d-items-fashion-mantles-design` branch.
 
-Deferred to PR2–PR4: crafting UI for attaching facets, ITEM/ROOM anchor cap formulas
+Deferred to PR3–PR4: ITEM/ROOM anchor cap formulas
 (still raises `AnchorCapNotImplemented`), mantle system (covenant group attunement),
 fashion combat integration.
+
+**Resonance Pivot — Spec D PR2 (Crafting UI for attaching facets) — DONE:**
+
+**Issue:** #510
+
+The player-facing surface for attaching facets to owned items, with the attachment
+quality determined by a **server-side crafting check** — never a player choice.
+
+What was built:
+
+- **Check-driven quality.** Attaching a facet runs an **Enchanting** check
+  (`craft_attach_facet`, `world.items.services.crafting`); the graded outcome maps to a
+  numeric score (`compute_quality_score`) resolved to a `QualityTier` via
+  `QualityTier.for_score` (reusing the existing `numeric_min/numeric_max` ranges).
+  Players choose only *which* facet; the server rolls the tier.
+- **`FacetCraftingConfig` singleton** (`check_type` FK + `base_difficulty` +
+  `success_level_step` + `min_success_level`); lazy `get_facet_crafting_config()`.
+  Seeded by `wire_enchanting_crafting()` (Enchanting SKILL trait + CheckType + config) —
+  a FactoryBoy chain doubling as integration-test setUp and seed data.
+- **Endpoint contract change.** `POST /api/items/item-facets/` now takes
+  `{item_instance, facet}` (no client-chosen tier) and returns a `FacetCraftResult`
+  (rolled outcome + resolved tier + the row); 201 on attach, 200 on a failed roll.
+  Ownership permission unchanged. `assert_facet_attachable` extracted and shared so the
+  craft path pre-validates duplicate/capacity *before* rolling.
+- **Frontend** (`frontend/src/inventory/`): `AttachFacetDialog` (facet-only picker that
+  surfaces the rolled outcome/tier) launched from `ItemDetailPanel`'s action row;
+  read-only facet chips now wired to live data (name + tier colour + remove) via
+  `useItemFacets`; `api.ts` + `useItemFacets.ts` data layer over the endpoint.
+- **No attach-time worn-gate** (deliberate; the issue's done-when item resolved as
+  stale). Worn enforcement already lives at point of use — `spend_resonance_for_pull`
+  raises `NoMatchingWornFacetItemsError` and the daily trickle iterates equipped items
+  only. Gating attach to worn items would break the **crafter/enchanter economy**: a
+  crafter enchants an owned, *unworn* item, then sells/gives it on (`give()` carries the
+  facets and `applied_by_account` attribution to the buyer, who benefits on wearing).
+- **E2E:** `integration_tests/test_crafting_facet_pull.py` chains craft → wear → pull on
+  a FACET thread — the crafted facet is what satisfies the worn-items gate at pull time.
+
+Deferred (follow-ups): crafter-skill-gated quality caps + material/effort cost;
+per-facet difficulty override; grid-card facet chips; a marketplace / sale-pricing
+mechanic; a telnet crafting action.
 
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
