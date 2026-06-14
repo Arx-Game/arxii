@@ -11,6 +11,7 @@ from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    wire_enchanting_crafting,
 )
 from world.items.models import ItemFacet, TemplateInteraction, TemplateSlot
 from world.items.services.equip import equip_item
@@ -142,9 +143,16 @@ class ItemFacetViewTests(ItemViewTestCase):
             RosterEntryFactory,
             RosterTenureFactory,
         )
+        from world.traits.factories import CharacterTraitValueFactory
+        from world.traits.models import Trait
 
         super().setUpTestData()
-        cls.quality = QualityTierFactory(name="ItemFacetViewQuality")
+        # Wire enchanting crafting so the POST endpoint can roll the check.
+        wire_enchanting_crafting(base_difficulty=0)
+        # Single wide-range quality tier so any score resolves.
+        cls.quality = QualityTierFactory(
+            name="ItemFacetViewCommon", numeric_min=0, numeric_max=9999, sort_order=0
+        )
         cls.facet_a = FacetFactory(name="ViewFacetA")
         cls.facet_b = FacetFactory(name="ViewFacetB")
         cls.facet_c = FacetFactory(name="ViewFacetC")
@@ -160,6 +168,13 @@ class ItemFacetViewTests(ItemViewTestCase):
             roster_entry=owner_entry,
             player_data=PlayerDataFactory(account=cls.owner),
         )
+        # Give the owner's character an Enchanting trait so the check can run.
+        CharacterTraitValueFactory(
+            character=cls.owner_char,
+            trait=Trait.objects.get(name="Enchanting"),
+            value=50,
+        )
+
         cls.non_owner = AccountFactory(username="facet_view_nonowner")
         cls.non_owner_char = CharacterFactory(db_key="facet_view_nonowner_char")
         cls.non_owner_sheet = CharacterSheetFactory(character=cls.non_owner_char)
@@ -248,17 +263,21 @@ class ItemFacetViewTests(ItemViewTestCase):
             self.assertEqual(item["item_instance"], self.item_owner.pk)
 
     def test_post_create_calls_service(self) -> None:
-        """POST creates an ItemFacet via the service; applied_by_account is set."""
-        response = self.client.post(
-            "/api/items/item-facets/",
-            {
-                "item_instance": self.item_owner.pk,
-                "facet": self.facet_a.pk,
-                "attachment_quality_tier": self.quality.pk,
-            },
-            format="json",
-        )
+        """POST rolls the crafting check and (on success) attaches the facet."""
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="FacetViewOk", success_level=2)):
+            response = self.client.post(
+                "/api/items/item-facets/",
+                {
+                    "item_instance": self.item_owner.pk,
+                    "facet": self.facet_a.pk,
+                },
+                format="json",
+            )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["attached"])
         row = ItemFacet.objects.get(item_instance=self.item_owner, facet=self.facet_a)
         self.assertEqual(row.applied_by_account_id, self.owner.pk)
 
@@ -270,7 +289,6 @@ class ItemFacetViewTests(ItemViewTestCase):
             {
                 "item_instance": self.item_owner.pk,
                 "facet": self.facet_a.pk,
-                "attachment_quality_tier": self.quality.pk,
             },
             format="json",
         )
@@ -289,7 +307,6 @@ class ItemFacetViewTests(ItemViewTestCase):
             {
                 "item_instance": self.item_owner.pk,
                 "facet": self.facet_a.pk,
-                "attachment_quality_tier": self.quality.pk,
             },
             format="json",
         )
@@ -309,7 +326,6 @@ class ItemFacetViewTests(ItemViewTestCase):
             {
                 "item_instance": self.item_cap1.pk,
                 "facet": self.facet_b.pk,
-                "attachment_quality_tier": self.quality.pk,
             },
             format="json",
         )

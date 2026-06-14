@@ -1,14 +1,19 @@
 """DRF serializers for items API."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
+
+if TYPE_CHECKING:
+    from world.items.types import FacetCraftResult
 
 from flows.service_functions.outfits import (
     add_outfit_slot,
     save_outfit,
 )
 from world.items.exceptions import (
-    FacetAlreadyAttached,
-    FacetCapacityExceeded,
     NotAContainer,
     NotReachable,
     PermissionDenied,
@@ -26,7 +31,6 @@ from world.items.models import (
     TemplateInteraction,
     TemplateSlot,
 )
-from world.items.services.facets import attach_facet_to_item
 
 
 class QualityTierSerializer(serializers.ModelSerializer):
@@ -103,31 +107,36 @@ class ItemFacetReadSerializer(serializers.ModelSerializer):
 
 
 class ItemFacetWriteSerializer(serializers.ModelSerializer):
-    """Write serializer for ItemFacet (POST create)."""
+    """Write serializer for ItemFacet (POST create) — input validation only.
+
+    The viewset drives the crafting service directly; this serializer parses
+    and validates the ``item_instance`` and ``facet`` foreign keys.
+    """
 
     class Meta:
         model = ItemFacet
-        fields = ["item_instance", "facet", "attachment_quality_tier"]
+        fields = ["item_instance", "facet"]
         # DRF auto-injects a UniqueTogetherValidator from
         # UniqueConstraint(item_instance, facet); suppress it so the
         # FacetAlreadyAttached exception in the service raises a user-message
         # error instead of DRF's generic "must make a unique set" message.
         validators: list = []
 
-    def create(self, validated_data: dict) -> ItemFacet:  # type: ignore[override]  # DRF base returns Model; we narrow to ItemFacet
-        """Delegate creation to the facet service."""
-        crafter = self.context["request"].user
-        try:
-            return attach_facet_to_item(
-                crafter=crafter,
-                item_instance=validated_data["item_instance"],
-                facet=validated_data["facet"],
-                attachment_quality_tier=validated_data["attachment_quality_tier"],
-            )
-        except FacetAlreadyAttached as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
-        except FacetCapacityExceeded as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+
+class FacetCraftResultSerializer(serializers.Serializer):
+    """Response for a facet-craft attempt: rolled outcome + resolved tier + the row."""
+
+    attached = serializers.BooleanField()
+    outcome_name = serializers.SerializerMethodField()
+    success_level = serializers.SerializerMethodField()
+    quality_tier = QualityTierSerializer(allow_null=True)
+    item_facet = ItemFacetReadSerializer(allow_null=True)
+
+    def get_outcome_name(self, obj: FacetCraftResult) -> str | None:
+        return obj.outcome.name if obj.outcome else None
+
+    def get_success_level(self, obj: FacetCraftResult) -> int | None:
+        return obj.outcome.success_level if obj.outcome else None
 
 
 class EquippedItemReadSerializer(serializers.ModelSerializer):
