@@ -1,6 +1,7 @@
 """API ViewSets for items."""
 
 from dataclasses import dataclass
+from http import HTTPMethod
 from typing import cast
 
 from django.db.models import Prefetch, QuerySet
@@ -14,6 +15,7 @@ from drf_spectacular.utils import (
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -25,6 +27,7 @@ from rest_framework.viewsets import GenericViewSet
 from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
+from world.items.exceptions import ItemError
 from world.items.filters import (
     FashionPresentationFilter,
     InteractionTypeFilter,
@@ -62,10 +65,13 @@ from world.items.serializers import (
     OutfitWriteSerializer,
     PresentationEndorsementSerializer,
     QualityTierSerializer,
+    UseItemResultSerializer,
+    UseItemSerializer,
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
 from world.items.services.facets import remove_facet_from_item
+from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
 from world.roster.models import RosterEntry
 
@@ -371,7 +377,8 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         if not user.is_staff and not _user_plays_pk(user, character.pk):
             raise NotFound
 
-        rows = list(character.carried_items)
+        # Exclude consumed/destroyed rows so used-up items leave the inventory.
+        rows = [r for r in character.carried_items if r.destroyed_at is None]
         paginator = ItemTemplatePagination()
         page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
         serializer = ItemInstanceReadSerializer(page, many=True)
@@ -386,7 +393,8 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             raise NotFound
         try:
             item = (
-                ItemInstance.objects.select_related(
+                ItemInstance.objects.in_play()
+                .select_related(
                     "template",
                     "quality_tier",
                     "game_object",
@@ -415,6 +423,57 @@ class ItemInstanceViewSet(viewsets.ViewSet):
 
         serializer = ItemInstanceReadSerializer(item)
         return Response(serializer.data)
+
+    @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="use")
+    def use(self, request: Request, pk: str | None = None) -> Response:
+        """Use a consumable item: apply its on-use effects (to self) and spend a charge.
+
+        Owner-or-staff gated. Business logic lives entirely in ``use_item``;
+        this view resolves the actor, enforces ownership, and maps
+        ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
+        surface does NOT accept a target — on-use effects apply to the holder
+        only. Targeted use belongs in the future use-item Action layer, which
+        carries proximity/prerequisite checks.
+        """
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = (
+                ItemInstance.objects.in_play()
+                .select_related(
+                    "template",
+                    "template__on_use_pool",
+                    "template__on_use_check_type",
+                    "game_object",
+                )
+                .get(pk=item_pk)
+            )
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff and not _user_holds_item(user, item):
+            raise NotFound
+        if item.game_object is None:
+            # A held consumable always has a game_object; guard against the
+            # AttributeError→500 if that invariant is ever violated.
+            raise NotFound
+        actor = item.game_object.db_location  # the holder character (its game object)
+        try:
+            result = use_item(item_instance=item, user=actor)
+        except ItemError as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(
+            UseItemResultSerializer(
+                {
+                    "charges_remaining": result.charges_remaining,
+                    "destroyed": result.destroyed,
+                    "soft_deleted": result.soft_deleted,
+                    "applied_effect_count": len(result.applied_effects),
+                }
+            ).data
+        )
 
 
 @extend_schema(tags=["items"])

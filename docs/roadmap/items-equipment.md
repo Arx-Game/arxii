@@ -105,6 +105,38 @@ What shipped:
   through the real services (clearance → gated weave → equip → `collect_check_modifiers`)
 - **Typed exception** — `MantleNotClearedError` in `world.magic.exceptions`
 
+## Item Interaction Service Functions — Use / Consume Charges (DONE, #509)
+
+**Branch:** `feature-509-item-interaction-service-functions-use-c`
+
+Service layer (+ a REST entry point) for using consumable items — potions, scrolls,
+charged-use items. Reuses the wired effect stack end-to-end rather than introducing new
+effect or pool primitives: effects are authored as `checks.Consequence` → `ConsequenceEffect`
+and grouped into an `actions.ConsequencePool` (the same abstraction combat clashes use).
+
+What landed:
+
+- **Schema (`ItemTemplate`):** `on_use_pool` FK → `actions.ConsequencePool` (null = not usable),
+  `on_use_check_type` FK → `checks.CheckType` (null ⇒ deterministic apply; set ⇒ check-gated),
+  `on_use_difficulty` (authored difficulty, required iff `on_use_check_type` set; enforced in
+  `clean()`). No new through-model — reuses the pool abstraction.
+- **Soft-delete (`ItemInstance`):** new `destroyed_at` marker + `differs_from_template` property
+  + `objects.in_play()` queryset. At 0 charges, instances carrying per-instance data (custom
+  name/description, non-default quality tier, facets, `lore_value`, or provenance) are
+  **soft-deleted** (row + history preserved); bare template-identical throwaways are
+  hard-deleted (the `CONSUMED` ledger row survives via `OwnershipEvent.item_instance` `SET_NULL`).
+- **Service `world/items/services/usage.py`:** `consume_item_charges` (atomic, `select_for_update`
+  charge lock, `ACTIVATED`/`CONSUMED` ledger, soft/hard delete) and `use_item` (deterministic via
+  `apply_pool_deterministically`, or check-gated via `select_consequence` + `apply_resolution`;
+  charge spent regardless of check outcome). Returns a `UseItemResult` dataclass.
+- **Typed exceptions:** `ItemNotUsable`, `NoChargesRemaining` (in `world.items.exceptions`).
+- **REST:** `POST /api/items/inventory/<pk>/use/` — a `use` action on `ItemInstanceViewSet`,
+  owner-or-staff gated, `ItemError` → HTTP 400; list/retrieve filter `.in_play()`.
+
+Deferred follow-ups: use-item *Action* (`actions/definitions/`) converging on `action.run()`
+alongside equip/unequip; time-based cleanup of soft-deleted, non-lore-critical instances;
+durability-on-use (#508) integration; quantity/stack consumption; frontend "use item" UI.
+
 ## Inventory Service Functions (DONE)
 
 **Branch:** `inventory-service-functions-design`
@@ -400,7 +432,7 @@ Explicitly NOT in this slice (parked):
 - ~~Saved outfits (Phase A)~~ — **done** (Outfit / OutfitSlot models, apply_outfit / undress / save_outfit / delete_outfit / add_outfit_slot / remove_outfit_slot services, ApplyOutfit/Undress actions, `wear outfit <name>` + `undress` telnet commands, REST CRUD, wardrobe page)
 - ~~Item stats model~~ — **done** (#508: `ItemTemplate` base combat stats — `weapon_damage_type`, `base_weapon_damage`, `base_armor_soak`, `max_durability`, gated by `gear_archetype`; `ItemInstance` derives `effective_weapon_damage` / `effective_armor_soak` / `is_broken` from quality tier and `durability`; `decrement_item_durability` service; combat wiring — armor soak in `apply_damage_to_participant`, equipped-weapon damage via `TechniqueDamageProfile.uses_equipped_weapon`, durability decremented on landed/soaked hits)
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
-- Item interaction service functions — using items, consuming charges (not started)
+- Item interaction service functions — using items, consuming charges (DONE, #509)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
 - ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; scene-derived society + combat surfacing delivered in Spec D PR4 / #512 via `societies_for_scene` + `collect_check_modifiers`)
 - ~~Outfits Phase C (Modeling)~~ — **done** (#514: `FashionPresentation` + peer `PresentationEndorsement`, `Event.host_society`, `prestige_from_fashion` axis, `FacetVogueMomentum` + seasonal trendsetter ceremony rewriting `Society.current_fashion_style`, `RankingType.FASHION` leaderboard reusing #676, present/judge API + event-detail UI)

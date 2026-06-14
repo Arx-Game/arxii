@@ -75,37 +75,56 @@ class MissionPoolCountTests(TestCase):
     def setUpTestData(cls):
         cls.character, cls.pc_persona = _make_pc()
         cls.npc = PersonaFactory()
+        # A role with no org affiliation isolates the NPC-standing input
+        # (org count falls back to the floor, so max() is a no-op here).
+        cls.role = NPCRoleFactory()
 
     def test_class1_functionary_gets_floor(self):
         # npc_persona is None → no standing surface → one trial job.
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=None), 1)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=None), 1
+        )
 
     def test_no_standing_row_gets_floor(self):
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 1)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 1
+        )
 
     def test_neutral_affection_gets_floor(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=0)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 1)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 1
+        )
 
     def test_negative_affection_gets_floor(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=-40)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 1)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 1
+        )
 
     def test_lower_band_boundary(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=10)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 2)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 2
+        )
 
     def test_mid_band(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=25)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 3)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 3
+        )
 
     def test_just_below_a_band_uses_lower_band(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=49)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 3)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 3
+        )
 
     def test_ceiling_clamp(self):
         NPCStandingFactory(persona=self.pc_persona, npc_persona=self.npc, affection=10_000)
-        self.assertEqual(mission_pool_count(persona=self.pc_persona, npc_persona=self.npc), 5)
+        self.assertEqual(
+            mission_pool_count(role=self.role, persona=self.pc_persona, npc_persona=self.npc), 5
+        )
 
 
 class DrawPriorityTests(TestCase):
@@ -159,7 +178,7 @@ class StandingDrivenCountIntegrationTests(TestCase):
             _make_mission_offer(self.role, label=f"pool-{i}")
 
     def _pool_count_listed(self, persona, character):
-        count = mission_pool_count(persona=persona, npc_persona=self.npc)
+        count = mission_pool_count(role=self.role, persona=persona, npc_persona=self.npc)
         session = start_interaction(
             role=self.role, persona=persona, character=character, npc_persona=self.npc
         )

@@ -172,6 +172,7 @@ def _serialize_state(
         available_offers(
             session,
             pool_count=mission_pool_count(
+                role=session.role,
                 persona=session.persona,
                 npc_persona=session.npc_persona,
             ),

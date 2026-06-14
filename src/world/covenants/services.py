@@ -216,6 +216,92 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
 
 
 @transaction.atomic
+def leave_covenant(*, membership: CharacterCovenantRole) -> None:
+    """A member voluntarily leaves a covenant. Soft-ends the membership, then
+    auto-dissolves the covenant if active membership falls below the minimum.
+    Idempotent: leaving an already-ended membership is a no-op."""
+    if membership.left_at is not None:
+        return
+    covenant = membership.covenant
+    departed_sheet = membership.character_sheet
+    end_covenant_role(assignment=membership)
+    if not _maybe_dissolve(covenant=covenant):
+        _emit_departure_message(covenant, departed_sheet, kicked=False)
+
+
+@transaction.atomic
+def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) -> None:
+    """A leader removes another (non-leader) member. Soft-ends the target, then
+    auto-dissolves if active membership falls below the minimum.
+    Idempotent: kicking an already-departed member is a no-op."""
+    from world.covenants.exceptions import (  # noqa: PLC0415
+        CannotKickLeaderError,
+        CannotKickSelfError,
+        NotACovenantLeaderError,
+    )
+
+    if actor.left_at is not None or not actor.covenant_role.is_leadership:
+        raise NotACovenantLeaderError
+    if actor.covenant_id != target.covenant_id:
+        # cross-covenant: defensive guard, UI-unreachable (targets are always same-covenant)
+        raise NotACovenantLeaderError
+    if actor.pk == target.pk:
+        raise CannotKickSelfError
+    if target.covenant_role.is_leadership:
+        raise CannotKickLeaderError
+    if target.left_at is not None:
+        return
+    covenant = target.covenant
+    departed_sheet = target.character_sheet
+    end_covenant_role(assignment=target)
+    if not _maybe_dissolve(covenant=covenant):
+        _emit_departure_message(covenant, departed_sheet, kicked=True)
+
+
+def _maybe_dissolve(*, covenant: Covenant) -> bool:
+    """Dissolve the covenant if fewer than MINIMUM_FOUNDERS active members remain.
+    Returns True if it dissolved. Idempotent via dissolve_covenant's guard."""
+    remaining = covenant.member_roster.active_character_sheets
+    if len(remaining) >= MINIMUM_FOUNDERS:
+        return False
+    recipients = list(remaining)  # capture before dissolve ends them
+    dissolve_covenant(covenant=covenant)
+    _emit_dissolution_message(covenant, recipients)
+    return True
+
+
+def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kicked: bool) -> None:
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    sheets = covenant.member_roster.active_character_sheets
+    if not sheets:
+        return
+    verb = "has been cast out of" if kicked else "has left"
+    send_narrative_message(
+        recipients=sheets,
+        body=f"{departed.character.db_key} {verb} the covenant '{covenant.name}'.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+
+def _emit_dissolution_message(covenant: Covenant, recipients: list[CharacterSheet]) -> None:
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    if not recipients:
+        return
+    send_narrative_message(
+        recipients=recipients,
+        body=(
+            f"The covenant '{covenant.name}' dissolves — too few remain to "
+            "uphold the oath. Its bonds fall silent, but its memory endures."
+        ),
+        category=NarrativeCategory.COVENANT,
+    )
+
+
+@transaction.atomic
 def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     """Engage this membership; un-engage other same-type rows for the same character.
 
