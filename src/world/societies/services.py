@@ -380,20 +380,30 @@ def get_covenant_legend_total(covenant: Covenant) -> int:
     return result[0] if result else 0
 
 
-def get_character_role_legend(*, character_sheet: CharacterSheet, role: CovenantRole) -> int:
+def get_character_role_legend(
+    *,
+    character_sheet: CharacterSheet,
+    role: CovenantRole,
+    covenant_ids: list[int] | None = None,
+) -> int:
     """Sum the legend this character earned that was credited to covenants where they held ``role``.
 
     "Legend earned in role" signal for the COVENANT_ROLE anchor cap (issue #517).
     Counts each LegendEntry once (distinct-entry) to avoid the spread-join /
     multi-covenant-credit fan-out double-count. Active entries only.
-    """
-    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
 
-    covenant_ids = list(
-        CharacterCovenantRole.objects.filter(
-            character_sheet=character_sheet, covenant_role=role
-        ).values_list("covenant_id", flat=True)
-    )
+    ``covenant_ids`` may be supplied by a caller that already has the character's
+    held-role covenants cached (the anchor-cap path reads them from the
+    ``CharacterCovenantRoleHandler`` cache) to skip the membership query.
+    """
+    if covenant_ids is None:
+        from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+        covenant_ids = list(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=character_sheet, covenant_role=role
+            ).values_list("covenant_id", flat=True)
+        )
     if not covenant_ids:
         return 0
 

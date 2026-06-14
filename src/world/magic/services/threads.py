@@ -150,7 +150,13 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             covenant_component = (
                 handler.max_covenant_level_for_role(role) * ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER
             )
-            legend = get_character_role_legend(character_sheet=thread.owner, role=role)
+            # covenant_ids come from the warmed handler cache (0 queries); the legend
+            # lookup then needs only its own credit query rather than re-fetching membership.
+            legend = get_character_role_legend(
+                character_sheet=thread.owner,
+                role=role,
+                covenant_ids=handler.covenant_ids_for_role(role),
+            )
             days = handler.days_held_in_role(role)
             return (
                 covenant_component

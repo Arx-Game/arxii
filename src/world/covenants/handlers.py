@@ -64,6 +64,15 @@ class CharacterCovenantRoleHandler:
                 total += (r.left_at or now) - r.joined_at
         return total.days
 
+    def covenant_ids_for_role(self, role: CovenantRole) -> list[int]:
+        """Return covenant PKs where this character has held ``role`` (active or historical).
+
+        Reads the cached rows — no DB query. Lets callers (e.g. the COVENANT_ROLE
+        anchor-cap legend lookup) skip re-querying covenant membership that is
+        already in the handler cache.
+        """
+        return [r.covenant_id for r in self._rows if r.covenant_role_id == role.pk]
+
     def currently_held_role_in(self, covenant: Covenant) -> CovenantRole | None:
         """Return the active role in the specified covenant, or None.
 
