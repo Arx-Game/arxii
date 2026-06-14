@@ -156,6 +156,8 @@ class ActionRegistryTests(TestCase):
             "take_out",
             "apply_outfit",
             "undress",
+            "present_outfit",
+            "judge_presentation",
             "traverse_exit",
             "home",
             "activate_permit",
