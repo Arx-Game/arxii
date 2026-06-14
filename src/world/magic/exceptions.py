@@ -42,6 +42,12 @@ class WeavingUnlockMissing(MagicError):
     user_message = "You have not learned to weave threads of this kind."
 
 
+class MantleNotClearedError(MagicError):
+    """Raised when weaving a MANTLE thread for a mantle whose level 1 isn't cleared."""
+
+    user_message = "You must clear this mantle's first rank before you can weave a thread to it."
+
+
 class NoMatchingWornFacetItemsError(MagicError):
     user_message = "You aren't wearing anything bearing this facet."
 

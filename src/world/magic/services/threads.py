@@ -26,6 +26,7 @@ from world.magic.exceptions import (
     AnchorCapExceeded,
     AnchorCapNotImplemented,
     InvalidImbueAmount,
+    MantleNotClearedError,
     WeavingUnlockMissing,
     XPInsufficient,
 )
@@ -115,6 +116,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
     - COVENANT_ROLE: max(covenant.level across the character's all-time CharacterCovenantRole
       rows for this role) × 10. Cap is a persistent character property, independent of
       current engagement.
+    - MANTLE: max cleared mantle level × 10 (Spec D §6.2). Cap grows as the
+      character clears higher mantle ranks via codex research.
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """
     match thread.target_kind:
@@ -138,6 +141,10 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
         case TargetKind.COVENANT_ROLE:
             role = thread.target_covenant_role
             max_level = thread.owner.character.covenant_roles.max_covenant_level_for_role(role)
+            return max_level * 10
+        case TargetKind.MANTLE:
+            mantle = thread.target_mantle
+            max_level = thread.owner.character.mantle_clearances.max_cleared_level(mantle)
             return max_level * 10
         case TargetKind.ROOM:
             msg = thread.target_kind + " anchor cap awaits Spec D."
@@ -318,6 +325,15 @@ def weave_thread(  # noqa: PLR0913
 
         if not character_sheet.character.covenant_roles.has_ever_held(target):
             raise CovenantRoleNeverHeldError
+    elif target_kind == TargetKind.MANTLE:
+        from world.items.services.mantle import (  # noqa: PLC0415
+            get_max_cleared_mantle_level,
+            record_mantle_clearances,
+        )
+
+        record_mantle_clearances(character_sheet, target)  # type: ignore[invalid-argument-type]
+        if get_max_cleared_mantle_level(character_sheet, target) < 1:  # type: ignore[invalid-argument-type]
+            raise MantleNotClearedError
     elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
@@ -330,6 +346,7 @@ def weave_thread(  # noqa: PLR0913
         TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
         TargetKind.FACET: "target_facet",
         TargetKind.COVENANT_ROLE: "target_covenant_role",
+        TargetKind.MANTLE: "target_mantle",
     }
     kwargs: dict[str, object] = {
         "owner": character_sheet,
