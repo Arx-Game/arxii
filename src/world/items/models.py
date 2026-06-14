@@ -1068,6 +1068,9 @@ class Mantle(SharedMemoryModel):
             ),
         ]
 
+    def __str__(self) -> str:
+        return self.name
+
 
 class MantleLevelDefinition(SharedMemoryModel):
     """Authored content for a single mantle level.
@@ -1099,6 +1102,7 @@ class MantleLevelDefinition(SharedMemoryModel):
     )
 
     class Meta:
+        ordering = ["level"]
         constraints = [
             models.UniqueConstraint(
                 fields=["mantle", "level"],
@@ -1129,6 +1133,7 @@ class MantleLevelClearance(SharedMemoryModel):
     cleared_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        ordering = ["level"]
         constraints = [
             models.UniqueConstraint(
                 fields=["character_sheet", "mantle", "level"],
