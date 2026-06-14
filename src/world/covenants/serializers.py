@@ -85,6 +85,9 @@ class CovenantSerializer(serializers.ModelSerializer):
     covenant_type_display = serializers.CharField(
         source="get_covenant_type_display", read_only=True
     )
+    battle_binding_display = serializers.CharField(
+        source="get_battle_binding_display", read_only=True
+    )
     member_count = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
     legend_total = serializers.SerializerMethodField()
@@ -102,6 +105,9 @@ class CovenantSerializer(serializers.ModelSerializer):
             "formed_at",
             "dissolved_at",
             "is_active",
+            "is_dormant",
+            "battle_binding",
+            "battle_binding_display",
             "member_count",
             "legend_total",
             "storylines",
