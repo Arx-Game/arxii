@@ -17,6 +17,8 @@ export const covenantKeys = {
   list: () => [...covenantKeys.all, 'list'] as const,
   detail: (id: number) => [...covenantKeys.all, 'detail', id] as const,
   members: (covenantId: number) => [...covenantKeys.all, 'members', covenantId] as const,
+  powers: (covenantId: number) => [...covenantKeys.all, 'powers', covenantId] as const,
+  subroles: (parentRoleId: number) => [...covenantKeys.all, 'subroles', parentRoleId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +51,28 @@ export function useCovenantMembers(covenantId: number) {
   });
 }
 
+export function useCovenantPowers(covenantId: number) {
+  return useQuery({
+    queryKey: covenantKeys.powers(covenantId),
+    queryFn: () => api.getCovenantPowers(covenantId),
+    enabled: covenantId > 0,
+    throwOnError: true,
+  });
+}
+
+/**
+ * Fetch a role's sub-roles for the promotion picker. Disabled until a parent
+ * role id is known.
+ */
+export function useSubroles(parentRoleId: number | null) {
+  return useQuery({
+    queryKey: covenantKeys.subroles(parentRoleId ?? 0),
+    queryFn: () => api.getCovenantRoles({ parent_role: parentRoleId as number }),
+    enabled: parentRoleId != null,
+    throwOnError: true,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutation hooks
 // ---------------------------------------------------------------------------
@@ -71,6 +95,30 @@ export function useDisengageMembership(covenantId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function usePromoteMembership(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { membershipId: number; targetSubroleId: number }) =>
+      api.promoteMembership(vars.membershipId, vars.targetSubroleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.powers(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useStandDownCovenant(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.standDownCovenant(covenantId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.powers(covenantId) }).catch(() => {});
     },
   });
 }

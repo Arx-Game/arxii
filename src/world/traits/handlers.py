@@ -204,6 +204,7 @@ class TraitHandler:
         capacity (which resolves 6 stat values per participant) from firing
         a per-stat N+1 on the combat detail hot path (#552).
         """
+        from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
         from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
@@ -215,7 +216,7 @@ class TraitHandler:
         target = ModifierTarget.get_for_trait(trait)
         if target is None:
             return 0
-        return get_modifier_total(sheet, target)
+        return get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
 
     def get_trait_display_value(self, trait_name: str) -> float:
         """

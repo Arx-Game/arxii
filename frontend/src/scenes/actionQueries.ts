@@ -38,6 +38,8 @@ export async function createActionRequest(
     strain_commitment?: number;
     /** Audience routing override (#903); omit to use the template default. */
     delivery?: string;
+    /** Explicit WHISPER audience as persona ids (#907); empty/omitted = target alone. */
+    delivery_receiver_ids?: number[];
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -61,6 +63,9 @@ export async function createActionRequest(
   }
   if (body.delivery !== undefined) {
     requestBody.delivery = body.delivery;
+  }
+  if (body.delivery_receiver_ids !== undefined && body.delivery_receiver_ids.length > 0) {
+    requestBody.delivery_receiver_ids = body.delivery_receiver_ids;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',

@@ -33,6 +33,7 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "archetype_display",
             "speed_rank",
             "description",
+            "parent_role",
         ]
         read_only_fields = fields
 
@@ -85,6 +86,9 @@ class CovenantSerializer(serializers.ModelSerializer):
     covenant_type_display = serializers.CharField(
         source="get_covenant_type_display", read_only=True
     )
+    battle_binding_display = serializers.CharField(
+        source="get_battle_binding_display", read_only=True
+    )
     member_count = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
     legend_total = serializers.SerializerMethodField()
@@ -102,6 +106,9 @@ class CovenantSerializer(serializers.ModelSerializer):
             "formed_at",
             "dissolved_at",
             "is_active",
+            "is_dormant",
+            "battle_binding",
+            "battle_binding_display",
             "member_count",
             "legend_total",
             "storylines",
@@ -170,6 +177,26 @@ class CovenantRiteSerializer(serializers.ModelSerializer):
             "duration_rounds",
         ]
         read_only_fields = fields
+
+
+class CovenantRolePassivePowerSerializer(serializers.Serializer):
+    """Read-only shape for one active membership's current passive role power.
+
+    A member's passive power is the tier-0 CAPABILITY_GRANT ThreadPullEffect for
+    the resonance their COVENANT_ROLE thread channels. Members without a woven
+    role-thread (or whose thread level is below the effect's min_thread_level)
+    have null capability fields; resonance_name may still be populated when a
+    thread exists.
+    """
+
+    membership_id = serializers.IntegerField(read_only=True)
+    character_sheet = serializers.IntegerField(read_only=True)
+    covenant_role_id = serializers.IntegerField(read_only=True)
+    covenant_role_name = serializers.CharField(read_only=True)
+    resonance_name = serializers.CharField(read_only=True, allow_null=True)
+    capability_name = serializers.CharField(read_only=True, allow_null=True)
+    narrative_snippet = serializers.CharField(read_only=True, allow_null=True)
+    engaged = serializers.BooleanField(read_only=True)
 
 
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
