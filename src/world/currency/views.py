@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, viewsets
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -28,6 +29,7 @@ from world.currency.services import get_or_create_economics, get_or_create_treas
 
 _MSG_NO_ORG = "No such organization."
 _MSG_NOT_MEMBER = "You are not a member of that organization."
+_MSG_NO_CAPTIVITY = "No such ransom demand for this organization."
 _RECENT_ROWS = 50
 
 
@@ -73,6 +75,15 @@ class LedgerRowSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
+class DemandRowSerializer(serializers.Serializer):
+    """A ransom demand owed by this org for one of its captured members (#931)."""
+
+    captivity_id = serializers.IntegerField()
+    captive_name = serializers.CharField()
+    captor = serializers.CharField()
+    amount = serializers.IntegerField()
+
+
 class MyBooksRowSerializer(serializers.Serializer):
     """One organization whose books the viewer may open."""
 
@@ -95,6 +106,7 @@ class OrgBooksSerializer(serializers.Serializer):
     obligations = ObligationRowSerializer(many=True)
     contributions = ContributionRowSerializer(many=True)
     ledger = LedgerRowSerializer(many=True)
+    demands = DemandRowSerializer(many=True)
 
 
 class OrgBooksViewSet(viewsets.ViewSet):
@@ -134,24 +146,65 @@ class OrgBooksViewSet(viewsets.ViewSet):
         },
     )
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
-        from world.societies.models import Organization, OrganizationMembership  # noqa: PLC0415
-
-        organization = Organization.objects.filter(pk=pk).first()
-        if organization is None:
-            raise NotFound(_MSG_NO_ORG)
-
-        persona = _viewer_persona(request)
-        is_member = (
-            persona is not None
-            and OrganizationMembership.objects.filter(
-                persona=persona, organization=organization
-            ).exists()
-        )
-        if not is_member:
-            raise PermissionDenied(_MSG_NOT_MEMBER)
-
+        organization = _require_member_org(request, pk)
         payload = _books_payload(organization)
         return Response(OrgBooksSerializer(payload).data)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: OrgBooksSerializer,
+            400: OpenApiResponse(description="The ransom could not be paid."),
+            403: OpenApiResponse(description="Not a member of the organization."),
+            404: OpenApiResponse(description="No such organization."),
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="pay-ransom")
+    def pay_ransom(self, request: Request, pk: str | None = None) -> Response:
+        """Pay a held member's ransom from this org's treasury (#931).
+
+        Body: ``{"captivity_id": <int>}``. Member-gated like the books read;
+        the demand must be owed by this org. Returns the refreshed books.
+        """
+        from world.captivity.exceptions import CaptivityError  # noqa: PLC0415
+        from world.captivity.models import Captivity  # noqa: PLC0415
+        from world.captivity.ransom import pay_ransom as pay_ransom_service  # noqa: PLC0415
+
+        organization = _require_member_org(request, pk)
+        captivity_id = request.data.get("captivity_id")
+        captivity = Captivity.objects.filter(pk=captivity_id).first()
+        if captivity is None:
+            raise NotFound(_MSG_NO_CAPTIVITY)
+        contract = captivity.ransom_contract
+        if contract is None or contract.counterparty_organization_id != organization.pk:
+            # This org does not owe that ransom — never leak others' demands.
+            raise NotFound(_MSG_NO_CAPTIVITY)
+
+        try:
+            pay_ransom_service(captivity)
+        except CaptivityError as exc:
+            raise ValidationError(exc.user_message) from exc
+
+        return Response(OrgBooksSerializer(_books_payload(organization)).data)
+
+
+def _require_member_org(request: Request, pk: str | None):
+    """The organization at ``pk``, or raise — gated to the viewer's membership."""
+    from world.societies.models import Organization, OrganizationMembership  # noqa: PLC0415
+
+    organization = Organization.objects.filter(pk=pk).first()
+    if organization is None:
+        raise NotFound(_MSG_NO_ORG)
+    persona = _viewer_persona(request)
+    is_member = (
+        persona is not None
+        and OrganizationMembership.objects.filter(
+            persona=persona, organization=organization
+        ).exists()
+    )
+    if not is_member:
+        raise PermissionDenied(_MSG_NOT_MEMBER)
+    return organization
 
 
 def _viewer_persona(request: Request):
@@ -267,4 +320,37 @@ def _books_payload(organization) -> dict:
             )[:_RECENT_ROWS]
         ],
         "ledger": ledger,
+        "demands": _ransom_demands(organization),
     }
+
+
+def _ransom_demands(organization) -> list[dict]:
+    """Active ransom demands this org owes for its captured members (#931).
+
+    A captor's demand is a Contract whose counterparty is this org, linked to a
+    still-HELD captivity. Queried from the captivity side (constants-only import
+    — no app cycle); terms prefetched so the amount lookup is not an N+1.
+    """
+    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+    from world.captivity.models import Captivity  # noqa: PLC0415
+
+    captivities = (
+        Captivity.objects.filter(
+            ransom_contract__counterparty_organization=organization,
+            status=CaptivityStatus.HELD,
+        )
+        .select_related("captive__character", "captor_organization")
+        .prefetch_related("ransom_contract__payment_terms")  # noqa: PREFETCH_STRING
+    )
+    rows = []
+    for cap in captivities:
+        terms = list(cap.ransom_contract.payment_terms.all())
+        rows.append(
+            {
+                "captivity_id": cap.pk,
+                "captive_name": cap.captive.character.key,
+                "captor": cap.captor_organization.name if cap.captor_organization else "",
+                "amount": terms[0].amount if terms else 0,
+            }
+        )
+    return rows
