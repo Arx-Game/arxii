@@ -4375,6 +4375,37 @@ paths:
           description: Not a member of the organization.
         '404':
           description: No such organization.
+  /api/currency/org-books/{id}/pay-ransom/:
+    post:
+      operationId: currency_org_books_pay_ransom_create
+      description: |-
+        Pay a held member's ransom from this org's treasury (#931).
+
+        Body: ``{"captivity_id": <int>}``. Member-gated like the books read;
+        the demand must be owed by this org. Returns the refreshed books.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgBooks'
+          description: ''
+        '400':
+          description: The ransom could not be paid.
+        '403':
+          description: Not a member of the organization.
+        '404':
+          description: No such organization.
   /api/distinctions/categories/:
     get:
       operationId: distinctions_categories_list
@@ -24223,6 +24254,24 @@ components:
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
+    DemandRow:
+      type: object
+      description: A ransom demand owed by this org for one of its captured members
+        (#931).
+      properties:
+        captivity_id:
+          type: integer
+        captive_name:
+          type: string
+        captor:
+          type: string
+        amount:
+          type: integer
+      required:
+      - amount
+      - captive_name
+      - captivity_id
+      - captor
     DifficultyChoiceEnum:
       enum:
       - trivial
@@ -30170,10 +30219,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LedgerRow'
+        demands:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemandRow'
       required:
       - balance
       - contributions
       - debts
+      - demands
       - graft_pct
       - income_streams
       - ledger

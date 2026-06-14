@@ -28,3 +28,21 @@ class NotHeldError(CaptivityError):
     """The captivity is already resolved — it cannot be resolved again."""
 
     user_message = "That captivity has already ended."
+
+
+class NoCaptorError(CaptivityError):
+    """A ransom needs a captor org to demand it; this captivity has none."""
+
+    user_message = "No captor is holding this character to ransom."
+
+
+class NoRansomError(CaptivityError):
+    """There is no ransom demand to pay on this captivity."""
+
+    user_message = "There is no ransom demand to pay."
+
+
+class InsufficientTreasuryError(CaptivityError):
+    """The paying organization's treasury cannot cover the ransom."""
+
+    user_message = "The treasury cannot cover that ransom."
