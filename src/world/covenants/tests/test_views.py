@@ -694,3 +694,40 @@ class PromoteActionViewTests(CovenantsViewTestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class CovenantRoleViewTests(CovenantsViewTestCase):
+    """Tests for GET /api/covenants/roles/ including the parent_role filter."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        from world.covenants.factories import SubroleCovenantRoleFactory
+
+        cls.parent_role = CovenantRoleFactory(name="RoleFilter Parent")
+        cls.sub_a = SubroleCovenantRoleFactory(
+            name="RoleFilter Sub A", parent_role=cls.parent_role
+        )
+        cls.sub_b = SubroleCovenantRoleFactory(
+            name="RoleFilter Sub B", parent_role=cls.parent_role
+        )
+        cls.other_parent = CovenantRoleFactory(name="RoleFilter Other Parent")
+        cls.other_sub = SubroleCovenantRoleFactory(
+            name="RoleFilter Other Sub", parent_role=cls.other_parent
+        )
+
+    def test_list_exposes_parent_role(self) -> None:
+        """The serializer exposes parent_role so sub-roles are identifiable."""
+        response = self.client.get(f"/api/covenants/roles/?parent_role={self.parent_role.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for row in response.data:
+            self.assertIn("parent_role", row)
+
+    def test_filter_by_parent_role_returns_only_its_subroles(self) -> None:
+        """?parent_role=<id> returns exactly that role's sub-roles."""
+        response = self.client.get(f"/api/covenants/roles/?parent_role={self.parent_role.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = {row["id"] for row in response.data}
+        self.assertEqual(returned_ids, {self.sub_a.pk, self.sub_b.pk})
+        for row in response.data:
+            self.assertEqual(row["parent_role"], self.parent_role.pk)

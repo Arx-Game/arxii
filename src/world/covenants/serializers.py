@@ -33,6 +33,7 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "archetype_display",
             "speed_rank",
             "description",
+            "parent_role",
         ]
         read_only_fields = fields
 
