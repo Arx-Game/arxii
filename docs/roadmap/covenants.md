@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate and dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -100,7 +100,10 @@ denormalizing the type onto the membership row would violate the project's
   flag). This is set as the default in combat `add_participant`/`join_encounter`.
 
 **Surfaces NOT gated by engagement** (persistent character properties):
-- Thread anchor cap — `max(covenant.level across all CCR rows for this role) × 10`.
+- Thread anchor cap — additive (Slice G / #517): `max(covenant.level across all
+  CCR rows for this role) × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER` (covenant floor)
+  `+ legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR
+  + days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR` (personal investment).
 - Thread weave gate — `has_ever_held(role)`.
 
 Auto-set via scene context is wired in Slice B: `evaluate_scene_engagement`
@@ -152,11 +155,14 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
 - **Weave gate:** the character must have **ever held the role** (active or
   ended) in any covenant. `CharacterCovenantRoleHandler.has_ever_held(role)`
   enforces this. Violations raise `CovenantRoleNeverHeldError`.
-- **Anchor cap formula** (Slice A §3.5): `max(covenant.level across the
-  character's all-time CharacterCovenantRole rows for this role) × 10`. Cap
-  is a persistent character property — independent of current engagement.
-  Scales naturally when Slice D adds covenant XP. Use-based capping (legend
-  earned in role / time held in role / etc.) is Slice G.
+- **Anchor cap formula** (Slice G / #517): additive — `max(covenant.level
+  across the character's all-time CharacterCovenantRole rows for this role) ×
+  ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER` (covenant floor, the prior Slice A
+  behaviour) `+ legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR
+  + days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR` (personal investment).
+  Cap is a persistent character property — independent of current engagement.
+  Derive-on-read; the personal terms are 0 for a fresh holder, so the covenant
+  floor preserves the original behaviour.
 - **Pull eligibility** (Slice A §3.6): COVENANT_ROLE Thread pull effects fire
   only when the character is currently engaged with a covenant where they
   hold the anchored role. Mismatch raises `CovenantRoleNotEngagedError`
@@ -593,12 +599,24 @@ effective trait values and stat checks, not only the technique multiplier.
 
 ### Slice G — Use-based Thread mechanics
 
-- **Use-based weave gate** — Tehom's "force people to actually use the
-  role before they could weave threads into it" — replaces (or augments)
-  today's `has_ever_held` gate.
-- **Use-based anchor cap** — legend earned in role / time held in role /
-  etc. — richer signal than max_covenant_level. Layered on top of the
-  Slice A formula.
+- **Use-based anchor cap (#517) — SHIPPED.** The COVENANT_ROLE anchor cap is now
+  additive: `max_covenant_level_for_role(role) × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER`
+  (covenant component — the prior Slice A behaviour, kept as a non-zero floor) plus
+  `legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR` plus
+  `days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR` (personal-investment
+  components). Derive-on-read with **no new model and no migration**: tenure from
+  existing `CharacterCovenantRole.joined_at`/`left_at` via
+  `CharacterCovenantRoleHandler.days_held_in_role`; legend from Slice D
+  `CovenantLegendCredit` rows via `world.societies.services.get_character_role_legend`
+  (per-character, distinct-entry, active deeds only). The three divisor/multiplier
+  knobs are admin-tunable constants in `world.magic.constants`. Because the covenant
+  component is a use-independent floor, a fresh holder keeps a non-zero cap and can
+  develop the thread immediately — so the `has_ever_held` weave gate is not an
+  experience↔access catch-22 (sub-role promotion stays reachable).
+- **Use-based weave gate — FUTURE.** Tehom's "force people to actually use the
+  role before they could weave threads into it" — replacing/augmenting today's
+  `has_ever_held` gate with a tenure/legend threshold — remains future work
+  (out of scope for #517, which changed only the cap).
 
 ### Cross-cutting (post-Covenants)
 
