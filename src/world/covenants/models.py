@@ -183,6 +183,13 @@ class CovenantRole(SharedMemoryModel):
         blank=True,
         help_text="Player-facing description of the role's identity and combat style.",
     )
+    is_leadership = models.BooleanField(
+        default=False,
+        help_text=(
+            "Staff-authored. Members holding a leadership role may kick non-leader "
+            "members. Leaders cannot kick other leaders. See issue #519."
+        ),
+    )
 
     parent_role = models.ForeignKey(
         "self",
