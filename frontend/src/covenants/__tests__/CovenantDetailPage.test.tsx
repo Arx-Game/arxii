@@ -32,6 +32,8 @@ vi.mock('@/covenants/queries', () => ({
   useCovenantMembers: vi.fn(),
   useEngageMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useDisengageMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useLeaveMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useKickMember: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/rituals/queries', () => ({
@@ -162,6 +164,7 @@ const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): Charact
       archetype_display: 'Sword',
       speed_rank: 1,
       description: 'The tip of the spear.',
+      is_leadership: false,
     },
     engaged: false,
     joined_at: '2026-01-01T00:00:00Z',
@@ -241,5 +244,82 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     // Own row (sheet 42) has a Promote button.
     const promoteButtons = screen.getAllByRole('button', { name: /^Promote$/i });
     expect(promoteButtons).toHaveLength(1);
+  });
+
+  it("renders a Leave button on the viewer's own active membership row", () => {
+    mockDetail(makeCovenant());
+    mockMembers([makeMembership({ id: 100, character_sheet: OWN_SHEET_ID })]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('leave-button')).toBeInTheDocument();
+  });
+
+  // A nested covenant_role override fully replaces the fixture's role object, so
+  // helpers build the full role with the desired is_leadership flag.
+  const leaderRole = (is_leadership: boolean) => ({
+    id: 7,
+    name: 'Vanguard',
+    slug: 'vanguard',
+    covenant_type: 'battle',
+    covenant_type_display: 'Covenant of Battle',
+    archetype: 'sword',
+    archetype_display: 'Sword',
+    speed_rank: 1,
+    description: 'The tip of the spear.',
+    is_leadership,
+  });
+
+  it('renders a kick-button on a non-leader other row when the viewer is a leader', () => {
+    mockDetail(makeCovenant());
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        covenant_role: leaderRole(true) as never,
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        covenant_role: leaderRole(false) as never,
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    const kickButtons = screen.getAllByTestId('kick-button');
+    expect(kickButtons).toHaveLength(1);
+  });
+
+  it('renders NO kick-button on a fellow-leader other row', () => {
+    mockDetail(makeCovenant());
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        covenant_role: leaderRole(true) as never,
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        covenant_role: leaderRole(true) as never,
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('kick-button')).not.toBeInTheDocument();
+  });
+
+  it('renders no kick-button on any row when the viewer is not a leader', () => {
+    mockDetail(makeCovenant());
+    mockMembers([
+      makeMembership({ id: 100, character_sheet: OWN_SHEET_ID }),
+      makeMembership({ id: 101, character_sheet: 999 }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('kick-button')).not.toBeInTheDocument();
   });
 });

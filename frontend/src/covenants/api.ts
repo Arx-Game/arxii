@@ -195,6 +195,38 @@ export async function disengageMembership(id: number): Promise<CharacterCovenant
 }
 
 // ---------------------------------------------------------------------------
+// Leave / kick mutations (exit lifecycle, #519)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/covenants/character-roles/{id}/leave/
+ * Voluntary self-leave. Returns the updated CharacterCovenantRole row.
+ */
+export async function leaveMembership(id: number): Promise<CharacterCovenantRole> {
+  const res = await apiFetch(`${CHARACTER_ROLES_URL}/${id}/leave/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to leave covenant');
+  return res.json() as Promise<CharacterCovenantRole>;
+}
+
+/**
+ * POST /api/covenants/character-roles/{id}/kick/
+ * A leader removes a non-leader member. Returns the updated target row.
+ */
+export async function kickMember(id: number): Promise<CharacterCovenantRole> {
+  const res = await apiFetch(`${CHARACTER_ROLES_URL}/${id}/kick/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to remove member');
+  return res.json() as Promise<CharacterCovenantRole>;
+}
+
+// ---------------------------------------------------------------------------
 // Powers read
 // ---------------------------------------------------------------------------
 

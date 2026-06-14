@@ -2890,6 +2890,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/{id}/kick/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+     *
+     *     The target may be outside the requester's own-scoped get_queryset, so fetch it
+     *     via the full manager and run object permissions explicitly rather than get_object().
+     */
+    post: operations['covenants_character_roles_kick_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/character-roles/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave. */
+    post: operations['covenants_character_roles_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/character-roles/{id}/promote/': {
     parameters: {
       query?: never;
@@ -13677,6 +13716,8 @@ export interface components {
       readonly archetype_display: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
+      /** @description Staff-authored. Members holding a leadership role may kick non-leader members. Leaders cannot kick other leaders. See issue #519. */
+      readonly is_leadership: boolean;
       /** @description Player-facing description of the role's identity and combat style. */
       readonly description: string;
       /** @description Null for primary roles. Set for sub-roles. */
@@ -25964,6 +26005,48 @@ export interface operations {
     };
   };
   covenants_character_roles_engage_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_kick_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_leave_create: {
     parameters: {
       query?: never;
       header?: never;

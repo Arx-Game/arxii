@@ -216,3 +216,47 @@ class CovenantNotDormantError(CovenantError):
             "This covenant is already risen — it cannot be called to banners again.",
         }
     )
+
+
+class CovenantExitError(CovenantError):
+    """Base for covenant exit (leave/kick) failures."""
+
+    user_message = "This covenant action is not allowed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "This covenant action is not allowed.",
+        }
+    )
+
+
+class NotACovenantLeaderError(CovenantExitError):
+    """Raised when a non-leader attempts to remove another member."""
+
+    user_message = "Only a covenant leader may remove another member."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only a covenant leader may remove another member.",
+        }
+    )
+
+
+class CannotKickLeaderError(CovenantExitError):
+    """Raised when a leader attempts to remove a fellow leader."""
+
+    user_message = "You cannot remove a fellow leader of the covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You cannot remove a fellow leader of the covenant.",
+        }
+    )
+
+
+class CannotKickSelfError(CovenantExitError):
+    """Raised when a leader attempts to kick themselves."""
+
+    user_message = "To leave the covenant yourself, use Leave rather than Kick."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "To leave the covenant yourself, use Leave rather than Kick.",
+        }
+    )
