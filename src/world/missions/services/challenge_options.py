@@ -10,16 +10,18 @@ data-source integration). Of the ``ChallengeTemplate`` fields only
 ``severity`` rides along, as the approach rolls' difficulty (design §8.4 Q4).
 
 Capability ownership is **not** re-implemented here. It is decided by
-``world.conditions.services.get_capability_value`` — the single definition
-of "does this acting character own capability X" (the Phase-0
-``has_capability`` predicate resolver wraps the same call).
+``world.conditions.services.get_effective_capability_value`` — the single
+definition of "does this acting character own capability X" across all
+sources (innate baseline, intrinsic modifiers, thread-passive role grants,
+conditions); the Phase-0 ``has_capability`` predicate resolver wraps the same
+call. (#1010: switched from the condition-only read.)
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.conditions.services import get_capability_value
+from world.conditions.services import get_effective_capability_value
 from world.mechanics.models import ChallengeApproach, ChallengeTemplate
 from world.missions.types import ChallengeOption
 
@@ -37,7 +39,7 @@ def challenge_options_for_character(
     :class:`~world.missions.types.ChallengeOption` when the acting
     ``character`` qualifies — they hold the approach's
     ``Application.capability`` (per
-    ``conditions.services.get_capability_value``) — or the approach is
+    ``conditions.services.get_effective_capability_value``) — or the approach is
     ``is_default`` (offered to everyone). Approaches the character neither
     qualifies for nor that are ``is_default`` are excluded; the result is
     legitimately empty when the challenge defines no default and the
@@ -63,7 +65,8 @@ def challenge_options_for_character(
         # directly rather than re-looking-up by name.
         qualifies = (
             approach.is_default
-            or get_capability_value(character.sheet_data, approach.application.capability) > 0
+            or get_effective_capability_value(character.sheet_data, approach.application.capability)
+            > 0
         )
         if not qualifies:
             continue

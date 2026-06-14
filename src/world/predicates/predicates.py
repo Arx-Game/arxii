@@ -171,17 +171,19 @@ def _resolve_has_condition(ctx: ResolverContext, *, key: str) -> bool:
 def _resolve_has_capability(ctx: ResolverContext, *, name: str) -> bool:
     """True if the character effectively possesses the named capability.
 
-    Capabilities are additive modifiers granted/removed by active
-    conditions. ``conditions.services.get_capability_value`` aggregates them
-    and floors at 0, where "0 == effectively blocked / not possessed".
+    Uses the *effective* capability value — innate baseline + intrinsic
+    modifiers (distinction/species/equipment) + thread-passive role grants +
+    active conditions — floored at 0, where "0 == effectively blocked / not
+    possessed". (#1010: the prior condition-only read missed intrinsic and
+    role-passive sources.)
     """
     from world.conditions.models import CapabilityType  # noqa: PLC0415
-    from world.conditions.services import get_capability_value  # noqa: PLC0415
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
 
     capability = CapabilityType.objects.filter(name=name).first()
     if capability is None:
         return False
-    return get_capability_value(ctx.character.sheet_data, capability) > 0
+    return get_effective_capability_value(ctx.character.sheet_data, capability) > 0
 
 
 def _resolve_has_thread(ctx: ResolverContext) -> bool:
