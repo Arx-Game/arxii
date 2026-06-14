@@ -39,9 +39,7 @@ class PresentationEndorsementModelTest(TestCase):
             endorsee_sheet=self.endorsee,
             presentation=self.presentation,
         )
-        expected = (
-            f"PresentationEndorsement({self.endorser.pk}->{self.presentation.pk})"
-        )
+        expected = f"PresentationEndorsement({self.endorser.pk}->{self.presentation.pk})"
         self.assertEqual(str(endorsement), expected)
 
     def test_uniqueness_per_judge_and_presentation(self):
