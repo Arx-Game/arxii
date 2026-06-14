@@ -7,13 +7,14 @@ interface Props {
 
 const SOURCE_ROWS: Array<{ key: keyof PrestigeBreakdown; label: string; hint: string }> = [
   { key: 'dwellings', label: 'Dwellings', hint: 'Polished buildings + tenanted rooms.' },
-  { key: 'items', label: 'Fashion', hint: 'Polish on equipped items.' },
+  { key: 'items', label: 'Attire', hint: 'Polish on equipped items.' },
   { key: 'orgs', label: 'Organizations', hint: 'Rank-weighted standing in each.' },
   { key: 'deeds', label: 'Deeds', hint: 'Permanent accumulation from Renown events.' },
+  { key: 'fashion', label: 'Fashion', hint: 'Acclaim from modeling outfits at events.' },
 ];
 
 /**
- * Four-axis prestige breakdown plus the total. Negative values can
+ * Five-axis prestige breakdown plus the total. Negative values can
  * appear after scandals or item loss; the colour mutes on negative.
  */
 export function PrestigeBreakdownCard({ prestige }: Props) {

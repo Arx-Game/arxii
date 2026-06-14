@@ -18,7 +18,7 @@ function makeRenown(overrides: Partial<RenownPayload> = {}): RenownPayload {
   return {
     persona_id: 1,
     persona_name: 'Alice',
-    prestige: { dwellings: 100, items: 50, orgs: 25, deeds: 75, total: 250 },
+    prestige: { dwellings: 100, items: 50, orgs: 25, deeds: 75, fashion: 0, total: 250 },
     fame: {
       points: 250,
       tier: 'talked_about',

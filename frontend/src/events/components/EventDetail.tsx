@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { urls } from '@/utils/urls';
+import { FashionPresentationPanel } from '@/fashion/FashionPresentationPanel';
 import { EventInvitations } from './EventInvitations';
 import { EventStatusBadge } from './EventStatusBadge';
 import { TimePhaseBadge } from './TimePhaseBadge';
@@ -133,6 +134,9 @@ export function EventDetail({
           </CardContent>
         </Card>
       )}
+
+      {/* Fashion presentations + peer judging (#514) */}
+      <FashionPresentationPanel eventId={event.id} />
 
       {/* Host actions */}
       <div className="flex flex-wrap gap-2">
