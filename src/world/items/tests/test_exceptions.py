@@ -56,3 +56,15 @@ class InventoryExceptionTests(SimpleTestCase):
         for cls in INVENTORY_SUBCLASSES:
             with self.subTest(cls=cls.__name__):
                 self.assertIn(cls.user_message, cls.SAFE_MESSAGES)
+
+
+class UsageExceptionTests(SimpleTestCase):
+    """Item-usage exceptions expose safe ``user_message`` values."""
+
+    def test_usage_exceptions_have_safe_messages(self) -> None:
+        from world.items.exceptions import ItemError, ItemNotUsable, NoChargesRemaining
+
+        for exc_cls in (ItemNotUsable, NoChargesRemaining):
+            with self.subTest(cls=exc_cls.__name__):
+                self.assertTrue(issubclass(exc_cls, ItemError))
+                self.assertIn(exc_cls().user_message, exc_cls.SAFE_MESSAGES)
