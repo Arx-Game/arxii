@@ -823,6 +823,20 @@ class PositionFactoryTests(TestCase):
         edge = PositionEdgeFactory()
         assert edge.position_a_id < edge.position_b_id
 
+    def test_position_edge_factory_swap_branch(self):
+        """PositionEdgeFactory swaps a/b when passed higher-pk as position_a."""
+        from evennia import create_object
+
+        room = create_object("typeclasses.rooms.Room", key="SwapRoom", nohome=True)
+        pos_first = PositionFactory(room=room, name="first")
+        pos_second = PositionFactory(room=room, name="second")
+        # Ensure pos_second has a higher pk (they are inserted in order, so this holds)
+        higher, lower = (
+            (pos_second, pos_first) if pos_second.pk > pos_first.pk else (pos_first, pos_second)
+        )
+        edge = PositionEdgeFactory(position_a=higher, position_b=lower)
+        assert edge.position_a_id < edge.position_b_id
+
     def test_position_edge_factory_same_room(self):
         edge = PositionEdgeFactory()
         assert edge.position_a.room == edge.position_b.room

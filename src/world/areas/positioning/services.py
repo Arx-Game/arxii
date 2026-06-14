@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.mechanics.models import ChallengeInstance
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ def connect_positions(
     b: Position,
     *,
     is_passable: bool = True,
-    gating_challenge: object = None,
+    gating_challenge: ChallengeInstance | None = None,
 ) -> PositionEdge:
     """Create a traversable edge between two positions, ordered canonically.
 
@@ -81,7 +82,11 @@ def disconnect_positions(a: Position, b: Position) -> None:
 def edge_between(a: Position, b: Position) -> PositionEdge | None:
     """Return the edge between two positions, regardless of argument order."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
-    return PositionEdge.objects.filter(position_a=lo, position_b=hi).first()
+    return (
+        PositionEdge.objects.filter(position_a=lo, position_b=hi)
+        .select_related("gating_challenge__template")
+        .first()
+    )
 
 
 def position_of(objectdb: ObjectDB) -> Position | None:
@@ -185,7 +190,6 @@ _ERR_MOVE_UNPLACED = "You are not placed in any position yet."
 _ERR_MOVE_NO_PATH = "There is no path to there."
 _ERR_MOVE_BLOCKED = "The way is blocked."
 _ERR_MOVE_IMMOBILE = "You cannot move."
-_ERR_FORCE_CROSS_ROOM = "That position is not in the same room as the object."
 
 
 def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
@@ -194,9 +198,7 @@ def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
     Raises PositionError if position.room != objectdb.location.
     Uses update_or_create so calling twice is idempotent (updates occupancy).
     """
-    location = getattr(objectdb, "location", None)  # noqa: GETATTR_LITERAL
-    location_id = getattr(location, "id", None)  # noqa: GETATTR_LITERAL
-    if position.room_id != location_id:
+    if position.room_id != objectdb.db_location_id:
         raise PositionError(_ERR_PLACE_CROSS_ROOM)
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
@@ -216,9 +218,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     5. the edge has no active gating challenge
     6. the actor's MOVEMENT capability > 0 (characters only)
     """
-    location = getattr(objectdb, "location", None)  # noqa: GETATTR_LITERAL
-    location_id = getattr(location, "id", None)  # noqa: GETATTR_LITERAL
-    if target.room_id != location_id:
+    if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
 
     current = position_of(objectdb)
@@ -252,10 +252,8 @@ def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPositi
 
     Only requires same room. No edge required.
     """
-    location = getattr(objectdb, "location", None)  # noqa: GETATTR_LITERAL
-    location_id = getattr(location, "id", None)  # noqa: GETATTR_LITERAL
-    if target.room_id != location_id:
-        raise PositionError(_ERR_FORCE_CROSS_ROOM)
+    if target.room_id != objectdb.db_location_id:
+        raise PositionError(_ERR_PLACE_CROSS_ROOM)
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
         defaults={"position": target},
