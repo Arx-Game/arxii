@@ -36,6 +36,7 @@ class CodexSubjectFactory(DjangoModelFactory):
 
     class Meta:
         model = CodexSubject
+        django_get_or_create = ("category", "parent", "name")
 
     category = factory.SubFactory(CodexCategoryFactory)
     parent = None
@@ -122,6 +123,7 @@ class PathCodexGrantFactory(DjangoModelFactory):
 
     class Meta:
         model = PathCodexGrant
+        django_get_or_create = ("path", "entry")
 
     path = factory.SubFactory("world.classes.factories.PathFactory")
     entry = factory.SubFactory(CodexEntryFactory)
