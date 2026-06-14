@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 if TYPE_CHECKING:
+    from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
@@ -465,6 +466,20 @@ class CombatOpponent(SharedMemoryModel):
             return 0.0
         return max(0.0, self.health / self.max_health)
 
+    @cached_property
+    def current_position(self) -> "Position | None":
+        """Return the Position this opponent's ObjectDB currently occupies, or None.
+
+        Derived — never stored. Returns None if objectdb is null (ephemeral NPC
+        whose ObjectDB was destroyed externally) or if the ObjectDB has no
+        ObjectPosition row.
+        """
+        from world.areas.positioning.services import position_of  # noqa: PLC0415
+
+        if self.objectdb_id is None:
+            return None
+        return position_of(self.objectdb)
+
     def __str__(self) -> str:
         return f"{self.name} ({self.get_tier_display()})"
 
@@ -672,6 +687,17 @@ class CombatParticipant(SharedMemoryModel):
             return self.character_sheet.character.anima.current
         except AttributeError:
             return 0
+
+    @cached_property
+    def current_position(self) -> "Position | None":
+        """Return the Position this participant's character currently occupies, or None.
+
+        Derived — never stored. Returns None if the character has no ObjectPosition row.
+        """
+        from world.areas.positioning.services import position_of  # noqa: PLC0415
+
+        obj = self.character_sheet.character
+        return position_of(obj) if obj is not None else None
 
     def __str__(self) -> str:
         if self.covenant_role_id:
