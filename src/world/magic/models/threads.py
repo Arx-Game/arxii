@@ -384,6 +384,14 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
     )
+    target_mantle = models.ForeignKey(
+        "items.Mantle",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="threads",
+        help_text="Set when target_kind=MANTLE; null otherwise.",
+    )
     target_sanctum_details = models.ForeignKey(
         "magic.SanctumDetails",
         on_delete=models.PROTECT,
@@ -445,6 +453,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -461,6 +470,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -477,6 +487,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -493,6 +504,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -509,6 +521,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -536,6 +549,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -561,6 +575,33 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
+                    )
+                ),
+            ),
+            # ---- MANTLE ------------------------------------------------------
+            # One active thread per (owner, mantle). Retired threads
+            # (retired_at IS NOT NULL) are excluded so a character can retire a
+            # mantle thread and later weave a new one on the same mantle.
+            models.UniqueConstraint(
+                fields=["owner", "target_mantle"],
+                condition=models.Q(target_kind=TargetKind.MANTLE, retired_at__isnull=True),
+                name="magic_thread_unique_mantle_per_owner",
+            ),
+            models.CheckConstraint(
+                name="thread_mantle_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.MANTLE)
+                    | (
+                        models.Q(target_mantle__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -612,6 +653,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
                     )
                 ),
             ),
@@ -635,6 +677,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
         }
         attr = _kind_to_attr.get(self.target_kind)
@@ -656,6 +699,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
         }
         all_target_fields = (
@@ -666,6 +710,7 @@ class Thread(SharedMemoryModel):
             "target_relationship_track",
             "target_capstone",
             "target_covenant_role",
+            "target_mantle",
             "target_sanctum_details",
         )
 
