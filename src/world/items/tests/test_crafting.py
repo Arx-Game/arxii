@@ -92,3 +92,14 @@ class AssertFacetAttachableTests(TestCase):
         ItemFacetFactory(item_instance=item, facet=facet)
         with self.assertRaises(FacetAlreadyAttached):
             assert_facet_attachable(item, facet)
+
+
+class WireEnchantingTests(TestCase):
+    def test_wires_trait_checktype_and_config(self) -> None:
+        from world.items.factories import wire_enchanting_crafting
+        from world.items.services.crafting import get_facet_crafting_config
+
+        cfg = wire_enchanting_crafting(base_difficulty=10)
+        self.assertEqual(cfg.pk, 1)
+        self.assertIsNotNone(cfg.check_type)
+        self.assertEqual(get_facet_crafting_config().check_type, cfg.check_type)
