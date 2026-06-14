@@ -95,6 +95,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
 function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
   return {
     id: 1,
+    objectdb_id: null,
     name: 'Mire Knight',
     tier: 'elite',
     health: 5,

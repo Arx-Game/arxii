@@ -26,7 +26,7 @@ import type { PlayerAction } from '@/scenes/actionTypes';
 import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import type { ApplicablePullsRequest } from '@/magic/types';
-import type { ActionContext, EffortLevel } from './types';
+import type { ActionContext, EffortLevel, TargetOption } from './types';
 
 // ---------------------------------------------------------------------------
 // Public props contract
@@ -43,6 +43,12 @@ export interface ActionDeclarationCardProps {
   actionContext: ActionContext;
   onContextChange: (next: ActionContext) => void;
   readOnly?: boolean;
+  /**
+   * Selectable combatants for the focused-target picker (#1001a). When provided
+   * (combat), the picker lists real opponents/allies; when omitted (scenes), it
+   * falls back to the kind-only selector.
+   */
+  targets?: TargetOption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -147,30 +153,117 @@ interface TargetPickerProps {
   targetKind: ActionContext['targetKind'];
   onTargetChange: (targetKind: ActionContext['targetKind'], targetId: number | undefined) => void;
   disabled?: boolean;
+  /** Real combatants (combat). When undefined, render the kind-only fallback. */
+  targets?: TargetOption[];
 }
 
-function TargetPicker({ targetId, targetKind, onTargetChange, disabled }: TargetPickerProps) {
-  // Phase 5 placeholder — kind select only.
-  // Real combatant-list target picker is wired in Phase 7.
+/** Kind-only fallback selector used in scenes (no combatant list available). */
+function TargetKindSelect({ targetId, targetKind, onTargetChange, disabled }: TargetPickerProps) {
   return (
-    <div className="flex items-center gap-2">
-      <select
-        disabled={disabled}
-        value={targetKind ?? ''}
-        onChange={(e) => {
-          const kind = e.target.value as ActionContext['targetKind'];
-          onTargetChange(kind || undefined, targetId);
-        }}
-        className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
-      >
-        <option value="">— no target —</option>
-        <option value="opponent">Opponent</option>
-        <option value="ally">Ally</option>
-        <option value="social">Social</option>
-        <option value="self">Self</option>
-      </select>
-      {targetKind && targetKind !== 'self' && (
-        <span className="text-xs text-muted-foreground">(target picker: Phase 7)</span>
+    <select
+      disabled={disabled}
+      value={targetKind ?? ''}
+      onChange={(e) => {
+        const kind = e.target.value as ActionContext['targetKind'];
+        onTargetChange(kind || undefined, targetId);
+      }}
+      className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+    >
+      <option value="">— no target —</option>
+      <option value="opponent">Opponent</option>
+      <option value="ally">Ally</option>
+      <option value="social">Social</option>
+      <option value="self">Self</option>
+    </select>
+  );
+}
+
+/** One combatant button. */
+function TargetButton({
+  option,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  option: TargetOption;
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        selected
+          ? 'border-primary bg-primary/10 text-primary'
+          : 'border-border bg-background text-foreground hover:border-primary/50'
+      )}
+    >
+      {option.name}
+    </button>
+  );
+}
+
+function TargetPicker(props: TargetPickerProps) {
+  const { targetId, targetKind, onTargetChange, disabled, targets } = props;
+
+  // Scenes: no combatant list → kind-only selector.
+  if (targets === undefined) {
+    return (
+      <div className="flex items-center gap-2">
+        <TargetKindSelect {...props} />
+      </div>
+    );
+  }
+
+  const opponents = targets.filter((t) => t.kind === 'opponent');
+  const allies = targets.filter((t) => t.kind === 'ally');
+  const hasSelection = targetKind !== undefined && targetId !== undefined;
+
+  const renderGroup = (label: string, options: TargetOption[]) =>
+    options.length > 0 && (
+      <div className="space-y-1">
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => (
+            <TargetButton
+              key={`${option.kind}-${option.id}`}
+              option={option}
+              selected={targetKind === option.kind && targetId === option.id}
+              disabled={disabled}
+              onSelect={() => onTargetChange(option.kind, option.id)}
+            />
+          ))}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="space-y-2" data-testid="combatant-target-picker">
+      {targets.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No targets available.</p>
+      ) : (
+        <>
+          {renderGroup('Opponents', opponents)}
+          {renderGroup('Allies', allies)}
+          <button
+            type="button"
+            disabled={disabled || !hasSelection}
+            onClick={() => onTargetChange(undefined, undefined)}
+            className={cn(
+              'text-[11px] underline-offset-2 transition-colors',
+              hasSelection
+                ? 'text-muted-foreground hover:text-foreground hover:underline'
+                : 'cursor-not-allowed text-muted-foreground/50'
+            )}
+          >
+            Clear target
+          </button>
+        </>
       )}
     </div>
   );
@@ -265,6 +358,7 @@ export function ActionDeclarationCard({
   actionContext,
   onContextChange,
   readOnly = false,
+  targets,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useTQQuery({
@@ -297,17 +391,41 @@ export function ActionDeclarationCard({
   }, [resonances]);
 
   // Build applicable-pulls context from current card state.
+  //
+  // Id-space note (#1001a): in combat (`targets` provided) actionContext.targetId
+  // is the dispatch PK (CombatOpponent / CombatParticipant), which is NOT the
+  // applicable-pulls id-space. The pulls API wants the opponent's ObjectDB pk
+  // (target_object_id) — carried on the selected TargetOption.objectId — and a
+  // persona id for allies, which the combat list does not carry (left null; no
+  // regression — combat ally pulls were never scoped). In scenes (no `targets`)
+  // the legacy mapping stands: targetId is the object/persona id directly.
   const pullsContext = useMemo<ApplicablePullsRequest | null>(() => {
     if (characterSheetId <= 0) return null;
+    const isCombatTargeting = targets !== undefined;
+    const selectedTarget = targets?.find(
+      (t) => t.kind === actionContext.targetKind && t.id === actionContext.targetId
+    );
+
+    let targetObjectId: number | null = null;
+    let targetPersonaId: number | null = null;
+    if (isCombatTargeting) {
+      targetObjectId =
+        actionContext.targetKind === 'opponent' ? (selectedTarget?.objectId ?? null) : null;
+      // Combat allies carry no persona id; opponent scoping uses target_object_id.
+    } else {
+      targetObjectId =
+        actionContext.targetKind === 'opponent' ? (actionContext.targetId ?? null) : null;
+      targetPersonaId =
+        actionContext.targetKind === 'social' || actionContext.targetKind === 'ally'
+          ? (actionContext.targetId ?? null)
+          : null;
+    }
+
     return {
       character_sheet_id: characterSheetId,
       technique_id: actionContext.techniqueId ?? null,
-      target_persona_id:
-        actionContext.targetKind === 'social' || actionContext.targetKind === 'ally'
-          ? (actionContext.targetId ?? null)
-          : null,
-      target_object_id:
-        actionContext.targetKind === 'opponent' ? (actionContext.targetId ?? null) : null,
+      target_persona_id: targetPersonaId,
+      target_object_id: targetObjectId,
       scene_id: null, // wired in Phase 7 when CombatTurnPanel passes scene context
       effect_type_id: null,
     };
@@ -316,6 +434,7 @@ export function ActionDeclarationCard({
     actionContext.techniqueId,
     actionContext.targetKind,
     actionContext.targetId,
+    targets,
   ]);
 
   // Clear revert notice after 4 seconds
@@ -389,6 +508,7 @@ export function ActionDeclarationCard({
           targetKind={actionContext.targetKind}
           onTargetChange={handleTargetChange}
           disabled={readOnly}
+          targets={targets}
         />
       </Section>
 

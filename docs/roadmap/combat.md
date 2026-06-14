@@ -525,11 +525,13 @@ Shipped since the original list:
 - Focused-category resolution — **DONE** (#558/#614): sourced from the technique's authored `action_category`; the `passive-physical` stub is gone.
 - `ClashStateSerializer` — **DONE**: exposes `contributors` and `side_favored`.
 - `lend-to-clash` / `CLASH_SUPPORT` — **REJECTED BY DESIGN (#559)**: a clash binds to the focused action only; there is no passive-contribution concept. Do not re-add a Lend surface.
+- Single-target focused attacks — **#1001a DONE**: the focused slot's `TargetPicker` (was a Phase-5 kind-`<select>` placeholder) now lists real combatants from the encounter; `YourTurn` threads the chosen target into the focused dispatch as `focused_opponent_target_id` (CombatOpponent PK) / `focused_ally_target_id` (CombatParticipant PK). `CombatRoundContext.record_declaration` resolves those ids to instances scoped to the encounter (forged-id safety) and persists them via `declare_action`. `OpponentSerializer` exposes `objectdb_id` so the card maps the applicable-pulls `target_object_id` correctly.
+- Auto-expand pose units on critical events — **#996 DONE**: `InteractionActionLinkSerializer` exposes `has_critical_effect` (cheap, N+1-safe signal: the linked `CombatRoundAction`'s `focused_opponent_target` is DEFEATED, derived from a prefetch — no condition queries); `PoseUnit` initialises its expanded state from `action_links.some(l => l.has_critical_effect)`. The `is_critical` row highlight shipped earlier in #1004.
 
 Still open (tracked):
 
 - `submit_pose` REST endpoint does not broadcast via WebSocket — #878
-- Auto-expand pose units on critical events (KO, death) — pending player-preference toggle (no issue yet)
+- Per-player preference toggle for critical-event auto-expand (#996 ships it always-on) — no issue yet
 - `CombatOpponent` portrait FK — NPC avatars are initial-letter-only (no issue yet)
 - Outcome-panel scoping/visibility polish — #866
 - Scene-side adoption of `<ActionDeclarationCard>` (no `ScenePull` envelope) — out of this spec's scope

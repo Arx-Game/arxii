@@ -19,7 +19,29 @@ export interface ActionContext {
   /** Technique PK selected for this action. */
   techniqueId?: number;
   targetKind?: 'opponent' | 'ally' | 'social' | 'self';
+  /**
+   * Selected target's PK. In combat this is the dispatch PK — a CombatOpponent
+   * PK when targetKind is 'opponent', a CombatParticipant PK when 'ally' —
+   * threaded to the dispatch as focused_opponent_target_id / focused_ally_target_id.
+   */
   targetId?: number;
   effort: EffortLevel;
   strainCommitment: number;
+}
+
+/**
+ * One selectable combatant in the focused-target picker (#1001a). The shared
+ * ActionDeclarationCard receives these from the combat panel; scene usage omits
+ * them and falls back to the kind-only selector.
+ */
+export interface TargetOption {
+  /** Dispatch PK: CombatOpponent PK (opponent) or CombatParticipant PK (ally). */
+  id: number;
+  kind: 'opponent' | 'ally';
+  name: string;
+  /**
+   * The combatant's in-world ObjectDB pk, used for the applicable-pulls API
+   * (target_object_id). Present for opponents; null/undefined otherwise.
+   */
+  objectId?: number | null;
 }

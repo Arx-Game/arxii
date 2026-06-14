@@ -27,10 +27,39 @@ class InteractionActionLinkSerializer(serializers.ModelSerializer):
     """Serializes the InteractionAction bridge for the action_links field on a POSE."""
 
     action_interaction = InlineActionInteractionSerializer(read_only=True)
+    has_critical_effect = serializers.SerializerMethodField()
 
     class Meta:
         model = InteractionAction
-        fields = ["id", "ordering", "action_interaction"]
+        fields = ["id", "ordering", "action_interaction", "has_critical_effect"]
+
+    def get_has_critical_effect(self, obj: InteractionAction) -> bool:
+        """Cheap critical signal for first-paint auto-expand (#996).
+
+        ``True`` when this action's linked ``CombatRoundAction`` targeted an
+        opponent that is now ``DEFEATED`` — the dominant load-bearing outcome the
+        detail panel highlights. Reads ONLY prefetched data (the linked action's
+        ``cached_round_actions`` + ``focused_opponent_target``); no condition or
+        vitals queries, so it stays N+1-safe. The prefetch is set up in
+        ``interaction_views`` as
+        ``action_links__action_interaction__combat_round_actions`` with
+        ``to_attr="cached_round_actions"`` and ``focused_opponent_target``
+        select_related, so reading ``cached_round_actions`` never queries.
+        """
+        from world.combat.constants import OpponentStatus  # noqa: PLC0415
+
+        action_interaction = obj.action_interaction
+        if action_interaction is None:
+            return False
+        # cached_round_actions is a Prefetch(to_attr=...) attribute set by the
+        # interaction_views queryset; getattr with a default keeps serialization
+        # safe if this serializer is ever used without that prefetch.
+        round_actions = getattr(action_interaction, "cached_round_actions", [])  # noqa: GETATTR_LITERAL
+        for round_action in round_actions:
+            opponent = round_action.focused_opponent_target
+            if opponent is not None and opponent.status == OpponentStatus.DEFEATED:
+                return True
+        return False
 
 
 class InteractionReceiverSerializer(serializers.ModelSerializer):
