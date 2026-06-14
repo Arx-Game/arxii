@@ -8,6 +8,8 @@ from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.models import (
     EquippedItem,
     FacetCraftingConfig,
+    FacetVogueMomentum,
+    FashionPresentation,
     FashionStyle,
     FashionStyleBonus,
     InteractionType,
@@ -21,6 +23,7 @@ from world.items.models import (
     OutfitSlot,
     QualityTier,
     TemplateSlot,
+    Trendsetter,
 )
 from world.mechanics.factories import ModifierTargetFactory
 
@@ -215,6 +218,46 @@ class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     mantle = factory.SubFactory(MantleFactory)
     level = 1
+
+
+class FacetVogueMomentumFactory(factory.django.DjangoModelFactory):
+    """Factory for FacetVogueMomentum (#514)."""
+
+    class Meta:
+        model = FacetVogueMomentum
+
+    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+    points = 0
+
+
+class FashionPresentationFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionPresentation (#514).
+
+    Builds a complete presentation row suitable for integration tests and seed data.
+    ``outfit`` is nullable and defaults to None — the check reads equipped items, not the FK.
+    """
+
+    class Meta:
+        model = FashionPresentation
+
+    event = factory.SubFactory("world.events.factories.EventFactory")
+    presenter = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    outfit = None
+    perceiving_society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    base_score = 0
+    acclaim = 0
+
+
+class TrendsetterFactory(factory.django.DjangoModelFactory):
+    """Factory for Trendsetter (#514)."""
+
+    class Meta:
+        model = Trendsetter
+
+    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    fashion_style = factory.SubFactory(FashionStyleFactory)
 
 
 class FacetCraftingConfigFactory(factory.django.DjangoModelFactory):

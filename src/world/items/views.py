@@ -14,7 +14,7 @@ from drf_spectacular.utils import (
 )
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-from rest_framework import serializers, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import PageNumberPagination
@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.viewsets import GenericViewSet
 
 from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
@@ -33,6 +34,7 @@ from world.items.exceptions import (
     ItemError,
 )
 from world.items.filters import (
+    FashionPresentationFilter,
     InteractionTypeFilter,
     ItemTemplateFilter,
     QualityTierFilter,
@@ -40,6 +42,7 @@ from world.items.filters import (
 )
 from world.items.models import (
     EquippedItem,
+    FashionPresentation,
     InteractionType,
     ItemFacet,
     ItemInstance,
@@ -53,6 +56,8 @@ from world.items.models import (
 from world.items.serializers import (
     EquippedItemReadSerializer,
     FacetCraftResultSerializer,
+    FashionJudgementSerializer,
+    FashionPresentationSerializer,
     InteractionTypeSerializer,
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
@@ -64,6 +69,7 @@ from world.items.serializers import (
     OutfitSlotReadSerializer,
     OutfitSlotWriteSerializer,
     OutfitWriteSerializer,
+    PresentationEndorsementSerializer,
     QualityTierSerializer,
     UseItemResultSerializer,
     UseItemSerializer,
@@ -73,6 +79,7 @@ from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
 from world.items.services.crafting import craft_attach_facet
 from world.items.services.facets import remove_facet_from_item
 from world.items.services.usage import use_item
+from world.magic.services.auth import _resolve_actor_sheet
 from world.roster.models import RosterEntry
 
 
@@ -1130,3 +1137,72 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
 
         # Visible (not concealed by a covering layer)?
         return not _is_concealed_for_observer(item, wearing_character)
+
+
+# =============================================================================
+# Fashion presentation + peer judging (Outfits Phase C, #514)
+# =============================================================================
+#
+# Modelled on ``PoseEndorsementViewSet`` / ``SceneEntryEndorsementViewSet`` in
+# ``world/magic/views.py``: the acting CharacterSheet (presenter / judge) is
+# resolved from the requesting account's active tenure via
+# ``_resolve_actor_sheet`` — it is never accepted from the client.
+
+
+class FashionPresentationViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+):
+    """Present an outfit + list presentations (#514).
+
+    POST /api/items/fashion-presentations/ — record the requesting account's
+    acting character presenting an outfit at an event.
+    GET  /api/items/fashion-presentations/?event=<id> — list presentations
+    (filterable by event) so the UI can show who is presenting there to judge.
+    GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+    """
+
+    queryset = FashionPresentation.objects.select_related(
+        "event",
+        "presenter",
+        "outfit",
+        "perceiving_society",
+    ).order_by("-created_at")
+    serializer_class = FashionPresentationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FashionPresentationFilter
+
+    def perform_create(self, serializer: serializers.BaseSerializer) -> None:
+        """Resolve the presenter sheet from the requesting account and save."""
+        presenter = _resolve_actor_sheet(self.request, body_key="presenter_sheet_id")
+        serializer.save(presenter=presenter)
+
+
+class FashionJudgementViewSet(
+    mixins.CreateModelMixin,
+    GenericViewSet,
+):
+    """Judge a fashion presentation (#514).
+
+    POST /api/items/fashion-judgements/ — the requesting account's acting
+    character endorses a presentation; the created
+    ``PresentationEndorsement`` is returned. Self-judging, alt-judging, and
+    duplicate judging are rejected with HTTP 400 (friendly message).
+    """
+
+    queryset = FashionPresentation.objects.none()
+    serializer_class = FashionJudgementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Validate, resolve the judge sheet, and return the endorsement."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        judge = _resolve_actor_sheet(request, body_key="judge_sheet_id")
+        endorsement = serializer.save(judge=judge)
+        read = PresentationEndorsementSerializer(endorsement)
+        return Response(read.data, status=status.HTTP_201_CREATED)

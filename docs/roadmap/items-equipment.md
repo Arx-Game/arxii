@@ -287,6 +287,60 @@ Design decisions:
 - **Follow-up #750 filed:** derive the perceiving society from scene context so
   event/combat callers don't have to thread it manually.
 
+## Outfits Phase C — Modeling at Events (DONE)
+
+**Branch:** `feature-514-outfits-phase-c-modeling-events` (#514)
+
+Players present outfits at events, peers judge them, acclaim feeds personal renown
+and an opt-in fashion leaderboard, and — the centerpiece — high performers set the
+trends a society considers fashionable, replacing the admin-only
+`Society.current_fashion_style` toggle with a player-driven seasonal ceremony.
+
+The loop: **present → society-taste-shaped check → peer judging (dominant weight) →
+acclaim → { fashion prestige + leaderboard } + { vogue momentum } → seasonal
+trendsetter ceremony → the crowned trendsetter's facets become the society's
+in-vogue trend → everyone's `fashion_outfit_bonus` shifts.**
+
+What shipped:
+
+- **`FashionPresentation` model** (`items`) — a character modeling an outfit at an
+  `Event`, judged by the event's host society. Records `base_score` (graded check)
+  and `acclaim` (peer-weighted final).
+- **`Event.host_society` FK** — the society whose taste judges presentations at that
+  event (the concrete perceiving-society source for events; #750 still owns the
+  general scene/combat derivation).
+- **`EndorsementBase` abstract model** — extracted from `PoseEndorsement` /
+  `SceneEntryEndorsement`; the new **`PresentationEndorsement`** (peer fashion
+  judgment, no resonance) is the third sibling. No parallel implementation.
+- **`present_outfit` / `judge_presentation` services** — the presentation runs a
+  check whose modifier is `fashion_outfit_bonus` (vs the host society) and whose
+  difficulty derives from the society's current taste; peer endorsements then
+  dominate the final acclaim. Consent boundary: only characters who present are
+  judgeable; no self/alt/duplicate judging.
+- **`Persona.prestige_from_fashion`** — a 5th prestige axis (same event-sourced
+  recompute pattern as the other four), surfaced on the Renown tab.
+- **`FacetVogueMomentum` + trendsetter ceremony** — acclaimed presentations accrue
+  per-`(society, facet)` vogue momentum (cron-decayed); a seasonal cron crowns the
+  top presenter (`Trendsetter`) and rewrites the society's living `FashionStyle`
+  in-vogue facets. Also host/staff-triggerable.
+- **`RankingType.FASHION`** — the opt-in fashion leaderboard reuses the existing
+  #676 `RankingDisplay` / `ranking_services` / `RankingBoardCard` infra (no parallel
+  board), ranking by perceived `prestige_from_fashion`.
+- **API + frontend** — present/judge endpoints (`/api/items/fashion-presentations/`,
+  `/api/items/fashion-judgements/`) and a `FashionPresentationPanel` mounted in the
+  event detail view; the Renown prestige card now shows the Fashion axis.
+
+Design decisions:
+
+- **Peer-weighted hybrid judging:** the check sets a floor; peer endorsements are
+  the dominant lever. Difficulty derives from authored society taste, never a
+  hardcoded per-call constant.
+- **Trend-setting as ceremony:** a *named* trendsetter is crowned each season — the
+  high-drama, individualizing path over an admin toggle.
+- **Deferred (follow-ups):** ConsequencePool side-effects on the presentation check;
+  masquerade-aware prestige attribution (currently the primary persona); IC
+  broadcast of the crowning.
+
 ## Visible Worn Equipment (DONE)
 
 **Branch:** `visible-worn-equipment`
@@ -381,7 +435,7 @@ Explicitly NOT in this slice (parked):
 - Item interaction service functions — using items, consuming charges (DONE, #509)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
 - ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; scene-derived society + combat surfacing delivered in Spec D PR4 / #512 via `societies_for_scene` + `collect_check_modifiers`)
-- Outfits Phase C (Modeling) — present an outfit at events, peer judging, leaderboards (not started)
+- ~~Outfits Phase C (Modeling)~~ — **done** (#514: `FashionPresentation` + peer `PresentationEndorsement`, `Event.host_society`, `prestige_from_fashion` axis, `FacetVogueMomentum` + seasonal trendsetter ceremony rewriting `Society.current_fashion_style`, `RankingType.FASHION` leaderboard reusing #676, present/judge API + event-detail UI)
 - ~~Mantle attunement layer~~ — **done** (Spec D PR4 / #512: `Mantle` artifacts, Codex-gated
   per-character `MANTLE`-thread attunement, mantle combat bonuses; see the PR4 section above)
 - Outfits Phase D (Legendary) — outfit legend accrual and famous outfits as referenceable

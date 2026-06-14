@@ -123,6 +123,41 @@ def get_society_prestige_top_n(society, *, n: int = 10) -> list[RankingRow]:
     ]
 
 
+def get_society_fashion_top_n(society, *, n: int = 10) -> list[RankingRow]:
+    """Top-N members of ``society`` by PERCEIVED fashion prestige (#514).
+
+    Identical to :func:`get_society_prestige_top_n` except the ordering
+    quantity is ``prestige_from_fashion × fame-tier multiplier`` — the
+    perceived fashion-prestige axis — so the board ranks members by their
+    standing in the society's eyes specifically for fashion. The numeric
+    value stays internal; only the qualitative band label ever renders.
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    members = Persona.objects.filter(
+        pk__in=OrganizationMembership.objects.filter(organization__society=society).values_list(
+            "persona_id", flat=True
+        )
+    )
+    scored = sorted(
+        (
+            (p.prestige_from_fashion * _perceived_multiplier(p.fame_tier, society), p.name)
+            for p in members
+        ),
+        key=lambda pair: (-pair[0], pair[1]),
+    )[:n]
+    bands = band_labels_for(society)
+    return [
+        RankingRow(
+            rank=index,
+            persona_name=name,
+            value=score,
+            band_label=_label_for_rank(index, bands),
+        )
+        for index, (score, name) in enumerate(scored, start=1)
+    ]
+
+
 def get_academy_legend_top_n(*, n: int = 10) -> list[RankingRow]:
     """Top-N personas by ``persona_legend`` across all realms.
 
@@ -188,6 +223,8 @@ def render_ranking_display(display: RankingDisplay, viewer_persona) -> str:
     """
     if display.ranking_type == RankingDisplay.RankingType.SOCIETY_PRESTIGE:
         return _render_society_prestige(display, viewer_persona)
+    if display.ranking_type == RankingDisplay.RankingType.FASHION:
+        return _render_society_fashion(display, viewer_persona)
     if display.ranking_type == RankingDisplay.RankingType.ACADEMY_LEGEND:
         return _render_academy_legend(display)
     return _EMPTY_NARRATION
@@ -204,6 +241,23 @@ def _render_society_prestige(display: RankingDisplay, viewer_persona) -> str:
     society_name = display.scope_society.name
     return _format_rows(
         header=f"PLACEHOLDER: The herald reads aloud — '{society_name}' top {len(rows)}:",
+        rows=rows,
+    )
+
+
+def _render_society_fashion(display: RankingDisplay, viewer_persona) -> str:
+    if display.scope_society is None:
+        return _EMPTY_NARRATION
+    if not viewer_is_member_of_society(viewer_persona, display.scope_society):
+        return _CLOAKED_NARRATION
+    rows = get_society_fashion_top_n(display.scope_society, n=display.top_n)
+    if not rows:
+        return _EMPTY_NARRATION
+    society_name = display.scope_society.name
+    return _format_rows(
+        header=(
+            f"PLACEHOLDER: The herald reads aloud — '{society_name}' best-dressed top {len(rows)}:"
+        ),
         rows=rows,
     )
 

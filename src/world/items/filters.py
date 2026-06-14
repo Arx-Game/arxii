@@ -13,6 +13,7 @@ import django_filters
 
 from world.items.models import (
     EquippedItem,
+    FashionPresentation,
     InteractionType,
     ItemTemplate,
     QualityTier,
@@ -66,3 +67,15 @@ class VisibleWornItemFilter(django_filters.FilterSet):
     class Meta:
         model = EquippedItem
         fields = ["character"]
+
+
+class FashionPresentationFilter(django_filters.FilterSet):
+    """Filters for the fashion-presentations list endpoint (#514).
+
+    Lets the judging UI scope presentations to a single event so it can show
+    who is presenting there.
+    """
+
+    class Meta:
+        model = FashionPresentation
+        fields = ["event", "presenter"]

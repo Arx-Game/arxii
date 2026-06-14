@@ -4,6 +4,8 @@ from rest_framework.routers import DefaultRouter
 
 from world.items.views import (
     EquippedItemViewSet,
+    FashionJudgementViewSet,
+    FashionPresentationViewSet,
     InteractionTypeViewSet,
     ItemFacetViewSet,
     ItemInstanceViewSet,
@@ -29,6 +31,16 @@ router.register(
     "visible-item-detail",
     VisibleItemDetailViewSet,
     basename="visible-item-detail",
+)
+router.register(
+    "fashion-presentations",
+    FashionPresentationViewSet,
+    basename="fashion-presentation",
+)
+router.register(
+    "fashion-judgements",
+    FashionJudgementViewSet,
+    basename="fashion-judgement",
 )
 
 urlpatterns = router.urls

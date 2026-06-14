@@ -16,6 +16,7 @@ from world.items.exceptions import (
 )
 from world.items.models import (
     EquippedItem,
+    FashionPresentation,
     InteractionType,
     ItemFacet,
     ItemInstance,
@@ -27,6 +28,7 @@ from world.items.models import (
     TemplateSlot,
 )
 from world.items.types import FacetCraftResult
+from world.magic.models.endorsement import PresentationEndorsement
 
 
 class QualityTierSerializer(serializers.ModelSerializer):
@@ -402,3 +404,93 @@ class OutfitRenameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Outfit
         fields = ["id", "name", "description"]
+
+
+class FashionPresentationSerializer(serializers.ModelSerializer):
+    """Serializer for FashionPresentation create + read (#514).
+
+    Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
+    request body. The ``presenter`` is resolved from the requesting account in
+    the view (``FashionPresentationViewSet.perform_create``) and injected via
+    ``serializer.save(presenter=sheet)`` — never supplied by the client
+    (mirrors the endorsement views' ``endorser_sheet`` handling).
+
+    Read: all fields are present; read-only fields cannot be supplied.
+    """
+
+    class Meta:
+        model = FashionPresentation
+        fields = [
+            "id",
+            "event",
+            "presenter",
+            "outfit",
+            "perceiving_society",
+            "base_score",
+            "acclaim",
+            "created_at",
+        ]
+        read_only_fields = [
+            "presenter",
+            "perceiving_society",
+            "base_score",
+            "acclaim",
+            "created_at",
+        ]
+
+    def create(self, validated_data: dict) -> FashionPresentation:  # type: ignore[override]
+        """Delegate to ``present_outfit``; surface service errors as 400."""
+        from world.items.exceptions import FashionPresentationError  # noqa: PLC0415
+        from world.items.services.fashion_presentation import present_outfit  # noqa: PLC0415
+
+        presenter = validated_data.pop("presenter")
+        event = validated_data["event"]
+        outfit = validated_data.get("outfit")
+        try:
+            return present_outfit(presenter, event, outfit)
+        except FashionPresentationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+class FashionJudgementSerializer(serializers.Serializer):
+    """Serializer for judging a fashion presentation (#514).
+
+    Write: accepts ``presentation`` PK from the request body. The ``judge`` is
+    resolved from the requesting account in the view and injected via
+    ``serializer.save(judge=sheet)`` — never supplied by the client. On success
+    the created ``PresentationEndorsement`` is exposed via the
+    ``PresentationEndorsementSerializer`` read shape.
+    """
+
+    presentation = serializers.PrimaryKeyRelatedField(
+        queryset=FashionPresentation.objects.all(),
+    )
+
+    def create(self, validated_data: dict) -> PresentationEndorsement:
+        """Delegate to ``judge_presentation``; surface service errors as 400."""
+        from world.items.exceptions import FashionPresentationError  # noqa: PLC0415
+        from world.items.services.fashion_presentation import judge_presentation  # noqa: PLC0415
+
+        judge = validated_data.pop("judge")
+        presentation = validated_data["presentation"]
+        try:
+            return judge_presentation(judge, presentation)
+        except FashionPresentationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+class PresentationEndorsementSerializer(serializers.ModelSerializer):
+    """Read serializer for PresentationEndorsement rows (#514)."""
+
+    class Meta:
+        model = PresentationEndorsement
+        fields = [
+            "id",
+            "presentation",
+            "endorser_sheet",
+            "endorsee_sheet",
+            "persona_snapshot",
+            "weight",
+            "created_at",
+        ]
+        read_only_fields = fields

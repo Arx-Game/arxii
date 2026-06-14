@@ -10,6 +10,7 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
@@ -49,6 +50,8 @@ _ALL_ACTIONS: list[Action] = [
     ActivatePermitAction(),
     ApplyOutfitAction(),
     UndressAction(),
+    PresentOutfitAction(),
+    JudgePresentationAction(),
     TraverseExitAction(),
     HomeAction(),
     MoveToPositionAction(),

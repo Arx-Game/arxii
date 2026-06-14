@@ -241,6 +241,7 @@ def _bump_prestige_from_deeds(persona: Persona, delta: int) -> None:
         + persona.prestige_from_items
         + persona.prestige_from_orgs
         + persona.prestige_from_deeds
+        + persona.prestige_from_fashion
     )
     persona.save(update_fields=["prestige_from_deeds", "total_prestige"])
 
@@ -725,6 +726,7 @@ def recompute_persona_prestige_from_orgs(persona: Persona) -> int:
         + persona.prestige_from_items
         + persona.prestige_from_orgs
         + persona.prestige_from_deeds
+        + persona.prestige_from_fashion
     )
     persona.save(update_fields=["prestige_from_orgs", "total_prestige"])
     return total
