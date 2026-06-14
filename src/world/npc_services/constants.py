@@ -33,3 +33,18 @@ MISSION_POOL_COUNT_BANDS: tuple[tuple[int, int], ...] = (
     (50, 4),  # confidant
     (100, 5),  # inner circle — full slate
 )
+
+# #1020 — org-reputation lift to the POOL count for NPCs that front an org
+# (``NPCRole.faction_affiliation``). Keyed on the persona's ReputationTier
+# *rank* — the declaration order of ``societies.types.ReputationTier``
+# (reviled=0 … unknown=4 … revered=8). Walked like MISSION_POOL_COUNT_BANDS
+# (highest met floor wins). The final POOL count is
+# ``max(npc-standing count, org count)``, so org favor lifts the floor without
+# capping a personally-cultivated contact. Tuning values — adjust freely.
+MISSION_POOL_ORG_COUNT_BANDS: tuple[tuple[int, int], ...] = (
+    (0, 1),  # reviled..unknown — org connection alone gives no slate lift
+    (5, 2),  # favored
+    (6, 3),  # liked
+    (7, 4),  # honored
+    (8, 5),  # revered
+)

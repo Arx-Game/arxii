@@ -84,6 +84,20 @@ class FacetAlreadyAttached(ItemError):
     )
 
 
+class ItemNotUsable(ItemError):
+    """The item has no on-use pool, or is not a consumable."""
+
+    user_message = "That item can't be used."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item can't be used."})
+
+
+class NoChargesRemaining(ItemError):
+    """The item has no charges left to spend."""
+
+    user_message = "That item has no uses left."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item has no uses left."})
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------

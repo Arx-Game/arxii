@@ -32,3 +32,30 @@ class IsOwnMembership(permissions.BasePermission):
             character_sheet__roster_entry__tenures__end_date__isnull=True,
             character_sheet__roster_entry__tenures__player_data__account=request.user,
         ).exists()
+
+
+class CanKickFromCovenant(permissions.BasePermission):
+    """Permits kicking ``obj`` (a target CharacterCovenantRole) only if the requester
+    plays an active character holding an active leadership role in the same covenant,
+    and ``obj`` is not their own membership. The 'cannot kick a leader' rule is enforced
+    in the service layer (→ 400) for a specific message."""
+
+    def has_object_permission(
+        self,
+        request: Request,
+        view: object,
+        obj: CharacterCovenantRole,
+    ) -> bool:
+        if request.user.is_staff:
+            return True
+        return (
+            CharacterCovenantRole.objects.filter(
+                covenant_id=obj.covenant_id,
+                left_at__isnull=True,
+                covenant_role__is_leadership=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=request.user,
+            )
+            .exclude(pk=obj.pk)
+            .exists()
+        )

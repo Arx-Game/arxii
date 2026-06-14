@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("checks", "0011_alter_consequenceoutcomemodifier_source_kind"),
-        ("items", "0011_alter_mantlelevelclearance_options_and_more"),
+        ("items", "0012_iteminstance_destroyed_at_and_more"),
     ]
 
     operations = [

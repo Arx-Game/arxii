@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db.models import QuerySet
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -13,6 +14,8 @@ from rest_framework.response import Response
 
 from world.covenants.exceptions import (
     CovenantEngagementPrerequisiteNotMetError,
+    CovenantExitError,
+    NotACovenantLeaderError,
     NotAStandingBattleCovenantError,
     SubrolePromotionError,
 )
@@ -32,7 +35,7 @@ from world.covenants.models import (
     CovenantRole,
     GearArchetypeCompatibility,
 )
-from world.covenants.permissions import IsOwnMembership
+from world.covenants.permissions import CanKickFromCovenant, IsOwnMembership
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
     CovenantLevelThresholdSerializer,
@@ -45,6 +48,8 @@ from world.covenants.serializers import (
 )
 from world.covenants.services import (
     clear_engaged_membership,
+    kick_member,
+    leave_covenant,
     promote_to_subrole,
     set_engaged_membership,
     stand_down_battle_covenant,
@@ -155,6 +160,55 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
             CharacterCovenantRoleSerializer(new_membership, context={"request": request}).data,
             status=status.HTTP_200_OK,
         )
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        permission_classes=[IsAuthenticated, IsOwnMembership],
+    )
+    def leave(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave."""
+        membership = self.get_object()
+        leave_covenant(membership=membership)
+        return Response(self.get_serializer(membership).data)
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        permission_classes=[IsAuthenticated, CanKickFromCovenant],
+    )
+    def kick(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+
+        The target may be outside the requester's own-scoped get_queryset, so fetch it
+        via the full manager and run object permissions explicitly rather than get_object().
+        """
+        target = get_object_or_404(
+            CharacterCovenantRole.objects.select_related("covenant", "covenant_role"), pk=pk
+        )
+        self.check_object_permissions(request, target)
+        actor = (
+            CharacterCovenantRole.objects.filter(
+                covenant_id=target.covenant_id,
+                left_at__isnull=True,
+                covenant_role__is_leadership=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=request.user,
+            )
+            .exclude(pk=target.pk)
+            .select_related("covenant_role")
+            .first()
+        )
+        if actor is None:
+            return Response(
+                {"detail": NotACovenantLeaderError.user_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            kick_member(target=target, actor=actor)
+        except CovenantExitError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(target).data)
 
 
 class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):

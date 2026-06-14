@@ -584,3 +584,10 @@ class BeatResolveRequestSerializer(serializers.Serializer):
 
     option_id = serializers.IntegerField(min_value=1)
     approach_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+
+class MissionAbandonResultSerializer(serializers.Serializer):
+    """Result of the #1023 abandon endpoint — the run's id and new status."""
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.CharField(read_only=True)

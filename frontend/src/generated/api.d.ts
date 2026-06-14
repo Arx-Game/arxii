@@ -2890,6 +2890,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/{id}/kick/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+     *
+     *     The target may be outside the requester's own-scoped get_queryset, so fetch it
+     *     via the full manager and run object permissions explicitly rather than get_object().
+     */
+    post: operations['covenants_character_roles_kick_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/character-roles/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave. */
+    post: operations['covenants_character_roles_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/character-roles/{id}/promote/': {
     parameters: {
       query?: never;
@@ -5232,6 +5271,32 @@ export interface paths {
     get: operations['items_inventory_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/inventory/{id}/use/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Use a consumable item: apply its on-use effects (to self) and spend a charge.
+     *
+     *     Owner-or-staff gated. Business logic lives entirely in ``use_item``;
+     *     this view resolves the actor, enforces ownership, and maps
+     *     ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
+     *     surface does NOT accept a target — on-use effects apply to the holder
+     *     only. Targeted use belongs in the future use-item Action layer, which
+     *     carries proximity/prerequisite checks.
+     */
+    post: operations['items_inventory_use_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -8014,6 +8079,35 @@ export interface paths {
     get: operations['missions_journal_list'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/{id}/abandon/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #885 — the player's mission journal + beat play loop.
+     *
+     *     list: every mission the puppeted character participates in (compass +
+     *     deeds + bookends). beat: the current node as the character sees it —
+     *     LIVE options only (location ∧ visibility; visibility=eligibility, no
+     *     greyed-out entries). resolve: take an option; the engine rolls and
+     *     routes; the actor gets clear STORY prose, the room gets a
+     *     source-ambiguous ambient stir.
+     *
+     *     Participant gating: a non-participant probing instance ids gets 404
+     *     (never 403 — existence must not leak).
+     */
+    post: operations['missions_journal_abandon_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -13677,6 +13771,8 @@ export interface components {
       readonly archetype_display: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
+      /** @description Staff-authored. Members holding a leadership role may kick non-leader members. Leaders cannot kick other leaders. See issue #519. */
+      readonly is_leadership: boolean;
       /** @description Player-facing description of the role's identity and combat style. */
       readonly description: string;
       /** @description Null for primary roles. Set for sub-roles. */
@@ -15705,6 +15801,11 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
+    MissionAbandonResult: {
+      readonly id: number;
+      readonly status: string;
+    };
     /**
      * @description List + detail serializer for MissionCategory browse.
      *
@@ -22279,6 +22380,13 @@ export interface components {
     UpdateBulletinReplyInputRequest: {
       body: string;
     };
+    /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
+    UseItemResult: {
+      charges_remaining: number;
+      destroyed: boolean;
+      soft_deleted: boolean;
+      applied_effect_count: number;
+    };
     /** @description Full UserStoryMute representation. */
     UserStoryMute: {
       readonly id: number;
@@ -25996,6 +26104,48 @@ export interface operations {
       };
     };
   };
+  covenants_character_roles_kick_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_leave_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
   covenants_character_roles_promote_create: {
     parameters: {
       query?: never;
@@ -29391,6 +29541,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ItemInstanceRead'];
+        };
+      };
+    };
+  };
+  items_inventory_use_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UseItemResult'];
         };
       };
     };
@@ -32997,6 +33168,41 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PaginatedJournalEntryList'][];
         };
+      };
+    };
+  };
+  missions_journal_abandon_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionAbandonResult'];
+        };
+      };
+      /** @description Run not active / not the contract holder. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

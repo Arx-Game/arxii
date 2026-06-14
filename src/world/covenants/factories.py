@@ -38,6 +38,14 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     description = ""
 
 
+class LeaderCovenantRoleFactory(CovenantRoleFactory):
+    """A CovenantRole flagged as leadership (may kick non-leader members). See #519."""
+
+    name = factory.Sequence(lambda n: f"Leader Role {n}")
+    slug = factory.Sequence(lambda n: f"leader-role-{n}")
+    is_leadership = True
+
+
 class SubroleCovenantRoleFactory(CovenantRoleFactory):
     """Factory for sub-role CovenantRole instances.
 

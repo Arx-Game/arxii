@@ -57,6 +57,7 @@ from world.missions.serializers import (
     BeatResolveRequestSerializer,
     BeatViewSerializer,
     JournalEntrySerializer,
+    MissionAbandonResultSerializer,
     MissionCategorySerializer,
     MissionGiverSerializer,
     MissionInstanceSerializer,
@@ -513,3 +514,31 @@ class MissionJournalViewSet(viewsets.ViewSet):
             # an internal error (CodeQL exception-exposure rule).
             raise ValidationError(exc.user_message) from exc
         return Response(ResolvedBeatSerializer(result).data)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: MissionAbandonResultSerializer,
+            400: OpenApiResponse(description="Run not active / not the contract holder."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",))
+    def abandon(self, request: Request, pk: str | None = None) -> Response:
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            abandon_mission,
+        )
+
+        instance, character = self._instance_for(request, pk)
+        try:
+            instance = abandon_mission(instance, character)
+        except BeatActionError as exc:
+            # Typed, user-safe message (CodeQL exception-exposure rule); a
+            # non-participant already 404'd in _instance_for.
+            raise ValidationError(exc.user_message) from exc
+        return Response(
+            MissionAbandonResultSerializer({"id": instance.pk, "status": instance.status}).data
+        )

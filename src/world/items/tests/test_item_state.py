@@ -61,3 +61,30 @@ class ItemStatePackageHookTests(TestCase):
     def test_can_take_denied_by_package_hook(self) -> None:
         self._attach_denying_package("can_take")
         self.assertFalse(self.state.can_take(taker=MagicMock()))
+
+
+class ItemInstanceDestructionHelpersTests(TestCase):
+    def test_bare_instance_does_not_differ(self):
+        from world.items.factories import ItemInstanceFactory
+
+        inst = ItemInstanceFactory(
+            custom_name="", custom_description="", lore_value=0, quality_tier=None
+        )
+        self.assertFalse(inst.differs_from_template)
+
+    def test_custom_name_differs(self):
+        from world.items.factories import ItemInstanceFactory
+
+        self.assertTrue(ItemInstanceFactory(custom_name="Excalibur").differs_from_template)
+
+    def test_in_play_excludes_destroyed(self):
+        from django.utils import timezone
+
+        from world.items.factories import ItemInstanceFactory
+        from world.items.models import ItemInstance
+
+        live = ItemInstanceFactory()
+        dead = ItemInstanceFactory(destroyed_at=timezone.now())
+        ids = set(ItemInstance.objects.in_play().values_list("pk", flat=True))
+        self.assertIn(live.pk, ids)
+        self.assertNotIn(dead.pk, ids)

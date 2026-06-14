@@ -77,6 +77,14 @@ class CovenantRoleTests(TestCase):
         self.assertIsNotNone(role.pk)
         self.assertEqual(role.covenant_type, CovenantType.DURANCE)
 
+    def test_is_leadership_defaults_false_and_settable(self):
+        from world.covenants.factories import CovenantRoleFactory
+
+        role = CovenantRoleFactory()
+        self.assertFalse(role.is_leadership)
+        leader = CovenantRoleFactory(slug="leader-role", is_leadership=True)
+        self.assertTrue(leader.is_leadership)
+
 
 class GearArchetypeCompatibilityTests(TestCase):
     def test_create(self) -> None:

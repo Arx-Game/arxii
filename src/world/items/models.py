@@ -188,6 +188,29 @@ class ItemTemplate(SharedMemoryModel):
         default=0,
         help_text="Maximum charges for consumable items.",
     )
+    on_use_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Consequences applied when this item is used (null = not usable).",
+    )
+    on_use_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Null = deterministic apply; set = roll a check and select from the pool.",
+    )
+    on_use_difficulty = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Authored target difficulty for the on-use check. Required iff on_use_check_type set."
+        ),
+    )
     is_craftable = models.BooleanField(
         default=False,
         help_text="Whether this item can be crafted by players.",
@@ -322,6 +345,15 @@ class ItemTemplate(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    def clean(self) -> None:
+        super().clean()
+        if self.on_use_check_type_id is not None and self.on_use_difficulty is None:
+            raise ValidationError({"on_use_difficulty": "Required when on_use_check_type is set."})
+        if self.on_use_check_type_id is None and self.on_use_difficulty is not None:
+            raise ValidationError(
+                {"on_use_difficulty": "Only valid when on_use_check_type is set."}
+            )
+
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:
         """
@@ -389,6 +421,14 @@ class TemplateSlot(SharedMemoryModel):
             f"{self.get_body_region_display()}"
             f"/{self.get_equipment_layer_display()}"
         )
+
+
+class ItemInstanceManager(NaturalKeyManager):
+    """Manager for ItemInstance with natural-key support + in-play filtering."""
+
+    def in_play(self) -> models.QuerySet[ItemInstance]:
+        """Rows still in play (not consumed/destroyed)."""
+        return self.get_queryset().filter(destroyed_at__isnull=True)
 
 
 class ItemInstance(SharedMemoryModel):
@@ -511,6 +551,14 @@ class ItemInstance(SharedMemoryModel):
             "MaterialLoreEffect, NOT here."
         ),
     )
+    destroyed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Set when the item is consumed/destroyed and removed from play. Null = in play.",
+    )
+
+    objects = ItemInstanceManager()
 
     class Meta:
         indexes = [
@@ -551,6 +599,16 @@ class ItemInstance(SharedMemoryModel):
     @property
     def is_broken(self) -> bool:
         return self.durability is not None and self.durability == 0
+
+    @property
+    def differs_from_template(self) -> bool:
+        """True if this instance carries per-instance data worth preserving on
+        destruction (soft-delete). Bare template-identical throwaways return False."""
+        if self.custom_name or self.custom_description or self.lore_value or self.quality_tier_id:
+            return True
+        if self.cached_item_facets:
+            return True
+        return self.ownership_events.exclude(event_type=OwnershipEventType.CREATED).exists()
 
     def _quality_multiplier(self) -> Decimal:
         if self.quality_tier is None:

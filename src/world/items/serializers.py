@@ -55,6 +55,25 @@ class InteractionTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UseItemSerializer(serializers.Serializer):
+    """Request body for the inventory ``use`` action.
+
+    Intentionally empty: the REST endpoint applies on-use effects to the
+    holder (self) only. Targeted use belongs in the future use-item Action
+    layer, which has proximity/prerequisite checks; accepting a target pk
+    here would let a player apply on-use effects to any character by pk.
+    """
+
+
+class UseItemResultSerializer(serializers.Serializer):
+    """Response shape mirroring ``UseItemResult`` (issue #509)."""
+
+    charges_remaining = serializers.IntegerField()
+    destroyed = serializers.BooleanField()
+    soft_deleted = serializers.BooleanField()
+    applied_effect_count = serializers.IntegerField()
+
+
 class TemplateSlotSerializer(serializers.ModelSerializer):
     """Serializer for TemplateSlot (region/layer assignment)."""
 
