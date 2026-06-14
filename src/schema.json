@@ -24963,13 +24963,18 @@ components:
           items:
             type: integer
           description: |-
-            PC participant PKs in initiative (resolution) order.
+            ACTIVE PC participant PKs in initiative (speed-rank) order.
 
-            Mirrors ``services.get_resolution_order`` — the order the round resolves
-            PC actions. Only PCs who can act are included (dead/unconscious PCs and
-            NPCs are omitted). The frontend RoundFlow orders its initiative chips by
-            this and marks the first not-yet-acted participant as the current/on-deck
-            actor. Empty when no PC can act.
+            Computed in-memory from ``participants_cached`` (which already
+            ``select_related("covenant_role")``) so serialization issues **no extra
+            query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
+            for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
+            initiative chips by this and marks the first not-yet-acted participant as the
+            on-deck actor.
+
+            The resolution path additionally applies a ``can_act`` filter (excluding a
+            downed-but-not-removed PC); that is omitted here to stay query-free, so such
+            a PC may still appear in the display order. Acceptable for a display field.
           readOnly: true
         escalation_curve:
           type: integer
