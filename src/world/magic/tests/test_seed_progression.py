@@ -1,11 +1,14 @@
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
-from world.codex.models import CodexEntry, PathCodexGrant
-from world.magic.constants import MagicMilestoneKind
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.models import CharacterCodexKnowledge, CodexEntry, PathCodexGrant
+from world.magic.constants import MagicMilestoneKind, MilestoneDiscoveryTier
 from world.magic.factories import seed_magic_progression
 from world.magic.models import MagicProgressionMilestone
+from world.roster.factories import RosterEntryFactory
 
 
 class SeedMagicProgressionTests(TestCase):
@@ -74,3 +77,46 @@ class SeedMagicProgressionTests(TestCase):
         seed_magic_progression()
         m.refresh_from_db()
         assert m.route_name == "/threads"
+
+    def test_e2e_dashboard_reveal(self):
+        """Grant → knowledge → dashboard reveal: full end-to-end path."""
+        from world.magic.services.progression_dashboard import build_progression_dashboard
+
+        seed_magic_progression()
+
+        # Build a sheet with a resolving roster_entry (mirrors reference test pattern).
+        sheet = CharacterSheetFactory()
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+
+        # --- Before knowledge grants ---
+        result = build_progression_dashboard(sheet)
+        prospect_view = next(sv for sv in result if sv.stage == PathStage.PROSPECT)
+
+        # Public entries (resonance_discovery, motif) are KNOWN even with no knowledge row.
+        tier_by_kind = {mv.kind: mv.tier for mv in prospect_view.milestones}
+        assert (
+            tier_by_kind.get(MagicMilestoneKind.RESONANCE_DISCOVERY) == MilestoneDiscoveryTier.KNOWN
+        )
+        assert tier_by_kind.get(MagicMilestoneKind.MOTIF) == MilestoneDiscoveryTier.KNOWN
+
+        # Gated entry (thread_weaving) is UNKNOWN → collapsed, not in milestones list.
+        assert MagicMilestoneKind.THREAD_WEAVING not in tier_by_kind
+        assert prospect_view.has_undiscovered is True
+
+        # --- Grant codex knowledge for all entries on self.prospect ---
+        granted_entry_ids = list(
+            PathCodexGrant.objects.filter(path=self.prospect).values_list("entry_id", flat=True)
+        )
+        for entry_id in granted_entry_ids:
+            CharacterCodexKnowledge.objects.create(
+                roster_entry=roster_entry,
+                entry_id=entry_id,
+                status=CodexKnowledgeStatus.KNOWN,
+            )
+
+        # --- After knowledge grants ---
+        result2 = build_progression_dashboard(sheet)
+        prospect_view2 = next(sv for sv in result2 if sv.stage == PathStage.PROSPECT)
+
+        tier_by_kind2 = {mv.kind: mv.tier for mv in prospect_view2.milestones}
+        assert tier_by_kind2.get(MagicMilestoneKind.THREAD_WEAVING) == MilestoneDiscoveryTier.KNOWN

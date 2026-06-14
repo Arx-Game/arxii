@@ -136,6 +136,11 @@ What was built:
 Requires authored `CodexEntry` rows + `PathCodexGrant`s for the magic features (and
 `MagicProgressionMilestone` rows) to surface real content — engine only; content
 authoring is separate.
+- Content authored (#972): `seed_magic_progression()` seeds the 14-milestone matrix
+  (5 concept milestones at Prospect — the L1–2 tutorial; `second_gift`+`stage_crossing`
+  recurring at each crossing), 11 codex entries (resonance/motif public, rest gated), and
+  `PathCodexGrant` rows for all active Prospect paths. `PathCodexGrant` is now consumed at
+  CG finalize via `_finalize_path_codex_grants` (mirrors the tradition grant).
 
 ## What's Needed for MVP
 
