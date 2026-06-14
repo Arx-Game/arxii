@@ -10,7 +10,14 @@ from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
-from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
+from world.combat.constants import (
+    NO_ROLE_SPEED_RANK,
+    ActionCategory,
+    ClashActionSlot,
+    ClashStatus,
+    OpponentTier,
+    ParticipantStatus,
+)
 from world.combat.models import (
     Clash,
     CombatEncounter,
@@ -709,20 +716,27 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         )
 
     def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
-        """PC participant PKs in initiative (resolution) order.
+        """ACTIVE PC participant PKs in initiative (speed-rank) order.
 
-        Mirrors ``services.get_resolution_order`` — the order the round resolves
-        PC actions. Only PCs who can act are included (dead/unconscious PCs and
-        NPCs are omitted). The frontend RoundFlow orders its initiative chips by
-        this and marks the first not-yet-acted participant as the current/on-deck
-        actor. Empty when no PC can act.
+        Computed in-memory from ``participants_cached`` (which already
+        ``select_related("covenant_role")``) so serialization issues **no extra
+        query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
+        for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
+        initiative chips by this and marks the first not-yet-acted participant as the
+        on-deck actor.
+
+        The resolution path additionally applies a ``can_act`` filter (excluding a
+        downed-but-not-removed PC); that is omitted here to stay query-free, so such
+        a PC may still appear in the display order. Acceptable for a display field.
         """
-        from world.combat.services import get_resolution_order  # noqa: PLC0415
-
-        order = get_resolution_order(obj)
-        return [
-            entity.pk for _entity_type, entity in order if isinstance(entity, CombatParticipant)
-        ]
+        active = [p for p in obj.participants_cached if p.status == ParticipantStatus.ACTIVE]
+        active.sort(
+            key=lambda p: (
+                p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK,
+                p.pk,
+            )
+        )
+        return [p.pk for p in active]
 
     def _get_viewer_character_ids(self, request: object) -> set[int] | frozenset[int]:
         """Get character_sheet IDs for the requesting user.
