@@ -174,6 +174,7 @@ def get_modifier_total(
     if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
         equipment_total = passive_facet_bonuses(character, modifier_target)
         equipment_total += covenant_role_bonus(character, modifier_target)
+        equipment_total += covenant_level_bonus(character, modifier_target)
     fashion_total = 0
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
@@ -383,6 +384,40 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
             else:
                 total += max(role_bonus, gear_stat)
     return total
+
+
+def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum the authored covenant-level passive bonus across engaged memberships (#762).
+
+    A ``CovenantLevelBonus`` row authored against ``target`` grants each engaged
+    member a derive-on-read modifier of ``covenant.level * bonus_per_level``.
+    Bonuses stack additively across the character's engaged covenants, mirroring
+    ``covenant_role_bonus`` (spec 2026-05-09 §3.6). No CharacterModifier rows are
+    persisted. Most targets have no row → returns 0.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate the level bonus for.
+
+    Returns:
+        Integer total of the engaged-covenant level bonus for ``target``.
+    """
+    from world.covenants.models import (  # noqa: PLC0415
+        CharacterCovenantRole,
+        CovenantLevelBonus,
+    )
+
+    config = CovenantLevelBonus.objects.filter(modifier_target=target).first()
+    if config is None:
+        return 0
+
+    # Batched query — no per-membership round trips (no-queries-in-loops standard).
+    memberships = CharacterCovenantRole.objects.filter(
+        character_sheet=sheet,
+        engaged=True,
+        left_at__isnull=True,
+    ).select_related("covenant")
+    return sum(m.covenant.level * config.bonus_per_level for m in memberships)
 
 
 def role_base_bonus_for_target(
