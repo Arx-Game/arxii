@@ -45,6 +45,11 @@ DATABASES = {
 }
 
 INSTALLED_APPS += [
+    # Enforces one migration leaf per app via a per-app max_migration.txt
+    # sentinel (#991). Two parallel branches that each add a migration both
+    # bump that file, so the second surfaces as a git conflict at PR time
+    # instead of a silent "multiple leaf nodes" failure in the merge queue.
+    "django_linear_migrations",
     "core_management",  # Add our management app for custom commands
     "web.admin.apps.AdminConfig",  # Custom admin functionality
     "flows.apps.FlowsConfig",
