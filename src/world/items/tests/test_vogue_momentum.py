@@ -141,9 +141,7 @@ class VogueMomentumDecayTests(TestCase):
     def test_decay_leaves_zero_rows_at_zero(self) -> None:
         """Rows already at 0 are untouched (and not counted as touched)."""
         zero = FacetVogueMomentumFactory(society=self.society, points=0)
-        positive = FacetVogueMomentumFactory(
-            society=self.society, facet=FacetFactory(), points=50
-        )
+        positive = FacetVogueMomentumFactory(society=self.society, facet=FacetFactory(), points=50)
         touched = vogue_momentum_decay_tick()
         zero.refresh_from_db()
         positive.refresh_from_db()
