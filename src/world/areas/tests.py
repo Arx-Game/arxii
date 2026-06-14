@@ -846,3 +846,152 @@ class PositionFactoryTests(TestCase):
         assert op.pk is not None
         assert op.position is not None
         assert op.objectdb is not None
+
+
+# ---------------------------------------------------------------------------
+# Task 9 — cross-cutting integration test (social scene + combat)
+# ---------------------------------------------------------------------------
+
+
+class PositioningIntegrationTests(TestCase):
+    """Integration test: one room's positions exercised across a social scene and a combat.
+
+    Room layout:
+      ground (PRIMARY) — open edge → balcony (FEATURE)
+      ground (PRIMARY) — impassable edge → pit (FEATURE)
+
+    Social scene:
+      - Two characters placed via place_in_position; positions asserted.
+      - One character moves ground→balcony via move_to_position.
+      - reachable_positions for the stationary character excludes pit.
+
+    Combat reading the same positions:
+      - CombatEncounter in the same room.
+      - CombatParticipant whose character is placed at ground.
+      - CombatOpponent whose NPC objectdb is placed at balcony.
+      - current_position on fresh instances resolves to the same Position rows.
+
+    Failure + bypass:
+      - move_to_position across the impassable ground↔pit edge raises PositionTransitionError.
+      - force_move_to_position to pit succeeds.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.combat.constants import OpponentTier
+        from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+        from world.combat.models import CombatOpponent
+        from world.combat.typeclasses.combat_npc import CombatNPC
+
+        # --- room + positions ---
+        self.room = create_object("typeclasses.rooms.Room", key="Test Arena", nohome=True)
+        self.ground = create_position(self.room, "ground", kind=PositionKind.PRIMARY)
+        self.balcony = create_position(self.room, "balcony", kind=PositionKind.FEATURE)
+        self.pit = create_position(self.room, "pit", kind=PositionKind.FEATURE)
+
+        # Open edge: ground ↔ balcony
+        connect_positions(self.ground, self.balcony, is_passable=True)
+        # Impassable edge: ground ↔ pit
+        connect_positions(self.ground, self.pit, is_passable=False)
+
+        # --- social characters: two characters in the room ---
+        self.char_a = CharacterFactory(location=self.room)
+        self.char_b = CharacterFactory(location=self.room)
+
+        # --- combat: encounter in the same room ---
+        self.encounter = CombatEncounterFactory(room=self.room)
+
+        # Participant: char_b (already in room); give it a sheet
+        self.sheet_b = CharacterSheetFactory()
+        self.sheet_b.character.location = self.room
+        self.sheet_b.character.save()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet_b
+        )
+
+        # Opponent: a CombatNPC in the same room
+        self.npc = create_object(CombatNPC, key="Arena Guard", location=self.room, nohome=True)
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Arena Guard",
+            health=50,
+            max_health=50,
+            objectdb=self.npc,
+            objectdb_is_ephemeral=True,
+        )
+
+    # -- Social scene assertions --
+
+    def test_place_in_position_asserts_position_of(self):
+        """place_in_position + position_of round-trips correctly for both characters."""
+        place_in_position(self.char_a, self.ground)
+        place_in_position(self.char_b, self.balcony)
+        assert position_of(self.char_a) == self.ground
+        assert position_of(self.char_b) == self.balcony
+
+    def test_move_to_position_updates_occupancy(self):
+        """Moving char_a from ground to balcony updates position_of."""
+        place_in_position(self.char_a, self.ground)
+        move_to_position(self.char_a, self.balcony)
+        assert position_of(self.char_a) == self.balcony
+
+    def test_reachable_positions_excludes_pit(self):
+        """After char_a moves to balcony, pit is not reachable from ground for char_b.
+
+        char_b remains at ground; ground→pit edge is impassable so pit is excluded.
+        """
+        place_in_position(self.char_a, self.ground)
+        place_in_position(self.char_b, self.ground)
+        move_to_position(self.char_a, self.balcony)
+        reachable = reachable_positions(self.char_b)
+        assert self.pit not in reachable
+        assert self.balcony in reachable
+
+    # -- Combat current_position assertions --
+
+    def test_combat_participant_current_position(self):
+        """CombatParticipant.current_position resolves to the placed Position."""
+        from world.combat.models import CombatParticipant
+
+        place_in_position(self.sheet_b.character, self.ground)
+        # Fresh instance so cached_property isn't inherited from setUp.
+        fresh = CombatParticipant.objects.get(pk=self.participant.pk)
+        assert fresh.current_position == self.ground
+
+    def test_combat_opponent_current_position(self):
+        """CombatOpponent.current_position resolves to the placed Position."""
+        from world.combat.models import CombatOpponent
+
+        place_in_position(self.npc, self.balcony)
+        fresh = CombatOpponent.objects.get(pk=self.opponent.pk)
+        assert fresh.current_position == self.balcony
+
+    def test_participant_and_opponent_same_position_rows(self):
+        """Participant at ground and opponent at balcony resolve to the correct distinct rows."""
+        from world.combat.models import CombatOpponent, CombatParticipant
+
+        place_in_position(self.sheet_b.character, self.ground)
+        place_in_position(self.npc, self.balcony)
+        fresh_participant = CombatParticipant.objects.get(pk=self.participant.pk)
+        fresh_opponent = CombatOpponent.objects.get(pk=self.opponent.pk)
+        assert fresh_participant.current_position == self.ground
+        assert fresh_opponent.current_position == self.balcony
+        assert fresh_participant.current_position != fresh_opponent.current_position
+
+    # -- Failure + bypass --
+
+    def test_move_to_impassable_raises_position_transition_error(self):
+        """move_to_position across the impassable ground↔pit edge raises PositionTransitionError."""
+        place_in_position(self.char_a, self.ground)
+        with self.assertRaises(PositionTransitionError) as ctx:
+            move_to_position(self.char_a, self.pit)
+        assert "blocked" in ctx.exception.user_message
+
+    def test_force_move_to_pit_succeeds(self):
+        """force_move_to_position to pit bypasses the impassable edge check."""
+        place_in_position(self.char_a, self.ground)
+        op = force_move_to_position(self.char_a, self.pit)
+        assert op.position == self.pit
+        assert position_of(self.char_a) == self.pit
