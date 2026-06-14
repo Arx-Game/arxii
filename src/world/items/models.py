@@ -70,6 +70,22 @@ class QualityTier(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @classmethod
+    def for_score(cls, score: int) -> QualityTier | None:
+        """Resolve a numeric quality score to the tier whose [min, max] contains it.
+
+        Below the lowest range clamps to the lowest tier; above the highest
+        clamps to the highest. Returns None only when no tiers exist.
+        """
+        match = cls.objects.filter(numeric_min__lte=score, numeric_max__gte=score).first()
+        if match is not None:
+            return match
+        ordered = cls.objects.order_by("sort_order")
+        first = ordered.first()
+        if first is not None and score < first.numeric_min:
+            return first
+        return ordered.last()
+
 
 class InteractionType(SharedMemoryModel):
     """
