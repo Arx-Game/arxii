@@ -24,6 +24,31 @@ export type PaginatedCharacterCovenantRoleList =
   components['schemas']['PaginatedCharacterCovenantRoleList'];
 
 // ---------------------------------------------------------------------------
+// Hand-written schema extensions (until OpenAPI regen at integration; see #518)
+// ---------------------------------------------------------------------------
+//
+// The generated api.d.ts is a single shared file derived from ALL serializers
+// across the app; regenerating it on this branch would collide with combat
+// serializer changes on another branch. So these new serializer fields are
+// declared by hand here, scoped to the covenants module, until the schema is
+// regenerated at integration.
+
+/** Battle-state fields added to CovenantSerializer in C1. */
+export interface CovenantBattleFields {
+  is_dormant: boolean;
+  battle_binding: string | null;
+  battle_binding_display: string;
+}
+
+/** Covenant detail payload including the C1 battle-state fields. */
+export type CovenantWithBattleState = Covenant & CovenantBattleFields;
+
+/** CovenantRole payload including the parent_role FK added in C4. */
+export interface CovenantRoleWithParent extends CovenantRole {
+  parent_role: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // Hand-written types for the powers / stand-down endpoints
 // ---------------------------------------------------------------------------
 
@@ -41,8 +66,9 @@ export interface CovenantRiteRow {
   granted_condition: number | null;
   base_severity: number;
   severity_per_extra_participant: number;
-  max_severity: number;
-  duration_rounds: number;
+  // Nullable on the backend model (null=True) → serialized as number | null.
+  max_severity: number | null;
+  duration_rounds: number | null;
   level_met: boolean;
   members_present_met: boolean;
 }
@@ -114,10 +140,10 @@ export async function getCovenants(): Promise<PaginatedCovenantList> {
   return res.json() as Promise<PaginatedCovenantList>;
 }
 
-export async function getCovenant(id: number): Promise<Covenant> {
+export async function getCovenant(id: number): Promise<CovenantWithBattleState> {
   const res = await apiFetch(`${COVENANTS_URL}/${id}/`);
   if (!res.ok) throw new Error(`Failed to load covenant ${id}`);
-  return res.json() as Promise<Covenant>;
+  return res.json() as Promise<CovenantWithBattleState>;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,12 +261,12 @@ export async function promoteMembership(
 export async function getCovenantRoles(params: {
   covenant_type?: string;
   parent_role?: number;
-}): Promise<CovenantRole[]> {
+}): Promise<CovenantRoleWithParent[]> {
   const search = new URLSearchParams();
   if (params.covenant_type != null) search.set('covenant_type', params.covenant_type);
   if (params.parent_role != null) search.set('parent_role', String(params.parent_role));
   const query = search.toString();
   const res = await apiFetch(`${ROLES_URL}/${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error('Failed to load covenant roles');
-  return res.json() as Promise<CovenantRole[]>;
+  return res.json() as Promise<CovenantRoleWithParent[]>;
 }
