@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from rest_framework import serializers
-
-if TYPE_CHECKING:
-    from world.items.types import FacetCraftResult
 
 from flows.service_functions.outfits import (
     add_outfit_slot,
@@ -31,6 +26,7 @@ from world.items.models import (
     TemplateInteraction,
     TemplateSlot,
 )
+from world.items.types import FacetCraftResult
 
 
 class QualityTierSerializer(serializers.ModelSerializer):
