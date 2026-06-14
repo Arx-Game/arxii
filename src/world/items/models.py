@@ -909,6 +909,50 @@ class OutfitSlot(SharedMemoryModel):
         return f"{self.outfit.name}: {self.item_instance.display_name}"
 
 
+class FashionPresentation(SharedMemoryModel):
+    """A character modelling an outfit at an event, judged by a society (#514)."""
+
+    event = models.ForeignKey(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="fashion_presentations",
+    )
+    presenter = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        related_name="fashion_presentations",
+    )
+    outfit = models.ForeignKey(
+        "items.Outfit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="presentations",
+        help_text="The outfit presented (record-keeping; the check reads equipped items).",
+    )
+    perceiving_society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.PROTECT,
+        related_name="fashion_presentations",
+    )
+    base_score = models.IntegerField(
+        default=0,
+        help_text="Floor from the society-taste-shaped presentation check.",
+    )
+    acclaim = models.IntegerField(
+        default=0,
+        help_text="Final acclaim = base_score + heavily-weighted peer endorsements.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["presenter", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"FashionPresentation({self.presenter_id}@{self.event_id})"
+
+
 class ItemCheckModifier(SharedMemoryModel):
     """Authored check modifier contributed by an item template when equipped.
 

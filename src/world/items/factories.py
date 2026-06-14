@@ -5,6 +5,7 @@ import factory
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.models import (
     EquippedItem,
+    FashionPresentation,
     FashionStyle,
     FashionStyleBonus,
     InteractionType,
@@ -212,3 +213,21 @@ class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     mantle = factory.SubFactory(MantleFactory)
     level = 1
+
+
+class FashionPresentationFactory(factory.django.DjangoModelFactory):
+    """Factory for FashionPresentation (#514).
+
+    Builds a complete presentation row suitable for integration tests and seed data.
+    ``outfit`` is nullable and defaults to None — the check reads equipped items, not the FK.
+    """
+
+    class Meta:
+        model = FashionPresentation
+
+    event = factory.SubFactory("world.events.factories.EventFactory")
+    presenter = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    outfit = None
+    perceiving_society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    base_score = 0
+    acclaim = 0
