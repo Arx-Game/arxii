@@ -172,6 +172,30 @@ class ItemTemplate(SharedMemoryModel):
         default=0,
         help_text="Maximum charges for consumable items.",
     )
+    on_use_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Consequences applied when this item is used (null = not usable).",
+    )
+    on_use_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Null = deterministic apply; set = roll a check and select from the pool.",
+    )
+    on_use_difficulty = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Authored target difficulty for the on-use check. "
+            "Required iff on_use_check_type set."
+        ),
+    )
     is_craftable = models.BooleanField(
         default=False,
         help_text="Whether this item can be crafted by players.",
@@ -305,6 +329,17 @@ class ItemTemplate(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.on_use_check_type_id is not None and self.on_use_difficulty is None:
+            raise ValidationError(
+                {"on_use_difficulty": "Required when on_use_check_type is set."}
+            )
+        if self.on_use_check_type_id is None and self.on_use_difficulty is not None:
+            raise ValidationError(
+                {"on_use_difficulty": "Only valid when on_use_check_type is set."}
+            )
 
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:
@@ -494,6 +529,12 @@ class ItemInstance(SharedMemoryModel):
             "grants resonance_amp to inhabitants) live on world.buildings."
             "MaterialLoreEffect, NOT here."
         ),
+    )
+    destroyed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Set when the item is consumed/destroyed and removed from play. Null = in play.",
     )
 
     class Meta:
