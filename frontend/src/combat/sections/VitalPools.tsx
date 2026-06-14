@@ -3,10 +3,9 @@
  *
  * Health: sourced from the viewer's participant row in EncounterDetail.participants.
  *   - Color shifts amber when health_percentage < 0.5.
- *   - Identified by finding the participant with non-null health (the viewer's own
- *     vitals are only returned for the viewer; other participants' health is hidden).
- *   - If viewer is staff/GM, health is visible for all — we fall back to the first
- *     participant whose `health` field is non-null.
+ *   - The viewer's row is identified by an exact `character_sheet_id` match against
+ *     the viewer's own sheet — not a health-presence heuristic, which picked an
+ *     arbitrary row for staff/GM viewers who can see everyone's vitals. (#918)
  *
  * Anima: sourced from useCharacterAnima(characterId).
  *   - characterId is the ObjectDB PK (same as what CharacterAnimaFilter uses).
@@ -31,6 +30,8 @@ export interface VitalPoolsProps {
   encounter: EncounterDetail;
   /** The viewer's character ObjectDB PK — used to query CharacterAnima. */
   characterId: number;
+  /** The viewer's CharacterSheet PK — identifies their own participant row. */
+  characterSheetId: number;
   /** Whether the section is collapsed. Controlled by parent (Task 8.6). */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -41,17 +42,19 @@ export interface VitalPoolsProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Find the viewer's participant row.
+ * Find the viewer's own participant row by exact character-sheet identity.
  *
- * The API only returns health/max_health for the viewer's own character.
- * We detect "own" by finding the first participant with a non-null health value.
- * If none have health (observer mode or all-null), returns undefined.
+ * Replaces the former health-presence heuristic, which picked an arbitrary row
+ * for staff/GM viewers who can see every participant's vitals. (#918)
  *
  * Exported: CombatTurnPanel reuses this to locate the puppeted participant for
- * the active-Audere strip (Participant exposes no character/sheet id field).
+ * the active-Audere strip. Returns undefined for observers (no matching row).
  */
-export function findViewerParticipant(participants: Participant[]): Participant | undefined {
-  return participants.find((p) => p.health !== null && p.health !== undefined);
+export function findOwnParticipant(
+  participants: Participant[],
+  characterSheetId: number
+): Participant | undefined {
+  return participants.find((p) => p.character_sheet_id === characterSheetId);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,13 +99,14 @@ function BarRow({ label, current, maximum, fillClass = 'bg-primary', testId }: B
 export function VitalPools({
   encounter,
   characterId,
+  characterSheetId,
   collapsed = false,
   onToggleCollapse,
 }: VitalPoolsProps) {
   const { data: animaData, isLoading: animaLoading } = useCharacterAnima(characterId);
 
-  // Health derived from the viewer's participant row.
-  const viewerParticipant = findViewerParticipant(encounter.participants);
+  // Health derived from the viewer's own participant row (exact sheet match).
+  const viewerParticipant = findOwnParticipant(encounter.participants, characterSheetId);
   const health = viewerParticipant?.health ?? null;
   const maxHealth = viewerParticipant?.max_health ?? null;
   const healthPct =

@@ -102,7 +102,7 @@ describe('VitalPools', () => {
   it('renders the health bar with correct values', () => {
     const encounter = makeEncounter([makeParticipant({ health: 8, max_health: 10 })]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -115,7 +115,7 @@ describe('VitalPools', () => {
   it('shows amber fill when health is below 50%', () => {
     const encounter = makeEncounter([makeParticipant({ health: 4, max_health: 10 })]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -127,7 +127,7 @@ describe('VitalPools', () => {
   it('shows green fill when health is at or above 50%', () => {
     const encounter = makeEncounter([makeParticipant({ health: 6, max_health: 10 })]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -138,7 +138,7 @@ describe('VitalPools', () => {
   it('renders the anima bar with correct values', () => {
     const encounter = makeEncounter([makeParticipant()]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -158,7 +158,7 @@ describe('VitalPools', () => {
       }),
     ]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -179,7 +179,7 @@ describe('VitalPools', () => {
   it('no longer renders the placeholder affordances', () => {
     const encounter = makeEncounter([makeParticipant()]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -198,7 +198,7 @@ describe('VitalPools', () => {
       }),
     ]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -211,7 +211,7 @@ describe('VitalPools', () => {
   it('hides fatigue bars when fatigue is null (no vitals permission)', () => {
     const encounter = makeEncounter([makeParticipant({ fatigue: null })]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -225,7 +225,7 @@ describe('VitalPools', () => {
   it('shows dash when no participant health is available', () => {
     const encounter = makeEncounter([makeParticipant({ health: null, max_health: null })]);
 
-    render(<VitalPools encounter={encounter} characterId={10} />, {
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
       wrapper: createWrapper(),
     });
 
@@ -233,12 +233,52 @@ describe('VitalPools', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
+  it('matches the viewer own row by sheet id when several participants have visible health', () => {
+    // A GM/staff viewer can see every participant's health, so health-presence no
+    // longer identifies "self". The viewer's own row must be matched by sheet id —
+    // the regression #918 fixes (the old heuristic showed the first non-null row).
+    const other = makeParticipant({
+      id: 2,
+      character_sheet_id: 2002,
+      character_name: 'Other',
+      health: 3,
+      max_health: 10,
+    });
+    const own = makeParticipant({
+      id: 1,
+      character_sheet_id: 1001,
+      character_name: 'Self',
+      health: 9,
+      max_health: 10,
+    });
+    // `other` is listed first — the old heuristic would have shown its health (3/10).
+    const encounter = makeEncounter([other, own]);
+
+    render(<VitalPools encounter={encounter} characterId={10} characterSheetId={1001} />, {
+      wrapper: createWrapper(),
+    });
+
+    const healthBar = screen.getByTestId('vital-health-bar');
+    expect(healthBar).toHaveTextContent('9');
+    expect(healthBar).toHaveTextContent('/ 10');
+    // Not the first participant's health.
+    expect(healthBar).not.toHaveTextContent('3');
+  });
+
   it('collapses content when collapsed=true', () => {
     const encounter = makeEncounter([makeParticipant()]);
 
-    render(<VitalPools encounter={encounter} characterId={10} collapsed={true} />, {
-      wrapper: createWrapper(),
-    });
+    render(
+      <VitalPools
+        encounter={encounter}
+        characterId={10}
+        characterSheetId={1001}
+        collapsed={true}
+      />,
+      {
+        wrapper: createWrapper(),
+      }
+    );
 
     expect(screen.queryByTestId('vital-health-bar')).not.toBeInTheDocument();
   });
