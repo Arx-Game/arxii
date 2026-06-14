@@ -6,17 +6,19 @@
  *   - item name + quality tier badge
  *   - markdown description (react-markdown + remark-gfm) in a manual prose wrapper
  *   - stats grid (weight / size / value)
- *   - facet chips (optional)
- *   - actions row (Wear/Remove, Drop, Give, Put in)
+ *   - facet chips (live data from useItemFacets; facetLabels prop accepted but unused)
+ *   - actions row (Wear/Remove, Drop, Give, Put in, Attach Facet)
  *
  * Open/close is parent-controlled via `open` + `onOpenChange` (standard
  * shadcn Sheet pattern). Action callbacks are optional — the parent decides
  * which buttons fire which mutations.
  */
 
-import { Hand, Package, Trash2, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Hand, Package, Sparkles, Trash2, Users, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,12 +30,15 @@ import {
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { useFacets } from '@/character-creation/queries';
 import type { ItemInstance } from '../types';
+import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
+import { AttachFacetDialog } from './AttachFacetDialog';
 
 interface ItemDetailPanelProps {
   /** Item to display. When null the panel renders nothing of substance. */
   item: ItemInstance | null;
-  /** Optional facet chip labels (caller resolves names — Phase A no facet API). */
+  /** Accepted for backward-compat; live facet data is loaded internally. */
   facetLabels?: string[];
   /** True when the parent has determined this item is currently equipped. */
   isEquipped?: boolean;
@@ -52,7 +57,8 @@ interface ItemDetailPanelProps {
 
 export function ItemDetailPanel({
   item,
-  facetLabels = [],
+  // facetLabels accepted for backward-compat; live data replaces it internally.
+  facetLabels: _facetLabels = [],
   isEquipped = false,
   open,
   onOpenChange,
@@ -62,6 +68,14 @@ export function ItemDetailPanel({
   onGive,
   onPutIn,
 }: ItemDetailPanelProps) {
+  // Hooks must be called unconditionally — pass item?.id (undefined when null)
+  // which is already enabled-guarded inside useItemFacets.
+  const itemFacetsQuery = useItemFacets(item?.id);
+  const facetsQuery = useFacets();
+  const tiersQuery = useQualityTiers();
+
+  const [attachOpen, setAttachOpen] = useState(false);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -69,16 +83,26 @@ export function ItemDetailPanel({
         className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md"
       >
         {item ? (
-          <ItemContent
-            item={item}
-            facetLabels={facetLabels}
-            isEquipped={isEquipped}
-            onWear={onWear}
-            onRemove={onRemove}
-            onDrop={onDrop}
-            onGive={onGive}
-            onPutIn={onPutIn}
-          />
+          <>
+            <ItemContent
+              item={item}
+              itemFacetsQuery={itemFacetsQuery}
+              facetsQuery={facetsQuery}
+              tiersQuery={tiersQuery}
+              isEquipped={isEquipped}
+              onWear={onWear}
+              onRemove={onRemove}
+              onDrop={onDrop}
+              onGive={onGive}
+              onPutIn={onPutIn}
+              onAttachFacet={() => setAttachOpen(true)}
+            />
+            <AttachFacetDialog
+              open={attachOpen}
+              onOpenChange={setAttachOpen}
+              itemInstanceId={item.id}
+            />
+          </>
         ) : (
           <SheetHeader className="p-6">
             <SheetTitle>No item selected</SheetTitle>
@@ -90,31 +114,75 @@ export function ItemDetailPanel({
   );
 }
 
+interface ItemFacetRow {
+  id: number;
+  item_instance: number;
+  facet: number;
+  attachment_quality_tier: number;
+  applied_by_account: number | null;
+  applied_at: string;
+}
+
+interface FacetRecord {
+  id: number;
+  name: string;
+  full_path: string;
+}
+
+interface QualityTierRecord {
+  id: number;
+  name: string;
+  color_hex: string;
+}
+
 interface ItemContentProps {
   item: ItemInstance;
-  facetLabels: string[];
+  itemFacetsQuery: { data?: ItemFacetRow[] };
+  facetsQuery: { data?: FacetRecord[] };
+  tiersQuery: { data?: QualityTierRecord[] };
   isEquipped: boolean;
   onWear?: (itemId: number) => void;
   onRemove?: (itemId: number) => void;
   onDrop?: (itemId: number) => void;
   onGive?: (itemId: number) => void;
   onPutIn?: (itemId: number) => void;
+  onAttachFacet: () => void;
 }
 
 function ItemContent({
   item,
-  facetLabels,
+  itemFacetsQuery,
+  facetsQuery,
+  tiersQuery,
   isEquipped,
   onWear,
   onRemove,
   onDrop,
   onGive,
   onPutIn,
+  onAttachFacet,
 }: ItemContentProps) {
   const tier = item.quality_tier;
   const tierColor = tier?.color_hex || '';
   const tintedBackground = tierColor ? `${tierColor}20` : undefined;
   const initial = item.display_name.trim().charAt(0).toUpperCase() || '?';
+
+  const removeMutation = useRemoveItemFacet(item.id);
+
+  const liveFacets = itemFacetsQuery.data ?? [];
+  const facetMap = new Map<number, FacetRecord>((facetsQuery.data ?? []).map((f) => [f.id, f]));
+  const tierMap = new Map<number, QualityTierRecord>((tiersQuery.data ?? []).map((t) => [t.id, t]));
+
+  function handleRemoveFacet(rowId: number) {
+    removeMutation.mutate(rowId, {
+      onSuccess: () => {
+        toast.success('Facet removed.');
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to remove facet.');
+      },
+    });
+  }
 
   return (
     <>
@@ -172,20 +240,41 @@ function ItemContent({
 
         <StatsGrid item={item} />
 
-        {facetLabels.length > 0 && (
+        {liveFacets.length > 0 && (
           <div className="flex flex-col gap-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Facets
             </h4>
             <div className="flex flex-wrap gap-1.5">
-              {facetLabels.map((label) => (
-                <span
-                  key={label}
-                  className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  {label}
-                </span>
-              ))}
+              {liveFacets.map((row) => {
+                const facetRecord = facetMap.get(row.facet);
+                const facetLabel = facetRecord?.full_path ?? `Facet #${row.facet}`;
+                const tierRecord = tierMap.get(row.attachment_quality_tier);
+                const dotColor = tierRecord?.color_hex;
+                return (
+                  <span
+                    key={row.id}
+                    className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {dotColor && (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                    )}
+                    {facetLabel}
+                    <button
+                      type="button"
+                      aria-label={`Remove facet ${row.facet}`}
+                      onClick={() => handleRemoveFacet(row.id)}
+                      className="ml-0.5 opacity-60 hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}
@@ -213,6 +302,10 @@ function ItemContent({
           <Button size="sm" variant="outline" onClick={() => onPutIn?.(item.id)}>
             <Package className="mr-1.5 h-3.5 w-3.5" />
             Put in
+          </Button>
+          <Button size="sm" variant="outline" onClick={onAttachFacet}>
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            Attach Facet
           </Button>
         </div>
       </div>
