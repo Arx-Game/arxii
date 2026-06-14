@@ -8,6 +8,7 @@ from world.codex.models import CharacterCodexKnowledge, CodexEntry, PathCodexGra
 from world.magic.constants import MagicMilestoneKind, MilestoneDiscoveryTier
 from world.magic.factories import seed_magic_progression
 from world.magic.models import MagicProgressionMilestone
+from world.magic.services.progression_dashboard import build_progression_dashboard
 from world.roster.factories import RosterEntryFactory
 
 
@@ -80,8 +81,6 @@ class SeedMagicProgressionTests(TestCase):
 
     def test_e2e_dashboard_reveal(self):
         """Grant → knowledge → dashboard reveal: full end-to-end path."""
-        from world.magic.services.progression_dashboard import build_progression_dashboard
-
         seed_magic_progression()
 
         # Build a sheet with a resolving roster_entry (mirrors reference test pattern).
@@ -120,3 +119,8 @@ class SeedMagicProgressionTests(TestCase):
 
         tier_by_kind2 = {mv.kind: mv.tier for mv in prospect_view2.milestones}
         assert tier_by_kind2.get(MagicMilestoneKind.THREAD_WEAVING) == MilestoneDiscoveryTier.KNOWN
+        assert (
+            tier_by_kind2[MagicMilestoneKind.TECHNIQUE_DEVELOPMENT] == MilestoneDiscoveryTier.KNOWN
+        )
+        assert tier_by_kind2[MagicMilestoneKind.ANIMA_RITUAL] == MilestoneDiscoveryTier.KNOWN
+        assert prospect_view2.has_undiscovered is False
