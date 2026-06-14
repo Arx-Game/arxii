@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("items", "0010_mantle_mantlelevelclearance_mantleleveldefinition_and_more"),
     ]

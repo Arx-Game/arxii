@@ -54,9 +54,7 @@ def _codex_entry_learned(sheet: CharacterSheet, entry_id: int) -> bool:
     ).exists()
 
 
-def record_mantle_clearances(
-    sheet: CharacterSheet, mantle: Mantle
-) -> list[MantleLevelClearance]:
+def record_mantle_clearances(sheet: CharacterSheet, mantle: Mantle) -> list[MantleLevelClearance]:
     """Idempotently record codex-gated mantle clearances for ``sheet``.
 
     Walks ``mantle.level_defs`` in level order. For each level not yet cleared,
@@ -68,9 +66,9 @@ def record_mantle_clearances(
     from world.items.models import MantleLevelClearance  # noqa: PLC0415
 
     already_cleared = set(
-        MantleLevelClearance.objects.filter(
-            character_sheet=sheet, mantle=mantle
-        ).values_list("level", flat=True)
+        MantleLevelClearance.objects.filter(character_sheet=sheet, mantle=mantle).values_list(
+            "level", flat=True
+        )
     )
     created: list[MantleLevelClearance] = []
     for level_def in mantle.level_defs.order_by("level"):

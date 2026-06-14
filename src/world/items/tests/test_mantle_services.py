@@ -141,6 +141,4 @@ class CharacterMantleClearanceHandlerTests(TestCase):
 
     def test_handler_zero_for_uncleared_mantle(self) -> None:
         other_mantle = MantleFactory()
-        self.assertEqual(
-            self.character.mantle_clearances.max_cleared_level(other_mantle), 0
-        )
+        self.assertEqual(self.character.mantle_clearances.max_cleared_level(other_mantle), 0)

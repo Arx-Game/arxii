@@ -98,11 +98,13 @@ def societies_for_scene(scene: Scene) -> list[Society]:
     is relevant. Returns ``[]`` when the location, its RoomProfile, its area, or
     the area's realm cannot be resolved.
     """
-    location = getattr(scene, "location", None)
+    location = getattr(scene, "location", None)  # noqa: GETATTR_LITERAL
     if location is None:
         return []
 
-    profile = getattr(location, "room_profile", None)
+    # room_profile is a reverse OneToOne; its accessor raises RelatedObjectDoesNotExist
+    # (a subclass of AttributeError) when absent, so getattr-with-default is the idiom.
+    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
     if profile is None:
         return []
 
