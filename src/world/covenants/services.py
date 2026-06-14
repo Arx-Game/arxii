@@ -45,6 +45,21 @@ MINIMUM_FOUNDERS = 2
 _COVENANT_NAME_UNIQUE_MARKER = "name"  # substring in DB integrity error for name uniqueness
 
 
+def _invalidate_role_caches(character_sheet: CharacterSheet) -> None:
+    """Bust the character's thread-handler grant cache after an engagement change.
+
+    ``CharacterThreadHandler.passive_capability_grants()`` (#751) caches the
+    engaged-role-gated CAPABILITY_GRANT set on the long-lived, idmapper-cached
+    Character typeclass instance. Engaging/disengaging a covenant role changes
+    that set, so the handler must be invalidated or role powers go stale.
+
+    Resolves the character via the same ``character_sheet.character`` reverse
+    relation the sibling ``.covenant_roles.invalidate()`` calls use throughout
+    this module — an engaged membership always has a resolved typeclass.
+    """
+    character_sheet.character.threads.invalidate()
+
+
 @transaction.atomic
 def create_covenant(
     *,
@@ -137,6 +152,7 @@ def change_role(
         covenant_role=new_role,
     )
     membership.character_sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(membership.character_sheet)
     membership.covenant.member_roster.invalidate()
     return new_row
 
@@ -164,6 +180,7 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
     for sheet_id in affected_sheet_ids:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
         sheet.character.covenant_roles.invalidate()
+        _invalidate_role_caches(sheet)
     covenant.member_roster.invalidate()
 
 
@@ -194,6 +211,7 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.left_at = timezone.now()
     assignment.save(update_fields=["engaged", "left_at"])
     assignment.character_sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(assignment.character_sheet)
     assignment.covenant.member_roster.invalidate()
 
 
@@ -221,6 +239,7 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     membership.engaged = True
     membership.save(update_fields=["engaged"])
     membership.character_sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(membership.character_sheet)
 
 
 @transaction.atomic
@@ -231,6 +250,7 @@ def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     membership.engaged = False
     membership.save(update_fields=["engaged"])
     membership.character_sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(membership.character_sheet)
 
 
 @transaction.atomic
@@ -254,6 +274,7 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
         row.engaged = False
         row.save(update_fields=["engaged"])
     character_sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(character_sheet)
 
 
 def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
@@ -451,6 +472,7 @@ def stand_down_battle_covenant(*, covenant: Covenant) -> None:
         m.engaged = False
         m.save(update_fields=["engaged"])
         m.character_sheet.character.covenant_roles.invalidate()
+        _invalidate_role_caches(m.character_sheet)
 
 
 def _emit_rise_message(covenant: Covenant) -> None:

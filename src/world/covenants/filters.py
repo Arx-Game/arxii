@@ -13,11 +13,16 @@ from world.covenants.models import (
 
 
 class CovenantRoleFilter(django_filters.FilterSet):
-    """Filter covenant roles by covenant type."""
+    """Filter covenant roles by covenant type and parent role.
+
+    ``parent_role`` lets the promotion UI fetch a role's sub-roles directly,
+    e.g. ``?parent_role=<id>`` returns the woven-resonance sub-roles a member
+    of that parent role may be promoted into.
+    """
 
     class Meta:
         model = CovenantRole
-        fields = ["covenant_type"]
+        fields = ["covenant_type", "parent_role"]
 
 
 class CharacterCovenantRoleFilter(django_filters.FilterSet):

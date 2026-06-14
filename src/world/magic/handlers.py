@@ -139,9 +139,80 @@ class CharacterThreadHandler:
             total += row.vital_bonus_amount * multiplier
         return total
 
+    def passive_capability_grants(self) -> set[int]:
+        """Return CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+
+        Thin accessor over the per-handler cached grant set
+        (``_passive_capability_grants_cache``). Cleared by ``invalidate()``
+        alongside ``_all`` so a sweep over many techniques reuses one memoized
+        result (one set of queries per character per request, not per
+        requirement).
+        """
+        return self._passive_capability_grants_cache
+
+    @cached_property
+    def _passive_capability_grants_cache(self) -> set[int]:
+        """Compute CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+
+        Derive-on-read mirror of ``passive_vital_bonuses``. For COVENANT_ROLE
+        threads the grant only applies while the character holds an active,
+        *engaged* CharacterCovenantRole for that role (Slice A §3.6 / #751).
+        Other thread kinds always pass (anchor-in-scope via PROTECT — see
+        ``passive_vital_bonuses``). Single batched query; no N+1.
+        """
+        threads = self._all
+        if not threads:
+            return set()
+
+        threads_by_key: dict[tuple[str, int], list[Thread]] = {}
+        for t in threads:
+            threads_by_key.setdefault((t.target_kind, t.resonance_id), []).append(t)
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        q = Q()
+        for target_kind, resonance_id in threads_by_key:
+            q |= Q(target_kind=target_kind, resonance_id=resonance_id)
+
+        effects = (
+            ThreadPullEffect.objects.filter(
+                q,
+                tier=0,
+                effect_kind=EffectKind.CAPABILITY_GRANT,
+            )
+            .exclude(capability_grant__isnull=True)
+            .select_related("capability_grant")
+        )
+
+        from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+        engaged_role_ids = set(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=self.character.sheet_data,
+                engaged=True,
+                left_at__isnull=True,
+            ).values_list("covenant_role_id", flat=True)
+        )
+
+        granted: set[int] = set()
+        for row in effects:
+            candidates = threads_by_key.get((row.target_kind, row.resonance_id), [])
+            for t in candidates:
+                if row.min_thread_level > t.level:
+                    continue
+                if (
+                    row.target_kind == TargetKind.COVENANT_ROLE
+                    and t.target_covenant_role_id not in engaged_role_ids
+                ):
+                    continue
+                granted.add(row.capability_grant_id)
+                break  # one qualifying thread suffices for this effect
+        return granted
+
     def invalidate(self) -> None:
         """Clear the cached thread list. Called by mutation services."""
         self.__dict__.pop("_all", None)
+        self.__dict__.pop("_passive_capability_grants_cache", None)
 
 
 class CharacterResonanceHandler:
