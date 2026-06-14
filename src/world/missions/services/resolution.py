@@ -66,6 +66,7 @@ from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
 from world.checks.services import perform_check
+from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, PendingResolution, ResolutionContext
 from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
@@ -387,6 +388,47 @@ def _route_next_node(
     return route.target_node, None
 
 
+_MIN_ROULETTE_FACES = 2  # a wheel needs at least two faces to be worth spinning
+
+
+def _emit_candidate_roulette(
+    character: ObjectDB,
+    route: MissionOptionRoute,
+    chosen: MissionOptionRouteCandidate,
+    title: str,
+) -> None:
+    """Reveal a random-set draw on the roller's roulette wheel (#933).
+
+    Faces are the candidates that resolve to a consequence (the candidate's
+    own, else the route's), weighted by each candidate's selection weight; the
+    wheel lands on the chosen candidate. Reuses the #924 theater seam, which
+    fires only when a face carries real stakes (character_loss / theater) — so
+    routine random sets stay quiet, and the canonical mission-failure reveal
+    (Death flickering to Imprisonment) lights up.
+    """
+    faces: list[Consequence] = []
+    selected: Consequence | None = None
+    for candidate in route.candidates.select_related("consequence__outcome_tier").all():
+        conseq = candidate.consequence or route.consequence
+        if conseq is None or conseq.outcome_tier_id is None:
+            continue  # no tier to render a face for; skip it
+        face = Consequence(
+            outcome_tier=conseq.outcome_tier,
+            label=conseq.label,
+            weight=candidate.weight,
+            character_loss=conseq.character_loss,
+            theater=conseq.theater,
+        )
+        faces.append(face)
+        if candidate.pk == chosen.pk:
+            selected = face
+    if selected is None or len(faces) < _MIN_ROULETTE_FACES:  # nothing to spin
+        return
+    maybe_emit_resolution_theater(
+        character=character, title=title, consequences=faces, selected=selected
+    )
+
+
 def _spawn_mission_instance_room(
     instance: MissionInstance, option: MissionOption, character: ObjectDB
 ) -> None:
@@ -551,6 +593,8 @@ def resolve_option(  # noqa: PLR0913
     # (it always advances, so it is never the terminal route).
     if candidate is not None:
         emit_candidate_rewards(instance, candidate, deed)
+        # #933: spin the candidate draw on the roller's wheel (theater self-gates).
+        _emit_candidate_roulette(character, route, candidate, instance.template.name)
     if is_terminal:
         # Phase 5b.0: emit the terminal route's authored reward lines. The gate
         # is the local is_terminal flag, set ABOVE the deed.create

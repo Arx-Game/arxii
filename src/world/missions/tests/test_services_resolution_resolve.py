@@ -209,6 +209,59 @@ class ResolveCheckOptionTests(TestCase):
             deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.assertIsNone(deed.route_candidate)
 
+    def _random_route(self, outcome):
+        return MissionOptionRouteFactory(
+            option=self.check_option,
+            outcome_tier=outcome,
+            target_node=None,
+            is_random_set=True,
+        )
+
+    def test_random_set_emits_roulette_with_candidate_faces(self) -> None:
+        # #933: the wheel faces are the candidate consequences, weighted by the
+        # candidate's selection weight, landing on the chosen candidate.
+        outcome = CheckOutcomeFactory(name="RouletteFail", success_level=-1)
+        route = self._random_route(outcome)
+        death = ConsequenceFactory(outcome_tier=outcome, label="Death", character_loss=True)
+        prison = ConsequenceFactory(outcome_tier=outcome, label="Imprisonment")
+        MissionOptionRouteCandidateFactory(
+            route=route, target_node=self.node_a, weight=3, consequence=death
+        )
+        MissionOptionRouteCandidateFactory(
+            route=route, target_node=self.node_b, weight=1, consequence=prison
+        )
+        theater = "world.missions.services.resolution.maybe_emit_resolution_theater"
+        with force_check_outcome(outcome), patch(theater) as emit:
+            deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
+
+        emit.assert_called_once()
+        kwargs = emit.call_args.kwargs
+        faces = kwargs["consequences"]
+        self.assertEqual({f.label for f in faces}, {"Death", "Imprisonment"})
+        self.assertEqual({f.weight for f in faces}, {3, 1})  # candidate weights
+        self.assertEqual(kwargs["selected"].label, deed.route_candidate.consequence.label)
+
+    def test_single_candidate_does_not_spin(self) -> None:
+        outcome = CheckOutcomeFactory(name="RouletteSolo", success_level=-1)
+        route = self._random_route(outcome)
+        MissionOptionRouteCandidateFactory(
+            route=route,
+            target_node=self.node_a,
+            weight=1,
+            consequence=ConsequenceFactory(outcome_tier=outcome),
+        )
+        theater = "world.missions.services.resolution.maybe_emit_resolution_theater"
+        with force_check_outcome(outcome), patch(theater) as emit:
+            resolve_option(self.instance, self.entry, self.check_option, self.actor)
+
+        emit.assert_not_called()
+
+    def test_non_random_route_does_not_spin(self) -> None:
+        theater = "world.missions.services.resolution.maybe_emit_resolution_theater"
+        with force_check_outcome(self.success), patch(theater) as emit:
+            resolve_option(self.instance, self.entry, self.check_option, self.actor)
+        emit.assert_not_called()
+
 
 class ResolveChallengeOptionTests(TestCase):
     """CHALLENGE option: approach check (or auto-success) → route on outcome.
