@@ -9,9 +9,7 @@ from world.areas.positioning.constants import PositionKind
 class Position(SharedMemoryModel):
     """A named tactical region within a room. The node of the positioning graph."""
 
-    room = models.ForeignKey(
-        "objects.ObjectDB", on_delete=models.CASCADE, related_name="positions"
-    )
+    room = models.ForeignKey("objects.ObjectDB", on_delete=models.CASCADE, related_name="positions")
     name = models.CharField(max_length=50)
     kind = models.CharField(
         max_length=20, choices=PositionKind.choices, default=PositionKind.FEATURE
@@ -55,9 +53,10 @@ class PositionEdge(SharedMemoryModel):
                 fields=["position_a", "position_b"], name="unique_position_edge"
             ),
             models.CheckConstraint(
-                check=Q(position_a__lt=F("position_b")), name="position_edge_canonical_order"
+                condition=Q(position_a__lt=F("position_b")), name="position_edge_canonical_order"
             ),
         ]
+        ordering = ["position_a", "position_b"]
 
     def clean(self) -> None:
         super().clean()
@@ -70,6 +69,13 @@ class PositionEdge(SharedMemoryModel):
             and self.position_a.room_id != self.position_b.room_id
         ):
             msg = "Both positions of an edge must be in the same room."
+            raise ValidationError(msg)
+        if (
+            self.position_a_id is not None
+            and self.position_b_id is not None
+            and self.position_a_id > self.position_b_id
+        ):
+            msg = "position_a must have a lower id than position_b (canonical order)."
             raise ValidationError(msg)
 
     def __str__(self) -> str:

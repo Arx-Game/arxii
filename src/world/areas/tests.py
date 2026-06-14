@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
-from evennia import create_object
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
@@ -433,9 +432,15 @@ class PayloadIntegrationTests(TestCase):
 
 
 class PositionModelTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.room = create_object("typeclasses.rooms.Room", key="Plaza", nohome=True)
+    def setUp(self):
+        self.room = ObjectDB.objects.create(
+            db_key="Plaza",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.room2 = ObjectDB.objects.create(
+            db_key="Alley",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
 
     def test_position_unique_per_room(self):
         Position.objects.create(room=self.room, name="ground", kind=PositionKind.PRIMARY)
@@ -449,8 +454,25 @@ class PositionModelTests(TestCase):
 
     def test_object_position_is_one_to_one(self):
         a = Position.objects.create(room=self.room, name="a_oto", kind=PositionKind.FEATURE)
-        obj = create_object("typeclasses.characters.Character", key="Pat", location=self.room)
+        obj = ObjectDB.objects.create(
+            db_key="Pat",
+            db_typeclass_path="typeclasses.characters.Character",
+            db_location=self.room,
+        )
         ObjectPosition.objects.create(objectdb=obj, position=a)
         b = Position.objects.create(room=self.room, name="b_oto", kind=PositionKind.FEATURE)
         with self.assertRaises(IntegrityError):
             ObjectPosition.objects.create(objectdb=obj, position=b)
+
+    def test_edge_rejects_cross_room(self):
+        a = Position.objects.create(room=self.room, name="north", kind=PositionKind.FEATURE)
+        b = Position.objects.create(room=self.room2, name="south", kind=PositionKind.FEATURE)
+        with self.assertRaises(ValidationError):
+            PositionEdge(position_a=a, position_b=b).full_clean()
+
+    def test_edge_rejects_wrong_canonical_order(self):
+        a = Position.objects.create(room=self.room, name="first", kind=PositionKind.FEATURE)
+        b = Position.objects.create(room=self.room, name="second", kind=PositionKind.FEATURE)
+        # Swap so that position_a_id > position_b_id (wrong canonical order)
+        with self.assertRaises(ValidationError):
+            PositionEdge(position_a=b, position_b=a).full_clean()
