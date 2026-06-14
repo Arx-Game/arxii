@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.magic.constants import (
+    ANCHOR_CAP_COVENANT_DAYS_DIVISOR,
+    ANCHOR_CAP_COVENANT_LEGEND_DIVISOR,
+    ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER,
     ANCHOR_CAP_FACET_DIVISOR,
     ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE,
     TargetKind,
@@ -113,9 +116,10 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
       the anchor cap. path_cap remains the absolute ceiling on Thread.level.
     - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
       path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
-    - COVENANT_ROLE: max(covenant.level across the character's all-time CharacterCovenantRole
-      rows for this role) × 10. Cap is a persistent character property, independent of
-      current engagement.
+    - COVENANT_ROLE: max_covenant_level × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER (covenant
+      component) + legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR (personal
+      deeds) + days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR (personal tenure).
+      Use-based (issue #517): personal investment adds on top of the covenant floor.
     - MANTLE: max cleared mantle level × 10 (Spec D §6.2). Cap grows as the
       character clears higher mantle ranks via codex research.
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
@@ -139,9 +143,20 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
             return min(lifetime // ANCHOR_CAP_FACET_DIVISOR, hard_max)
         case TargetKind.COVENANT_ROLE:
+            from world.societies.services import get_character_role_legend  # noqa: PLC0415
+
             role = thread.target_covenant_role
-            max_level = thread.owner.character.covenant_roles.max_covenant_level_for_role(role)
-            return max_level * 10
+            handler = thread.owner.character.covenant_roles
+            covenant_component = (
+                handler.max_covenant_level_for_role(role) * ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER
+            )
+            legend = get_character_role_legend(character_sheet=thread.owner, role=role)
+            days = handler.days_held_in_role(role)
+            return (
+                covenant_component
+                + legend // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR
+                + days // ANCHOR_CAP_COVENANT_DAYS_DIVISOR
+            )
         case TargetKind.MANTLE:
             mantle = thread.target_mantle
             max_level = thread.owner.character.mantle_clearances.max_cleared_level(mantle)

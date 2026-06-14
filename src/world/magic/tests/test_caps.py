@@ -56,10 +56,12 @@ class AnchorCapTests(TestCase):
 
 
 class CovenantRoleAnchorCapTests(TestCase):
-    """COVENANT_ROLE anchor cap reads from membership covenant.level (Slice A §3.5).
+    """COVENANT_ROLE anchor cap: additive formula (issue #517).
 
-    Cap is persistent (independent of engagement). max(covenant.level across all
-    CCR rows, active or historical) × 10.
+    covenant_component (max_covenant_level × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER)
+    + legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR (personal deeds)
+    + days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR (personal tenure).
+    Cap is persistent (independent of engagement).
     """
 
     def test_returns_zero_when_no_membership(self) -> None:
@@ -89,6 +91,43 @@ class CovenantRoleAnchorCapTests(TestCase):
             target_trait=None,
         )
         self.assertEqual(compute_anchor_cap(thread), 70)
+
+    def test_additive_personal_components(self) -> None:
+        """Legend-in-role and tenure add cap points on top of the covenant component."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.scenes.factories import PersonaFactory
+        from world.societies.factories import CovenantLegendCreditFactory, LegendEntryFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE, level=3)  # 3x10 = 30
+        ccr = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=covenant, covenant_role=role
+        )
+        ccr.joined_at = timezone.now() - timedelta(days=365)  # 365 // 30 = 12
+        ccr.save(update_fields=["joined_at"])
+        entry = LegendEntryFactory(
+            persona=PersonaFactory(character_sheet=sheet), base_value=500, is_active=True
+        )  # 500 // 50 = 10
+        CovenantLegendCreditFactory(entry=entry, covenant=covenant)
+
+        thread = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            target_trait=None,
+        )
+        # 30 (covenant) + 10 (legend) + 12 (tenure) = 52
+        self.assertEqual(compute_anchor_cap(thread), 52)
 
     def test_independent_of_engagement(self) -> None:
         """Cap is a persistent property; engagement does not change it."""
