@@ -15857,9 +15857,9 @@ export interface components {
       is_random_set?: boolean;
       /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
       consequence?: number | null;
-      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). WIRED by #885 — the resolution engine surfaces it as the actor's STORY message (a random-set route prefers the chosen candidate's outcome_text, #941). */
       outcome_text?: string;
-      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
@@ -15898,9 +15898,9 @@ export interface components {
       is_random_set?: boolean;
       /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
       consequence?: number | null;
-      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). WIRED by #885 — the resolution engine surfaces it as the actor's STORY message (a random-set route prefers the chosen candidate's outcome_text, #941). */
       outcome_text?: string;
-      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
     };
     /**
@@ -18683,9 +18683,9 @@ export interface components {
       is_random_set?: boolean;
       /** @description Authored structured effect applied when this route's outcome tier is rolled; null = pure routing/no effect. */
       consequence?: number | null;
-      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). STORED BUT UNCONSUMED in Phase B — the resolution engine doesn't surface outcome_text today; Phase D wires it into the player message. */
+      /** @description Player-facing outcome text shown when this route's tier is rolled (design §8.3). WIRED by #885 — the resolution engine surfaces it as the actor's STORY message (a random-set route prefers the chosen candidate's outcome_text, #941). */
       outcome_text?: string;
-      /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
+      /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
     };
     /**
