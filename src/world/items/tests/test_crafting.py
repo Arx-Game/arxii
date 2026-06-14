@@ -29,3 +29,15 @@ class QualityTierForScoreTests(TestCase):
         from world.items.models import QualityTier
 
         self.assertEqual(QualityTier.for_score(9999), self.master)
+
+
+class FacetCraftingConfigTests(TestCase):
+    def test_get_is_lazy_singleton(self) -> None:
+        from world.items.services.crafting import get_facet_crafting_config
+
+        cfg1 = get_facet_crafting_config()
+        cfg2 = get_facet_crafting_config()
+        self.assertEqual(cfg1.pk, 1)
+        self.assertEqual(cfg1.pk, cfg2.pk)
+        self.assertIsNone(cfg1.check_type)
+        self.assertGreaterEqual(cfg1.min_success_level, 1)
