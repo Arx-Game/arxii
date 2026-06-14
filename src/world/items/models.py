@@ -953,6 +953,33 @@ class FashionPresentation(SharedMemoryModel):
         return f"FashionPresentation({self.presenter_id}@{self.event_id})"
 
 
+class FacetVogueMomentum(SharedMemoryModel):
+    """Accumulating popularity of a facet within a society (#514).
+
+    Bumped by acclaimed presentations (for the facets actually worn);
+    cron-decayed. Read by the seasonal trendsetter ceremony to choose a
+    society's new in-vogue facets.
+    """
+
+    society = models.ForeignKey(
+        "societies.Society", on_delete=models.CASCADE, related_name="facet_momentum",
+    )
+    facet = models.ForeignKey(
+        "magic.Facet", on_delete=models.CASCADE, related_name="vogue_momentum",
+    )
+    points = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["society", "facet"], name="unique_facet_momentum"),
+        ]
+        ordering = ["-points"]
+
+    def __str__(self) -> str:
+        return f"FacetVogueMomentum({self.society_id}/{self.facet_id}={self.points})"
+
+
 class ItemCheckModifier(SharedMemoryModel):
     """Authored check modifier contributed by an item template when equipped.
 

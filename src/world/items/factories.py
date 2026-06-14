@@ -5,6 +5,7 @@ import factory
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.models import (
     EquippedItem,
+    FacetVogueMomentum,
     FashionPresentation,
     FashionStyle,
     FashionStyleBonus,
@@ -213,6 +214,17 @@ class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     mantle = factory.SubFactory(MantleFactory)
     level = 1
+
+
+class FacetVogueMomentumFactory(factory.django.DjangoModelFactory):
+    """Factory for FacetVogueMomentum (#514)."""
+
+    class Meta:
+        model = FacetVogueMomentum
+
+    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+    points = 0
 
 
 class FashionPresentationFactory(factory.django.DjangoModelFactory):
