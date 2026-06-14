@@ -12098,6 +12098,7 @@ export interface components {
       clash_id?: number | null;
       clash_action_slot?: string | null;
       action_slot?: string | null;
+      position_id?: number | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
