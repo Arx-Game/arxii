@@ -36,20 +36,17 @@ if TYPE_CHECKING:
 _RANSOM_FLOOR_COPPERS = 100_000
 
 
-def _estimate_annual_income(captive: CharacterSheet) -> int | None:  # noqa: ARG001
-    """A captive's annual income in coppers, for sizing a ~1-year ransom.
+def default_ransom_amount(captive: CharacterSheet) -> int:  # noqa: ARG001
+    """The captor's default demand: ~1 year of the captive's income.
 
-    PLACEHOLDER seam (#931): returns None until the income ledger
-    (professions/businesses) exists — read it here when it does, and the
-    family-org income as a secondary fallback.
+    PLACEHOLDER seam (#931): until the income ledger (professions/businesses)
+    exists there is nothing to read, so every captive defaults to the flat
+    floor. When it lands, compute ~1 year of the captive's income here (with
+    the family-org income as a secondary fallback) and keep the floor as the
+    final fallback. A GM may always override the amount at demand time.
     """
-    return None
-
-
-def default_ransom_amount(captive: CharacterSheet) -> int:
-    """The captor's default demand: ~1 year of income, else the flat floor."""
-    income = _estimate_annual_income(captive)
-    return income if income is not None else _RANSOM_FLOOR_COPPERS
+    # TODO(#931): read the income ledger here once professions/businesses ship.
+    return _RANSOM_FLOOR_COPPERS
 
 
 def demand_ransom(
