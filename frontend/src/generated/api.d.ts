@@ -2961,6 +2961,65 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/covenants/{id}/powers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/covenants/covenants/{id}/powers/
+     *
+     *     Return the covenant's available rites (with per-covenant gate flags) and
+     *     per-member passive role powers in one payload, for the React detail page.
+     *
+     *     Visibility is enforced by ``get_object()`` (the membership-scoped
+     *     ``get_queryset``): a non-staff user with no active membership gets 404.
+     *     Deliberately does NOT serialize the Covenant via ``CovenantSerializer``
+     *     (that touches the Postgres-only legend materialized view).
+     */
+    get: operations['covenants_covenants_powers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/covenants/{id}/stand_down/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/covenants/{id}/stand_down/
+     *
+     *     Stand a risen STANDING battle covenant back down to dormant, clearing
+     *     engagement on its members. The "rise" path is ritual-fired; this is the
+     *     plain inverse the covenant detail UI POSTs to.
+     *
+     *     Visibility/membership is enforced by ``get_object()`` (the
+     *     membership-scoped ``get_queryset``): a non-staff user with no active
+     *     membership gets 404. Returns 400 with a ``detail`` message when the
+     *     target is not a standing battle covenant.
+     *
+     *     Returns a minimal confirmation dict rather than ``CovenantSerializer``
+     *     (which touches the Postgres-only legend materialized view); the
+     *     frontend re-fetches the covenant detail separately.
+     */
+    post: operations['covenants_covenants_stand_down_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/gear-compatibilities/': {
     parameters: {
       query?: never;
@@ -12180,6 +12239,12 @@ export interface components {
       readonly effective_cost: number;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
     };
+    /**
+     * @description * `standing` - Standing (unit or banner — can rise again)
+     *     * `campaign` - Campaign (one-time event — dissolves when done)
+     * @enum {string}
+     */
+    BattleBindingEnum: 'standing' | 'campaign';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -13520,6 +13585,16 @@ export interface components {
       /** Format: date-time */
       readonly dissolved_at: string | null;
       readonly is_active: boolean;
+      /** @description Battle covenants only: True when a STANDING covenant has stood down and awaits a 'call the banners' rise ritual. A dormant covenant cannot be engaged. Never True for DURANCE or CAMPAIGN covenants. */
+      readonly is_dormant: boolean;
+      /**
+       * @description Battle covenants only (Slice E). STANDING can rise again; CAMPAIGN dissolves when its objective concludes. Empty for DURANCE covenants.
+       *
+       *     * `standing` - Standing (unit or banner — can rise again)
+       *     * `campaign` - Campaign (one-time event — dissolves when done)
+       */
+      readonly battle_binding: components['schemas']['BattleBindingEnum'];
+      readonly battle_binding_display: string;
       readonly member_count: number;
       readonly legend_total: number;
       readonly storylines: number[];
@@ -13579,6 +13654,8 @@ export interface components {
       readonly speed_rank: number;
       /** @description Player-facing description of the role's identity and combat style. */
       readonly description: string;
+      /** @description Null for primary roles. Set for sub-roles. */
+      readonly parent_role: number | null;
     };
     /**
      * @description * `sword` - Sword
@@ -25916,6 +25993,48 @@ export interface operations {
       };
     };
   };
+  covenants_covenants_powers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Covenant'];
+        };
+      };
+    };
+  };
+  covenants_covenants_stand_down_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Covenant'];
+        };
+      };
+    };
+  };
   covenants_gear_compatibilities_list: {
     parameters: {
       query?: {
@@ -26088,6 +26207,7 @@ export interface operations {
          *     * `battle` - Covenant of Battle
          */
         covenant_type?: 'battle' | 'durance';
+        parent_role?: number;
       };
       header?: never;
       path?: never;

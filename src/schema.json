@@ -4074,6 +4074,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/Covenant'
           description: ''
+  /api/covenants/covenants/{id}/powers/:
+    get:
+      operationId: covenants_covenants_powers_retrieve
+      description: |-
+        GET /api/covenants/covenants/{id}/powers/
+
+        Return the covenant's available rites (with per-covenant gate flags) and
+        per-member passive role powers in one payload, for the React detail page.
+
+        Visibility is enforced by ``get_object()`` (the membership-scoped
+        ``get_queryset``): a non-staff user with no active membership gets 404.
+        Deliberately does NOT serialize the Covenant via ``CovenantSerializer``
+        (that touches the Postgres-only legend materialized view).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Covenant'
+          description: ''
+  /api/covenants/covenants/{id}/stand_down/:
+    post:
+      operationId: covenants_covenants_stand_down_create
+      description: |-
+        POST /api/covenants/covenants/{id}/stand_down/
+
+        Stand a risen STANDING battle covenant back down to dormant, clearing
+        engagement on its members. The "rise" path is ritual-fired; this is the
+        plain inverse the covenant detail UI POSTs to.
+
+        Visibility/membership is enforced by ``get_object()`` (the
+        membership-scoped ``get_queryset``): a non-staff user with no active
+        membership gets 404. Returns 400 with a ``detail`` message when the
+        target is not a standing battle covenant.
+
+        Returns a minimal confirmation dict rather than ``CovenantSerializer``
+        (which touches the Postgres-only legend materialized view); the
+        frontend re-fetches the covenant detail separately.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Covenant'
+          description: ''
   /api/covenants/gear-compatibilities/:
     get:
       operationId: covenants_gear_compatibilities_list
@@ -4283,6 +4348,10 @@ paths:
 
           * `durance` - Covenant of the Durance
           * `battle` - Covenant of Battle
+      - in: query
+        name: parent_role
+        schema:
+          type: integer
       tags:
       - covenants
       security:
@@ -20833,6 +20902,14 @@ components:
       - soulfray_warning
       - technique_id
       - technique_name
+    BattleBindingEnum:
+      enum:
+      - standing
+      - campaign
+      type: string
+      description: |-
+        * `standing` - Standing (unit or banner — can rise again)
+        * `campaign` - Campaign (one-time event — dissolves when done)
     Beat:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -23777,6 +23854,24 @@ components:
         is_active:
           type: boolean
           readOnly: true
+        is_dormant:
+          type: boolean
+          readOnly: true
+          description: 'Battle covenants only: True when a STANDING covenant has stood
+            down and awaits a ''call the banners'' rise ritual. A dormant covenant
+            cannot be engaged. Never True for DURANCE or CAMPAIGN covenants.'
+        battle_binding:
+          allOf:
+          - $ref: '#/components/schemas/BattleBindingEnum'
+          readOnly: true
+          description: |-
+            Battle covenants only (Slice E). STANDING can rise again; CAMPAIGN dissolves when its objective concludes. Empty for DURANCE covenants.
+
+            * `standing` - Standing (unit or banner — can rise again)
+            * `campaign` - Campaign (one-time event — dissolves when done)
+        battle_binding_display:
+          type: string
+          readOnly: true
         member_count:
           type: integer
           readOnly: true
@@ -23789,12 +23884,15 @@ components:
             type: integer
           readOnly: true
       required:
+      - battle_binding
+      - battle_binding_display
       - covenant_type
       - covenant_type_display
       - dissolved_at
       - formed_at
       - id
       - is_active
+      - is_dormant
       - legend_total
       - level
       - member_count
@@ -23925,6 +24023,11 @@ components:
           readOnly: true
           description: Player-facing description of the role's identity and combat
             style.
+        parent_role:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Null for primary roles. Set for sub-roles.
       required:
       - archetype
       - archetype_display
@@ -23933,6 +24036,7 @@ components:
       - description
       - id
       - name
+      - parent_role
       - slug
       - speed_rank
     CovenantRoleArchetypeEnum:

@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751) + dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -580,9 +580,16 @@ exercised in combat integration tests.
 
 This is deliberately **not** "every member is granted an identical castable
 power at covenant level N" (rejected as anti-individualization). Per-**role**
-unique castable techniques and tier-0 passives remain tracked separately in
-**#751** via the existing `Thread`-on-`COVENANT_ROLE` + `ThreadPullEffect`
-machinery.
+unique powers ship via the existing `Thread`-on-`COVENANT_ROLE` +
+`ThreadPullEffect` machinery (**#751**, delivered): the tier-0 passive
+application surface is `CharacterThreadHandler.passive_capability_grants()`
+(engagement-gated, derive-on-read), folded into the capability read in
+`world/conditions/services.py`; a reference per-`(role,resonance)` catalog is
+seeded by `wire_covenant_role_powers_catalog()`. Two holders of the same role
+anchoring different Resonances unlock different capabilities — the
+individualization lever. **#783** (delivered) folds condition-sourced stat
+buffs into `TraitHandler._get_stat_modifier`, so a rite buff now raises
+effective trait values and stat checks, not only the technique multiplier.
 
 ### Slice G — Use-based Thread mechanics
 
@@ -599,9 +606,13 @@ machinery.
   RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE / FACET into the same
   "in-action" model that Slice A added for COVENANT_ROLE. Project-wide
   Thread-discipline work, not Covenant-specific.
-- **Frontend UI (remaining)** — Battle covenant UI, group ability triggers,
-  covenant-Story linkage UI (Slice D). Covenant browser, engage/disengage
-  controls, and formation/induction flows landed in Slice B. (No
+- **Frontend UI (remaining)** — covenant-Story linkage UI (Slice D). Covenant
+  browser, engage/disengage controls, and formation/induction flows landed in
+  Slice B. Battle-covenant state (dormant/rise/stand-down), group-ability/rite
+  triggers, per-member role-power display, and the sub-role promotion dialog
+  landed in **#518** (`frontend/src/covenants/components/` +
+  `CovenantDetailPage`, backed by the `/powers/` + `/stand_down/` endpoints).
+  (No
   sworn-objective tracker — sworn_objective is intentionally free text;
   see the durable design decision above.)
 
@@ -638,7 +649,8 @@ machinery.
   "Covenants Slices A+B"); `seed-and-integration-tests.md` task 2Q
   authors the canonical CovenantRole seed set so combat resolution order
   becomes meaningful.
-- The "Frontend UI" bullet in Cross-cutting is partially delivered by Slice B
-  (covenant browser, engage/disengage, formation/induction ritual flow). What
-  remains: sworn-objective tracker, advanced dissolution flows, Battle covenant
-  UI, group ability triggers.
+- The "Frontend UI" bullet in Cross-cutting is delivered by Slice B (covenant
+  browser, engage/disengage, formation/induction ritual flow) plus **#518**
+  (battle-covenant state, group-ability/rite triggers, role-power display,
+  sub-role promotion). What remains: sworn-objective tracker, advanced
+  dissolution flows.

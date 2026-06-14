@@ -29,6 +29,10 @@ import {
 } from '@/covenants/queries';
 import { useRituals } from '@/rituals/queries';
 import { RitualSessionDraftDialog } from '@/rituals/components/RitualSessionDraftDialog';
+import { BattleStateBanner } from '@/covenants/components/BattleStateBanner';
+import { RitesPanel } from '@/covenants/components/RitesPanel';
+import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
+import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
 import type { CharacterCovenantRole } from '@/covenants/api';
 import type { RitualWithSchema, RitualInputSchema } from '@/rituals/types';
 
@@ -67,6 +71,7 @@ function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) 
   const engage = useEngageMembership(covenantId);
   const disengage = useDisengageMembership(covenantId);
   const isBusy = engage.isPending || disengage.isPending;
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
@@ -108,29 +113,40 @@ function MemberRow({ membership, isOwnMembership, covenantId }: MemberRowProps) 
       </div>
 
       {isOwnMembership && membership.is_active && (
-        <div className="shrink-0">
-          {membership.engaged ? (
-            <Button size="sm" variant="outline" onClick={handleDisengage} disabled={isBusy}>
-              {disengage.isPending ? 'Disengaging…' : 'Disengage'}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {membership.engaged ? (
+              <Button size="sm" variant="outline" onClick={handleDisengage} disabled={isBusy}>
+                {disengage.isPending ? 'Disengaging…' : 'Disengage'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleEngage}
+                disabled={isBusy || !membership.can_engage}
+                title={
+                  !membership.can_engage && membership.engage_blocked_reason
+                    ? membership.engage_blocked_reason
+                    : undefined
+                }
+              >
+                {engage.isPending ? 'Engaging…' : 'Engage'}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setPromoteOpen(true)}>
+              Promote
             </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleEngage}
-              disabled={isBusy || !membership.can_engage}
-              title={
-                !membership.can_engage && membership.engage_blocked_reason
-                  ? membership.engage_blocked_reason
-                  : undefined
-              }
-            >
-              {engage.isPending ? 'Engaging…' : 'Engage'}
-            </Button>
-          )}
+          </div>
           {!membership.can_engage && membership.engage_blocked_reason && !membership.engaged && (
-            <p className="mt-1 text-xs text-muted-foreground">{membership.engage_blocked_reason}</p>
+            <p className="text-xs text-muted-foreground">{membership.engage_blocked_reason}</p>
           )}
+          <PromoteRoleDialog
+            covenantId={covenantId}
+            membership={membership}
+            open={promoteOpen}
+            onOpenChange={setPromoteOpen}
+          />
         </div>
       )}
     </div>
@@ -153,7 +169,7 @@ function findInductionRitual(rituals: RitualWithSchema[]): RitualWithSchema | nu
 // Inner page
 // ---------------------------------------------------------------------------
 
-function CovenantDetailInner({ covenantId }: { covenantId: number }) {
+export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
   const navigate = useNavigate();
   const account = useSelector((state: RootState) => state.auth.account);
 
@@ -189,6 +205,13 @@ function CovenantDetailInner({ covenantId }: { covenantId: number }) {
 
   return (
     <div className="space-y-6">
+      {/* Battle-state banner (renders null for non-battle covenants) */}
+      <BattleStateBanner
+        covenant={covenant}
+        characterSheetId={characterSheetId}
+        isActiveMember={isActiveMember}
+      />
+
       {/* Covenant header */}
       <Card>
         <CardHeader className="pb-3">
@@ -249,6 +272,20 @@ function CovenantDetailInner({ covenantId }: { covenantId: number }) {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Covenant rites */}
+      <section>
+        <RitesPanel
+          covenantId={covenantId}
+          isActiveMember={isActiveMember}
+          characterSheetId={characterSheetId}
+        />
+      </section>
+
+      {/* Per-member passive role powers */}
+      <section>
+        <RolePowersPanel covenantId={covenantId} />
       </section>
 
       {/* Induction dialog */}
