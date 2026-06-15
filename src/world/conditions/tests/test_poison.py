@@ -70,3 +70,33 @@ class AcuteDotDamagesHealthTests(TestCase):
         tick_round_for_targets([self.target], timing="end")
         self.vitals.refresh_from_db()
         self.assertEqual(self.vitals.health, 90)
+
+
+class EnsurePoisonContentTests(TestCase):
+    def test_seeds_idempotently(self):
+        from world.conditions.constants import (
+            POISON_DAMAGE_TYPE_NAME,
+            POISONED_CONDITION_NAME,
+            SLOW_POISON_CONDITION_NAME,
+        )
+        from world.conditions.models import (
+            ConditionDamageOverTime,
+            ConditionTemplate,
+            DamageType,
+        )
+        from world.conditions.services import ensure_poison_content
+
+        ensure_poison_content()
+        ensure_poison_content()  # must not duplicate
+
+        self.assertEqual(DamageType.objects.filter(name=POISON_DAMAGE_TYPE_NAME).count(), 1)
+        acute = ConditionTemplate.objects.get(name=POISONED_CONDITION_NAME)
+        slow = ConditionTemplate.objects.get(name=SLOW_POISON_CONDITION_NAME)
+        self.assertTrue(acute.has_progression)
+        self.assertEqual(acute.stages.count(), 2)
+        self.assertTrue(
+            ConditionDamageOverTime.objects.filter(condition=acute, is_long_term=False).exists()
+        )
+        self.assertTrue(
+            ConditionDamageOverTime.objects.filter(condition=slow, is_long_term=True).exists()
+        )

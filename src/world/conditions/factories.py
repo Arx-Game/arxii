@@ -14,6 +14,7 @@ from flows.factories import (
 )
 from world.conditions.constants import (
     BLEED_OUT_CONDITION_NAME,
+    POISONED_CONDITION_NAME,
     UNCONSCIOUS_CONDITION_NAME,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -118,6 +119,21 @@ class BleedingOutConditionFactory(ConditionTemplateFactory):
 
     name = BLEED_OUT_CONDITION_NAME
     has_progression = True
+
+
+class PoisonedConditionFactory(ConditionTemplateFactory):
+    """Seed factory for the staged acute 'Poisoned' condition (#1050).
+
+    Sets the name constant and marks the template progressive + stackable so
+    ``apply_condition`` initialises ``current_stage`` and stacks correctly.
+    Tests build the concrete stages via ``ConditionStageFactory`` (or call
+    ``ensure_poison_content`` for the fully seeded content).
+    """
+
+    name = POISONED_CONDITION_NAME
+    has_progression = True
+    is_stackable = True
+    max_stacks = 5
 
 
 class ConditionStageFactory(DjangoModelFactory):
