@@ -1063,3 +1063,112 @@ describe('YourTurn — own-action resolved by participant PK, not position', () 
     expect(screen.queryByTestId('flee-btn')).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 8 — Move-to-position actions (#532)
+// ---------------------------------------------------------------------------
+
+function makeMoveAction(positionId: number, name: string): PlayerAction {
+  return {
+    backend: 'registry',
+    display_name: name,
+    description: '',
+    difficulty: null,
+    prerequisite_met: true,
+    prerequisite_reasons: [],
+    check_type: { id: 0, name: '' },
+    action_template: null,
+    ref: {
+      backend: 'registry',
+      challenge_instance_id: null,
+      approach_id: null,
+      technique_id: null,
+      registry_key: 'move_to_position',
+      position_id: positionId,
+    },
+    target_spec: null,
+    enhancements: [],
+    strain: null,
+  };
+}
+
+describe('YourTurn — Task 8 move-to-position actions', () => {
+  it('does not render movement section when no move_to_position actions present', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ availableActions: [] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('movement-section')).not.toBeInTheDocument();
+  });
+
+  it('renders movement section listing both move actions', () => {
+    setupMocks();
+    const moveActions = [
+      makeMoveAction(1, 'Move to Courtyard'),
+      makeMoveAction(2, 'Move to Gatehouse'),
+    ];
+
+    render(<YourTurn {...defaultProps({ availableActions: moveActions })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('movement-section')).toBeInTheDocument();
+    expect(screen.getByText('Move to Courtyard')).toBeInTheDocument();
+    expect(screen.getByText('Move to Gatehouse')).toBeInTheDocument();
+  });
+
+  it('dispatches the correct ref with empty kwargs when a move button is clicked', async () => {
+    setupMocks();
+    const moveAction = makeMoveAction(7, 'Move to Tower');
+
+    render(<YourTurn {...defaultProps({ availableActions: [moveAction] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('move-btn-7'));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: {
+        backend: 'registry',
+        challenge_instance_id: null,
+        approach_id: null,
+        technique_id: null,
+        registry_key: 'move_to_position',
+        position_id: 7,
+      },
+      kwargs: {},
+    });
+  });
+
+  it('does not render movement section when actions only contain non-move registry actions', () => {
+    setupMocks();
+    const nonMoveAction: PlayerAction = {
+      backend: 'registry',
+      display_name: 'Some Other Action',
+      description: '',
+      difficulty: null,
+      prerequisite_met: true,
+      prerequisite_reasons: [],
+      check_type: { id: 0, name: '' },
+      action_template: null,
+      ref: {
+        backend: 'registry',
+        challenge_instance_id: null,
+        approach_id: null,
+        technique_id: null,
+        registry_key: 'some_other_action',
+      },
+      target_spec: null,
+      enhancements: [],
+      strain: null,
+    };
+
+    render(<YourTurn {...defaultProps({ availableActions: [nonMoveAction] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('movement-section')).not.toBeInTheDocument();
+  });
+});

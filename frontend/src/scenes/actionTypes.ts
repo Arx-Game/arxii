@@ -35,6 +35,8 @@ export interface ActionRef {
   registry_key: string | null;
   clash_id?: number | null;
   clash_action_slot?: string | null;
+  /** Destination position PK — present on move_to_position registry actions (#532). */
+  position_id?: number | null;
 }
 
 // ---------------------------------------------------------------------------
