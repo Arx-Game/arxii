@@ -124,7 +124,17 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
       />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>
+        <div className="flex items-center gap-1">
+          <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>
+          {participant.current_position && (
+            <span
+              data-testid="position-badge"
+              className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+            >
+              {participant.current_position.name}
+            </span>
+          )}
+        </div>
         {/* HP mini-bar */}
         <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
@@ -164,7 +174,17 @@ function OpponentRow({ opponent }: OpponentRowProps) {
       />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{opponent.name}</p>
+        <div className="flex items-center gap-1">
+          <p className="truncate text-xs font-medium text-foreground">{opponent.name}</p>
+          {opponent.current_position && (
+            <span
+              data-testid="position-badge"
+              className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+            >
+              {opponent.current_position.name}
+            </span>
+          )}
+        </div>
         {/* HP mini-bar */}
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
