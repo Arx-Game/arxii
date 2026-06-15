@@ -79,6 +79,30 @@ def disconnect_positions(a: Position, b: Position) -> None:
 # ---------------------------------------------------------------------------
 
 
+def position_reachable(origin: Position, target: Position, reach: str) -> bool:
+    """Whether `target` is reachable from `origin` under a TechniqueReach value.
+
+    SAME     -> target is the same position.
+    ADJACENT -> same position, or a directly-connected passable edge exists.
+                (Gating challenges gate movement, not reach — an ADJACENT
+                technique can strike across a movement-gated edge.)
+    ANY      -> any position in the same room.
+    """
+    from world.magic.constants import TechniqueReach
+
+    if reach == TechniqueReach.SAME:
+        return origin.pk == target.pk
+    if reach == TechniqueReach.ADJACENT:
+        if origin.pk == target.pk:
+            return True
+        edge = edge_between(origin, target)
+        return edge is not None and edge.is_passable
+    if reach == TechniqueReach.ANY:
+        return origin.room_id == target.room_id
+    # Unknown reach value — conservative fallback.
+    return False
+
+
 def edge_between(a: Position, b: Position) -> PositionEdge | None:
     """Return the edge between two positions, regardless of argument order."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
