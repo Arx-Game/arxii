@@ -1,14 +1,35 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 
+from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.constants import DamageTickTiming
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.test_helpers import force_check_outcome
+from world.conditions.constants import (
+    BLEED_OUT_CONDITION_NAME,
+    POISON_DAMAGE_TYPE_NAME,
+    POISONED_CONDITION_NAME,
+    DamageTickTiming,
+)
 from world.conditions.factories import (
+    BleedingOutConditionFactory,
     ConditionDamageOverTimeFactory,
     ConditionInstanceFactory,
+    ConditionStageFactory,
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
-from world.conditions.services import _process_round_tick
+from world.conditions.models import ConditionStage, ConditionTemplate, DamageType
+from world.conditions.services import (
+    _process_round_tick,
+    apply_condition,
+    ensure_poison_content,
+    get_active_conditions,
+)
+from world.scenes.constants import RoundStatus
+from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
+from world.scenes.round_services import advance_scene_round
+from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.services import tick_round_for_targets
 
@@ -99,4 +120,138 @@ class EnsurePoisonContentTests(TestCase):
         )
         self.assertTrue(
             ConditionDamageOverTime.objects.filter(condition=slow, is_long_term=True).exists()
+        )
+
+
+@tag("postgres")
+class AcutePoisonSceneRoundTests(TestCase):
+    """Test A — acute poison ticks health when a SCENE round resolves out of combat.
+
+    @tag("postgres") — applying the progressive Poisoned condition and ticking it via
+    the round path exercises the PG ``.distinct("condition_id")`` query that errors on SQLite.
+    """
+
+    def test_scene_round_resolution_ticks_acute_poison_health(self) -> None:
+        ensure_poison_content()
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        vitals = CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
+
+        poisoned = ConditionTemplate.get_by_name(POISONED_CONDITION_NAME)
+        apply_condition(target=character, condition=poisoned)
+
+        rnd = SceneRoundFactory(status=RoundStatus.DECLARING, round_number=1)
+        SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
+
+        advance_scene_round(rnd)
+
+        vitals.refresh_from_db()
+        self.assertLess(
+            vitals.health,
+            100,
+            "Resolving a scene round must apply acute poison DoT to participant health",
+        )
+
+
+@tag("postgres")
+class PoisonStagingScalesDotTests(TestCase):
+    """Test B — condition staging drives the DoT: stage 2 deals more than stage 1.
+
+    @tag("postgres") — staged progressive condition ticking hits the PG DISTINCT ON query.
+    """
+
+    def test_higher_stage_deals_more_poison_damage(self) -> None:
+        ensure_poison_content()
+        poisoned = ConditionTemplate.get_by_name(POISONED_CONDITION_NAME)
+        stage1 = ConditionStage.objects.get(condition=poisoned, stage_order=1)
+        stage2 = ConditionStage.objects.get(condition=poisoned, stage_order=2)
+
+        sheet1 = CharacterSheetFactory()
+        char1 = sheet1.character
+        vitals1 = CharacterVitalsFactory(character_sheet=sheet1, health=100, max_health=100)
+        apply_condition(target=char1, condition=poisoned)
+        inst1 = get_active_conditions(char1, condition=poisoned).get()
+        inst1.current_stage = stage1
+        inst1.save(update_fields=["current_stage"])
+
+        sheet2 = CharacterSheetFactory()
+        char2 = sheet2.character
+        vitals2 = CharacterVitalsFactory(character_sheet=sheet2, health=100, max_health=100)
+        apply_condition(target=char2, condition=poisoned)
+        inst2 = get_active_conditions(char2, condition=poisoned).get()
+        inst2.current_stage = stage2
+        inst2.save(update_fields=["current_stage"])
+
+        # Confirm the raw DoT scales with stage (stage 2 multiplier 2.00 vs stage 1's 1.00).
+        def tick_damage(char):
+            result = _process_round_tick(char, DamageTickTiming.END_OF_ROUND)
+            return sum(amt for _dt, amt in result.damage_dealt)
+
+        dmg1 = tick_damage(char1)
+        dmg2 = tick_damage(char2)
+        # Staging scales the DoT: the higher stage deals strictly more damage. We assert the
+        # monotonic intent rather than an exact ratio because _process_round_tick composes the
+        # stage multiplier with effective_severity (which itself folds in the stage multiplier
+        # — preexisting #230 behavior), so a severity-scaling staged DoT does not scale by a
+        # clean 2x. The mechanic that matters here is "higher stage => more DoT".
+        self.assertGreater(dmg2, dmg1, "Stage 2 must compute more DoT than stage 1")
+
+        # And the health loss through the real tick path reflects the staging.
+        tick_round_for_targets([char1], timing="end")
+        tick_round_for_targets([char2], timing="end")
+        vitals1.refresh_from_db()
+        vitals2.refresh_from_db()
+        loss1 = 100 - vitals1.health
+        loss2 = 100 - vitals2.health
+        self.assertGreater(loss2, loss1, "Stage-2 character must lose more health than stage-1")
+
+
+@tag("postgres")
+class AcutePoisonCrossesDeathThresholdTests(TestCase):
+    """Test C — acute poison crossing the death threshold applies Bleeding-Out (#523).
+
+    @tag("postgres") — applying the progressive Bleeding-Out condition hits the PG
+    DISTINCT ON query, mirroring vitals' ``test_death_resolves_pool_applies_bleed_out``.
+    """
+
+    def test_lethal_poison_tick_applies_bleeding_out(self) -> None:
+        ensure_poison_content()
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        # Low health so a single poison tick crosses DEATH_HEALTH_THRESHOLD (0.0).
+        vitals = CharacterVitalsFactory(character_sheet=sheet, health=2, max_health=100)
+
+        # Seed a FAILURE-tier death pool that applies Bleeding-Out, wired to the poison
+        # DamageType's death_pool (the damage_type threaded through _apply_round_tick_damage).
+        failure_outcome = CheckOutcomeFactory(name="Poison-Death-Failure", success_level=-1)
+        bleed_out_template = BleedingOutConditionFactory()
+        ConditionStageFactory(condition=bleed_out_template, stage_order=1, name="Bleeding")
+
+        consequence = ConsequenceFactory(outcome_tier=failure_outcome, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=bleed_out_template,
+            target="self",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        poison_dtype = DamageType.objects.get(name=POISON_DAMAGE_TYPE_NAME)
+        poison_dtype.death_pool = pool
+        poison_dtype.save(update_fields=["death_pool"])
+
+        poisoned = ConditionTemplate.get_by_name(POISONED_CONDITION_NAME)
+        apply_condition(target=character, condition=poisoned)
+
+        with force_check_outcome(failure_outcome):
+            tick_round_for_targets([character], timing="end")
+
+        vitals.refresh_from_db()
+        self.assertLessEqual(vitals.health, 0, "Poison tick must cross the death threshold")
+        active_names = {inst.condition.name for inst in get_active_conditions(character)}
+        self.assertIn(
+            BLEED_OUT_CONDITION_NAME,
+            active_names,
+            "Crossing the death threshold via poison must apply Bleeding-Out",
         )
