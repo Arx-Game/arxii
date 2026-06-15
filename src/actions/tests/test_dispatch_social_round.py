@@ -105,40 +105,41 @@ def _grant_capability(sheet, capability) -> None:
 class TestSocialRoundAutoResolvesOnLastDeclaration(TestCase):
     """A social round resolves only once every present ACTIVE participant has declared."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
+    def setUp(self) -> None:
+        # Build Evennia objects per-test in setUp (NOT setUpTestData): class-level Evennia
+        # objects carry a DbHolder that Django's setUpTestData deep-copy cannot handle,
+        # which surfaces only under CI's larger shard runs (idmapper contamination).
         from evennia_extensions.factories import ObjectDBFactory
 
-        cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
 
-        cls.sheet_a = CharacterSheetFactory()
-        cls.sheet_b = CharacterSheetFactory()
-        cls.char_a = _set_character_location(cls.sheet_a.character, cls.room)
-        cls.char_b = _set_character_location(cls.sheet_b.character, cls.room)
+        self.sheet_a = CharacterSheetFactory()
+        self.sheet_b = CharacterSheetFactory()
+        self.char_a = _set_character_location(self.sheet_a.character, self.room)
+        self.char_b = _set_character_location(self.sheet_b.character, self.room)
 
-        cls.challenge_instance, cls.approach, capability = _make_challenge(cls.room)
-        _grant_capability(cls.sheet_a, capability)
-        _grant_capability(cls.sheet_b, capability)
+        self.challenge_instance, self.approach, capability = _make_challenge(self.room)
+        _grant_capability(self.sheet_a, capability)
+        _grant_capability(self.sheet_b, capability)
 
         # OPT_IN (social) round in DECLARING; both participants ACTIVE and present.
-        cls.scene_round = SceneRoundFactory(
-            room=cls.room,
+        self.scene_round = SceneRoundFactory(
+            room=self.room,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
         )
-        cls.participant_a = SceneRoundParticipantFactory(
-            scene_round=cls.scene_round,
-            character_sheet=cls.sheet_a,
+        self.participant_a = SceneRoundParticipantFactory(
+            scene_round=self.scene_round,
+            character_sheet=self.sheet_a,
             status=SceneRoundParticipantStatus.ACTIVE,
         )
-        cls.participant_b = SceneRoundParticipantFactory(
-            scene_round=cls.scene_round,
-            character_sheet=cls.sheet_b,
+        self.participant_b = SceneRoundParticipantFactory(
+            scene_round=self.scene_round,
+            character_sheet=self.sheet_b,
             status=SceneRoundParticipantStatus.ACTIVE,
         )
 
-    def setUp(self) -> None:
         self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
         self._difficulty_patch.start()
         self.addCleanup(self._difficulty_patch.stop)

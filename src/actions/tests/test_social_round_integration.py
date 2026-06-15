@@ -114,22 +114,23 @@ def _challenge_ref(challenge_instance, approach):
 class SocialRoundIntegrationBase(TestCase):
     """Shared setup: a real room, a shared challenge, two CharacterSheets granted a technique."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
+    def setUp(self) -> None:
+        # Build Evennia objects per-test in setUp (NOT setUpTestData): class-level Evennia
+        # objects carry a DbHolder that Django's setUpTestData deep-copy cannot handle,
+        # which surfaces only under CI's larger shard runs (idmapper contamination).
         from evennia_extensions.factories import ObjectDBFactory
 
-        cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
 
-        cls.sheet_a = CharacterSheetFactory()
-        cls.sheet_b = CharacterSheetFactory()
-        cls.char_a = cls.sheet_a.character
-        cls.char_b = cls.sheet_b.character
+        self.sheet_a = CharacterSheetFactory()
+        self.sheet_b = CharacterSheetFactory()
+        self.char_a = self.sheet_a.character
+        self.char_b = self.sheet_b.character
 
-        cls.challenge_instance, cls.approach, capability = _make_challenge(cls.room)
-        _grant_capability(cls.sheet_a, capability)
-        _grant_capability(cls.sheet_b, capability)
+        self.challenge_instance, self.approach, capability = _make_challenge(self.room)
+        _grant_capability(self.sheet_a, capability)
+        _grant_capability(self.sheet_b, capability)
 
-    def setUp(self) -> None:
         # Both present by default; individual tests override placement as needed.
         _set_character_location(self.char_a, self.room)
         _set_character_location(self.char_b, self.room)
