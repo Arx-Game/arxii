@@ -39,13 +39,15 @@ from world.scenes.permissions import (
     ReadOnlyOrSceneParticipant,
 )
 from world.scenes.serializers import (
+    ActivePersonaResultSerializer,
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
+    SetActivePersonaRequestSerializer,
 )
-from world.scenes.services import broadcast_scene_message
+from world.scenes.services import ActivePersonaError, broadcast_scene_message, set_active_persona
 from world.societies.renown_serializers import (
     RenownCardSerializer,
     RenownSerializer,
@@ -299,6 +301,43 @@ class PersonaViewSet(viewsets.ModelViewSet):
             .filter(is_system=False)
             .order_by("created_at")
         )
+
+    @extend_schema(
+        request=SetActivePersonaRequestSerializer,
+        responses={200: ActivePersonaResultSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="set-active",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def set_active(self, request: Request) -> Response:
+        """#981 — set the played character's ACTIVE persona (the worn face).
+
+        The single player-facing mutator. The face must be one of the played
+        character's own personas; a foreign or unknown id is rejected uniformly
+        (400) without revealing whether it exists.
+        """
+        body = SetActivePersonaRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            msg = "You must be playing a character to switch identities."
+            raise serializers.ValidationError(msg)
+        persona = Persona.objects.filter(
+            pk=body.validated_data["persona_id"], character_sheet_id=sheet.pk
+        ).first()
+        if persona is None:
+            msg = "That isn't one of this character's identities."
+            raise serializers.ValidationError(msg)
+        try:
+            set_active_persona(sheet, persona)
+        except ActivePersonaError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(ActivePersonaResultSerializer({"active_persona_id": persona.pk}).data)
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])

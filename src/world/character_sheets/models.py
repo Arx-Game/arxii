@@ -260,6 +260,25 @@ class CharacterSheet(SharedMemoryModel):
     )
     rollmod = models.SmallIntegerField(default=0)
 
+    # #981 — the persona (face) this character is currently presenting as. NULL
+    # means "on their PRIMARY persona" (the resolver defaults to it), so a fresh
+    # sheet writes no row. Mutated ONLY via ``scenes.services.set_active_persona``
+    # (an explicit player switch, or an IC act such as a mask being removed →
+    # restore the covered face). ``SET_NULL`` so a deleted persona safely reverts
+    # to primary, never a dangling/foreign identity.
+    active_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The face this character is currently presenting as (#981); NULL ⇒ "
+            "PRIMARY. Resolve via active_persona_for_sheet; set only via "
+            "set_active_persona — never gate IC reads on primary_persona directly."
+        ),
+    )
+
     # Temporal & Cultural
     birthday = models.CharField(
         max_length=255,

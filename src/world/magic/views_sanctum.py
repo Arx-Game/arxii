@@ -56,26 +56,24 @@ if TYPE_CHECKING:
 
 
 def _active_persona_for_request(request) -> Persona:
-    """Resolve the request user's currently presented persona.
+    """Resolve the request user's ACTIVE persona — the face they're on (#981).
 
     Sanctum actions are persona-scoped per `feedback_account_fk_wrong_for_ic_items`
-    — alt personas are separate IC identities, and ownership / membership
-    checks must run against the persona the player is acting as right now.
-    Lookup: account → active RosterEntry → CharacterSheet → primary_persona.
-    Multi-persona alt-of-self awareness is a deferred follow-up; for now
-    the primary persona is the safe default.
+    — alt personas are separate IC identities, and ownership / membership checks
+    must run against the persona the player is acting as right now. Lookup:
+    account → active RosterEntry → CharacterSheet → `active_persona_for_sheet`
+    (the durable worn face, defaulting to PRIMARY). So a player acting as an
+    ESTABLISHED alt operates on *that* identity's sanctums and their other faces
+    never leak.
     """
     from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     entry = RosterEntry.objects.for_account(request.user).first()
     if entry is None:
         msg = "You must have an active roster entry to act on Sanctums."
         raise DRFValidationError(msg)
-    persona = entry.character_sheet.primary_persona
-    if persona is None:
-        msg = "Your character has no primary persona; cannot act on Sanctums."
-        raise DRFValidationError(msg)
-    return persona
+    return active_persona_for_sheet(entry.character_sheet)
 
 
 class SanctumViewSet(viewsets.ReadOnlyModelViewSet):

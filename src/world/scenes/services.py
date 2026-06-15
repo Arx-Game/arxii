@@ -8,6 +8,7 @@ from world.scenes.models import Persona, Scene
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.character_sheets.models import CharacterSheet
 
 ActionType = SceneAction
 
@@ -52,6 +53,49 @@ def persona_for_character(character: Character) -> Persona:
         return sheet.primary_persona
     except Exception as exc:
         raise MissingPrimaryPersonaError(character) from exc
+
+
+class ActivePersonaError(ValueError):
+    """A ``set_active_persona`` call targeting a persona that isn't this sheet's.
+
+    Carries a fixed ``user_message`` (per ``feedback_codeql_exceptions``) so the
+    switch endpoint can surface a safe string without leaking object ids.
+    """
+
+    user_message = "That isn't one of this character's identities."
+
+
+def active_persona_for_sheet(sheet: CharacterSheet) -> Persona:
+    """The face a character is currently presenting as (#981).
+
+    Returns the durable ``active_persona`` when set, else the PRIMARY persona.
+    This is THE answer to "which persona is this character on right now" — gate
+    every IC-meaningful read on this, never on ``primary_persona`` directly, so
+    presenting as an ESTABLISHED alt or a TEMPORARY mask is honoured and a
+    player's other faces never leak. Pure; never mutates. (Propagates the loud
+    ``Persona.DoesNotExist`` only when the PRIMARY invariant is itself broken —
+    the request-level resolver is the fail-closed boundary that maps that to a
+    safe deny.)
+    """
+    active = sheet.active_persona
+    if active is not None:
+        return active
+    return sheet.primary_persona
+
+
+def set_active_persona(sheet: CharacterSheet, persona: Persona) -> None:
+    """Set the character's active face (#981) — the ONLY mutator.
+
+    Both doors that may change the face go through here: an explicit player
+    switch, and an IC-forced swap (e.g. the TEMPORARY-mask system restoring the
+    covered face via ``set_active_persona(sheet, covered_face)``). Validates the
+    persona is one of *this* character's own faces — a foreign persona raises
+    ``ActivePersonaError`` and never silently crosses identities.
+    """
+    if persona.character_sheet_id != sheet.pk:
+        raise ActivePersonaError
+    sheet.active_persona = persona
+    sheet.save(update_fields=["active_persona"])
 
 
 def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
