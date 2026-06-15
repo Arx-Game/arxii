@@ -137,8 +137,8 @@ def build_option_list(
     CHALLENGE entries.
 
     Phase 3 is single-participant; Phase 4's group path
-    (``build_group_option_list``) does not yet apply the location conjunct
-    — group/invite play is the #885 follow-up.
+    (``build_group_option_list``) applies this same conjunct per participant
+    (#887).
     """
     # select_related("challenge") so the CHALLENGE-branch FK walk in
     # present_options_for_character doesn't fire one query per option.

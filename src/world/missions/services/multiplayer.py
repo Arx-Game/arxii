@@ -41,8 +41,10 @@ from django.db import transaction
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
+    _current_room_profile_id,
     _finish_terminal,
     _route_next_node,
+    option_is_locally_live,
     present_options_for_character,
     resolve_option,
 )
@@ -95,21 +97,33 @@ def build_group_option_list(
     additive — players still pick; conflicting picks are arbitrated later
     by :func:`resolve_group_node` (GROUP_VOTE tally / JOINT combine).
 
-    The node's options are fetched ONCE and reused across every participant
-    via :func:`present_options_for_character`, so the per-participant union
-    does NOT re-issue the options query per participant. Phase-3
+    The location conjunct (#885/#887) is applied **per participant**: each
+    participant only sees options live where *their* character currently stands
+    (mirroring the solo ``build_option_list`` — ANYWHERE always live, ANCHOR/
+    ROOMS/INSTANCE gated on the participant's room). A node with the default
+    ANYWHERE mode surfaces every option to everyone, unchanged.
+
+    The node's options are fetched ONCE and reused across every participant, so
+    the union does NOT re-issue the options query per participant. Phase-3
     ``build_option_list``'s single-participant behavior is unchanged (it
-    delegates to the same extracted helper).
+    delegates to the same extracted helper + conjunct).
     """
-    # select_related("challenge") so the CHALLENGE-branch FK walk in
-    # present_options_for_character doesn't fire one query per option per
-    # participant (the options list is built once and reused).
-    options = list(node.options.select_related("challenge").order_by("order", "pk"))
+    # select_related("challenge") + prefetch "locations" so neither the
+    # CHALLENGE-branch FK walk (in present_options_for_character) nor the
+    # location conjunct's per-option ``locations`` M2M fires a query per option
+    # per participant — the options list is built once and reused.
+    options = list(
+        node.options.select_related("challenge")
+        .prefetch_related("locations")  # noqa: PREFETCH_STRING
+        .order_by("order", "pk")
+    )
 
     participants = instance.participants.all().order_by("pk")
     presented: list[PresentedOption] = []
     for participant in participants:
-        presented.extend(present_options_for_character(participant.character, options))
+        here = _current_room_profile_id(participant.character)
+        local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
+        presented.extend(present_options_for_character(participant.character, local))
     return presented
 
 
