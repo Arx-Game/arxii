@@ -203,6 +203,7 @@ function makeParticipant(
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_position: null,
   };
 }
 
@@ -972,8 +973,8 @@ describe('YourTurn — #1001a focused target', () => {
     expect(focusedCall).toBeDefined();
     const targets = (focusedCall![0] as { targets?: Array<{ id: number; kind: string }> }).targets;
     expect(targets).toEqual([
-      { id: 11, kind: 'opponent', name: 'Bandit Captain', objectId: 42 },
-      { id: 7, kind: 'ally', name: 'Shield Bearer' },
+      { id: 11, kind: 'opponent', name: 'Bandit Captain', objectId: 42, positionId: null },
+      { id: 7, kind: 'ally', name: 'Shield Bearer', positionId: null },
     ]);
   });
 

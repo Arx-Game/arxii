@@ -11,10 +11,33 @@ import type { components } from '@/generated/api';
 // Re-exports from generated schema
 // ---------------------------------------------------------------------------
 
-export type EncounterDetail = components['schemas']['EncounterDetail'];
 export type EncounterListItem = components['schemas']['EncounterList'];
 export type Participant = components['schemas']['Participant'];
 export type Opponent = components['schemas']['Opponent'];
+export type PositionSummary = components['schemas']['PositionSummary'];
+
+// ---------------------------------------------------------------------------
+// Position adjacency
+//
+// The generated schema types EncounterDetail.position_adjacency as `string`
+// (spectacular infers the wrong type from the SerializerMethodField). The
+// actual runtime shape is an array of PositionAdjacencyItem objects, matching
+// PositionAdjacencyItemSerializer on the backend. We re-type it here.
+// ---------------------------------------------------------------------------
+
+export interface PositionAdjacencyItem {
+  position_id: number;
+  adjacent_position_ids: number[];
+}
+
+/**
+ * EncounterDetail with position_adjacency re-typed to the correct runtime shape.
+ * The generated type has it as `string`; the backend serializes it as
+ * `{ position_id: number; adjacent_position_ids: number[] }[]`.
+ */
+export type EncounterDetail = Omit<components['schemas']['EncounterDetail'], 'position_adjacency'> & {
+  position_adjacency: PositionAdjacencyItem[];
+};
 
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —
 // the backend serializes these with varying shapes depending on action type.

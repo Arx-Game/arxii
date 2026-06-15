@@ -57,6 +57,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_position: null,
     ...overrides,
   };
 }
@@ -80,6 +81,7 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     escalation_tick_narration: null,
     forced_escape: false,
     resolution_order: [],
+    position_adjacency: [],
   };
 }
 

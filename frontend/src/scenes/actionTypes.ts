@@ -89,6 +89,11 @@ export interface PlayerAction {
   /** Physical/social/mental arena (#614). Optional on this hand-written mirror;
    *  the API always supplies it (possibly null) for technique actions. */
   action_category?: ActionCategory | null;
+  /**
+   * Reach constraint for target selection (#532). Values: "same" | "adjacent" | "any" | null.
+   * null / "any" → no restriction; "same" → must share a position; "adjacent" → same or neighbouring.
+   */
+  reach?: string | null;
 }
 
 export interface PlayerActionsResponse {

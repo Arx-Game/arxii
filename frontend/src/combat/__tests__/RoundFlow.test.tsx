@@ -49,6 +49,7 @@ function makeParticipant(id: number, name: string): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_position: null,
   };
 }
 
@@ -77,6 +78,7 @@ function makeEncounter(
     escalation_tick_narration: null,
     forced_escape: false,
     resolution_order: [],
+    position_adjacency: [],
     ...overrides,
   };
 }

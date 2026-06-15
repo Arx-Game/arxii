@@ -340,9 +340,17 @@ export function YourTurn({
     (p) => p.status === 'active' && p.id !== myParticipantId
   );
 
+  // Actor's position — the viewer's own participant's current_position.
+  const actorPositionId: number | null = (() => {
+    if (myParticipantId === null) return null;
+    const self = (encounter?.participants ?? []).find((p) => p.id === myParticipantId);
+    return self?.current_position?.id ?? null;
+  })();
+
   // Focused-target options (#1001a): active opponents + allies. Opponents carry
   // their ObjectDB id for the applicable-pulls API; the dispatch uses the
-  // CombatOpponent / CombatParticipant PK (`id`).
+  // CombatOpponent / CombatParticipant PK (`id`). Each option also carries
+  // positionId for the reach pre-filter (#532).
   const focusedTargets: TargetOption[] = [
     ...(encounter?.opponents ?? [])
       .filter((o) => o.status === 'active')
@@ -351,13 +359,24 @@ export function YourTurn({
         kind: 'opponent' as const,
         name: o.name,
         objectId: o.objectdb_id,
+        positionId: o.current_position?.id ?? null,
       })),
     ...coverableAllies.map((p) => ({
       id: p.id,
       kind: 'ally' as const,
       name: p.character_name,
+      positionId: p.current_position?.id ?? null,
     })),
   ];
+
+  // Reach constraint for the currently selected focused technique (#532).
+  const focusedTechniqueReach: string | null = (() => {
+    if (focusedContext.techniqueId === undefined) return null;
+    const selected = availableActions.find(
+      (a) => a.ref.technique_id === focusedContext.techniqueId
+    );
+    return selected?.reach ?? null;
+  })();
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
@@ -531,6 +550,9 @@ export function YourTurn({
           }}
           readOnly={isLocked}
           targets={focusedTargets}
+          reach={focusedTechniqueReach}
+          actorPositionId={actorPositionId}
+          positionAdjacency={encounter?.position_adjacency ?? []}
         />
       </div>
 
