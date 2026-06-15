@@ -7,7 +7,7 @@ or any damage source.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -30,7 +30,9 @@ from world.vitals.constants import (
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
+
+    from evennia.objects.models import ObjectDB
 
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
@@ -39,6 +41,9 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
     from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
+
+ROUND_TICK_START = "start"
+ROUND_TICK_END = "end"
 
 
 def is_dead(character_sheet: CharacterSheet | None) -> bool:
@@ -693,3 +698,32 @@ def resolve_vitals_consequence(
     )
     apply_resolution(pending, ResolutionContext(character=character))
     return pending
+
+
+def tick_round_for_targets(
+    targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
+    *,
+    timing: Literal["start", "end"] = ROUND_TICK_END,
+) -> None:
+    """Apply one round's worth of per-target effects for a set of targets.
+
+    Shared by combat resolve_round/begin_declaration_phase and non-combat scene-round
+    resolution so DoT, rounds_remaining/stage countdown, and bleed-out advance through
+    one code path. Empty ``targets`` is a no-op — the primitive behind AFK-safety
+    (no participants -> no tick). ``timing`` is "start" or "end".
+    """
+    from world.conditions.services import process_round_end, process_round_start  # noqa: PLC0415
+
+    target_list = [t for t in targets if t is not None]
+    for target in target_list:
+        if timing == ROUND_TICK_START:
+            process_round_start(target)
+        else:
+            process_round_end(target)
+    if timing == ROUND_TICK_END:
+        for target in target_list:
+            try:
+                sheet = target.sheet_data
+            except (AttributeError, ObjectDoesNotExist):
+                continue
+            advance_bleed_out(sheet)
