@@ -476,6 +476,55 @@ def _route_delivery(
     return InteractionMode.ACTION, None, receivers
 
 
+def _area_outcome_content(
+    *,
+    action_request: SceneActionRequest,
+    status_word: str,
+    outcome_name: str,
+) -> str:
+    """Build the content line for an area action (no target persona).
+
+    A telling always names its tale (#902) — listeners can't learn a deed the
+    echo never identifies.
+    """
+    initiator_name = action_request.initiator_persona.name
+    action_key = action_request.action_key
+    if action_request.spread_deed_target is not None:
+        outcome_line = (
+            f"{initiator_name} spreads the tale of "
+            f"«{action_request.spread_deed_target.title}»: "
+            f"{status_word} ({outcome_name})"
+        )
+    else:
+        outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
+    return (
+        f"{action_request.pose_text}\n{outcome_line}" if action_request.pose_text else outcome_line
+    )
+
+
+def _targeted_outcome_content(
+    *,
+    action_request: SceneActionRequest,
+    result: EnhancedSceneActionResult,
+    target_name: str,
+    status_word: str,
+    outcome_name: str,
+) -> str:
+    """Build the content line for a targeted action (technique-aware)."""
+    initiator_name = action_request.initiator_persona.name
+    action_key = action_request.action_key
+    if result.technique_result is not None and action_request.technique is not None:
+        technique_name = action_request.technique.name
+        anima_spent = result.technique_result.anima_cost.effective_cost
+        return (
+            f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
+            f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
+        )
+    return (
+        f"{initiator_name} attempts to {action_key} {target_name}: {status_word} ({outcome_name})"
+    )
+
+
 def _create_result_interaction(
     *,
     action_request: SceneActionRequest,
@@ -496,43 +545,26 @@ def _create_result_interaction(
     status_word = "Success" if success else "Failure"
     outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
-    initiator_name = action_request.initiator_persona.name
-    action_key = action_request.action_key
     target_persona = action_request.target_persona
 
     if target_persona is None:
         # Area action (e.g. a telling to the room): no target, optional pose
-        # text echoed above the outcome. A telling always names its tale
-        # (#902) — listeners can't learn a deed the echo never identifies.
-        if action_request.spread_deed_target is not None:
-            outcome_line = (
-                f"{initiator_name} spreads the tale of "
-                f"«{action_request.spread_deed_target.title}»: "
-                f"{status_word} ({outcome_name})"
-            )
-        else:
-            outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
-        content = (
-            f"{action_request.pose_text}\n{outcome_line}"
-            if action_request.pose_text
-            else outcome_line
+        # text echoed above the outcome.
+        content = _area_outcome_content(
+            action_request=action_request,
+            status_word=status_word,
+            outcome_name=outcome_name,
         )
         receivers: list[Persona] = []
         target_personas: list[Persona] = []
     else:
-        target_name = target_persona.name
-        if result.technique_result is not None and action_request.technique is not None:
-            technique_name = action_request.technique.name
-            anima_spent = result.technique_result.anima_cost.effective_cost
-            content = (
-                f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
-                f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
-            )
-        else:
-            content = (
-                f"{initiator_name} attempts to {action_key} {target_name}: "
-                f"{status_word} ({outcome_name})"
-            )
+        content = _targeted_outcome_content(
+            action_request=action_request,
+            result=result,
+            target_name=target_persona.name,
+            status_word=status_word,
+            outcome_name=outcome_name,
+        )
         receivers = [target_persona]
         target_personas = [target_persona]
 

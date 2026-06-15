@@ -69,6 +69,17 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
         return []
 
     instance_ids = [p.instance_id for p in participations]
+    deeds_by_instance = _deeds_by_instance(instance_ids, character)
+    options_by_node = _options_by_node(participations)
+
+    return [_journal_entry_for(part, deeds_by_instance, options_by_node) for part in participations]
+
+
+def _deeds_by_instance(
+    instance_ids: list[int],
+    character: ObjectDB,
+) -> dict[int, list[JournalDeed]]:
+    """Bucket the character's own deeds across *instance_ids* by instance id."""
     deed_rows = list(
         MissionDeedRecord.objects.filter(
             instance_id__in=instance_ids,
@@ -88,9 +99,16 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
                 applied_at=row.applied_at,
             )
         )
+    return deeds_by_instance
 
-    # Bulk-fetch current nodes' options (+ override locations) for the
-    # compass — one pass for every active entry, no per-entry queries.
+
+def _options_by_node(
+    participations: list[MissionParticipant],
+) -> dict[int, list[MissionOption]]:
+    """Bulk-fetch current nodes' options (+ override locations) for the compass.
+
+    One pass for every active entry, no per-entry queries.
+    """
     current_node_ids = [
         p.instance.current_node_id for p in participations if p.instance.current_node_id
     ]
@@ -101,32 +119,33 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
         )
         for option in option_rows:
             options_by_node[option.node_id].append(option)
+    return options_by_node
 
-    entries: list[JournalEntry] = []
-    for part in participations:
-        instance = part.instance
-        current = instance.current_node
-        compass_rooms, compass_anywhere = _compass_for(
-            instance, current, options_by_node.get(current.pk, []) if current else []
-        )
-        entries.append(
-            JournalEntry(
-                instance_id=instance.pk,
-                template_name=instance.template.name,
-                status=instance.status,
-                current_node_key=current.key if current is not None else None,
-                is_contract_holder=part.is_contract_holder,
-                deeds=tuple(deeds_by_instance.get(instance.pk, ())),
-                summary=instance.template.summary,
-                epilogue=(
-                    instance.template.epilogue if instance.status == MissionStatus.COMPLETE else ""
-                ),
-                current_node_flavor=current.flavor_text if current is not None else "",
-                compass_rooms=compass_rooms,
-                compass_anywhere=compass_anywhere,
-            )
-        )
-    return entries
+
+def _journal_entry_for(
+    part: MissionParticipant,
+    deeds_by_instance: dict[int, list[JournalDeed]],
+    options_by_node: dict[int, list[MissionOption]],
+) -> JournalEntry:
+    """Build a single :class:`JournalEntry` from a participation row."""
+    instance = part.instance
+    current = instance.current_node
+    compass_rooms, compass_anywhere = _compass_for(
+        instance, current, options_by_node.get(current.pk, []) if current else []
+    )
+    return JournalEntry(
+        instance_id=instance.pk,
+        template_name=instance.template.name,
+        status=instance.status,
+        current_node_key=current.key if current is not None else None,
+        is_contract_holder=part.is_contract_holder,
+        deeds=tuple(deeds_by_instance.get(instance.pk, ())),
+        summary=instance.template.summary,
+        epilogue=(instance.template.epilogue if instance.status == MissionStatus.COMPLETE else ""),
+        current_node_flavor=current.flavor_text if current is not None else "",
+        compass_rooms=compass_rooms,
+        compass_anywhere=compass_anywhere,
+    )
 
 
 def _node_default_compass(instance: MissionInstance, node: MissionNode) -> tuple[list[str], bool]:

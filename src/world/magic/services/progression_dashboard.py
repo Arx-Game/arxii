@@ -133,6 +133,86 @@ def _resolve_eligibility(
     return MilestoneEligibility.ELIGIBLE, [], None
 
 
+def _knowledge_status_map(roster_entry: object | None) -> dict[int, str]:
+    """Prefetch codex knowledge in one query so _knowledge_tier has no per-milestone DB hit."""
+    if roster_entry is None:
+        return {}
+    return dict(
+        CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry).values_list(
+            "entry_id", "status"
+        )
+    )
+
+
+def _build_milestone_view(
+    sheet: CharacterSheet,
+    milestone: MagicProgressionMilestone,
+    tier: str,
+    current_stage: int,
+    prefetched: _Prefetched,
+) -> MilestoneView:
+    """Assemble a single MilestoneView for a KNOWN or UNCOVERED milestone."""
+    entry = milestone.codex_entry
+    if tier == MilestoneDiscoveryTier.KNOWN:
+        eligibility, missing, xp_cost = _resolve_eligibility(
+            sheet, milestone, current_stage, prefetched
+        )
+        summary = entry.summary if entry is not None else ""
+        title = entry.name if entry is not None else milestone.get_kind_display()
+    else:
+        # UNCOVERED: teaser only
+        eligibility = None
+        missing = []
+        xp_cost = None
+        summary = ""
+        title = entry.name if entry is not None else milestone.get_kind_display()
+
+    return MilestoneView(
+        kind=milestone.kind,
+        tier=tier,
+        title=title,
+        summary=summary,
+        eligibility=eligibility,
+        missing=missing,
+        xp_cost=xp_cost,
+        route_name=milestone.route_name or None,
+        codex_entry_id=entry.pk if entry is not None else None,
+    )
+
+
+def _build_stage_view(  # noqa: PLR0913
+    sheet: CharacterSheet,
+    stage_value: int,
+    stage_label: object,
+    stage_milestones: list[MagicProgressionMilestone],
+    current_stage: int,
+    prefetched: _Prefetched,
+    knowledge_status_by_entry_id: dict[int, str],
+) -> StageView:
+    """Build one StageView: map each milestone to a view, collapsing UNKNOWN into a flag."""
+    milestone_views: list[MilestoneView] = []
+    has_undiscovered = False
+
+    for milestone in stage_milestones:
+        tier = _knowledge_tier(knowledge_status_by_entry_id, milestone.codex_entry)
+
+        if tier == MilestoneDiscoveryTier.UNKNOWN:
+            has_undiscovered = True
+            continue  # collapsed into the per-stage mystery flag
+
+        milestone_views.append(
+            _build_milestone_view(sheet, milestone, tier, current_stage, prefetched)
+        )
+
+    return StageView(
+        stage=stage_value,
+        stage_label=str(stage_label),
+        is_current=(stage_value == current_stage),
+        milestones=milestone_views,
+        has_undiscovered=has_undiscovered,
+    )
+
+
 def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
     """Return one StageView per PathStage (all six, ascending), with milestones
     gated by Codex discovery tier and eligibility checks.
@@ -153,14 +233,7 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
     prefetched = _prefetch_facts(sheet)
 
     # Prefetch codex knowledge in one query so _knowledge_tier has no per-milestone DB hit.
-    if roster_entry is not None:
-        knowledge_status_by_entry_id: dict[int, str] = dict(
-            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry).values_list(
-                "entry_id", "status"
-            )
-        )
-    else:
-        knowledge_status_by_entry_id = {}
+    knowledge_status_by_entry_id = _knowledge_status_map(roster_entry)
 
     # Group milestones by stage for efficient per-stage access.
     milestones_by_stage: dict[int, list[MagicProgressionMilestone]] = {}
@@ -170,52 +243,15 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
     result: list[StageView] = []
     for stage_value, stage_label in PathStage.choices:
         stage_milestones = milestones_by_stage.get(stage_value, [])
-        milestone_views: list[MilestoneView] = []
-        has_undiscovered = False
-
-        for milestone in stage_milestones:
-            entry = milestone.codex_entry
-            tier = _knowledge_tier(knowledge_status_by_entry_id, entry)
-
-            if tier == MilestoneDiscoveryTier.UNKNOWN:
-                has_undiscovered = True
-                continue  # collapsed into the per-stage mystery flag
-
-            if tier == MilestoneDiscoveryTier.KNOWN:
-                eligibility, missing, xp_cost = _resolve_eligibility(
-                    sheet, milestone, current_stage, prefetched
-                )
-                summary = entry.summary if entry is not None else ""
-                title = entry.name if entry is not None else milestone.get_kind_display()
-            else:
-                # UNCOVERED: teaser only
-                eligibility = None
-                missing = []
-                xp_cost = None
-                summary = ""
-                title = entry.name if entry is not None else milestone.get_kind_display()
-
-            milestone_views.append(
-                MilestoneView(
-                    kind=milestone.kind,
-                    tier=tier,
-                    title=title,
-                    summary=summary,
-                    eligibility=eligibility,
-                    missing=missing,
-                    xp_cost=xp_cost,
-                    route_name=milestone.route_name or None,
-                    codex_entry_id=entry.pk if entry is not None else None,
-                )
-            )
-
         result.append(
-            StageView(
-                stage=stage_value,
-                stage_label=str(stage_label),
-                is_current=(stage_value == current_stage),
-                milestones=milestone_views,
-                has_undiscovered=has_undiscovered,
+            _build_stage_view(
+                sheet,
+                stage_value,
+                stage_label,
+                stage_milestones,
+                current_stage,
+                prefetched,
+                knowledge_status_by_entry_id,
             )
         )
 

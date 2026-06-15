@@ -2780,7 +2780,74 @@ def _resolve_pc_action(
     return outcome
 
 
-def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
+def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
+    target_participant: CombatParticipant,
+    *,
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    defense_check_type: CheckType | None,
+    defense_check_fn: PerformCheckFn | None,
+    conditions: list,
+    outcome: ActionOutcome,
+    condition_applications: list,
+    get_npc_action_interaction: Callable[[], Interaction],
+) -> None:
+    """Resolve one NPC action against a single target, recording results in place.
+
+    Skips escaped (non-ACTIVE) and dead targets. Applies damage (via a defense
+    check when one is configured, else flat threat damage), runs the
+    survivability pipeline, and queues any conditions for bulk apply by
+    appending to ``outcome`` and ``condition_applications``.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    # A successful escape protects for the rest of the round (#878). The
+    # idmapper guarantees this is the same instance _resolve_flee just
+    # mutated, so the status write is visible without a re-fetch.
+    if target_participant.status != ParticipantStatus.ACTIVE:
+        return
+
+    # Damage recipients: any not-dead target is valid. Unconscious / dying
+    # PCs still take damage (incapacitation/dying are conditions, not a gate
+    # on damage application). Only the dead are excluded.
+    if is_dead(target_participant.character_sheet):
+        return
+
+    if defense_check_type is not None:
+        defense = resolve_npc_attack(
+            npc_action,
+            target_participant,
+            defense_check_type,
+            perform_check_fn=defense_check_fn,
+        )
+        dmg_result = defense.damage_result
+    else:
+        dmg_result = apply_damage_to_participant(
+            target_participant,
+            npc_action.threat_entry.base_damage,
+            damage_type=npc_action.threat_entry.damage_type,
+            source=opponent,
+        )
+    outcome.damage_results.append(dmg_result)
+
+    # Survivability pipeline — knockout, death, wound checks
+    from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+    consequence = process_damage_consequences(
+        character_sheet=target_participant.character_sheet,
+        damage_dealt=dmg_result.damage_dealt,
+        damage_type=npc_action.threat_entry.damage_type,
+        combat_interaction_factory=get_npc_action_interaction,
+    )
+    outcome.damage_consequences.append(consequence)
+
+    # Collect condition applications for bulk apply
+    if dmg_result.damage_dealt > 0 and conditions:
+        target_obj = target_participant.character_sheet.character
+        condition_applications.extend((target_obj, ct) for ct in conditions)
+
+
+def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
@@ -2807,7 +2874,6 @@ def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
     )
-    from world.vitals.services import is_dead  # noqa: PLC0415
 
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
@@ -2828,50 +2894,17 @@ def _resolve_npc_action(  # noqa: C901 - lazy interaction closure adds 1 branch
     condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
     for target_participant in targets:
-        # A successful escape protects for the rest of the round (#878). The
-        # idmapper guarantees this is the same instance _resolve_flee just
-        # mutated, so the status write is visible without a re-fetch.
-        if target_participant.status != ParticipantStatus.ACTIVE:
-            continue
-
-        # Damage recipients: any not-dead target is valid. Unconscious / dying
-        # PCs still take damage (incapacitation/dying are conditions, not a gate
-        # on damage application). Only the dead are excluded.
-        if is_dead(target_participant.character_sheet):
-            continue
-
-        if defense_check_type is not None:
-            defense = resolve_npc_attack(
-                npc_action,
-                target_participant,
-                defense_check_type,
-                perform_check_fn=defense_check_fn,
-            )
-            dmg_result = defense.damage_result
-        else:
-            dmg_result = apply_damage_to_participant(
-                target_participant,
-                npc_action.threat_entry.base_damage,
-                damage_type=npc_action.threat_entry.damage_type,
-                source=opponent,
-            )
-        outcome.damage_results.append(dmg_result)
-
-        # Survivability pipeline — knockout, death, wound checks
-        from world.vitals.services import process_damage_consequences  # noqa: PLC0415
-
-        consequence = process_damage_consequences(
-            character_sheet=target_participant.character_sheet,
-            damage_dealt=dmg_result.damage_dealt,
-            damage_type=npc_action.threat_entry.damage_type,
-            combat_interaction_factory=_get_npc_action_interaction,
+        _resolve_npc_action_on_target(
+            target_participant,
+            opponent=opponent,
+            npc_action=npc_action,
+            defense_check_type=defense_check_type,
+            defense_check_fn=defense_check_fn,
+            conditions=conditions,
+            outcome=outcome,
+            condition_applications=condition_applications,
+            get_npc_action_interaction=_get_npc_action_interaction,
         )
-        outcome.damage_consequences.append(consequence)
-
-        # Collect condition applications for bulk apply
-        if dmg_result.damage_dealt > 0 and conditions:
-            target_obj = target_participant.character_sheet.character
-            condition_applications.extend((target_obj, ct) for ct in conditions)
 
     # Bulk-apply all conditions from this NPC action
     if condition_applications:

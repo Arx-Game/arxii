@@ -139,6 +139,42 @@ function blankConfig(): BeatConfig {
   };
 }
 
+/** Parse a numeric config string to a number, or null when blank. */
+function numOrNull(value: string): number | null {
+  return value ? Number(value) : null;
+}
+
+/**
+ * Build the predicate-specific slice of a Beat payload from the current config.
+ * Extracted from buildPayload to keep that function's cognitive complexity low.
+ */
+function predicateConfigPayload(
+  predicateType: BeatPredicateType,
+  config: BeatConfig
+): Partial<BeatCreateBody> {
+  switch (predicateType) {
+    case 'character_level_at_least':
+      return { required_level: numOrNull(config.required_level) };
+    case 'achievement_held':
+      return { required_achievement: numOrNull(config.required_achievement) };
+    case 'condition_held':
+      return { required_condition_template: numOrNull(config.required_condition_template) };
+    case 'codex_entry_unlocked':
+      return { required_codex_entry: numOrNull(config.required_codex_entry) };
+    case 'story_at_milestone':
+      return {
+        referenced_story: numOrNull(config.referenced_story),
+        referenced_milestone_type: config.referenced_milestone_type,
+        referenced_chapter: numOrNull(config.referenced_chapter),
+        referenced_episode: numOrNull(config.referenced_episode),
+      };
+    case 'aggregate_threshold':
+      return { required_points: numOrNull(config.required_points) };
+    default:
+      return {};
+  }
+}
+
 function configFromBeat(beat: Beat): BeatConfig {
   return {
     required_level: beat.required_level != null ? String(beat.required_level) : '',
@@ -502,44 +538,7 @@ export function BeatFormDialog({
       agm_eligible: agmEligible,
     };
 
-    // Predicate-specific config
-    switch (predicateType) {
-      case 'character_level_at_least':
-        base.required_level = config.required_level ? Number(config.required_level) : null;
-        break;
-      case 'achievement_held':
-        base.required_achievement = config.required_achievement
-          ? Number(config.required_achievement)
-          : null;
-        break;
-      case 'condition_held':
-        base.required_condition_template = config.required_condition_template
-          ? Number(config.required_condition_template)
-          : null;
-        break;
-      case 'codex_entry_unlocked':
-        base.required_codex_entry = config.required_codex_entry
-          ? Number(config.required_codex_entry)
-          : null;
-        break;
-      case 'story_at_milestone':
-        base.referenced_story = config.referenced_story ? Number(config.referenced_story) : null;
-        base.referenced_milestone_type = config.referenced_milestone_type;
-        base.referenced_chapter = config.referenced_chapter
-          ? Number(config.referenced_chapter)
-          : null;
-        base.referenced_episode = config.referenced_episode
-          ? Number(config.referenced_episode)
-          : null;
-        break;
-      case 'aggregate_threshold':
-        base.required_points = config.required_points ? Number(config.required_points) : null;
-        break;
-      default:
-        break;
-    }
-
-    return base;
+    return { ...base, ...predicateConfigPayload(predicateType, config) };
   }
 
   function handleSubmit(e: React.FormEvent) {

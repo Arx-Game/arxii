@@ -27,6 +27,10 @@ from world.currency.constants import (
     IncomeStreamKind,
 )
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+PERSONA_MODEL = "scenes.Persona"
+ORGANIZATION_MODEL = "societies.Organization"
+
 
 class CharacterPurse(SharedMemoryModel):
     """A character's personal money, in coppers."""
@@ -50,7 +54,7 @@ class OrganizationTreasury(SharedMemoryModel):
     """An organization's money, in coppers, with rank-gated spend authority."""
 
     organization = models.OneToOneField(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="treasury",
         help_text="The org this treasury belongs to (house, family, guild).",
@@ -195,7 +199,7 @@ class OrgEconomicsProfile(SharedMemoryModel):
     """
 
     organization = models.OneToOneField(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="economics",
         help_text="The org this economic profile belongs to.",
@@ -227,7 +231,7 @@ class OrgIncomeStream(SharedMemoryModel):
     """
 
     organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="income_streams",
     )
@@ -294,12 +298,12 @@ class OrgObligation(SharedMemoryModel):
     """
 
     from_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="obligations_owed",
     )
     to_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="obligations_due",
     )
@@ -337,12 +341,12 @@ class ContributionRecord(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="org_contributions",
     )
     organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="contributions",
     )
@@ -380,12 +384,12 @@ class DebtInstrument(SharedMemoryModel):
     """
 
     debtor_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="debts",
     )
     creditor_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         related_name="loans_extended",
         help_text="The creditor (e.g. Blighton, the canonical NPC moneylender house).",
@@ -449,28 +453,28 @@ class Contract(SharedMemoryModel):
     """
 
     proposer_persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="contracts_proposed",
     )
     proposer_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="contracts_proposed",
     )
     counterparty_persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="contracts_received",
     )
     counterparty_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -489,7 +493,7 @@ class Contract(SharedMemoryModel):
         default=ContractStatus.PROPOSED,
     )
     notary_organization = models.ForeignKey(
-        "societies.Organization",
+        ORGANIZATION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -660,7 +664,7 @@ class Business(SharedMemoryModel):
     """
 
     owner_persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="businesses",
     )

@@ -110,16 +110,7 @@ def dispatch_player_action(
 
     # REGISTRY: validate the key exists; no round gating — always immediate.
     if ref.backend == ActionBackend.REGISTRY:
-        action_obj = get_action(ref.registry_key or "")
-        if action_obj is None:
-            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-        # Merge non-ObjectDB target ids from the ref into kwargs so REGISTRY actions
-        # that operate on non-ObjectDB models (e.g. move_to_position) receive them.
-        merged_kwargs = dict(kwargs)
-        if ref.position_id is not None:
-            merged_kwargs["position_id"] = ref.position_id
-        result = action_obj.run(actor=character, **merged_kwargs)
-        return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
+        return _dispatch_registry(character, ref, kwargs)
 
     # Step 2: recover authoritative resolution inputs (validates ref against current availability).
     if ref.backend == ActionBackend.CHALLENGE:
@@ -130,17 +121,8 @@ def dispatch_player_action(
         # COMBAT: only surfaced during a DECLARING round; no round = invalid ref.
         if ctx is None or not ctx.is_declaration_open:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-        player_action = _find_combat_player_action_for_ref(character, ref)
 
-        # The availability layer rebuilds the ref with technique_id only; carry the
-        # client's slot intent (focused vs passive-<category>) onto it so the
-        # declaration routes to the correct CombatRoundAction slot (#874).
-        if ref.action_slot is not None:
-            player_action = dataclasses.replace(
-                player_action,
-                ref=dataclasses.replace(player_action.ref, action_slot=ref.action_slot),
-            )
-
+        player_action = _recover_combat_player_action(character, ref)
         avail = None  # COMBAT doesn't use AvailableAction
 
         # Clash-contribution path: bypass record_declaration and write directly.
@@ -158,9 +140,53 @@ def dispatch_player_action(
         ctx.record_declaration(sheet, player_action, kwargs)  # type: ignore[arg-type] — sheet is non-None: ctx only exists when a sheet resolved
         return DispatchResult(backend=ref.backend, deferred=True)
 
-    # Immediate CHALLENGE resolution.
-    # avail is guaranteed non-None here: COMBAT without a round context raised above;
-    # CHALLENGE always sets avail; REGISTRY returned early.
+    return _dispatch_immediate_challenge(character, avail, ctx)
+
+
+def _dispatch_registry(
+    character: ObjectDB,
+    ref: ActionRef,
+    kwargs: dict[str, Any],
+) -> DispatchResult:
+    """Resolve and run a REGISTRY action immediately (no round gating)."""
+    action_obj = get_action(ref.registry_key or "")
+    if action_obj is None:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+    # Merge non-ObjectDB target ids from the ref into kwargs so REGISTRY actions
+    # that operate on non-ObjectDB models (e.g. move_to_position) receive them.
+    merged_kwargs = dict(kwargs)
+    if ref.position_id is not None:
+        merged_kwargs["position_id"] = ref.position_id
+    result = action_obj.run(actor=character, **merged_kwargs)
+    return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
+
+
+def _recover_combat_player_action(character: ObjectDB, ref: ActionRef) -> PlayerAction:
+    """Recover the COMBAT ``PlayerAction`` for *ref*, carrying any client slot intent.
+
+    The availability layer rebuilds the ref with technique_id only; carry the
+    client's slot intent (focused vs passive-<category>) onto it so the
+    declaration routes to the correct CombatRoundAction slot (#874).
+    """
+    player_action = _find_combat_player_action_for_ref(character, ref)
+    if ref.action_slot is not None:
+        player_action = dataclasses.replace(
+            player_action,
+            ref=dataclasses.replace(player_action.ref, action_slot=ref.action_slot),
+        )
+    return player_action
+
+
+def _dispatch_immediate_challenge(
+    character: ObjectDB,
+    avail: AvailableAction | None,
+    ctx: RoundContext | None,
+) -> DispatchResult:
+    """Resolve a CHALLENGE action immediately and tick the scene round if active.
+
+    ``avail`` is guaranteed non-None on the live path: COMBAT without a round
+    context raised earlier; CHALLENGE always sets ``avail``; REGISTRY returned early.
+    """
     if avail is None:  # defensive: should be unreachable
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 

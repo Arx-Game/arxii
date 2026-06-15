@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.covenants.handlers import CovenantMembershipHandler
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+COVENANT_ROLE_MODEL = "covenants.CovenantRole"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
+
 
 class Covenant(SharedMemoryModel):
     """The foundational social/magical structure that binds members under a sworn oath.
@@ -283,7 +288,7 @@ class GearArchetypeCompatibility(SharedMemoryModel):
     """
 
     covenant_role = models.ForeignKey(
-        "covenants.CovenantRole",
+        COVENANT_ROLE_MODEL,
         on_delete=models.CASCADE,
         related_name="gear_compatibilities",
     )
@@ -325,12 +330,12 @@ class CharacterCovenantRole(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="covenant_role_assignments",
     )
     covenant_role = models.ForeignKey(
-        "covenants.CovenantRole",
+        COVENANT_ROLE_MODEL,
         on_delete=models.PROTECT,
         related_name="character_assignments",
     )
@@ -466,7 +471,7 @@ class CovenantRite(SharedMemoryModel):
     min_covenant_level = models.PositiveSmallIntegerField(default=1)
     min_members_present = models.PositiveSmallIntegerField(default=2)
     granted_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -524,13 +529,13 @@ class CovenantRiteRolePackage(SharedMemoryModel):
         related_name="role_packages",
     )
     covenant_role = models.ForeignKey(
-        "covenants.CovenantRole",
+        COVENANT_ROLE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
     min_covenant_level = models.PositiveSmallIntegerField(default=1)
     condition_template = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -573,7 +578,7 @@ class CovenantRiteInstance(SharedMemoryModel):
         blank=True,
     )
     participants = models.ManyToManyField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         through="covenants.CovenantRiteParticipant",
         related_name="covenant_rite_instances",
     )
@@ -596,12 +601,12 @@ class CovenantRiteParticipant(SharedMemoryModel):
         related_name="participant_records",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
     granted_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )

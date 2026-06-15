@@ -80,6 +80,43 @@ def level_power_term(ctx: PowerTermContext) -> int:
     return char_contribution + tech_contribution
 
 
+def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
+    """Affinity-alignment contribution: caster's CharacterAura % per distinct affinity."""
+    from world.magic.models.aura import CharacterAura  # noqa: PLC0415
+
+    if not config.affinity_alignment_bonus:
+        return 0
+    aura = CharacterAura.objects.filter(character=ctx.sheet.character).first()
+    if aura is None:
+        return 0
+    alignment = 0
+    affinities = {r.affinity for r in resonances}
+    for affinity in affinities:
+        pct = getattr(aura, affinity.name.lower(), None)
+        if pct is not None:
+            alignment += int(pct / 100 * config.affinity_alignment_bonus)
+    return alignment
+
+
+def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
+    """Resonance-standing contribution: summed lifetime_earned x bonus, soft-capped."""
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+
+    if not config.resonance_standing_bonus:
+        return 0
+    resonance_ids = [r.pk for r in resonances]
+    total_earned = sum(
+        cr.lifetime_earned
+        for cr in CharacterResonance.objects.filter(
+            character_sheet=ctx.sheet, resonance_id__in=resonance_ids
+        )
+    )
+    standing = total_earned * config.resonance_standing_bonus
+    if config.resonance_standing_cap:
+        standing = min(standing, config.resonance_standing_cap)
+    return standing
+
+
 def aura_power_term(ctx: PowerTermContext) -> int:
     """Aura contribution to power: affinity-alignment + resonance standing (#768).
 
@@ -89,8 +126,6 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     in those resonances x ``resonance_standing_bonus``, soft-capped.
     Returns 0 when unconfigured or when the cast has no technique.
     """
-    from world.magic.models.aura import CharacterAura, CharacterResonance  # noqa: PLC0415
-
     config = get_aura_power_config()
     if config is None or ctx.technique is None:
         return 0
@@ -99,28 +134,8 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     if not resonances:
         return 0
 
-    alignment = 0
-    if config.affinity_alignment_bonus:
-        aura = CharacterAura.objects.filter(character=ctx.sheet.character).first()
-        if aura is not None:
-            affinities = {r.affinity for r in resonances}
-            for affinity in affinities:
-                pct = getattr(aura, affinity.name.lower(), None)
-                if pct is not None:
-                    alignment += int(pct / 100 * config.affinity_alignment_bonus)
-
-    standing = 0
-    if config.resonance_standing_bonus:
-        resonance_ids = [r.pk for r in resonances]
-        total_earned = sum(
-            cr.lifetime_earned
-            for cr in CharacterResonance.objects.filter(
-                character_sheet=ctx.sheet, resonance_id__in=resonance_ids
-            )
-        )
-        standing = total_earned * config.resonance_standing_bonus
-        if config.resonance_standing_cap:
-            standing = min(standing, config.resonance_standing_cap)
+    alignment = _aura_alignment(ctx, config, resonances)
+    standing = _aura_standing(ctx, config, resonances)
 
     return int(alignment + standing)
 

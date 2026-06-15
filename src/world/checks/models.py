@@ -287,29 +287,40 @@ class ConsequenceEffect(SharedMemoryModel):
 
     def clean(self) -> None:
         """Validate that the correct fields are populated for the effect type."""
-        required = self._REQUIRED_FIELDS.get(self.effect_type, [])
         errors: dict[str, str] = {}
+        self._validate_required_fields(errors)
+        if self.effect_type == EffectType.LEGEND_AWARD:
+            self._validate_legend_award_fields(errors)
+        else:
+            self._validate_non_legend_award_fields(errors)
+
+        if errors:
+            raise ValidationError(errors)
+
+    def _validate_required_fields(self, errors: dict[str, str]) -> None:
+        """Populate *errors* for any per-effect-type required field left unset."""
+        required = self._REQUIRED_FIELDS.get(self.effect_type, [])
         for field_name, id_attr in required:
             if not getattr(self, id_attr, None):
                 errors[field_name] = f"{field_name} is required for {self.effect_type}"
 
-        if self.effect_type == EffectType.LEGEND_AWARD:
-            if not self.legend_base_value or self.legend_base_value <= 0:
-                msg = "legend_base_value must be a positive integer for LEGEND_AWARD effects"
-                errors["legend_base_value"] = msg
-            if not self.legend_source_type_id:
-                msg = "legend_source_type is required for LEGEND_AWARD effects"
-                errors["legend_source_type"] = msg
-        else:
-            if self.legend_base_value is not None:
-                msg = "legend_base_value must be null for non-LEGEND_AWARD effects"
-                errors["legend_base_value"] = msg
-            if self.legend_source_type_id:
-                msg = "legend_source_type must be null for non-LEGEND_AWARD effects"
-                errors["legend_source_type"] = msg
-            if self.legend_description_template:
-                msg = "legend_description_template must be blank for non-LEGEND_AWARD effects"
-                errors["legend_description_template"] = msg
+    def _validate_legend_award_fields(self, errors: dict[str, str]) -> None:
+        """Populate *errors* for LEGEND_AWARD-required fields left unset/invalid."""
+        if not self.legend_base_value or self.legend_base_value <= 0:
+            msg = "legend_base_value must be a positive integer for LEGEND_AWARD effects"
+            errors["legend_base_value"] = msg
+        if not self.legend_source_type_id:
+            msg = "legend_source_type is required for LEGEND_AWARD effects"
+            errors["legend_source_type"] = msg
 
-        if errors:
-            raise ValidationError(errors)
+    def _validate_non_legend_award_fields(self, errors: dict[str, str]) -> None:
+        """Populate *errors* for legend fields that must stay unset off LEGEND_AWARD."""
+        if self.legend_base_value is not None:
+            msg = "legend_base_value must be null for non-LEGEND_AWARD effects"
+            errors["legend_base_value"] = msg
+        if self.legend_source_type_id:
+            msg = "legend_source_type must be null for non-LEGEND_AWARD effects"
+            errors["legend_source_type"] = msg
+        if self.legend_description_template:
+            msg = "legend_description_template must be blank for non-LEGEND_AWARD effects"
+            errors["legend_description_template"] = msg

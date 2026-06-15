@@ -52,6 +52,10 @@ _REWARD_BOTH_PARENTS_SET = 2
 # smell (python:S1192).
 _CONSEQUENCE_FK = "checks.Consequence"
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+OBJECT_DB_MODEL = "objects.ObjectDB"
+ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
+
 
 # ---------------------------------------------------------------------------
 # Mission graph data model
@@ -324,7 +328,7 @@ class MissionNode(SharedMemoryModel):
         ),
     )
     locations = models.ManyToManyField(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         blank=True,
         related_name="+",
         help_text=(
@@ -355,32 +359,38 @@ class MissionNode(SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         errors: dict[str, str] = {}
+        self._validate_single_entry_node(errors)
+        self._validate_joint_mode_coupling(errors)
 
-        # Exactly one entry node per template.
-        if self.is_entry and self.template_id is not None:
-            other_entries = MissionNode.objects.filter(
-                template_id=self.template_id,
-                is_entry=True,
-            ).exclude(pk=self.pk)
-            if other_entries.exists():
-                errors["is_entry"] = "Template already has an entry node."
+        if errors:
+            raise ValidationError(errors)
 
-        # JOINT-mode coupling between conflict_mode/joint_combine/joint_count.
-        if self.conflict_mode == ConflictMode.JOINT:
-            if not self.joint_combine:
-                errors["joint_combine"] = "Required when conflict_mode is JOINT."
-            elif self.joint_combine == JointCombine.COUNT and self.joint_count is None:
-                errors["joint_count"] = "Required when joint_combine is COUNT."
-            elif self.joint_combine != JointCombine.COUNT and self.joint_count is not None:
-                errors["joint_count"] = "Must be null unless joint_combine is COUNT."
-        else:
+    def _validate_single_entry_node(self, errors: dict[str, str]) -> None:
+        """Enforce exactly one entry node per template."""
+        if not (self.is_entry and self.template_id is not None):
+            return
+        other_entries = MissionNode.objects.filter(
+            template_id=self.template_id,
+            is_entry=True,
+        ).exclude(pk=self.pk)
+        if other_entries.exists():
+            errors["is_entry"] = "Template already has an entry node."
+
+    def _validate_joint_mode_coupling(self, errors: dict[str, str]) -> None:
+        """Enforce conflict_mode/joint_combine/joint_count coupling."""
+        if self.conflict_mode != ConflictMode.JOINT:
             if self.joint_combine:
                 errors["joint_combine"] = "Must be null unless conflict_mode is JOINT."
             if self.joint_count is not None:
                 errors["joint_count"] = "Must be null unless conflict_mode is JOINT."
+            return
 
-        if errors:
-            raise ValidationError(errors)
+        if not self.joint_combine:
+            errors["joint_combine"] = "Required when conflict_mode is JOINT."
+        elif self.joint_combine == JointCombine.COUNT and self.joint_count is None:
+            errors["joint_count"] = "Required when joint_combine is COUNT."
+        elif self.joint_combine != JointCombine.COUNT and self.joint_count is not None:
+            errors["joint_count"] = "Must be null unless joint_combine is COUNT."
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -487,7 +497,7 @@ class MissionOption(SharedMemoryModel):
         ),
     )
     locations = models.ManyToManyField(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         blank=True,
         related_name="+",
         help_text=(
@@ -983,7 +993,7 @@ class MissionInstance(SharedMemoryModel):
         help_text="Where the run currently sits; null = complete.",
     )
     spawned_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -995,7 +1005,7 @@ class MissionInstance(SharedMemoryModel):
         ),
     )
     anchor_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1085,7 +1095,7 @@ class MissionParticipant(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -1233,7 +1243,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="deeds",
     )
     actor = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The acting participant's character — consequence follows the actor.",
@@ -1304,7 +1314,7 @@ class MissionGiver(SharedMemoryModel):
         help_text="How this giver reaches the player; selects the target's expected typeclass.",
     )
     target = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1423,7 +1433,7 @@ class MissionGiverCooldown(SharedMemoryModel):
     # Character is an ObjectDB here to match MissionParticipant.character — the
     # missions app keys runtime participation on the Evennia object, not a Persona.
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECT_DB_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -1459,7 +1469,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         related_name="reward_lines",
     )
     recipient = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(

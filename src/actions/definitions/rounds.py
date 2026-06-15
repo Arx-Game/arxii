@@ -18,6 +18,10 @@ from world.scenes.constants import (
 from world.scenes.models import SceneRound, SceneRoundParticipant
 from world.scenes.round_services import end_scene_round, start_scene_round
 
+# Repeated ActionResult failure messages, extracted to satisfy S1192.
+NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
+NO_CHARACTER_SHEET_MESSAGE = "No character sheet found."
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -61,9 +65,9 @@ class StartRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
         if sheet is None:
-            return ActionResult(success=False, message="No character sheet found.")
+            return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
         rnd = _active_round_for_room(room)
         if rnd is None:
@@ -103,9 +107,9 @@ class JoinRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
         if sheet is None:
-            return ActionResult(success=False, message="No character sheet found.")
+            return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
         rnd = _active_round_for_room(room)
         if rnd is None:
@@ -138,9 +142,9 @@ class LeaveRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
         if sheet is None:
-            return ActionResult(success=False, message="No character sheet found.")
+            return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
         SceneRoundParticipant.objects.filter(
             scene_round__room=room,
@@ -170,7 +174,7 @@ class EndRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
 
         rnd = _active_round_for_room(room)
         if rnd is None:

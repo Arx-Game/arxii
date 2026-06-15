@@ -356,6 +356,111 @@ def _wounds_from(pending: PendingResolution) -> list[ConditionTemplate]:
     return [e.condition_template for e in _apply_condition_effects(pending)]
 
 
+def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier input
+    *,
+    character_sheet: CharacterSheet,
+    result: DamageConsequenceResult,
+    wound_check_type: CheckType,
+    wound_difficulty: int,
+    wound_pool: ConsequencePool,
+    extra_modifiers: int,
+    combat_interaction_factory: Callable[[], Interaction] | None,
+) -> None:
+    """Resolve the permanent-wound tier and record any wounds onto ``result``."""
+    wound_breakdown = collect_check_modifiers(character_sheet, wound_check_type)
+    pending = resolve_vitals_consequence(
+        character_sheet,
+        wound_check_type,
+        wound_difficulty,
+        wound_pool,
+        extra_modifiers=extra_modifiers + wound_breakdown.total,
+    )
+    wounds = _wounds_from(pending)
+    if wounds:
+        result.wounds_applied.extend(wounds)
+        result.modifier_breakdown = wound_breakdown
+        _record_combat_outcome(
+            character_sheet,
+            wound_check_type,
+            wound_pool,
+            pending,
+            wound_breakdown,
+            combat_interaction_factory,
+            "permanent wound",
+        )
+
+
+def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier input
+    *,
+    character_sheet: CharacterSheet,
+    result: DamageConsequenceResult,
+    death_check_type: CheckType,
+    death_difficulty: int,
+    death_pool: ConsequencePool,
+    extra_modifiers: int,
+    combat_interaction_factory: Callable[[], Interaction] | None,
+) -> bool:
+    """Resolve the death tier; return True if processing should stop (character dying)."""
+    death_breakdown = collect_check_modifiers(character_sheet, death_check_type)
+    pending = resolve_vitals_consequence(
+        character_sheet,
+        death_check_type,
+        death_difficulty,
+        death_pool,
+        extra_modifiers=extra_modifiers + death_breakdown.total,
+    )
+    result.modifier_breakdown = death_breakdown
+    if _applied_bleed_out(pending):
+        result.dying = True
+        result.message = "took a lethal hit and is dying"
+        _record_combat_outcome(
+            character_sheet,
+            death_check_type,
+            death_pool,
+            pending,
+            death_breakdown,
+            combat_interaction_factory,
+            "lethal hit",
+        )
+        _maybe_danger_round_on_bleed_out(character_sheet)
+        return True
+    return False
+
+
+def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier input
+    *,
+    character_sheet: CharacterSheet,
+    result: DamageConsequenceResult,
+    ko_check_type: CheckType,
+    knockout_difficulty: int,
+    knockout_pool: ConsequencePool,
+    extra_modifiers: int,
+    combat_interaction_factory: Callable[[], Interaction] | None,
+) -> None:
+    """Resolve the knockout tier and record an unconscious outcome onto ``result``."""
+    ko_breakdown = collect_check_modifiers(character_sheet, ko_check_type)
+    pending = resolve_vitals_consequence(
+        character_sheet,
+        ko_check_type,
+        knockout_difficulty,
+        knockout_pool,
+        extra_modifiers=extra_modifiers + ko_breakdown.total,
+    )
+    result.modifier_breakdown = ko_breakdown
+    if _applied_unconscious(pending):
+        result.knocked_out = True
+        result.message = "was knocked unconscious"
+        _record_combat_outcome(
+            character_sheet,
+            ko_check_type,
+            knockout_pool,
+            pending,
+            ko_breakdown,
+            combat_interaction_factory,
+            "knockout",
+        )
+
+
 def process_damage_consequences(
     character_sheet: CharacterSheet | None,
     damage_dealt: int,
@@ -425,56 +530,29 @@ def process_damage_consequences(
     )
     wound_pool = _wound_pool(damage_type)
     if wound_difficulty > 0 and wound_pool is not None:
-        wound_check_type = _ensure_endurance_check_type()
-        wound_breakdown = collect_check_modifiers(character_sheet, wound_check_type)
-        pending = resolve_vitals_consequence(
-            character_sheet,
-            wound_check_type,
-            wound_difficulty,
-            wound_pool,
-            extra_modifiers=extra_modifiers + wound_breakdown.total,
+        _apply_wound_tier(
+            character_sheet=character_sheet,
+            result=result,
+            wound_check_type=_ensure_endurance_check_type(),
+            wound_difficulty=wound_difficulty,
+            wound_pool=wound_pool,
+            extra_modifiers=extra_modifiers,
+            combat_interaction_factory=combat_interaction_factory,
         )
-        wounds = _wounds_from(pending)
-        if wounds:
-            result.wounds_applied.extend(wounds)
-            result.modifier_breakdown = wound_breakdown
-            _record_combat_outcome(
-                character_sheet,
-                wound_check_type,
-                wound_pool,
-                pending,
-                wound_breakdown,
-                combat_interaction_factory,
-                "permanent wound",
-            )
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
     death_pool = _death_pool(damage_type)
     if death_difficulty > 0 and death_pool is not None:
-        death_check_type = _ensure_death_check_type()
-        death_breakdown = collect_check_modifiers(character_sheet, death_check_type)
-        pending = resolve_vitals_consequence(
-            character_sheet,
-            death_check_type,
-            death_difficulty,
-            death_pool,
-            extra_modifiers=extra_modifiers + death_breakdown.total,
-        )
-        result.modifier_breakdown = death_breakdown
-        if _applied_bleed_out(pending):
-            result.dying = True
-            result.message = "took a lethal hit and is dying"
-            _record_combat_outcome(
-                character_sheet,
-                death_check_type,
-                death_pool,
-                pending,
-                death_breakdown,
-                combat_interaction_factory,
-                "lethal hit",
-            )
-            _maybe_danger_round_on_bleed_out(character_sheet)
+        if _apply_death_tier(
+            character_sheet=character_sheet,
+            result=result,
+            death_check_type=_ensure_death_check_type(),
+            death_difficulty=death_difficulty,
+            death_pool=death_pool,
+            extra_modifiers=extra_modifiers,
+            combat_interaction_factory=combat_interaction_factory,
+        ):
             return result
 
     # 3. Knockout check (health between 0% and 20%)
@@ -483,29 +561,15 @@ def process_damage_consequences(
     )
     knockout_pool = _knockout_pool()
     if knockout_difficulty > 0 and knockout_pool is not None:
-        ko_check_type = _ensure_endurance_check_type()
-        ko_breakdown = collect_check_modifiers(character_sheet, ko_check_type)
-        pending = resolve_vitals_consequence(
-            character_sheet,
-            ko_check_type,
-            knockout_difficulty,
-            knockout_pool,
-            extra_modifiers=extra_modifiers + ko_breakdown.total,
+        _apply_knockout_tier(
+            character_sheet=character_sheet,
+            result=result,
+            ko_check_type=_ensure_endurance_check_type(),
+            knockout_difficulty=knockout_difficulty,
+            knockout_pool=knockout_pool,
+            extra_modifiers=extra_modifiers,
+            combat_interaction_factory=combat_interaction_factory,
         )
-        result.modifier_breakdown = ko_breakdown
-        if _applied_unconscious(pending):
-            result.knocked_out = True
-            result.message = "was knocked unconscious"
-            _record_combat_outcome(
-                character_sheet,
-                ko_check_type,
-                knockout_pool,
-                pending,
-                ko_breakdown,
-                combat_interaction_factory,
-                "knockout",
-            )
-            return result
 
     return result
 

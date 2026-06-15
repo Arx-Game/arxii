@@ -82,6 +82,13 @@ _EFFECT_PROPERTY_DEFINITIONS: list[tuple[str, str]] = [
     ("air", "Effect carries air energy"),
 ]
 
+# Outcome-tier labels and content names reused across seed rows (S1192).
+_CRITICAL_SUCCESS = "Critical Success"
+_CRITICAL_FAILURE = "Critical Failure"
+_TEMPERED_AGAINST_LIGHT = "Tempered Against Light"
+_HALLOWED_BURN = "Hallowed Burn"
+_MARKED_PATH = "Marked Path"
+
 
 @dataclass
 class MagicContentResult:
@@ -495,10 +502,10 @@ def _seed_endure_hallowed_ground_check() -> None:
 
     # --- Canonical CheckOutcome rows (not migration-seeded; idempotent) ---
     canonical_outcomes: dict[str, int] = {
-        "Critical Success": 2,
+        _CRITICAL_SUCCESS: 2,
         "Success": 1,
         "Failure": -1,
-        "Critical Failure": -2,
+        _CRITICAL_FAILURE: -2,
     }
     outcome_instances: dict[str, CheckOutcome] = {}
     for name, success_level in canonical_outcomes.items():
@@ -525,10 +532,10 @@ def _seed_endure_hallowed_ground_check() -> None:
     #   51–85 → Success
     #   86–100 → Critical Success
     outcome_specs: list[tuple[int, int, str]] = [
-        (1, 15, "Critical Failure"),
+        (1, 15, _CRITICAL_FAILURE),
         (16, 50, "Failure"),
         (51, 85, "Success"),
-        (86, 100, "Critical Success"),
+        (86, 100, _CRITICAL_SUCCESS),
     ]
     for min_roll, max_roll, outcome_name in outcome_specs:
         ResultChartOutcome.objects.get_or_create(
@@ -553,8 +560,8 @@ def _seed_endure_hallowed_ground_check() -> None:
 #: player_description/observer_description and ignores ``outcome_tier``.
 _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     {
-        "name": "Tempered Against Light",
-        "outcome_tier": "Critical Success",
+        "name": _TEMPERED_AGAINST_LIGHT,
+        "outcome_tier": _CRITICAL_SUCCESS,
         "description": (
             "The caster's flesh remembers an old burn; they walk hallowed ground unscathed."
         ),
@@ -580,8 +587,8 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
         "observer_description": "They smolder, marked by light they cannot bear.",
     },
     {
-        "name": "Hallowed Burn",
-        "outcome_tier": "Critical Failure",
+        "name": _HALLOWED_BURN,
+        "outcome_tier": _CRITICAL_FAILURE,
         "description": "A grievous, self-rebuking mark from sanctified ground.",
         "player_description": (
             "The sanctified ground answers the spell with fire. "
@@ -593,7 +600,7 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     },
     {
         "name": "Cast Disrupted",
-        "outcome_tier": "Critical Failure",
+        "outcome_tier": _CRITICAL_FAILURE,
         "description": "The casting failed mid-working; threads in the caster's hands snap.",
         "player_description": (
             "The threads in your hands snap. Whatever you were weaving has come undone."
@@ -655,7 +662,7 @@ def _seed_hallowed_reaction_conditions() -> None:
 
 #: The Critical Failure tier — the only tier with >1 spec (two APPLY_CONDITION
 #: effects on one Consequence). All other tiers map 1:1 to a single condition.
-_CRIT_FAIL_TIER: str = "Critical Failure"
+_CRIT_FAIL_TIER: str = _CRITICAL_FAILURE
 
 
 def _derive_tier_condition_names() -> dict[str, str]:
@@ -663,7 +670,7 @@ def _derive_tier_condition_names() -> dict[str, str]:
 
     Derived from ``_HALLOWED_REACTION_SPECS`` (the single source of truth).
     Tier insertion order follows spec order; the first spec at each tier wins
-    (so Critical Failure → the primary "Hallowed Burn"). The full list of
+    (so Critical Failure → the primary _HALLOWED_BURN). The full list of
     crit-fail names lives in ``CRIT_FAIL_CONDITION_NAMES``.
     """
     names: dict[str, str] = {}
@@ -723,7 +730,7 @@ def _seed_resonance_environment_consequence_pools() -> None:
 
     # --- Fetch CheckOutcome tiers (created by _seed_endure_hallowed_ground_check) ---
     outcome_map: dict[str, CheckOutcome] = {}
-    for name in ("Critical Success", "Success", "Failure", "Critical Failure"):
+    for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
     # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions) ---
@@ -778,7 +785,7 @@ def _seed_resonance_environment_consequence_pools() -> None:
             )
 
         # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
-        crit_fail_outcome = outcome_map["Critical Failure"]
+        crit_fail_outcome = outcome_map[_CRITICAL_FAILURE]
         crit_fail_label = f"{pool_name}: Critical Failure"
         # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
         # DB-unique; idempotency relies on the unique pool name embedded in label.
@@ -1008,7 +1015,7 @@ def _seed_resonance_alignment_boons() -> None:
 
 _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
     {
-        "condition_name": "Tempered Against Light",
+        "condition_name": _TEMPERED_AGAINST_LIGHT,
         "stat_key": "conditions.tempered_against_light.gained",
         "stat_name": "Tempered Against Light Gained",
         "achievement_name": "Hallowed-Hardened",
@@ -1027,7 +1034,7 @@ _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
         "notification_level": "personal",
     },
     {
-        "condition_name": "Hallowed Burn",
+        "condition_name": _HALLOWED_BURN,
         "stat_key": "conditions.hallowed_burn.gained",
         "stat_name": "Hallowed Burn Gained",
         "achievement_name": "Cast Out by the Light",
@@ -1233,7 +1240,7 @@ def _seed_hallowed_threshold_story() -> None:
             Beat-Burning: CONDITION_HELD Burning
             Beat-Hallowed-Burn: CONDITION_HELD Hallowed Burn
           Episode "Tempered Walk" (order=2, destination)
-          Episode "Marked Path" (order=3, destination, shared SUCCESS+FAILURE)
+          Episode _MARKED_PATH (order=3, destination, shared SUCCESS+FAILURE)
           Episode "Cast Out" (order=4, destination)
 
       Transitions out of Stepping Into Light (in order):
@@ -1292,7 +1299,7 @@ def _seed_hallowed_threshold_story() -> None:
     for ep_title, ep_order in [
         ("Stepping Into Light", 1),
         ("Tempered Walk", 2),
-        ("Marked Path", 3),
+        (_MARKED_PATH, 3),
         ("Cast Out", 4),
     ]:
         ep, _ = Episode.objects.get_or_create(
@@ -1307,7 +1314,7 @@ def _seed_hallowed_threshold_story() -> None:
     # --- Beats on source episode ---
     beat_specs: list[tuple[str, str]] = [
         (
-            "Tempered Against Light",
+            _TEMPERED_AGAINST_LIGHT,
             "The light bends around you instead of burning. The wound your blood "
             "remembers has hardened to a callus.",
         ),
@@ -1322,7 +1329,7 @@ def _seed_hallowed_threshold_story() -> None:
             "consecrated air, and the spell goes wide.",
         ),
         (
-            "Hallowed Burn",
+            _HALLOWED_BURN,
             "The sanctified ground answers the spell with fire. You are flung "
             "from the working, burning, and the threads in your hands snap.",
         ),
@@ -1352,19 +1359,19 @@ def _seed_hallowed_threshold_story() -> None:
         (
             1,
             "Tempered Walk",
-            "Tempered Against Light",
+            _TEMPERED_AGAINST_LIGHT,
             "You walked into hallowed ground and walked out unchanged. "
             "Some part of you is being remade.",
         ),
         (
             2,
             "Cast Out",
-            "Hallowed Burn",
+            _HALLOWED_BURN,
             "You broke against the threshold. Whatever was watching turned away. "
             "You will not try this again the same way.",
         ),
-        (3, "Marked Path", "Singed", marked_summary),
-        (4, "Marked Path", "Burning", marked_summary),
+        (3, _MARKED_PATH, "Singed", marked_summary),
+        (4, _MARKED_PATH, "Burning", marked_summary),
     ]
     for order, target_title, beat_cond_name, connection_summary in transition_specs:
         target = episodes_by_title[target_title]

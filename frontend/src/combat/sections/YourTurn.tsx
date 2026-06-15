@@ -32,7 +32,13 @@ import {
   useFleeMutation,
   useUpgradeCombo,
 } from '../queries';
-import type { AvailableCombo, EncounterDetail, Participant, RoundActionTyped } from '../types';
+import type {
+  AvailableCombo,
+  DispatchActionRequest,
+  EncounterDetail,
+  Participant,
+  RoundActionTyped,
+} from '../types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,6 +121,106 @@ function initialContext(slot: ActionSlot): ActionContext {
     effort: 'MEDIUM',
     strainCommitment: 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch-job builders (extracted from handleSubmit to flatten its branching)
+// ---------------------------------------------------------------------------
+
+type DispatchFn = (params: DispatchActionRequest) => Promise<unknown>;
+
+type DispatchJob = () => Promise<unknown>;
+
+/**
+ * Build the focused-slot dispatch job (if a technique is selected). Threads the
+ * chosen single target onto the focused declaration (#1001a); the backend
+ * resolves these PKs to instances scoped to the encounter.
+ */
+function buildFocusedJob(
+  focusedContext: ActionContext,
+  effortLevel: string,
+  dispatchAction: DispatchFn
+): DispatchJob | null {
+  if (focusedContext.techniqueId === undefined) return null;
+
+  const targetKwargs: Record<string, number> = {};
+  if (focusedContext.targetId !== undefined) {
+    if (focusedContext.targetKind === 'opponent') {
+      targetKwargs.focused_opponent_target_id = focusedContext.targetId;
+    } else if (focusedContext.targetKind === 'ally') {
+      targetKwargs.focused_ally_target_id = focusedContext.targetId;
+    }
+  }
+  return () =>
+    dispatchAction({
+      ref: {
+        backend: 'COMBAT',
+        technique_id: focusedContext.techniqueId ?? null,
+        action_slot: 'focused',
+      },
+      kwargs: { effort_level: effortLevel, ...targetKwargs },
+    });
+}
+
+/**
+ * Build a dispatch job for each visible passive slot that has a technique.
+ * Passives inherit the round effort declared on the focused slot.
+ */
+function buildPassiveJobs(
+  visiblePassiveSlots: ActionSlot[],
+  passiveContexts: Partial<Record<ActionSlot, ActionContext>>,
+  effortLevel: string,
+  dispatchAction: DispatchFn
+): DispatchJob[] {
+  const jobs: DispatchJob[] = [];
+  for (const slot of visiblePassiveSlots) {
+    const ctx = passiveContexts[slot];
+    if (ctx != null && ctx.techniqueId !== undefined) {
+      jobs.push(() =>
+        dispatchAction({
+          ref: {
+            backend: 'COMBAT',
+            technique_id: ctx.techniqueId ?? null,
+            // `slot` is already the 'passive-<category>' string the backend's
+            // CombatActionSlot expects — pass it straight through.
+            action_slot: slot,
+          },
+          kwargs: { effort_level: effortLevel },
+        })
+      );
+    }
+  }
+  return jobs;
+}
+
+/**
+ * Build the clash-contribution dispatch job. technique_id goes in kwargs (NOT on
+ * the ref) per plan Task 7.3: ActionRef.__post_init__ rejects both clash_id and
+ * technique_id being set; see src/actions/types.py:137-155.
+ */
+function buildClashJob(
+  selectedClashRef: PlayerAction['ref'] | null,
+  focusedContext: ActionContext,
+  strainByClash: Record<number, number>,
+  dispatchAction: DispatchFn
+): DispatchJob | null {
+  if (selectedClashRef === null || selectedClashRef.clash_id == null) return null;
+
+  const clashId = selectedClashRef.clash_id;
+  const strain = strainByClash[clashId] ?? 0;
+  return () =>
+    dispatchAction({
+      ref: {
+        backend: 'COMBAT',
+        clash_id: clashId,
+        clash_action_slot: selectedClashRef.clash_action_slot ?? null,
+      },
+      kwargs: {
+        // technique_id belongs here for clash contributions, not on the ref.
+        technique_id: focusedContext.techniqueId,
+        strain_commitment: strain,
+      },
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -385,81 +491,28 @@ export function YourTurn({
 
     setSubmitError(null);
 
-    // Submission order per plan: focused first, then passives, then clashes.
-    const dispatchJobs: Array<() => Promise<unknown>> = [];
-
     // The round effort comes from the focused slot and applies to every
     // declaration (focused + passives). The COMBAT dispatch requires
     // effort_level in kwargs on every ref or it rejects (UNKNOWN_ACTION_REF).
     const effortLevel = EFFORT_TO_BACKEND[focusedContext.effort];
 
-    // 1. Focused action (if technique selected)
-    if (focusedContext.techniqueId !== undefined) {
-      // Thread the chosen single target onto the focused declaration (#1001a).
-      // The backend resolves these PKs to instances scoped to the encounter.
-      const targetKwargs: Record<string, number> = {};
-      if (focusedContext.targetId !== undefined) {
-        if (focusedContext.targetKind === 'opponent') {
-          targetKwargs.focused_opponent_target_id = focusedContext.targetId;
-        } else if (focusedContext.targetKind === 'ally') {
-          targetKwargs.focused_ally_target_id = focusedContext.targetId;
-        }
-      }
-      dispatchJobs.push(() =>
-        dispatchAction({
-          ref: {
-            backend: 'COMBAT',
-            technique_id: focusedContext.techniqueId ?? null,
-            action_slot: 'focused',
-          },
-          kwargs: { effort_level: effortLevel, ...targetKwargs },
-        })
-      );
-    }
+    // Submission order per plan: focused first, then passives, then clashes
+    // (focused first guarantees the server sees focused before passives).
+    const focusedJob = buildFocusedJob(focusedContext, effortLevel, dispatchAction);
+    const passiveJobs = buildPassiveJobs(
+      visiblePassiveSlots,
+      passiveContexts,
+      effortLevel,
+      dispatchAction
+    );
+    const clashJob = buildClashJob(selectedClashRef, focusedContext, strainByClash, dispatchAction);
 
-    // 2. Passive actions (for each visible passive slot that has a technique)
-    for (const slot of visiblePassiveSlots) {
-      const ctx = passiveContexts[slot];
-      if (ctx != null && ctx.techniqueId !== undefined) {
-        dispatchJobs.push(() =>
-          dispatchAction({
-            ref: {
-              backend: 'COMBAT',
-              technique_id: ctx.techniqueId ?? null,
-              // `slot` is already the 'passive-<category>' string the backend's
-              // CombatActionSlot expects — pass it straight through.
-              action_slot: slot,
-            },
-            // Passives inherit the round effort declared on the focused slot.
-            kwargs: { effort_level: effortLevel },
-          })
-        );
-      }
-    }
+    const dispatchJobs: DispatchJob[] = [
+      ...(focusedJob ? [focusedJob] : []),
+      ...passiveJobs,
+      ...(clashJob ? [clashJob] : []),
+    ];
 
-    // 3. Clash contributions — technique_id goes in kwargs (NOT on the ref).
-    // Per plan Task 7.3: ActionRef.__post_init__ rejects both clash_id and
-    // technique_id being set; see src/actions/types.py:137-155.
-    if (selectedClashRef !== null && selectedClashRef.clash_id != null) {
-      const clashId = selectedClashRef.clash_id;
-      const strain = strainByClash[clashId] ?? 0;
-      dispatchJobs.push(() =>
-        dispatchAction({
-          ref: {
-            backend: 'COMBAT',
-            clash_id: clashId,
-            clash_action_slot: selectedClashRef.clash_action_slot ?? null,
-          },
-          kwargs: {
-            // technique_id belongs here for clash contributions, not on the ref.
-            technique_id: focusedContext.techniqueId,
-            strain_commitment: strain,
-          },
-        })
-      );
-    }
-
-    // Execute in order (focused first guarantees the server sees focused before passives).
     try {
       for (const job of dispatchJobs) {
         await job();

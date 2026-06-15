@@ -22,7 +22,21 @@ locally, plus the existing CI shard matrix at ``ci.yml:46-76``) runs the
 real migration chain and the real refresh implementations.
 """
 
-from server.conf.test_settings import *  # noqa: F403
+import server.conf.test_settings as _base_test_settings
+
+# Inherit every public setting from the base test settings module. A wildcard
+# import (``from ... import *``) trips SonarCloud python:S2208; copying the
+# public module-level names in explicitly is behaviourally equivalent for
+# Django settings (which only reads module-level names) and keeps the linter
+# clean. ``test_settings`` defines no ``__all__``, so this matches what
+# ``import *`` would have pulled in.
+globals().update(
+    {
+        _name: _value
+        for _name, _value in vars(_base_test_settings).items()
+        if not _name.startswith("_")
+    }
+)
 
 # Override the test database to SQLite in-memory. Django auto-creates a
 # fresh in-memory DB per test run (and per parallel worker), so no

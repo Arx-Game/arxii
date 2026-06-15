@@ -42,6 +42,15 @@ from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
+CHECK_TYPE_MODEL = "checks.CheckType"
+CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+TECHNIQUE_MODEL = "magic.Technique"
+COMBAT_PARTICIPANT_MODEL = "combat.CombatParticipant"
+COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
+
 
 class CombatEncounter(SharedMemoryModel):
     """Top-level container for a combat encounter."""
@@ -259,7 +268,7 @@ class ThreatPoolEntry(SharedMemoryModel):
         ),
     )
     clash_resolution_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -267,7 +276,7 @@ class ThreatPoolEntry(SharedMemoryModel):
         help_text="Consequence pool fired when a Clash initiated by this entry resolves.",
     )
     clash_per_round_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -396,7 +405,7 @@ class CombatOpponent(SharedMemoryModel):
         ),
     )
     barrier_break_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -404,7 +413,7 @@ class CombatOpponent(SharedMemoryModel):
         help_text=("Consequence pool fired when PCs successfully break this opponent's barrier."),
     )
     aftermath_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -616,7 +625,7 @@ class ComboLearning(SharedMemoryModel):
         related_name="learnings",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="combo_learnings",
     )
@@ -647,7 +656,7 @@ class CombatParticipant(SharedMemoryModel):
         related_name="participants",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="combat_participations",
     )
@@ -726,7 +735,7 @@ class CombatRoundAction(SharedMemoryModel):
         default=EffortLevel.MEDIUM,
     )
     focused_action = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         null=True,
@@ -760,21 +769,21 @@ class CombatRoundAction(SharedMemoryModel):
     )
 
     physical_passive = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     social_passive = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     mental_passive = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -871,12 +880,12 @@ class CombatPull(SharedMemoryModel):
     """
 
     participant = models.ForeignKey(
-        "combat.CombatParticipant",
+        COMBAT_PARTICIPANT_MODEL,
         on_delete=models.CASCADE,
         related_name="combat_pulls",
     )
     encounter = models.ForeignKey(
-        "combat.CombatEncounter",
+        COMBAT_ENCOUNTER_MODEL,
         on_delete=models.CASCADE,
         related_name="combat_pulls",
     )
@@ -1113,13 +1122,13 @@ class RoundChallengeDeclaration(SharedMemoryModel):
     """
 
     encounter = models.ForeignKey(
-        "combat.CombatEncounter",
+        COMBAT_ENCOUNTER_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_declarations",
     )
     round_number = models.PositiveIntegerField()
     participant = models.ForeignKey(
-        "combat.CombatParticipant",
+        COMBAT_PARTICIPANT_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_declarations",
     )
@@ -1195,7 +1204,7 @@ class StrainConfig(SharedMemoryModel):
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1312,7 +1321,7 @@ class ClashConfig(SharedMemoryModel):
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1351,7 +1360,7 @@ class FleeConfig(SharedMemoryModel):
     """
 
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="CheckType rolled for flee attempts.",
@@ -1361,7 +1370,7 @@ class FleeConfig(SharedMemoryModel):
         help_text="Flee difficulty before opponent-tier modifiers.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1374,7 +1383,7 @@ class FleeConfig(SharedMemoryModel):
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1415,7 +1424,7 @@ class EncounterAftermathRule(SharedMemoryModel):
     outcome = models.CharField(max_length=20, choices=EncounterOutcome.choices)
     risk_level = models.CharField(max_length=20, choices=RiskLevel.choices)
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="CheckType rolled per affected participant.",
@@ -1424,7 +1433,7 @@ class EncounterAftermathRule(SharedMemoryModel):
         help_text="Authored difficulty for the aftermath check.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1475,19 +1484,19 @@ class Clash(SharedMemoryModel):
         related_name="clashes",
     )
     initiator = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     resolution_consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
     per_round_consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1678,7 +1687,7 @@ class ClashContribution(SharedMemoryModel):
         help_text="The ClashRound this contribution belongs to.",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="The PC whose contribution this row records.",
@@ -1692,7 +1701,7 @@ class ClashContribution(SharedMemoryModel):
         help_text="Anima the PC committed to the Clash this round.",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1788,7 +1797,7 @@ class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
     """
 
     encounter = models.ForeignKey(
-        "combat.CombatEncounter",
+        COMBAT_ENCOUNTER_MODEL,
         on_delete=models.CASCADE,
         related_name="clash_declarations",
         help_text="The encounter this declaration belongs to.",
@@ -1797,7 +1806,7 @@ class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
         help_text="The encounter round this declaration is for (1-indexed).",
     )
     participant = models.ForeignKey(
-        "combat.CombatParticipant",
+        COMBAT_PARTICIPANT_MODEL,
         on_delete=models.CASCADE,
         related_name="clash_declarations",
         help_text="The PC participant making this contribution.",
@@ -1814,7 +1823,7 @@ class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
         help_text="Which action slot the PC commits: FOCUSED (primary) or PASSIVE (secondary).",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        TECHNIQUE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The Technique the PC is using for this clash contribution.",
@@ -1853,7 +1862,7 @@ class EncounterRiskAcknowledgement(SharedMemoryModel):
         related_name="risk_acknowledgements",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="combat_risk_acknowledgements",
     )
@@ -1904,7 +1913,7 @@ class EscalationCurve(SharedMemoryModel):
         help_text="Intensity modifier added to each participant's engagement per tick.",
     )
     pace_check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="escalation_curves",
         help_text="Check rolled each tick to keep control in pace with intensity.",
