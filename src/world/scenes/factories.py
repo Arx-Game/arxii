@@ -2,7 +2,7 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest
@@ -10,6 +10,7 @@ from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
     PersonaType,
+    RoundStatus,
     ScenePrivacyMode,
     SummaryAction,
 )
@@ -23,6 +24,8 @@ from world.scenes.models import (
     PersonaDiscovery,
     Scene,
     SceneParticipation,
+    SceneRound,
+    SceneRoundParticipant,
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
@@ -197,3 +200,20 @@ class InteractionActionFactory(factory_django.DjangoModelFactory):
     pose = factory.SubFactory(InteractionFactory, mode=InteractionMode.POSE)
     action_interaction = factory.SubFactory(InteractionFactory, mode=InteractionMode.ACTION)
     ordering = 0
+
+
+class SceneRoundFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneRound
+
+    room = factory.SubFactory(ObjectDBFactory)
+    status = RoundStatus.BETWEEN_ROUNDS
+    round_number = 0
+
+
+class SceneRoundParticipantFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneRoundParticipant
+
+    scene_round = factory.SubFactory(SceneRoundFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)

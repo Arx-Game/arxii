@@ -43,3 +43,12 @@ class SceneRoundModelTests(TestCase):
         SceneRoundParticipant.objects.create(scene_round=rnd, character_sheet=sheet)
         with self.assertRaises(IntegrityError):
             SceneRoundParticipant.objects.create(scene_round=rnd, character_sheet=sheet)
+
+
+class RoundFactorySmokeTests(TestCase):
+    def test_factories_build(self):
+        from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
+
+        p = SceneRoundParticipantFactory()
+        assert p.scene_round_id is not None
+        assert p.character_sheet_id is not None
