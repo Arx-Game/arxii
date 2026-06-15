@@ -275,3 +275,84 @@ class GroupJointTriggerTests(TestCase):
         self.assertIsNotNone(res.resolved)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node_id, dest.pk)
+
+
+class GroupVoteRegressionTests(TestCase):
+    """Adversarial-review regressions (#1036)."""
+
+    def test_repick_after_others_voted_does_not_crash(self):
+        # B1: a stale vote for a now-unpicked option must be filtered at tally
+        # (not crash with a winner that has no picker). The still-surfaced
+        # option wins.
+        instance, holder, p2, opt_a, opt_b, *_ = _group("repick")
+        submit_group_pick(instance, holder, option_id=opt_a.pk)
+        submit_group_pick(instance, p2, option_id=opt_b.pk)
+        cast_group_vote(instance, p2, option_id=opt_a.pk)  # p2 votes A (surfaced)
+        submit_group_pick(instance, holder, option_id=opt_b.pk)  # A now unpicked
+        res = cast_group_vote(instance, holder, option_id=opt_b.pk)  # all voted → resolve
+        self.assertIsNotNone(res.resolved)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node_id, opt_b.branch_target_id)
+
+    def test_joint_timeout_without_holder_pick_resolves(self):
+        # B2: timeout fires JOINT resolution even when the holder never picked —
+        # the routing anchor falls back to a picker rather than raising.
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory, ConsequenceFactory
+        from world.checks.types import CheckResult
+        from world.missions.factories import MissionOptionRouteFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        holder = _pc()
+        p2 = _pc()
+        template = MissionTemplateFactory(name="joint-timeout")
+        entry = MissionNodeFactory(
+            template=template,
+            key="entry",
+            is_entry=True,
+            conflict_mode=ConflictMode.JOINT,
+            joint_combine=JointCombine.ANY,
+        )
+        dest = MissionNodeFactory(template=template, key="dest")
+        success = CheckOutcomeFactory(name="JTWin", success_level=3)
+        check = CheckTypeFactory(name="JTCheck")
+        opt = MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=check,
+        )
+        MissionOptionRouteFactory(
+            option=opt,
+            outcome_tier=success,
+            target_node=dest,
+            consequence=ConsequenceFactory(outcome_tier=success),
+        )
+        instance = staff_assign_mission(template, holder)
+        share_mission(instance, p2)
+
+        def _always_success(character, check_type, **_kw):
+            return CheckResult(
+                check_type=check_type,
+                outcome=success,
+                chart=None,
+                roller_rank=None,
+                target_rank=None,
+                rank_difference=0,
+                trait_points=0,
+                aspect_bonus=0,
+                total_points=0,
+            )
+
+        with patch("world.missions.services.resolution.perform_check", side_effect=_always_success):
+            submit_group_pick(instance, p2, option_id=opt.pk)  # holder never picks
+        # Expire the window, then a lazy access resolves anchoring on p2.
+        past = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 5)
+        MissionGroupBallot.objects.filter(instance=instance).update(created_at=past)
+        with patch("world.missions.services.resolution.perform_check", side_effect=_always_success):
+            res = group_beat(instance, p2)
+        self.assertIsNotNone(res.resolved)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node_id, dest.pk)

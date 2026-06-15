@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionOption,
-        MissionParticipant,
         MissionRewardQueue,
     )
 
@@ -71,31 +70,6 @@ class ChallengeOption:
     auto_succeeds: bool
     difficulty: int
     owner: ObjectDB
-
-
-@dataclass(frozen=True)
-class GroupChoice:
-    """The resolution decision for a multi-participant :class:`MissionNode`.
-
-    Produced by ``world.missions.services.multiplayer.select_group_choice``
-    from the per-participant ``picks`` and the node's ``conflict_mode``.
-
-    * COINFLIP / VOTE — a *single* winning option is chosen and one acting
-      participant is selected (``option`` and ``actor`` set; ``attempts``
-      empty). The Phase-3 ``resolve_option`` then performs that one option as
-      ``actor`` (moral consequence follows the actor).
-    * JOINT — there is NO single winner. ``attempts`` carries the full set of
-      (participant, option) pairs; every participant runs their own pick and
-      the orchestrator combines the per-participant outcomes per the node's
-      ``joint_combine`` / ``joint_count``. ``option`` and ``actor`` are None.
-
-    Not a bare dict — ``attempts`` is an immutable tuple of typed pairs.
-    """
-
-    is_joint: bool
-    option: MissionOption | None = None
-    actor: MissionParticipant | None = None
-    attempts: tuple[tuple[MissionParticipant, MissionOption], ...] = ()
 
 
 @dataclass(frozen=True)

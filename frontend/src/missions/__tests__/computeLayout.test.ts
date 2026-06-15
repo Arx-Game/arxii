@@ -15,7 +15,7 @@ const node = (id: number, key: string, overrides: Partial<MissionNode> = {}): Mi
     template: 1,
     key,
     is_entry: false,
-    conflict_mode: 'coinflip',
+    conflict_mode: 'group_vote',
     joint_combine: null,
     joint_count: null,
     allowed_riders: [],

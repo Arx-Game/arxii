@@ -96,7 +96,7 @@ class MissionTemplateFactory(DjangoModelFactory):
 
 
 class MissionNodeFactory(DjangoModelFactory):
-    """Factory for MissionNode. Defaults to a non-entry COINFLIP node."""
+    """Factory for MissionNode. Defaults to a non-entry GROUP_VOTE node."""
 
     class Meta:
         model = MissionNode

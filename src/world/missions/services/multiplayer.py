@@ -36,6 +36,8 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
@@ -91,7 +93,7 @@ def build_group_option_list(
     list is appended verbatim; each ``PresentedOption.owner`` is already
     that participant's character (Phase 3 sets it). The merge is purely
     additive — players still pick; conflicting picks are arbitrated later
-    by :func:`select_group_choice`.
+    by :func:`resolve_group_node` (GROUP_VOTE tally / JOINT combine).
 
     The node's options are fetched ONCE and reused across every participant
     via :func:`present_options_for_character`, so the per-participant union
@@ -136,15 +138,20 @@ def resolve_group_node(
     )
     if not ballots:
         return []
-    presented = build_group_option_list(instance, node)
-    if node.conflict_mode == ConflictMode.JOINT:
-        picks = {ballot.participant: ballot.picked_option for ballot in ballots}
-        attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
-        deeds = _resolve_joint(instance, node, presented, attempts)
-    else:
-        option, actor = _tally_group_winner(instance, ballots)
-        deeds = _resolve_single_winner(instance, node, presented, option, actor)
-    MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
+    # Resolution + ballot cleanup are one atomic unit: ``resolve_option`` always
+    # creates a fresh (non-idempotent) deed, so a mid-resolution raise must roll
+    # back any partial deeds rather than leave the node wedged with stale ballots
+    # that a retry would double-resolve.
+    with transaction.atomic():
+        presented = build_group_option_list(instance, node)
+        if node.conflict_mode == ConflictMode.JOINT:
+            picks = {ballot.participant: ballot.picked_option for ballot in ballots}
+            attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
+            deeds = _resolve_joint(instance, node, presented, attempts)
+        else:
+            option, actor = _tally_group_winner(instance, ballots)
+            deeds = _resolve_single_winner(instance, node, presented, option, actor)
+        MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
     return deeds
 
 
@@ -158,11 +165,19 @@ def _tally_group_winner(
     back to the stage-1 picks. Ties break uniformly at random (the COINFLIP
     element folded in). The actor is a *picker* of the winning option — the
     contract holder when they picked it, else the lowest-pk picker. Votes choose
-    the option; picks choose who can actually perform it. ``cast_group_vote``
-    constrains votes to surfaced (picked) options, so a vote-winner always has at
-    least one picker.
+    the option; picks choose who can actually perform it.
+
+    Votes are filtered to options still *surfaced* (currently picked by someone)
+    at tally time — a participant can re-pick after others voted for their old
+    option, which would otherwise leave a vote-winner with no picker. This keeps
+    the winner always pickable (``pickers`` is never empty).
     """
-    voted = [ballot.voted_option for ballot in ballots if ballot.voted_option_id is not None]
+    surfaced = {ballot.picked_option_id for ballot in ballots}
+    voted = [
+        ballot.voted_option
+        for ballot in ballots
+        if ballot.voted_option_id is not None and ballot.voted_option_id in surfaced
+    ]
     tally = voted or [ballot.picked_option for ballot in ballots]
     counts: dict[int, int] = {}
     by_pk: dict[int, MissionOption] = {}
@@ -328,11 +343,10 @@ def _resolve_joint(
     # reward-line / contractual side effects can no longer be neutralized
     # by an "overwrite" trick.
     holder = contract_holder(instance)
-    holder_option: MissionOption | None = None
+    attempt_option: dict[int, MissionOption] = {}
     deeds: list[MissionDeedRecord] = []
     for participant, option in attempts:
-        if participant.pk == holder.pk:
-            holder_option = option
+        attempt_option[participant.pk] = option
         approach = _approach_for_pick(presented, participant, option)
         deeds.append(
             resolve_option(
@@ -345,45 +359,36 @@ def _resolve_joint(
             )
         )
 
-    if holder_option is None:
-        msg = (
-            "JOINT node group_resolve_node requires the contract holder to "
-            "have submitted a pick (its route-set carries the combined "
-            "routing decision)."
-        )
-        raise ValueError(msg)
+    # The combined decision routes through one anchor participant's option
+    # route-set. Normally that's the contract holder; on a timeout/partial
+    # where the holder never picked, fall back to the lowest-pk attempt so the
+    # node still resolves rather than raising (#1036). ``attempts`` is non-empty.
+    anchor = holder if holder.pk in attempt_option else attempts[0][0]
+    anchor_option = attempt_option[anchor.pk]
 
     # ROUTE ONCE based on the COMBINED result. _combined_route maps the
-    # boolean to the holder pick's authored route via the same
+    # boolean to the anchor pick's authored route via the same
     # CheckOutcome.success_level classification; _route_next_node /
     # _finish_terminal are the Phase-3 routing/terminal helpers reused
     # verbatim (not duplicated). DESIGN: JOINT nodes route by combined
     # success/failure BUCKET (best success-tier route / worst failure-tier
     # route), NOT per rolled tier — authors must author JOINT route-sets
-    # accordingly.
-    #
-    # Because per-attempt resolve_option calls used ``advance=False``, the
-    # instance position/status was never touched mid-loop; the compensation
-    # block that previously restored ACTIVE/cleared completed_at after a
-    # transient terminal is no longer needed.
+    # accordingly. Per-attempt resolve_option calls used ``advance=False``, so
+    # the instance position/status was never touched mid-loop.
     combined_success = _joint_combined_success(node, deeds)
-    route = _combined_route(holder_option, combined_success)
+    route = _combined_route(anchor_option, combined_success)
     next_node, candidate = _route_next_node(route)
-    # The JOINT decision's anchor is the contract holder's deed (the holder's
-    # option route-set drives _combined_route). Per-attempt deeds carried
-    # advance=False, so no candidate/reward emission happened mid-loop — this
-    # is the single combined-decision emission.
-    holder_deed = next(d for d in deeds if d.actor_id == holder.character_id)
+    anchor_deed = next(d for d in deeds if d.actor_id == anchor.character_id)
     if candidate is not None:
         # #941: record the fired random-set candidate on the anchor deed and
         # emit its reward bundle once (on selection, like the solo path).
-        holder_deed.route_candidate = candidate
-        holder_deed.save(update_fields=["route_candidate"])
-        emit_candidate_rewards(instance, candidate, holder_deed)
+        anchor_deed.route_candidate = candidate
+        anchor_deed.save(update_fields=["route_candidate"])
+        emit_candidate_rewards(instance, candidate, anchor_deed)
     if next_node is None:
         _finish_terminal(instance)
         # Phase 5b.0: JOINT terminal emits the route's reward lines ONCE.
-        emit_terminal_rewards(instance, route, holder_deed)
+        emit_terminal_rewards(instance, route, anchor_deed)
     else:
         instance.current_node = next_node
         instance.save()

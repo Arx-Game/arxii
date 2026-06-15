@@ -337,7 +337,10 @@ def register_all_tasks() -> None:
         )
     )
 
-    from world.missions.services.cron import apply_mission_reward_batch
+    from world.missions.services.cron import (
+        apply_mission_reward_batch,
+        resolve_expired_group_votes,
+    )
 
     register_task(
         CronDefinition(
@@ -348,6 +351,19 @@ def register_all_tasks() -> None:
                 "Apply queued POST_CRON mission rewards (LP/Resonance). Phase "
                 "5b.2 stub-seals both grant entry points pending payload "
                 "enrichment — see DESIGN §13.3."
+            ),
+        )
+    )
+
+    register_task(
+        CronDefinition(
+            task_key="missions.group_vote_sweep",
+            callable=resolve_expired_group_votes,
+            interval=timedelta(minutes=2),
+            description=(
+                "#1036 backstop: resolve group-decision nodes whose vote window "
+                "elapsed with the party gone (the play surface resolves the common "
+                "case lazily on access). Cheap when nothing is expired."
             ),
         )
     )

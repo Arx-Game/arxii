@@ -165,7 +165,7 @@ def apply_mission_reward_batch() -> RewardBatchResult:
     return RewardBatchResult(applied=tuple(applied), failed=tuple(failed))
 
 
-__all__ = ("apply_mission_reward_batch",)
+__all__ = ("apply_mission_reward_batch", "resolve_expired_group_votes")
 
 
 def resolve_expired_group_votes() -> int:
@@ -175,9 +175,13 @@ def resolve_expired_group_votes() -> int:
     which covers the common case. This sweep catches groups where *every*
     participant walked away without anyone hitting the beat again. Idempotent:
     a resolved node advances ``current_node`` and deletes its ballots, so a
-    second sweep finds nothing. Returns the number of nodes resolved.
+    second sweep finds nothing. A row whose instance has moved on (node no longer
+    current / run ended) has its stale ballots dropped so it doesn't re-scan
+    forever; one node failing to resolve is logged and skipped so it can't starve
+    the rest. Returns the number of nodes resolved.
     """
     from datetime import timedelta  # noqa: PLC0415
+    import logging  # noqa: PLC0415
 
     from django.db.models import Min  # noqa: PLC0415
 
@@ -189,6 +193,7 @@ def resolve_expired_group_votes() -> int:
     )
     from world.missions.services.multiplayer import resolve_group_node  # noqa: PLC0415
 
+    logger = logging.getLogger(__name__)
     cutoff = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS)
     expired = (
         MissionGroupBallot.objects.values("instance_id", "node_id")
@@ -199,12 +204,27 @@ def resolve_expired_group_votes() -> int:
     for row in expired:
         instance = MissionInstance.objects.filter(pk=row["instance_id"]).first()
         node = MissionNode.objects.filter(pk=row["node_id"]).first()
-        if (
+        live = (
             instance is not None
             and node is not None
             and instance.current_node_id == node.pk
             and instance.status == MissionStatus.ACTIVE
-        ):
+        )
+        if instance is None or node is None or not live:
+            # Node moved on / run ended — drop stale ballots so they don't
+            # re-scan on every future sweep.
+            MissionGroupBallot.objects.filter(
+                instance_id=row["instance_id"], node_id=row["node_id"]
+            ).delete()
+            continue
+        try:
             resolve_group_node(instance, node)
-            resolved += 1
+        except Exception:
+            logger.exception(
+                "group-vote sweep failed: instance=%s node=%s",
+                row["instance_id"],
+                row["node_id"],
+            )
+            continue
+        resolved += 1
     return resolved
