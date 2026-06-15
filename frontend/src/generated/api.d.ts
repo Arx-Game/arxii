@@ -8219,6 +8219,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/group-beat/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description #1036 — the group decision beat (resolves first if the window expired). */
+    get: operations['missions_journal_group_beat_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/{id}/group-pick/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1036 — submit this participant's stage-1 pick for the group node. */
+    post: operations['missions_journal_group_pick_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/{id}/group-vote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1036 — cast this participant's stage-2 vote; auto-resolves when all in. */
+    post: operations['missions_journal_group_vote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/{id}/resolve/': {
     parameters: {
       query?: never;
@@ -13662,12 +13713,11 @@ export interface components {
       readonly stages: components['schemas']['ConditionStage'][];
     };
     /**
-     * @description * `coinflip` - Coin Flip
-     *     * `vote` - Vote
+     * @description * `group_vote` - Group Vote
      *     * `joint` - Joint
      * @enum {string}
      */
-    ConflictModeEnum: 'coinflip' | 'vote' | 'joint';
+    ConflictModeEnum: 'group_vote' | 'joint';
     /**
      * @description * `therefore` - Therefore
      *     * `but` - But
@@ -15416,6 +15466,38 @@ export interface components {
       /** @description Check if this domain is optional (doesn't require point allocation). */
       readonly is_optional: boolean;
     };
+    /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
+    GroupBallotState: {
+      character_id: number;
+      picked_option_id: number | null;
+      voted_option_id: number | null;
+    };
+    /**
+     * @description Mirror of :class:`world.missions.types.GroupBeatResult` (#1036).
+     *
+     *     Exactly one of ``group_beat`` / ``resolved`` is set. Both use a
+     *     SerializerMethodField because DRF nested ``to_representation`` rejects None.
+     */
+    GroupBeatResult: {
+      readonly group_beat: components['schemas']['GroupBeatView'] | null;
+      readonly resolved: components['schemas']['ResolvedBeat'] | null;
+    };
+    /** @description Read-only mirror of :class:`world.missions.types.GroupBeatView` (#1036). */
+    GroupBeatView: {
+      instance_id: number;
+      node_key: string;
+      flavor_text: string;
+      conflict_mode: string;
+      phase: string;
+      options: components['schemas']['BeatOption'][];
+      ballots: components['schemas']['GroupBallotState'][];
+      expires_at: string | null;
+    };
+    /** @description POST body for the #1036 group-pick endpoint. */
+    GroupPickRequestRequest: {
+      option_id: number;
+      approach_id?: number | null;
+    };
     /** @description Serializer for GroupStoryProgress — per-GMTable progress pointer. */
     GroupStoryProgress: {
       readonly id: number;
@@ -15436,6 +15518,10 @@ export interface components {
       /** @description Null while the story is at the frontier (unauthored) or before start. */
       current_episode?: number | null;
       is_active?: boolean;
+    };
+    /** @description POST body for the #1036 group-vote endpoint. */
+    GroupVoteRequestRequest: {
+      option_id: number;
     };
     HeightBand: {
       readonly id: number;
@@ -16059,8 +16145,7 @@ export interface components {
       /**
        * @description How contested option choices resolve for multiple participants.
        *
-       *     * `coinflip` - Coin Flip
-       *     * `vote` - Vote
+       *     * `group_vote` - Group Vote
        *     * `joint` - Joint
        */
       conflict_mode: components['schemas']['ConflictModeEnum'];
@@ -16109,8 +16194,7 @@ export interface components {
       /**
        * @description How contested option choices resolve for multiple participants.
        *
-       *     * `coinflip` - Coin Flip
-       *     * `vote` - Vote
+       *     * `group_vote` - Group Vote
        *     * `joint` - Joint
        */
       conflict_mode: components['schemas']['ConflictModeEnum'];
@@ -18996,8 +19080,7 @@ export interface components {
       /**
        * @description How contested option choices resolve for multiple participants.
        *
-       *     * `coinflip` - Coin Flip
-       *     * `vote` - Vote
+       *     * `group_vote` - Group Vote
        *     * `joint` - Joint
        */
       conflict_mode?: components['schemas']['ConflictModeEnum'];
@@ -33477,6 +33560,119 @@ export interface operations {
         };
       };
       /** @description Not a participant / run concluded. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_group_beat_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupBeatResult'];
+        };
+      };
+      /** @description Run not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_group_pick_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GroupPickRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupBeatResult'];
+        };
+      };
+      /** @description Option not live / run not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_group_vote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GroupVoteRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupBeatResult'];
+        };
+      };
+      /** @description Voting not open / option not surfaced / not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
       404: {
         headers: {
           [name: string]: unknown;

@@ -12578,6 +12578,96 @@ paths:
           description: ''
         '404':
           description: Not a participant / run concluded.
+  /api/missions/journal/{id}/group-beat/:
+    get:
+      operationId: missions_journal_group_beat_retrieve
+      description: '#1036 — the group decision beat (resolves first if the window
+        expired).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBeatResult'
+          description: ''
+        '400':
+          description: Run not active.
+        '404':
+          description: Not a participant / no such mission.
+  /api/missions/journal/{id}/group-pick/:
+    post:
+      operationId: missions_journal_group_pick_create
+      description: '#1036 — submit this participant''s stage-1 pick for the group
+        node.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupPickRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBeatResult'
+          description: ''
+        '400':
+          description: Option not live / run not active.
+        '404':
+          description: Not a participant / no such mission.
+  /api/missions/journal/{id}/group-vote/:
+    post:
+      operationId: missions_journal_group_vote_create
+      description: '#1036 — cast this participant''s stage-2 vote; auto-resolves when
+        all in.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupVoteRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBeatResult'
+          description: ''
+        '400':
+          description: Voting not open / option not surfaced / not active.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/journal/{id}/resolve/:
     post:
       operationId: missions_journal_resolve_create
@@ -23903,13 +23993,11 @@ components:
       - stages
     ConflictModeEnum:
       enum:
-      - coinflip
-      - vote
+      - group_vote
       - joint
       type: string
       description: |-
-        * `coinflip` - Coin Flip
-        * `vote` - Vote
+        * `group_vote` - Group Vote
         * `joint` - Joint
     ConnectionTypeEnum:
       enum:
@@ -27563,6 +27651,92 @@ components:
       - id
       - is_optional
       - name
+    GroupBallotState:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.GroupBallotState`
+        (#1036).
+      properties:
+        character_id:
+          type: integer
+        picked_option_id:
+          type: integer
+          nullable: true
+        voted_option_id:
+          type: integer
+          nullable: true
+      required:
+      - character_id
+      - picked_option_id
+      - voted_option_id
+    GroupBeatResult:
+      type: object
+      description: |-
+        Mirror of :class:`world.missions.types.GroupBeatResult` (#1036).
+
+        Exactly one of ``group_beat`` / ``resolved`` is set. Both use a
+        SerializerMethodField because DRF nested ``to_representation`` rejects None.
+      properties:
+        group_beat:
+          allOf:
+          - $ref: '#/components/schemas/GroupBeatView'
+          nullable: true
+          readOnly: true
+        resolved:
+          allOf:
+          - $ref: '#/components/schemas/ResolvedBeat'
+          nullable: true
+          readOnly: true
+      required:
+      - group_beat
+      - resolved
+    GroupBeatView:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.GroupBeatView`
+        (#1036).
+      properties:
+        instance_id:
+          type: integer
+        node_key:
+          type: string
+        flavor_text:
+          type: string
+        conflict_mode:
+          type: string
+        phase:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOption'
+        ballots:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupBallotState'
+        expires_at:
+          type: string
+          nullable: true
+      required:
+      - ballots
+      - conflict_mode
+      - expires_at
+      - flavor_text
+      - instance_id
+      - node_key
+      - options
+      - phase
+    GroupPickRequestRequest:
+      type: object
+      description: 'POST body for the #1036 group-pick endpoint.'
+      properties:
+        option_id:
+          type: integer
+          minimum: 1
+        approach_id:
+          type: integer
+          minimum: 1
+          nullable: true
+      required:
+      - option_id
     GroupStoryProgress:
       type: object
       description: Serializer for GroupStoryProgress — per-GMTable progress pointer.
@@ -27613,6 +27787,15 @@ components:
       required:
       - gm_table
       - story
+    GroupVoteRequestRequest:
+      type: object
+      description: 'POST body for the #1036 group-vote endpoint.'
+      properties:
+        option_id:
+          type: integer
+          minimum: 1
+      required:
+      - option_id
     HeightBand:
       type: object
       properties:
@@ -28955,8 +29138,7 @@ components:
           description: |-
             How contested option choices resolve for multiple participants.
 
-            * `coinflip` - Coin Flip
-            * `vote` - Vote
+            * `group_vote` - Group Vote
             * `joint` - Joint
         joint_combine:
           nullable: true
@@ -29044,8 +29226,7 @@ components:
           description: |-
             How contested option choices resolve for multiple participants.
 
-            * `coinflip` - Coin Flip
-            * `vote` - Vote
+            * `group_vote` - Group Vote
             * `joint` - Joint
         joint_combine:
           nullable: true
@@ -34030,8 +34211,7 @@ components:
           description: |-
             How contested option choices resolve for multiple participants.
 
-            * `coinflip` - Coin Flip
-            * `vote` - Vote
+            * `group_vote` - Group Vote
             * `joint` - Joint
         joint_combine:
           nullable: true

@@ -56,6 +56,9 @@ from world.missions.models import (
 from world.missions.serializers import (
     BeatResolveRequestSerializer,
     BeatViewSerializer,
+    GroupBeatResultSerializer,
+    GroupPickRequestSerializer,
+    GroupVoteRequestSerializer,
     JournalEntrySerializer,
     MissionAbandonResultSerializer,
     MissionCategorySerializer,
@@ -542,3 +545,82 @@ class MissionJournalViewSet(viewsets.ViewSet):
         return Response(
             MissionAbandonResultSerializer({"id": instance.pk, "status": instance.status}).data
         )
+
+    @extend_schema(
+        responses={
+            200: GroupBeatResultSerializer,
+            400: OpenApiResponse(description="Run not active."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("GET",), url_path="group-beat")
+    def group_beat(self, request: Request, pk: str | None = None) -> Response:
+        """#1036 — the group decision beat (resolves first if the window expired)."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            group_beat as group_beat_service,
+        )
+
+        instance, character = self._instance_for(request, pk)
+        try:
+            result = group_beat_service(instance, character)
+        except BeatActionError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(GroupBeatResultSerializer(result).data)
+
+    @extend_schema(
+        request=GroupPickRequestSerializer,
+        responses={
+            200: GroupBeatResultSerializer,
+            400: OpenApiResponse(description="Option not live / run not active."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",), url_path="group-pick")
+    def group_pick(self, request: Request, pk: str | None = None) -> Response:
+        """#1036 — submit this participant's stage-1 pick for the group node."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import BeatActionError, submit_group_pick  # noqa: PLC0415
+
+        body = GroupPickRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        try:
+            result = submit_group_pick(
+                instance,
+                character,
+                option_id=body.validated_data["option_id"],
+                approach_id=body.validated_data.get("approach_id"),
+            )
+        except BeatActionError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(GroupBeatResultSerializer(result).data)
+
+    @extend_schema(
+        request=GroupVoteRequestSerializer,
+        responses={
+            200: GroupBeatResultSerializer,
+            400: OpenApiResponse(description="Voting not open / option not surfaced / not active."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",), url_path="group-vote")
+    def group_vote(self, request: Request, pk: str | None = None) -> Response:
+        """#1036 — cast this participant's stage-2 vote; auto-resolves when all in."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import BeatActionError, cast_group_vote  # noqa: PLC0415
+
+        body = GroupVoteRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        try:
+            result = cast_group_vote(
+                instance, character, option_id=body.validated_data["option_id"]
+            )
+        except BeatActionError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(GroupBeatResultSerializer(result).data)

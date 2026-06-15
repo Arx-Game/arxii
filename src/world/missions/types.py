@@ -197,6 +197,48 @@ class ResolvedBeat:
 
 
 @dataclass(frozen=True)
+class GroupBallotState:
+    """One participant's pick/vote in the group-vote window (#1036)."""
+
+    character_id: int
+    picked_option_id: int | None
+    voted_option_id: int | None
+
+
+@dataclass(frozen=True)
+class GroupBeatView:
+    """The group-decision beat — surfaced options + the party's ballots (#1036).
+
+    ``options`` is the UNION group option list (every participant's live
+    options, owner-tagged). ``phase`` is ``"pick"`` until every participant
+    has picked, then ``"vote"``. ``expires_at`` is the ISO deadline (None
+    until the first pick opens the window).
+    """
+
+    instance_id: int
+    node_key: str
+    flavor_text: str
+    conflict_mode: str
+    phase: str
+    options: tuple[BeatOption, ...]
+    ballots: tuple[GroupBallotState, ...]
+    expires_at: str | None
+
+
+@dataclass(frozen=True)
+class GroupBeatResult:
+    """A group pick/vote/beat response (#1036).
+
+    Exactly one side is set: ``group_beat`` while the party is still
+    collecting picks/votes, or ``resolved`` once the node resolved (all voted
+    or the window timed out).
+    """
+
+    group_beat: GroupBeatView | None
+    resolved: ResolvedBeat | None
+
+
+@dataclass(frozen=True)
 class StubCallRecord:
     """A summary of one stub-seam invocation during ``apply_deed_rewards``.
 

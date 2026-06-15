@@ -591,3 +591,58 @@ class MissionAbandonResultSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     status = serializers.CharField(read_only=True)
+
+
+class GroupBallotStateSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036)."""
+
+    character_id = serializers.IntegerField()
+    picked_option_id = serializers.IntegerField(allow_null=True)
+    voted_option_id = serializers.IntegerField(allow_null=True)
+
+
+class GroupBeatViewSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.GroupBeatView` (#1036)."""
+
+    instance_id = serializers.IntegerField()
+    node_key = serializers.CharField()
+    flavor_text = serializers.CharField(allow_blank=True)
+    conflict_mode = serializers.CharField()
+    phase = serializers.CharField()
+    options = BeatOptionSerializer(many=True)
+    ballots = GroupBallotStateSerializer(many=True)
+    expires_at = serializers.CharField(allow_null=True)
+
+
+class GroupBeatResultSerializer(serializers.Serializer):
+    """Mirror of :class:`world.missions.types.GroupBeatResult` (#1036).
+
+    Exactly one of ``group_beat`` / ``resolved`` is set. Both use a
+    SerializerMethodField because DRF nested ``to_representation`` rejects None.
+    """
+
+    group_beat = serializers.SerializerMethodField()
+    resolved = serializers.SerializerMethodField()
+
+    @extend_schema_field(GroupBeatViewSerializer(allow_null=True))
+    def get_group_beat(self, obj: object) -> dict | None:
+        view = obj.group_beat  # type: ignore[attr-defined]
+        return GroupBeatViewSerializer(view).data if view is not None else None
+
+    @extend_schema_field(ResolvedBeatSerializer(allow_null=True))
+    def get_resolved(self, obj: object) -> dict | None:
+        resolved = obj.resolved  # type: ignore[attr-defined]
+        return ResolvedBeatSerializer(resolved).data if resolved is not None else None
+
+
+class GroupPickRequestSerializer(serializers.Serializer):
+    """POST body for the #1036 group-pick endpoint."""
+
+    option_id = serializers.IntegerField(min_value=1)
+    approach_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+
+class GroupVoteRequestSerializer(serializers.Serializer):
+    """POST body for the #1036 group-vote endpoint."""
+
+    option_id = serializers.IntegerField(min_value=1)

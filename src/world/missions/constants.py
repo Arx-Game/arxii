@@ -29,15 +29,24 @@ class ArcScope(models.TextChoices):
 
 class ConflictMode(models.TextChoices):
     """How a multi-participant :class:`~world.missions.models.MissionNode`
-    resolves contested option choices.
+    resolves option choices — two distinct *kinds* of beat (#1036).
 
-    COINFLIP — random tiebreak; VOTE — majority of participants; JOINT — a
-    combined check governed by ``joint_combine``/``joint_count``.
+    GROUP_VOTE — the party converges on ONE option they all commit to; one
+    roll/actor resolves it. The player flow is two-stage: each participant
+    PICKS their own option, then the group VOTES (any member, any surfaced
+    option); plurality wins, ties break at random. Absorbs the former
+    COINFLIP (random tiebreak) + VOTE (plurality) modes.
+    JOINT — every participant performs their OWN pick in parallel; results
+    combine via ``joint_combine``/``joint_count``.
     """
 
-    COINFLIP = "coinflip", "Coin Flip"
-    VOTE = "vote", "Vote"
+    GROUP_VOTE = "group_vote", "Group Vote"
     JOINT = "joint", "Joint"
+
+
+# #1036 — seconds the group-vote window stays open from the first pick before
+# it auto-resolves from whatever's in (random tiebreak). Tunable.
+GROUP_VOTE_TIMEOUT_SECONDS = 120
 
 
 class JointCombine(models.TextChoices):

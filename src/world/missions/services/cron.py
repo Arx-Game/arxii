@@ -166,3 +166,45 @@ def apply_mission_reward_batch() -> RewardBatchResult:
 
 
 __all__ = ("apply_mission_reward_batch",)
+
+
+def resolve_expired_group_votes() -> int:
+    """Backstop sweep: resolve group nodes whose vote window has elapsed (#1036).
+
+    The play surface lazily resolves an expired group node on the next access,
+    which covers the common case. This sweep catches groups where *every*
+    participant walked away without anyone hitting the beat again. Idempotent:
+    a resolved node advances ``current_node`` and deletes its ballots, so a
+    second sweep finds nothing. Returns the number of nodes resolved.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.db.models import Min  # noqa: PLC0415
+
+    from world.missions.constants import GROUP_VOTE_TIMEOUT_SECONDS, MissionStatus  # noqa: PLC0415
+    from world.missions.models import (  # noqa: PLC0415
+        MissionGroupBallot,
+        MissionInstance,
+        MissionNode,
+    )
+    from world.missions.services.multiplayer import resolve_group_node  # noqa: PLC0415
+
+    cutoff = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS)
+    expired = (
+        MissionGroupBallot.objects.values("instance_id", "node_id")
+        .annotate(first=Min("created_at"))
+        .filter(first__lte=cutoff)
+    )
+    resolved = 0
+    for row in expired:
+        instance = MissionInstance.objects.filter(pk=row["instance_id"]).first()
+        node = MissionNode.objects.filter(pk=row["node_id"]).first()
+        if (
+            instance is not None
+            and node is not None
+            and instance.current_node_id == node.pk
+            and instance.status == MissionStatus.ACTIVE
+        ):
+            resolve_group_node(instance, node)
+            resolved += 1
+    return resolved
