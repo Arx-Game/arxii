@@ -162,6 +162,10 @@ class ActionRegistryTests(TestCase):
             "home",
             "activate_permit",
             "move_to_position",
+            "start_round",
+            "join_round",
+            "leave_round",
+            "end_round",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
