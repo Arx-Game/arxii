@@ -318,3 +318,57 @@ class ChronicPoisonTickTests(TestCase):
         vitals.refresh_from_db()
         self.assertEqual(vitals.health, 100, "Acute poison (is_long_term=False) is not chronic")
         self.assertEqual(summary.examined, 0)
+
+
+@tag("postgres")
+class SlowPoisonTierSplitTests(TestCase):
+    """End-to-end split: Slow Poison advances ONLY via the long-term tier (#520/#1050).
+
+    A long-term (``is_long_term=True``) DoT row is owned by the capped chronic tier, not
+    the acute round tick. This proves both directions of that ownership:
+    - an acute scene round does NOT advance Slow Poison (the acute tick skips long-term rows);
+    - the chronic daily tick DOES advance it.
+
+    @tag("postgres") — applying the progressive Slow Poison condition and resolving a scene
+    round exercise the PG-only DISTINCT ON query in the conditions apply/active path.
+    """
+
+    def test_slow_poison_advanced_only_by_long_term_tier(self) -> None:
+        ensure_poison_content()
+        slow = ConditionTemplate.get_by_name(SLOW_POISON_CONDITION_NAME)
+
+        # Character A: in an ACTIVE scene round — the acute tick must NOT touch Slow Poison.
+        sheet_round = CharacterSheetFactory()
+        char_round = sheet_round.character
+        vitals_round = CharacterVitalsFactory(
+            character_sheet=sheet_round, health=100, max_health=100
+        )
+        apply_condition(target=char_round, condition=slow)
+        rnd = SceneRoundFactory(status=RoundStatus.DECLARING, round_number=1)
+        SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet_round)
+
+        advance_scene_round(rnd)
+
+        vitals_round.refresh_from_db()
+        self.assertEqual(
+            vitals_round.health,
+            100,
+            "An acute scene round must NOT advance a long-term Slow Poison DoT row",
+        )
+
+        # Character B: NOT in any round — the chronic tier DOES advance Slow Poison.
+        sheet_chronic = CharacterSheetFactory()
+        char_chronic = sheet_chronic.character
+        vitals_chronic = CharacterVitalsFactory(
+            character_sheet=sheet_chronic, health=100, max_health=100
+        )
+        apply_condition(target=char_chronic, condition=slow)
+
+        batch_chronic_effect_tick()
+
+        vitals_chronic.refresh_from_db()
+        self.assertLess(
+            vitals_chronic.health,
+            100,
+            "The chronic long-term tier must advance Slow Poison and reduce health",
+        )
