@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
+
+from actions.constants import ActionBackend
+from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
+    RoundStatus,
     SceneRoundParticipantStatus,
+    SceneRoundStartReason,
 )
-from world.scenes.models import SceneRoundParticipant
+from world.scenes.models import SceneActionDeclaration, SceneRoundParticipant
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -32,20 +38,55 @@ class SceneRoundContext(RoundContext):
 
     @property
     def is_declaration_open(self) -> bool:
-        # Scene rounds resolve actions immediately and tick on action — they never
-        # declaration-gate (the tempo seam still reports the active round so dispatch
-        # can fire the per-action tick).
-        return False
+        # Social (opt-in / GM) rounds gather declarations while DECLARING. DANGER rounds
+        # keep the #1046 acute-tier behavior (resolve immediately, tick on action), so they
+        # never declaration-gate — this preserves AFK-safety for bleed-out progression.
+        return (
+            self._scene_round.status == RoundStatus.DECLARING
+            and self._scene_round.start_reason != SceneRoundStartReason.DANGER
+        )
 
+    @transaction.atomic
     def record_declaration(
         self,
         character: CharacterSheet,
         player_action: Any,
-        kwargs: dict[str, Any],
+        kwargs: dict[str, Any],  # noqa: ARG002  # contract-mandated; CHALLENGE path ignores it
     ) -> None:
-        # Unreachable while is_declaration_open is False; kept as a stub.
-        msg = "scene-round declarations land in the acute-tier plan"
-        raise NotImplementedError(msg)
+        if not self.is_declaration_open:
+            raise ActionDispatchError(ActionDispatchError.ROUND_DECLARATION_CLOSED)
+        if player_action.backend != ActionBackend.CHALLENGE:
+            # COMBAT never reaches a scene round (combat context precedence). Only CHALLENGE
+            # declarations are gathered here; turn-costing REGISTRY is handled in dispatch.
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+        from world.mechanics.models import ChallengeApproach, ChallengeInstance  # noqa: PLC0415
+
+        participant = SceneRoundParticipant.objects.get(
+            scene_round=self._scene_round,
+            character_sheet=character,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+        try:
+            challenge_instance = ChallengeInstance.objects.get(
+                pk=player_action.ref.challenge_instance_id
+            )
+        except ChallengeInstance.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+        try:
+            challenge_approach = ChallengeApproach.objects.get(pk=player_action.ref.approach_id)
+        except ChallengeApproach.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+        SceneActionDeclaration.objects.update_or_create(
+            scene_round=self._scene_round,
+            round_number=self._scene_round.round_number,
+            participant=participant,
+            defaults={
+                "challenge_instance": challenge_instance,
+                "challenge_approach": challenge_approach,
+                "is_pass": False,
+            },
+        )
 
 
 def resolve_scene_round_context(character: CharacterSheet) -> SceneRoundContext | None:

@@ -413,8 +413,16 @@ Two deliverables in one branch:
   `PlayerAction` so the unified endpoint is self-contained. (See magic.md Scope 4 deferred note.)
 - **Consequence→challenge spawn not yet wired** — the unified read surfaces spawned
   challenges when that lands; no interface change will be needed.
-- **General (non-combat) turn provider not built** — `RoundContext` seam exists; combat
-  is the sole implementor. The general provider is unbuilt by design.
+- **General (non-combat) turn provider — built (#520).** The `SceneRound` provider in
+  `world/scenes` implements the `RoundContext` seam alongside combat: opt-in / GM /
+  danger rounds, a shared per-target tick orchestrator, and **deferred-declaration
+  turn-taking** — in a social (opt-in/GM) round, declarations gather within the round
+  and resolve together in **initiative order** once every participant *present in the
+  room* has declared or (implicitly) passed; a GM may force-resolve, and an absent/idle
+  participant is an implicit pass that never blocks the round. Resolution is only ever
+  triggered by a turn-costing action (never a timer), so an idle scene never advances —
+  the AFK-safety guarantee. See `world/scenes/round_context.py`,
+  `world/scenes/round_services.py`, and the `SceneActionDeclaration` bridge.
 - **Frontend targeted-action routing gap** — `PlayerAction` has no `is_targeted` /
   target-spec field. `ActionPanel` currently uses `prerequisite_met` as a proxy for
   whether to enable the dispatch button, leaving the targeted-action UI path effectively

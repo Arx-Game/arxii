@@ -1001,6 +1001,55 @@ class SceneRoundParticipant(SharedMemoryModel):
         return f"{self.character_sheet} in {self.scene_round_id}"
 
 
+class SceneActionDeclaration(SharedMemoryModel):
+    """Consumer-owned bridge: a participant's declared action (or explicit pass) for a
+    social scene round. Mirrors combat's ``RoundChallengeDeclaration`` (no polymorphic FK).
+
+    ``is_pass=True`` with null challenge FKs is an explicit pass. A CHALLENGE declaration
+    stores ``(challenge_instance, challenge_approach)`` and is re-validated/resolved at
+    round resolution via ``get_available_actions`` (mirrors combat's post-pass).
+    """
+
+    scene_round = models.ForeignKey(
+        "scenes.SceneRound", on_delete=models.CASCADE, related_name="action_declarations"
+    )
+    round_number = models.PositiveIntegerField()
+    participant = models.ForeignKey(
+        "scenes.SceneRoundParticipant",
+        on_delete=models.CASCADE,
+        related_name="action_declarations",
+    )
+    challenge_instance = models.ForeignKey(
+        "mechanics.ChallengeInstance",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scene_declarations",
+    )
+    challenge_approach = models.ForeignKey(
+        "mechanics.ChallengeApproach",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scene_declarations",
+    )
+    is_pass = models.BooleanField(default=False)
+    declared_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["participant__initiative_order", "declared_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scene_round", "round_number", "participant"],
+                name="one_scene_action_declaration_per_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        kind = "pass" if self.is_pass else "challenge"
+        return f"SceneActionDeclaration({self.participant_id}, r{self.round_number}, {kind})"
+
+
 # Import place_models, action_models, and reaction_models for Django model discovery
 from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
