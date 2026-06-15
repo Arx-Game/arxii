@@ -97,3 +97,25 @@ class ReactionWindowKind(models.TextChoices):
     ENTRANCE = "entrance", "Make an Entrance"
     KUDOS = "kudos", "Kudos"
     SPREAD_ASSIST = "spread_assist", "Acclaim the Telling"  # PLACEHOLDER label
+
+
+class RoundStatus(models.TextChoices):
+    """Lifecycle status of a non-combat scene round (mirrors combat's EncounterStatus)."""
+
+    DECLARING = "declaring", "Declaring"
+    RESOLVING = "resolving", "Resolving"
+    BETWEEN_ROUNDS = "between_rounds", "Between Rounds"
+    COMPLETED = "completed", "Completed"
+
+
+class SceneRoundParticipantStatus(models.TextChoices):
+    """Whether a character is currently taking turns in a scene round."""
+
+    ACTIVE = "active", "Active"
+    LEFT = "left", "Left"
+
+
+# Scene-round statuses that represent an ongoing (non-completed) round.
+ACTIVE_SCENE_ROUND_STATUSES = frozenset(
+    {RoundStatus.DECLARING, RoundStatus.RESOLVING, RoundStatus.BETWEEN_ROUNDS}
+)
