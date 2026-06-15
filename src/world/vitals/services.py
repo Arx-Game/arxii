@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
     from world.checks.types import ModifierBreakdown, PendingResolution
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+    from world.conditions.types import RoundTickResult
     from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
 
@@ -728,6 +729,29 @@ def recompute_max_health(
     return new_max
 
 
+def apply_clamped_chronic_damage(character_sheet: CharacterSheet, amount: int) -> int:
+    """Reduce health by ``amount`` but never to/below the knockout floor, never increasing it.
+
+    The long-term tier MUST NOT incapacitate or kill (#520 §5.3): it never calls
+    process_damage_consequences and clamps post-damage health strictly above
+    KNOCKOUT_HEALTH_THRESHOLD * max_health. Returns the health actually removed.
+    """
+    if amount <= 0:
+        return 0
+    try:
+        vitals = character_sheet.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return 0
+    floor = int(KNOCKOUT_HEALTH_THRESHOLD * vitals.max_health) + 1  # strictly above the floor
+    new_health = max(vitals.health - amount, floor)
+    if new_health >= vitals.health:  # already at/below floor -> never heal, never raise
+        return 0
+    removed = vitals.health - new_health
+    vitals.health = new_health
+    vitals.save(update_fields=["health"])
+    return removed
+
+
 def get_vitals_consequence_config() -> VitalsConsequenceConfig:
     """Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.
 
@@ -778,6 +802,34 @@ def resolve_vitals_consequence(
     return pending
 
 
+def _apply_round_tick_damage(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM
+    result: RoundTickResult,
+) -> None:
+    """Apply acute DoT damage from a RoundTickResult to the target's health.
+
+    Mirrors mechanics._deal_damage: decrement health, then run the survivability
+    pipeline (acute tier — may wound/knockout/kill, which is correct for in-round
+    poison). No-op for targets without vitals.
+    """
+    if not result.damage_dealt:
+        return
+    try:
+        vitals = target.sheet_data.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    for damage_type, amount in result.damage_dealt:
+        if amount <= 0:
+            continue
+        vitals.health -= amount
+        vitals.save(update_fields=["health"])
+        process_damage_consequences(
+            character_sheet=target.sheet_data,
+            damage_dealt=amount,
+            damage_type=damage_type,
+        )
+
+
 def tick_round_for_targets(
     targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
     *,
@@ -795,9 +847,10 @@ def tick_round_for_targets(
     target_list = [t for t in targets if t is not None]
     for target in target_list:
         if timing == ROUND_TICK_START:
-            process_round_start(target)
+            result = process_round_start(target)
         else:
-            process_round_end(target)
+            result = process_round_end(target)
+        _apply_round_tick_damage(target, result)
     if timing == ROUND_TICK_END:
         from world.fatigue.services import tick_fatigue_collapse_for_targets  # noqa: PLC0415
 

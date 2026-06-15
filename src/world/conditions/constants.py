@@ -74,6 +74,14 @@ class TreatmentTargetKind(models.TextChoices):
 UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
 BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
 
+# Poison content identity keys (#1050). The DamageType, the staged acute
+# Poisoned ConditionTemplate, and the long-term Slow Poison variant are seeded
+# idempotently by ensure_poison_content(); these names locate those rows.
+POISON_DAMAGE_TYPE_NAME: str = "Poison"
+POISONED_CONDITION_NAME: str = "Poisoned"
+SLOW_POISON_CONDITION_NAME: str = "Slow Poison"
+POISON_CATEGORY_NAME: str = "Poison"
+
 
 class FoundationalCapability:
     """String constants for capabilities every character has innately.

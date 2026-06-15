@@ -178,6 +178,21 @@ class DecayTickSummary:
     severity_gated: int
 
 
+@dataclass
+class ChronicTickSummary:
+    """Summary of a scheduler-driven long-term chronic-effect tick.
+
+    Mirrors DecayTickSummary. ``examined`` counts active instances with a
+    long-term DoT row; ``ticked`` counts those that actually lost health;
+    ``active_round_skipped`` counts targets owned by an active round (the acute
+    tier advances them instead).
+    """
+
+    examined: int = 0
+    ticked: int = 0
+    active_round_skipped: int = 0
+
+
 @dataclass(frozen=True)
 class TreatmentOutcome:
     """Result returned by perform_treatment.

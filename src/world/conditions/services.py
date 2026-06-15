@@ -37,6 +37,10 @@ from world.checks.models import CheckType
 from world.checks.services import perform_check
 from world.checks.types import ModifierContribution
 from world.conditions.constants import (
+    POISON_CATEGORY_NAME,
+    POISON_DAMAGE_TYPE_NAME,
+    POISONED_CONDITION_NAME,
+    SLOW_POISON_CONDITION_NAME,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -47,6 +51,7 @@ from world.conditions.constants import (
 from world.conditions.models import (
     CapabilityType,
     ConditionCapabilityEffect,
+    ConditionCategory,
     ConditionCheckModifier,
     ConditionConditionInteraction,
     ConditionDamageInteraction,
@@ -69,6 +74,7 @@ from world.conditions.types import (
     BulkConditionApplication,
     CapabilityStatus,
     CheckModifierResult,
+    ChronicTickSummary,
     ConditionStageAdvanceCheckPayload,
     DamageInteractionResult,
     DecayTickSummary,
@@ -86,7 +92,6 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.conditions.models import ConditionCategory
     from world.magic.models import PendingAlteration, Technique, Thread
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
@@ -1597,7 +1602,9 @@ def _process_round_tick(
         query = Q(condition=instance.condition)
         if instance.current_stage:
             query |= Q(stage=instance.current_stage)
-        dot_effects = ConditionDamageOverTime.objects.filter(query, tick_timing=timing)
+        dot_effects = ConditionDamageOverTime.objects.filter(
+            query, tick_timing=timing, is_long_term=False
+        )
 
         for dot in dot_effects:
             damage = dot.base_damage
@@ -2241,6 +2248,75 @@ def decay_all_conditions_tick() -> DecayTickSummary:
     )
 
 
+def batch_chronic_effect_tick() -> ChronicTickSummary:
+    """Scheduler entry point. Advance long-term (chronic) DoT by one tick.
+
+    The capped long-term tier (#520 §5.3 + §6): for each active condition
+    instance whose template carries at least one ``is_long_term=True`` DoT row,
+    reduce the target's health DIRECTLY via apply_clamped_chronic_damage — a
+    non-lethal clamp that keeps health strictly above the knockout floor and
+    NEVER routes through process_damage_consequences (so it can never wound,
+    knock out, or kill).
+
+    Targets currently owned by an active (non-completed) combat or scene round
+    are skipped: the acute round tick advances their poison in that window (§6).
+
+    Long-term DoT has no stages, so the per-stage multiplier is intentionally
+    NOT applied here (mirroring the spec; avoids the known double-severity
+    scaling). base_damage is scaled only by effective_severity / stacks when the
+    row opts in.
+    """
+    from actions.round_context import get_active_round_context  # noqa: PLC0415
+    from world.vitals.services import apply_clamped_chronic_damage  # noqa: PLC0415
+
+    summary = ChronicTickSummary()
+
+    instances = (
+        ConditionInstance.objects.filter(
+            resolved_at__isnull=True,
+            condition__conditiondamageovertime_set__is_long_term=True,
+        )
+        .filter(
+            Q(is_suppressed=False)
+            | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
+        )
+        .select_related("condition", "current_stage", "target")
+        .distinct()
+    )
+
+    for instance in instances:
+        summary.examined += 1
+
+        try:
+            sheet = instance.target.sheet_data
+        except ObjectDoesNotExist:
+            sheet = None
+        if sheet is not None and get_active_round_context(sheet) is not None:
+            summary.active_round_skipped += 1
+            continue
+
+        total = 0
+        long_term_rows = ConditionDamageOverTime.objects.filter(
+            condition=instance.condition,
+            is_long_term=True,
+        )
+        for dot in long_term_rows:
+            damage = dot.base_damage
+            if dot.scales_with_severity:
+                damage = int(damage * instance.effective_severity)
+            if dot.scales_with_stacks:
+                damage = damage * instance.stacks
+            if damage > 0:
+                total += damage
+
+        if total > 0 and sheet is not None:
+            removed = apply_clamped_chronic_damage(sheet, total)
+            if removed > 0:
+                summary.ticked += 1
+
+    return summary
+
+
 # =============================================================================
 # Treatment service (Scope 6 §5.2)
 # =============================================================================
@@ -2608,3 +2684,117 @@ def get_penetration_factor(success_level: int) -> Decimal:
     ).order_by("-min_success_level")
     first = rows.first()
     return first.factor if first else Decimal("1.00")
+
+
+# =============================================================================
+# Poison content seed (#1050)
+# =============================================================================
+
+
+def _ensure_poison_category() -> ConditionCategory:
+    """Idempotently seed the Poison ConditionCategory.
+
+    ConditionTemplate.category is a non-null PROTECT FK, so the poison templates
+    need a stable category row to point at.
+    """
+    obj, _ = ConditionCategory.objects.get_or_create(
+        name=POISON_CATEGORY_NAME,
+        defaults={
+            "description": "Toxins and venoms that linger and harm over time.",
+            "is_negative": True,
+        },
+    )
+    return obj
+
+
+def _ensure_poison_damage_type() -> DamageType:
+    """Idempotently seed the engine-required Poison DamageType.
+
+    Leaves the consequence pools null so the config-default fallback applies.
+    """
+    obj, _ = DamageType.objects.get_or_create(
+        name=POISON_DAMAGE_TYPE_NAME,
+        defaults={"description": "Toxin damage that lingers as a poisoning condition."},
+    )
+    return obj
+
+
+def ensure_poison_content() -> None:
+    """Idempotently seed poison content (#1050).
+
+    Seeds the Poison DamageType, the staged acute Poisoned ConditionTemplate
+    (an acute DoT row plus two severity-ramping progression stages), and the
+    Slow Poison long-term variant (a single long-term DoT row advanced by the
+    daily chronic tick rather than the acute round tick). Safe to call
+    repeatedly — every write goes through get_or_create.
+    """
+    category = _ensure_poison_category()
+    dtype = _ensure_poison_damage_type()
+
+    poisoned, _ = ConditionTemplate.objects.get_or_create(
+        name=POISONED_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "description": (
+                "A virulent toxin courses through the body, worsening with each round."
+            ),
+            "has_progression": True,
+            "is_stackable": True,
+            "max_stacks": 5,
+            "stack_behavior": StackBehavior.INTENSITY,
+            "default_duration_type": DurationType.ROUNDS,
+            "default_duration_value": 5,
+        },
+    )
+    ConditionDamageOverTime.objects.get_or_create(
+        condition=poisoned,
+        damage_type=dtype,
+        defaults={
+            "base_damage": 4,
+            "scales_with_severity": True,
+            "scales_with_stacks": True,
+            "tick_timing": DamageTickTiming.END_OF_ROUND,
+            "is_long_term": False,
+        },
+    )
+    ConditionStage.objects.get_or_create(
+        condition=poisoned,
+        stage_order=1,
+        defaults={
+            "name": "Queasy",
+            "description": "The first churning of the toxin; mild but mounting.",
+            "rounds_to_next": 2,
+            "severity_multiplier": Decimal("1.00"),
+        },
+    )
+    ConditionStage.objects.get_or_create(
+        condition=poisoned,
+        stage_order=2,
+        defaults={
+            "name": "Wracked",
+            "description": "The poison takes full hold, racking the body with pain.",
+            "rounds_to_next": None,
+            "severity_multiplier": Decimal("2.00"),
+        },
+    )
+
+    slow, _ = ConditionTemplate.objects.get_or_create(
+        name=SLOW_POISON_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "description": ("A slow-acting toxin that gnaws at the body over days until cured."),
+            "has_progression": False,
+            "default_duration_type": DurationType.UNTIL_CURED,
+        },
+    )
+    ConditionDamageOverTime.objects.get_or_create(
+        condition=slow,
+        damage_type=dtype,
+        defaults={
+            "base_damage": 2,
+            "scales_with_severity": False,
+            "scales_with_stacks": False,
+            "tick_timing": DamageTickTiming.END_OF_ROUND,
+            "is_long_term": True,
+        },
+    )
