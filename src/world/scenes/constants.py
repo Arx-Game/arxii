@@ -119,3 +119,9 @@ class SceneRoundParticipantStatus(models.TextChoices):
 ACTIVE_SCENE_ROUND_STATUSES = frozenset(
     {RoundStatus.DECLARING, RoundStatus.RESOLVING, RoundStatus.BETWEEN_ROUNDS}
 )
+
+
+class SceneRoundStartReason(models.TextChoices):
+    OPT_IN = "opt_in", "Player opt-in"
+    GM = "gm", "GM-started"
+    DANGER = "danger", "Danger (auto-started)"

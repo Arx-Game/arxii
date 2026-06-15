@@ -15,7 +15,10 @@ from world.scenes.constants import (
     InteractionVisibility,
     PersonaType,
     PoseKind,
+    RoundStatus,
     ScenePrivacyMode,
+    SceneRoundParticipantStatus,
+    SceneRoundStartReason,
     SummaryAction,
     SummaryStatus,
 )
@@ -909,6 +912,89 @@ class SceneCheckModifier(SharedMemoryModel):
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         return f"{self.scene.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+
+class SceneRound(SharedMemoryModel):
+    """A non-combat round/turn structure anchored to a room.
+
+    Mirrors CombatEncounter's lifecycle without coupling to combat. One active
+    (non-completed) round per room.
+    """
+
+    room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="scene_rounds",
+        help_text="Room the round takes place in (mirrors CombatEncounter.room).",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scene_rounds",
+    )
+    round_number = models.PositiveIntegerField(default=0)
+    status = models.CharField(
+        max_length=20, choices=RoundStatus.choices, default=RoundStatus.BETWEEN_ROUNDS
+    )
+    start_reason = models.CharField(
+        max_length=20,
+        choices=SceneRoundStartReason.choices,
+        default=SceneRoundStartReason.OPT_IN,
+    )
+    round_started_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room"],
+                condition=models.Q(
+                    status__in=[
+                        RoundStatus.DECLARING,
+                        RoundStatus.RESOLVING,
+                        RoundStatus.BETWEEN_ROUNDS,
+                    ]
+                ),
+                name="one_active_scene_round_per_room",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"SceneRound(room={self.room_id}, round={self.round_number}, {self.status})"
+
+
+class SceneRoundParticipant(SharedMemoryModel):
+    """A character taking turns in a SceneRound."""
+
+    scene_round = models.ForeignKey(
+        SceneRound, on_delete=models.CASCADE, related_name="participants"
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="scene_round_participations",
+    )
+    initiative_order = models.PositiveIntegerField(default=0)
+    status = models.CharField(
+        max_length=20,
+        choices=SceneRoundParticipantStatus.choices,
+        default=SceneRoundParticipantStatus.ACTIVE,
+    )
+
+    class Meta:
+        ordering = ["initiative_order", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scene_round", "character_sheet"],
+                name="unique_scene_round_participant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} in {self.scene_round_id}"
 
 
 # Import place_models, action_models, and reaction_models for Django model discovery
