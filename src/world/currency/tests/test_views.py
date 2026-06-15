@@ -200,3 +200,48 @@ class OrgBooksRansomTests(TestCase):
                 format="json",
             )
         assert resp.status_code == 400
+
+
+class OrgBooksActivePersonaLeakTests(TestCase):
+    """#981 end-to-end: books follow the worn face, never leak the other faces."""
+
+    def setUp(self) -> None:
+        from types import SimpleNamespace
+
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.currency.views import OrgBooksViewSet
+        from world.scenes.constants import PersonaType
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.primary = self.sheet.primary_persona  # NOT a member
+        self.alt = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED
+        )  # member
+        self.org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.alt, organization=self.org, rank=3)
+        self._factory = APIRequestFactory()
+        self._view = OrgBooksViewSet.as_view({"get": "retrieve"})
+        self._SimpleNamespace = SimpleNamespace
+        self._force_authenticate = force_authenticate
+
+    def _get_books(self):
+        request = self._factory.get(f"/api/currency/org-books/{self.org.pk}/")
+        user = self._SimpleNamespace(is_authenticated=True, is_staff=False, puppet=self.character)
+        self._force_authenticate(request, user=user)
+        return self._view(request, pk=str(self.org.pk))
+
+    def test_primary_face_cannot_see_the_alts_org_books(self):
+        # On the primary (not a member) → denied. The alt's org membership must
+        # not be reachable while wearing the primary's face.
+        self.assertEqual(self._get_books().status_code, 403)
+
+    def test_switching_to_the_member_face_opens_its_books(self):
+        from world.scenes.services import set_active_persona
+
+        set_active_persona(self.sheet, self.alt)
+        self.assertEqual(self._get_books().status_code, 200)

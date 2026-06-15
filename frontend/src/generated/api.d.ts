@@ -9359,6 +9359,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/set-active/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #981 — set the played character's ACTIVE persona (the worn face).
+     *
+     *     The single player-facing mutator. The face must be one of the played
+     *     character's own personas; a foreign or unknown id is rejected uniformly
+     *     (400) without revealing whether it exists.
+     */
+    post: operations['personas_set_active_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/spread-specializations/': {
     parameters: {
       query?: never;
@@ -12348,6 +12371,10 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly default_delivery: string;
+    };
+    /** @description Result of the #981 set-active-persona endpoint — the now-worn face id. */
+    ActivePersonaResult: {
+      readonly active_persona_id: number;
     };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
@@ -21295,6 +21322,10 @@ export interface components {
       initiated_by_account?: number | null;
       /** @description Player or staff notes (scheduling preferences, etc.). */
       notes?: string;
+    };
+    /** @description POST body for the #981 set-active-persona endpoint. */
+    SetActivePersonaRequestRequest: {
+      persona_id: number;
     };
     /**
      * @description * `positive` - Positive
@@ -36165,6 +36196,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedSpreadableDeedList'];
+        };
+      };
+    };
+  };
+  personas_set_active_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetActivePersonaRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActivePersonaResult'];
         };
       };
     };

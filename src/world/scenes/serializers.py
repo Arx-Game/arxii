@@ -229,3 +229,15 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
                         )
 
         return attrs
+
+
+class SetActivePersonaRequestSerializer(serializers.Serializer):
+    """POST body for the #981 set-active-persona endpoint."""
+
+    persona_id = serializers.IntegerField(min_value=1)
+
+
+class ActivePersonaResultSerializer(serializers.Serializer):
+    """Result of the #981 set-active-persona endpoint — the now-worn face id."""
+
+    active_persona_id = serializers.IntegerField(read_only=True)

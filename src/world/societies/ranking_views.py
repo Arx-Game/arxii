@@ -70,15 +70,15 @@ class RankingDisplayViewSet(viewsets.ViewSet):
 
 
 def _viewer_persona(request: Request):
-    """The viewer's presented persona (PRIMARY convention), or None.
+    """The viewer's ACTIVE persona (the face they're on), or None (#981).
 
-    None viewers see public boards and the cloaked state on gated ones —
-    same posture as a telnet examine with no persona context.
+    Gates the board on whichever persona the player's character is currently
+    presenting as, so an ESTABLISHED alt's standing shows while that face is
+    worn and other faces never leak. None viewers see public boards and the
+    cloaked state on gated ones — same posture as a telnet examine with no
+    persona context. Fail-closed on any resolution fault.
     """
-    from world.scenes.services import (  # noqa: PLC0415
-        MissingPrimaryPersonaError,
-        persona_for_character,
-    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     try:
         puppet = request.user.puppet
@@ -86,9 +86,12 @@ def _viewer_persona(request: Request):
         return None
     if puppet is None:
         return None
+    sheet = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return None
     try:
-        return persona_for_character(puppet)
-    except MissingPrimaryPersonaError:
+        return active_persona_for_sheet(sheet)
+    except Exception:  # noqa: BLE001 - fail closed: any resolution fault → deny
         return None
 
 

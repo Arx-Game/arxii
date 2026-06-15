@@ -260,6 +260,25 @@ class CharacterSheet(SharedMemoryModel):
     )
     rollmod = models.SmallIntegerField(default=0)
 
+    # #981 — the persona (face) this character is currently presenting as. NULL
+    # means "on their PRIMARY persona" (the resolver defaults to it), so a fresh
+    # sheet writes no row. Mutated ONLY via ``scenes.services.set_active_persona``
+    # (an explicit player switch, or an IC act such as a mask being removed →
+    # restore the covered face). ``SET_NULL`` so a deleted persona safely reverts
+    # to primary, never a dangling/foreign identity.
+    active_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The face this character is currently presenting as (#981); NULL ⇒ "
+            "PRIMARY. Resolve via active_persona_for_sheet; set only via "
+            "set_active_persona — never gate IC reads on primary_persona directly."
+        ),
+    )
+
     # Temporal & Cultural
     birthday = models.CharField(
         max_length=255,
@@ -433,6 +452,19 @@ class CharacterSheet(SharedMemoryModel):
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 
         return self.personas.get(persona_type=PersonaType.PRIMARY)
+
+    def clean(self) -> None:
+        """Validate ``active_persona`` is one of this sheet's own faces (#981).
+
+        Defense-in-depth: ``scenes.services.set_active_persona`` is the only
+        intended writer and already validates ownership, but this guards
+        admin / ``full_clean`` callers from planting a cross-sheet
+        (foreign-identity) active persona that the resolver would then serve.
+        """
+        super().clean()
+        if self.active_persona_id is not None and self.active_persona.character_sheet_id != self.pk:
+            msg = "Active persona must be one of this character's own personas."
+            raise ValidationError({"active_persona": msg})
 
     @cached_property
     def cached_payload_personas(self) -> list[Persona]:

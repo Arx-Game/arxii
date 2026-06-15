@@ -208,17 +208,15 @@ def _require_member_org(request: Request, pk: str | None):
 
 
 def _viewer_persona(request: Request):
-    """The viewer's PRIMARY persona, or None.
+    """The viewer's ACTIVE persona (the face they're on), or None (#981).
 
-    NOTE: this resolves the account's PRIMARY persona, NOT the currently
-    *presented* persona — so an ESTABLISHED persona's org memberships are not
-    gated here. That mirrors RankingDisplayViewSet's existing posture; moving
-    books gating to the presented persona is tracked as a follow-up.
+    Gates books on whichever persona the player's character is currently
+    presenting as — PRIMARY, an ESTABLISHED alt, or a TEMPORARY mask — so an
+    ESTABLISHED persona's org books are reachable while that face is worn, and a
+    player's *other* faces never leak. Fail-closed: no puppet / no sheet / a
+    broken PRIMARY invariant all return None and the viewset denies.
     """
-    from world.scenes.services import (  # noqa: PLC0415
-        MissingPrimaryPersonaError,
-        persona_for_character,
-    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     try:
         puppet = request.user.puppet
@@ -226,9 +224,12 @@ def _viewer_persona(request: Request):
         return None
     if puppet is None:
         return None
+    sheet = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return None
     try:
-        return persona_for_character(puppet)
-    except MissingPrimaryPersonaError:
+        return active_persona_for_sheet(sheet)
+    except Exception:  # noqa: BLE001 - fail closed: any resolution fault → deny
         return None
 
 

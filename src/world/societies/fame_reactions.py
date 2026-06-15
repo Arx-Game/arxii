@@ -49,7 +49,7 @@ def maybe_emit_fame_reaction(character: ObjectDB, room: ObjectDB) -> bool:
     except Exception:  # noqa: BLE001 — non-room containers have no profile
         return False
 
-    persona = _presented_persona(character)
+    persona = _active_persona(character)
     if persona is None:
         return False
 
@@ -78,20 +78,23 @@ def maybe_emit_fame_reaction(character: ObjectDB, room: ObjectDB) -> bool:
     return True
 
 
-def _presented_persona(character: ObjectDB) -> Persona | None:
-    """The arriver's presented persona — PRIMARY per the #885 convention.
+def _active_persona(character: ObjectDB) -> Persona | None:
+    """The arriver's ACTIVE persona — the face they're currently wearing (#981).
 
-    Defensive: a sheet-less character (or missing PRIMARY) resolves to
-    None and the reaction stays silent rather than breaking movement.
+    Room fame reactions key on the identity the arriver is presenting, so
+    walking in wearing an ESTABLISHED alt's face draws reactions to *that*
+    reputation, not their primary's. Defensive: a sheet-less character (or a
+    broken PRIMARY invariant) resolves to None and the reaction stays silent
+    rather than breaking movement.
     """
-    from world.scenes.services import (  # noqa: PLC0415
-        MissingPrimaryPersonaError,
-        persona_for_character,
-    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return None
     try:
-        return persona_for_character(character)
-    except MissingPrimaryPersonaError:
+        return active_persona_for_sheet(sheet)
+    except Exception:  # noqa: BLE001 - silent reaction on any resolution fault
         return None
 
 

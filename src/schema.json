@@ -15555,6 +15555,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSpreadableDeedList'
           description: ''
+  /api/personas/set-active/:
+    post:
+      operationId: personas_set_active_create
+      description: |-
+        #981 — set the played character's ACTIVE persona (the worn face).
+
+        The single player-facing mutator. The face must be one of the played
+        character's own personas; a foreign or unknown id is rejected uniformly
+        (400) without revealing whether it exists.
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetActivePersonaRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivePersonaResult'
+          description: ''
   /api/personas/spread-specializations/:
     get:
       operationId: personas_spread_specializations_list
@@ -20945,6 +20971,16 @@ components:
       - default_delivery
       - id
       - name
+    ActivePersonaResult:
+      type: object
+      description: 'Result of the #981 set-active-persona endpoint — the now-worn
+        face id.'
+      properties:
+        active_persona_id:
+          type: integer
+          readOnly: true
+      required:
+      - active_persona_id
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -38559,6 +38595,15 @@ components:
           description: Player or staff notes (scheduling preferences, etc.).
       required:
       - episode
+    SetActivePersonaRequestRequest:
+      type: object
+      description: 'POST body for the #981 set-active-persona endpoint.'
+      properties:
+        persona_id:
+          type: integer
+          minimum: 1
+      required:
+      - persona_id
     SignEnum:
       enum:
       - positive
