@@ -292,6 +292,14 @@ export function YourTurn({
   );
 
   // ---------------------------------------------------------------------------
+  // Move-to-position actions from availableActions (registry backend, #532)
+  // ---------------------------------------------------------------------------
+
+  const moveActions = availableActions.filter(
+    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position'
+  );
+
+  // ---------------------------------------------------------------------------
   // Combos
   // ---------------------------------------------------------------------------
 
@@ -340,9 +348,17 @@ export function YourTurn({
     (p) => p.status === 'active' && p.id !== myParticipantId
   );
 
+  // Actor's position — the viewer's own participant's current_position.
+  const actorPositionId: number | null = (() => {
+    if (myParticipantId === null) return null;
+    const self = (encounter?.participants ?? []).find((p) => p.id === myParticipantId);
+    return self?.current_position?.id ?? null;
+  })();
+
   // Focused-target options (#1001a): active opponents + allies. Opponents carry
   // their ObjectDB id for the applicable-pulls API; the dispatch uses the
-  // CombatOpponent / CombatParticipant PK (`id`).
+  // CombatOpponent / CombatParticipant PK (`id`). Each option also carries
+  // positionId for the reach pre-filter (#532).
   const focusedTargets: TargetOption[] = [
     ...(encounter?.opponents ?? [])
       .filter((o) => o.status === 'active')
@@ -351,13 +367,24 @@ export function YourTurn({
         kind: 'opponent' as const,
         name: o.name,
         objectId: o.objectdb_id,
+        positionId: o.current_position?.id ?? null,
       })),
     ...coverableAllies.map((p) => ({
       id: p.id,
       kind: 'ally' as const,
       name: p.character_name,
+      positionId: p.current_position?.id ?? null,
     })),
   ];
+
+  // Reach constraint for the currently selected focused technique (#532).
+  const focusedTechniqueReach: string | null = (() => {
+    if (focusedContext.techniqueId === undefined) return null;
+    const selected = availableActions.find(
+      (a) => a.ref.technique_id === focusedContext.techniqueId
+    );
+    return selected?.reach ?? null;
+  })();
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
@@ -531,6 +558,9 @@ export function YourTurn({
           }}
           readOnly={isLocked}
           targets={focusedTargets}
+          reach={focusedTechniqueReach}
+          actorPositionId={actorPositionId}
+          positionAdjacency={encounter?.position_adjacency ?? []}
         />
       </div>
 
@@ -564,6 +594,38 @@ export function YourTurn({
                 isSelected={selectedClashRef?.clash_id === clashId}
                 strainMax={strainMax}
               />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Move-to-position actions (#532) — shown when adjacent open positions exist */}
+      {moveActions.length > 0 && (
+        <div className="space-y-2" data-testid="movement-section">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Move
+          </p>
+          {moveActions.map((action) => {
+            const positionId = action.ref.position_id;
+            return (
+              <button
+                key={positionId ?? action.display_name}
+                type="button"
+                disabled={isLocked}
+                data-testid={`move-btn-${positionId ?? 'unknown'}`}
+                onClick={() => {
+                  dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
+                }}
+                className={cn(
+                  'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  isLocked
+                    ? 'border-border bg-muted text-muted-foreground'
+                    : 'border-amber-500/40 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10'
+                )}
+              >
+                {action.display_name}
+              </button>
             );
           })}
         </div>

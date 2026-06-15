@@ -27,6 +27,8 @@ import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import type { ApplicablePullsRequest } from '@/magic/types';
 import type { ActionContext, EffortLevel, TargetOption } from './types';
+import type { PositionAdjacencyItem } from '@/combat/types';
+import { isTargetReachable } from '@/combat/reach';
 
 // ---------------------------------------------------------------------------
 // Public props contract
@@ -49,6 +51,16 @@ export interface ActionDeclarationCardProps {
    * falls back to the kind-only selector.
    */
   targets?: TargetOption[];
+  /**
+   * Reach pre-filter props (#532). When all three are provided, the target
+   * picker disables options that are out of range for the selected technique.
+   */
+  /** The selected technique's reach constraint ("same" | "adjacent" | "any" | null). */
+  reach?: string | null;
+  /** The acting participant's current position PK, or null if unplaced. */
+  actorPositionId?: number | null;
+  /** The encounter's position adjacency graph. */
+  positionAdjacency?: PositionAdjacencyItem[];
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +167,12 @@ interface TargetPickerProps {
   disabled?: boolean;
   /** Real combatants (combat). When undefined, render the kind-only fallback. */
   targets?: TargetOption[];
+  /** Reach pre-filter — technique's reach constraint (#532). */
+  reach?: string | null;
+  /** Actor's current position PK for the reach check. */
+  actorPositionId?: number | null;
+  /** Room's position adjacency graph for the reach check. */
+  positionAdjacency?: PositionAdjacencyItem[];
 }
 
 /** Kind-only fallback selector used in scenes (no combatant list available). */
@@ -183,17 +201,20 @@ function TargetButton({
   option,
   selected,
   disabled,
+  title,
   onSelect,
 }: {
   option: TargetOption;
   selected: boolean;
   disabled?: boolean;
+  title?: string;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      title={title}
       onClick={onSelect}
       className={cn(
         'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
@@ -209,7 +230,16 @@ function TargetButton({
 }
 
 function TargetPicker(props: TargetPickerProps) {
-  const { targetId, targetKind, onTargetChange, disabled, targets } = props;
+  const {
+    targetId,
+    targetKind,
+    onTargetChange,
+    disabled,
+    targets,
+    reach,
+    actorPositionId,
+    positionAdjacency,
+  } = props;
 
   // Scenes: no combatant list → kind-only selector.
   if (targets === undefined) {
@@ -229,15 +259,26 @@ function TargetPicker(props: TargetPickerProps) {
       <div className="space-y-1">
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
         <div className="flex flex-wrap gap-1.5">
-          {options.map((option) => (
-            <TargetButton
-              key={`${option.kind}-${option.id}`}
-              option={option}
-              selected={targetKind === option.kind && targetId === option.id}
-              disabled={disabled}
-              onSelect={() => onTargetChange(option.kind, option.id)}
-            />
-          ))}
+          {options.map((option) => {
+            // Reach pre-filter (#532): disable targets out of range for the selected technique.
+            const reachable = isTargetReachable(
+              reach,
+              actorPositionId,
+              option.positionId,
+              positionAdjacency ?? []
+            );
+            const isDisabledByReach = !reachable;
+            return (
+              <TargetButton
+                key={`${option.kind}-${option.id}`}
+                option={option}
+                selected={targetKind === option.kind && targetId === option.id}
+                disabled={disabled || isDisabledByReach}
+                title={isDisabledByReach ? 'Out of reach for this technique' : undefined}
+                onSelect={() => onTargetChange(option.kind, option.id)}
+              />
+            );
+          })}
         </div>
       </div>
     );
@@ -359,6 +400,9 @@ export function ActionDeclarationCard({
   onContextChange,
   readOnly = false,
   targets,
+  reach,
+  actorPositionId,
+  positionAdjacency,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useTQQuery({
@@ -509,6 +553,9 @@ export function ActionDeclarationCard({
           onTargetChange={handleTargetChange}
           disabled={readOnly}
           targets={targets}
+          reach={reach}
+          actorPositionId={actorPositionId}
+          positionAdjacency={positionAdjacency}
         />
       </Section>
 

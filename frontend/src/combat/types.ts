@@ -11,10 +11,23 @@ import type { components } from '@/generated/api';
 // Re-exports from generated schema
 // ---------------------------------------------------------------------------
 
-export type EncounterDetail = components['schemas']['EncounterDetail'];
 export type EncounterListItem = components['schemas']['EncounterList'];
 export type Participant = components['schemas']['Participant'];
 export type Opponent = components['schemas']['Opponent'];
+export type PositionSummary = components['schemas']['PositionSummary'];
+
+// ---------------------------------------------------------------------------
+// Position adjacency
+//
+// position_adjacency is now correctly typed in the generated schema (the
+// backend annotates get_position_adjacency with @extend_schema_field), so
+// EncounterDetail is a direct re-export. PositionAdjacencyItem is kept as a
+// convenience alias for the reach pre-filter consumers.
+// ---------------------------------------------------------------------------
+
+export type PositionAdjacencyItem = components['schemas']['PositionAdjacencyItem'];
+
+export type EncounterDetail = components['schemas']['EncounterDetail'];
 
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —
 // the backend serializes these with varying shapes depending on action type.
@@ -95,6 +108,8 @@ export interface ActionRef {
   clash_id?: number | null;
   clash_action_slot?: string | null;
   action_slot?: string | null;
+  /** Destination position PK — present on move_to_position registry actions (#532). */
+  position_id?: number | null;
 }
 
 /** POST /api/actions/characters/{id}/dispatch/ request body. */

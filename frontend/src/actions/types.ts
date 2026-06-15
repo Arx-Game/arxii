@@ -44,4 +44,11 @@ export interface TargetOption {
    * (target_object_id). Present for opponents; null/undefined otherwise.
    */
   objectId?: number | null;
+  /**
+   * The combatant's current position PK — used by the reach pre-filter (#532)
+   * to disable targets outside the selected technique's reach. Absent/null means
+   * "unplaced": the reach check treats unplaced combatants as always reachable
+   * (lenient, matching the backend's technique_can_reach).
+   */
+  positionId?: number | null;
 }

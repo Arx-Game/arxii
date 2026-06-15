@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
@@ -90,6 +91,13 @@ def _serialize_active_conditions(
 # ---------------------------------------------------------------------------
 
 
+class PositionSummarySerializer(serializers.Serializer):
+    """Compact public representation of a Position (id + name)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
 class OpponentSerializer(serializers.ModelSerializer):
     """Read serializer for combat opponents.
 
@@ -102,6 +110,7 @@ class OpponentSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
     # ``id`` is the CombatOpponent PK the focused-target dispatch sends as
     # ``focused_opponent_target_id``; ``objectdb_id`` is the ObjectDB pk the
@@ -127,6 +136,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
+            "current_position",
         ]
 
     def _is_gm_or_staff(self) -> bool:
@@ -211,6 +221,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     escalation_level = serializers.SerializerMethodField()
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
+    current_position = PositionSummarySerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = CombatParticipant
@@ -230,6 +241,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "escalation_level",
             "intensity_modifier",
             "control_modifier",
+            "current_position",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -478,6 +490,22 @@ class RoundActionSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
+# Position adjacency serializer (for EncounterDetailSerializer.position_adjacency)
+# ---------------------------------------------------------------------------
+
+
+class PositionAdjacencyItemSerializer(serializers.Serializer):
+    """Read-only serializer for a single PositionAdjacency entry.
+
+    Exposes the ADJACENT-reach neighbor graph for one position so the
+    frontend can pre-filter selectable targets by position before declaring.
+    """
+
+    position_id = serializers.IntegerField(read_only=True)
+    adjacent_position_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+
+
+# ---------------------------------------------------------------------------
 # Clash state serializer (for EncounterDetailSerializer.clashes)
 # ---------------------------------------------------------------------------
 
@@ -649,6 +677,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
+    position_adjacency = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -695,6 +724,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "escalation_start_round",
             "escalation_tick_narration",
             "forced_escape",
+            "position_adjacency",
         ]
         extra_kwargs = {
             "outcome": {"read_only": True},
@@ -838,6 +868,26 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 .all()
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
+    def get_position_adjacency(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return ADJACENT-reach position adjacency for the encounter's room.
+
+        Each entry is ``{position_id: int, adjacent_position_ids: [int]}``.
+        Returns an empty list when the encounter has no room.
+
+        Uses ``room_position_adjacency`` from the positioning services, which
+        reads from ``room.positions_cached`` / per-position
+        ``passable_edges_as_a`` / ``passable_edges_as_b`` attrs when they
+        were prefetched by the viewset's ``_base_queryset`` — zero extra
+        queries on the warm path.
+        """
+        if obj.room_id is None:
+            return []
+        from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
+
+        entries = room_position_adjacency(obj.room)
+        return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

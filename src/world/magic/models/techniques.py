@@ -19,6 +19,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.magic.constants import TechniqueReach
 from world.magic.models.gifts import Gift
 
 
@@ -283,6 +284,15 @@ class Technique(SharedMemoryModel):
         help_text=(
             "Physical/social/mental arena this technique acts in "
             "(drives combat slot + fatigue routing)."
+        ),
+    )
+    reach = models.CharField(
+        max_length=20,
+        choices=TechniqueReach.choices,
+        default=TechniqueReach.ANY,
+        help_text=(
+            "Positional reach: which positions this technique can target "
+            "(SAME=melee, ADJACENT=reach, ANY=ranged)."
         ),
     )
     combo_opening_probing = models.PositiveIntegerField(

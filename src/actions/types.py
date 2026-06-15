@@ -242,6 +242,11 @@ class PlayerAction:
     # None when no backend supplies one yet — non-magical actions classify later).
     action_category: ActionCategory | None = None
 
+    # Technique reach for combat actions (TechniqueReach value string: "same" /
+    # "adjacent" / "any"). None for non-combat actions. Carried so the frontend
+    # can pre-filter selectable targets by position before declaring.
+    reach: str | None = None
+
 
 class ActionInterrupted(Exception):
     """Raised when a trigger stops an action's intent event."""
@@ -360,7 +365,6 @@ class TargetFilters:
     """Boolean filter flags applied client-side to candidate targets."""
 
     in_same_scene: bool = False
-    in_same_zone: bool = False
     exclude_self: bool = False
     must_be_conscious: bool = False
 

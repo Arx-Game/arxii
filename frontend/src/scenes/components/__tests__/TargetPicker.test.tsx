@@ -11,7 +11,6 @@ function makeSpec(overrides: Partial<TargetSpec> = {}): TargetSpec {
     cardinality: 'single',
     filters: {
       in_same_scene: true,
-      in_same_zone: false,
       exclude_self: false,
       must_be_conscious: false,
     },
@@ -50,7 +49,6 @@ describe('TargetPicker', () => {
         spec={makeSpec({
           filters: {
             in_same_scene: true,
-            in_same_zone: false,
             exclude_self: true,
             must_be_conscious: false,
           },

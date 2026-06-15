@@ -343,6 +343,7 @@ def _combat_actions(
                 ref=ref,
                 action_template=template,
                 action_category=technique.action_category,
+                reach=technique.reach,
             )
         )
 

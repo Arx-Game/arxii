@@ -88,6 +88,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_position: null,
     ...overrides,
   };
 }
@@ -105,6 +106,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    current_position: null,
     ...overrides,
   };
 }
@@ -131,6 +133,7 @@ function makeEncounter(
     escalation_tick_narration: null,
     forced_escape: false,
     resolution_order: [],
+    position_adjacency: [],
   };
 }
 
@@ -369,5 +372,71 @@ describe('CombatantsList', () => {
 
     const avatars = screen.getAllByTestId('persona-avatar');
     expect(avatars.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ---------------------------------------------------------------------------
+  // current_position display
+  // ---------------------------------------------------------------------------
+
+  it('renders the position name badge for a participant with current_position', () => {
+    const encounter = makeEncounter(
+      [
+        makeParticipant({
+          id: 1,
+          character_name: 'Aerande',
+          current_position: { id: 3, name: 'Flank' },
+        }),
+      ],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-1');
+    expect(within(row).getByTestId('position-badge')).toBeInTheDocument();
+    expect(within(row).getByText('Flank')).toBeInTheDocument();
+  });
+
+  it('renders no position badge for a participant with current_position null', () => {
+    const encounter = makeEncounter(
+      [makeParticipant({ id: 1, character_name: 'Aerande', current_position: null })],
+      []
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-1');
+    expect(within(row).queryByTestId('position-badge')).not.toBeInTheDocument();
+  });
+
+  it('renders the position name badge for an opponent with current_position', () => {
+    const encounter = makeEncounter(
+      [],
+      [
+        makeOpponent({
+          id: 10,
+          name: 'Mire Knight',
+          current_position: { id: 5, name: 'Center' },
+        }),
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-10');
+    expect(within(row).getByTestId('position-badge')).toBeInTheDocument();
+    expect(within(row).getByText('Center')).toBeInTheDocument();
+  });
+
+  it('renders no position badge for an opponent with current_position null', () => {
+    const encounter = makeEncounter(
+      [],
+      [makeOpponent({ id: 10, name: 'Mire Knight', current_position: null })]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-10');
+    expect(within(row).queryByTestId('position-badge')).not.toBeInTheDocument();
   });
 });

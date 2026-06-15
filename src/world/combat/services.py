@@ -1220,6 +1220,42 @@ def _validate_target_kind_alignment(
         raise ValueError(msg)
 
 
+def _validate_technique_reach(
+    participant: CombatParticipant,
+    focused_action: Technique,
+    *,
+    focused_opponent_target: CombatOpponent | None,
+    focused_ally_target: CombatParticipant | None,
+) -> None:
+    """Raise ValueError if the technique's reach cannot cover the declared target.
+
+    Resolves the target's ObjectDB from either ``focused_opponent_target.objectdb``
+    (for NPC/opponent targets) or ``focused_ally_target.character_sheet.character``
+    (for participant/ally targets). Delegates to ``technique_can_reach``, which is
+    lenient when either combatant is unpositioned.
+
+    Only runs when a target is actually provided; skips self/no-target declarations.
+    """
+    from world.combat.reach import technique_can_reach  # noqa: PLC0415
+
+    attacker_objectdb = participant.character_sheet.character
+
+    target_objectdb = None
+    if focused_opponent_target is not None:
+        target_objectdb = focused_opponent_target.objectdb
+    elif focused_ally_target is not None and focused_ally_target != participant:
+        target_objectdb = focused_ally_target.character_sheet.character
+
+    if target_objectdb is None:
+        # No external target (self-buff or no target) — reach is not constraining.
+        return
+
+    if not technique_can_reach(attacker_objectdb, focused_action, target_objectdb):
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+
+        raise ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH)
+
+
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
@@ -1294,6 +1330,17 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             focused_action,
             focused_ally_target,
             focused_opponent_target,
+        )
+
+    # Positional reach gate: enforce technique.reach against the declared target.
+    # Only fires when there is a technique and a resolved target. Lenient when
+    # either combatant is unpositioned (technique_can_reach returns True).
+    if focused_action is not None:
+        _validate_technique_reach(
+            participant,
+            focused_action,
+            focused_opponent_target=focused_opponent_target,
+            focused_ally_target=focused_ally_target,
         )
 
     action, _created = CombatRoundAction.objects.update_or_create(

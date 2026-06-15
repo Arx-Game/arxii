@@ -35,6 +35,8 @@ export interface ActionRef {
   registry_key: string | null;
   clash_id?: number | null;
   clash_action_slot?: string | null;
+  /** Destination position PK — present on move_to_position registry actions (#532). */
+  position_id?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +45,6 @@ export interface ActionRef {
 
 export interface TargetFilters {
   in_same_scene: boolean;
-  in_same_zone: boolean;
   exclude_self: boolean;
   must_be_conscious: boolean;
 }
@@ -90,6 +91,11 @@ export interface PlayerAction {
   /** Physical/social/mental arena (#614). Optional on this hand-written mirror;
    *  the API always supplies it (possibly null) for technique actions. */
   action_category?: ActionCategory | null;
+  /**
+   * Reach constraint for target selection (#532). Values: "same" | "adjacent" | "any" | null.
+   * null / "any" → no restriction; "same" → must share a position; "adjacent" → same or neighbouring.
+   */
+  reach?: string | null;
 }
 
 export interface PlayerActionsResponse {

@@ -140,11 +140,34 @@ class CombatEncounterViewSet(ModelViewSet):
         )
 
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
-        return CombatEncounter.objects.select_related("scene").prefetch_related(
+        from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
+
+        return CombatEncounter.objects.select_related("scene", "room").prefetch_related(
+            Prefetch(
+                "room__positions",
+                queryset=Position.objects.order_by("pk").prefetch_related(
+                    Prefetch(
+                        "edges_as_a",
+                        queryset=PositionEdge.objects.filter(is_passable=True).only(
+                            "position_a_id", "position_b_id"
+                        ),
+                        to_attr="passable_edges_as_a",
+                    ),
+                    Prefetch(
+                        "edges_as_b",
+                        queryset=PositionEdge.objects.filter(is_passable=True).only(
+                            "position_a_id", "position_b_id"
+                        ),
+                        to_attr="passable_edges_as_b",
+                    ),
+                ),
+                to_attr="positions_cached",
+            ),
             Prefetch(
                 "participants",
                 queryset=CombatParticipant.objects.select_related(
                     "character_sheet__character",
+                    "character_sheet__character__object_position__position",
                     "character_sheet__vitals",
                     "character_sheet__fatigue",
                     "covenant_role",
@@ -173,6 +196,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 "opponents",
                 queryset=CombatOpponent.objects.select_related(
                     "persona__thumbnail",
+                    "objectdb__object_position__position",
                 ).prefetch_related(
                     self._active_conditions_prefetch("objectdb"),
                 ),

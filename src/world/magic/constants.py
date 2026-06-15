@@ -290,3 +290,9 @@ class MilestoneEligibility(models.TextChoices):
     ALREADY_HAVE = "already_have", "Already Have"
     ELIGIBLE = "eligible", "Eligible"
     LOCKED = "locked", "Locked"
+
+
+class TechniqueReach(models.TextChoices):
+    SAME = "same", "Same position"
+    ADJACENT = "adjacent", "Adjacent position"
+    ANY = "any", "Anywhere in room"

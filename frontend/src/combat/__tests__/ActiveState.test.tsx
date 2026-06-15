@@ -60,6 +60,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
         active_conditions: [],
         thumbnail_url: '',
         thumbnail_media_url: null,
+        current_position: null,
       },
     ],
     current_round_actions: [],
@@ -73,6 +74,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     escalation_tick_narration: null,
     forced_escape: false,
     resolution_order: [],
+    position_adjacency: [],
   };
 }
 

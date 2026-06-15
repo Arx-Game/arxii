@@ -14437,6 +14437,7 @@ export interface components {
       readonly escalation_start_round: number | null;
       readonly escalation_tick_narration: string | null;
       readonly forced_escape: boolean;
+      readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -17049,6 +17050,7 @@ export interface components {
        *     FK. ``None`` when neither supplies a thumbnail.
        */
       readonly thumbnail_media_url: string | null;
+      readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
      * @description Read serializer for combat opponents.
@@ -18703,6 +18705,7 @@ export interface components {
       readonly intensity_modifier: number | null;
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
+      readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -20011,6 +20014,7 @@ export interface components {
       readonly action_category:
         | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
         | null;
+      readonly reach: string | null;
     };
     /**
      * @description Write serializer - player creates feedback.
@@ -20286,6 +20290,21 @@ export interface components {
       /** @description The interaction being endorsed. */
       interaction: number;
       resonance: number;
+    };
+    /**
+     * @description Read-only serializer for a single PositionAdjacency entry.
+     *
+     *     Exposes the ADJACENT-reach neighbor graph for one position so the
+     *     frontend can pre-filter selectable targets by position before declaring.
+     */
+    PositionAdjacencyItem: {
+      readonly position_id: number;
+      readonly adjacent_position_ids: number[];
+    };
+    /** @description Compact public representation of a Position (id + name). */
+    PositionSummary: {
+      readonly id: number;
+      readonly name: string;
     };
     /** @description Serializes a PowerLedger (entries + total) for the cast result payload. */
     PowerLedger: {
@@ -21939,7 +21958,6 @@ export interface components {
     /** @description Read-only serializer for TargetFilters — boolean filter flags. */
     TargetFilters: {
       readonly in_same_scene: boolean;
-      readonly in_same_zone: boolean;
       readonly exclude_self: boolean;
       readonly must_be_conscious: boolean;
     };
