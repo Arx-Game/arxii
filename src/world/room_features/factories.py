@@ -14,6 +14,7 @@ from world.room_features.models import (
     RoomFeatureKindInstallRitual,
     RoomFeatureKindOwnerType,
     RoomFeatureProgressionDetails,
+    Trap,
 )
 
 
@@ -65,3 +66,18 @@ class RoomFeatureProgressionDetailsFactory(DjangoModelFactory):
     target_room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
     target_feature_kind = factory.SubFactory(RoomFeatureKindFactory)
     target_level = 1
+
+
+class TrapFactory(DjangoModelFactory):
+    class Meta:
+        model = Trap
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    name = factory.Sequence(lambda n: f"trap-{n}")
+    consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
+    detect_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    disarm_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    detect_difficulty = 20
+    disarm_difficulty = 20
+    is_armed = True
+    is_hidden = True

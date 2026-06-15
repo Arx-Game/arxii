@@ -260,3 +260,80 @@ class RoomFeatureProgressionDetails(SharedMemoryModel):
         return (
             f"Progression#{self.project_id}: {self.target_feature_kind.name} L{self.target_level}"
         )
+
+
+class Trap(SharedMemoryModel):
+    """A room-anchored hazard resolved through the shared check / pool path.
+
+    On entry an armed trap the entrant has not yet resolved runs a detection
+    check (``detect_check_type``) whose graded outcome selects from
+    ``consequence_pool``: a success tier carries no damage consequence (the
+    entrant spots and avoids it), a failure tier fires the authored damage via
+    the standard effect-handler path (``apply_resolution`` -> ``_deal_damage``
+    -> ``process_damage_consequences``). ``disarm_check_type`` routes the same
+    pool when a character actively disarms it. A room may hold several traps,
+    so this is a plain FK (not the one-per-room OneToOne RoomFeatureInstance
+    uses).
+    """
+
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="traps",
+        help_text="The room this trap is set in. A room may hold several traps.",
+    )
+    name = models.CharField(max_length=100)
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="traps",
+        help_text=(
+            "Graded damage payload, keyed by the detection/disarm check outcome "
+            "tier: success tiers should carry no consequence (avoided); failure "
+            "tiers deal the authored damage."
+        ),
+    )
+    detect_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="detect_traps",
+        help_text="Check rolled on entry to spot the trap before it triggers.",
+    )
+    disarm_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="disarm_traps",
+        help_text="Check rolled by the disarm action.",
+    )
+    detect_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text="Authored target difficulty for the on-entry detection check.",
+    )
+    disarm_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text="Authored target difficulty for the disarm check.",
+    )
+    is_armed = models.BooleanField(
+        default=True,
+        help_text="A disarmed trap never triggers and cannot be disarmed again.",
+    )
+    is_hidden = models.BooleanField(
+        default=True,
+        help_text="Whether the trap is concealed until a character resolves it.",
+    )
+    detected_by = models.ManyToManyField(
+        "character_sheets.CharacterSheet",
+        related_name="detected_traps",
+        blank=True,
+        help_text=(
+            "Characters for whom this trap is resolved — they spotted or already "
+            "triggered it, so it neither re-triggers nor stays hidden for them."
+        ),
+    )
+
+    class Meta:
+        ordering = ["room_profile_id", "name"]
+
+    def __str__(self) -> str:
+        state = "armed" if self.is_armed else "disarmed"
+        return f"Trap '{self.name}' ({state}) @ room {self.room_profile_id}"

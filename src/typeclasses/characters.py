@@ -333,6 +333,17 @@ class Character(ObjectParent, DefaultCharacter):
 
                 maybe_dispatch_on_enter(self, self.location)
 
+            # Dramatic traps (#1051): an armed trap the entrant has not yet
+            # resolved runs its detection check on arrival. Same room-bound
+            # rationale as mission dispatch — the cheap ``traps`` query short-
+            # circuits ordinary rooms. Best-effort — never break movement.
+            with contextlib.suppress(Exception):
+                from world.room_features.trap_services import (
+                    check_room_traps_on_entry,
+                )
+
+                check_room_traps_on_entry(self, self.location)
+
             # Fame reactions (#881): a room with authored FameReactionLine
             # rows may react to a notable arrival — bystanders see the
             # observer line, the arriver their own register. Optional

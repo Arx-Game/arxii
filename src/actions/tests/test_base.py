@@ -166,6 +166,7 @@ class ActionRegistryTests(TestCase):
             "join_round",
             "leave_round",
             "end_round",
+            "disarm_trap",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
