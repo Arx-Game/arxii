@@ -15,17 +15,25 @@ These are structural defenses against abuse. They don't bend for cool-sounding
 features — when a tradeoff is between "could a bad actor abuse this" and "cool
 mechanic," the hard rule wins.
 
-### No invisible characters, ever
+### Players are always aware when another player can see their RP
 
-The visibility model has no "hidden observer" mode for any role — not staff,
-not GMs, not players. There is no `is_invisible` flag, no `staff_only_can_see`
-mode, no "system can see hidden characters" backdoor. If a character is in a
-room, every other character in the room can see them.
+The guarantee is about **OOC knowledge, not IC perception**: a player is never
+watched without knowing it. A *character* may be IC-unaware of a concealed
+watcher, but the *player* always gets an OOC tell that someone is present — e.g.
+**"An invisible presence is here"** in the room. Concealment (a mask, a disguise,
+an invisibility effect) may hide *who* or *what* is there; it never hides *that*
+someone is there.
 
-The corollary: any feature that would need invisibility (lurking, scry-from-a-
-distance, omniscient staff observation) has to be redesigned around the
-constraint. The right architectural answer for "watch a scene without
-participating" is to enter as a separate persona, not to become invisible.
+So there is no hidden-observer mode that conceals presence from the watched
+player — no `staff_only_can_see`, no "system can see hidden characters" backdoor,
+no quiet presence that omits the OOC tell. Any feature that would otherwise hide
+presence (silent lurking, undisclosed scry-from-a-distance, omniscient unseen
+observation) is redesigned around the constraint: surface the presence, or enter
+as a separate (visible) persona to watch a scene without participating.
+
+(The detailed invisibility-as-an-IC-effect mechanic — the exact OOC marker, and
+how concealed traits render to the character who can't see — is TBD. This tenet
+fixes the floor that mechanic must respect.)
 
 ### Public means public
 

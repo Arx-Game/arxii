@@ -17,10 +17,11 @@
 
 From [`docs/roadmap/design-tenets.md`](../roadmap/design-tenets.md):
 
-- **No invisible characters, ever** (tenet §"No invisible characters"). The
-  concealment floor in this system is therefore **"always a visible figure"** — you
-  can hide *who* you are and *what you look like*, never *that you are present*.
-  There is no invisibility state; "watch a scene without participating" = enter as a
+- **Players are always aware when another player can see their RP** (tenet). The
+  concealment floor here is **OOC presence disclosure** — you can hide *who* you are
+  and *what you look like* (an invisibility effect may hide your traits), never *that
+  you are present*: a concealed/invisible presence still surfaces an OOC tell ("an
+  invisible presence is here"). "Watch a scene without participating" = enter as a
   separate persona.
 - **IC-meaningful state FKs to Persona, not AccountDB** — descriptors, reputation,
   and identity all hang off Persona (the IC layer), never the account (the OOC
@@ -144,7 +145,8 @@ viewer **V**:
 3. Apply the **active persona's descriptors** where the trait is present.
 4. Resolve the **name**: public-named persona → the name; anonymous persona → composed
    **sdesc**; if V holds a `PersonaDiscovery` for it → the real identity (per-viewer).
-5. V **always sees a visible figure** — never nothing (no-invisibility tenet).
+5. V is **always told a presence is there** — never nothing; a concealed/invisible
+   presence surfaces an OOC marker ("an invisible presence is here") rather than silence.
 
 **Truth query** (the owner, staff, and game mechanics) ignores overlays and reads
 `current_real_form` + `true_form` + all personas — **ground truth**. So there are
@@ -162,7 +164,9 @@ composed-and-gated view.
   world pins a deed on your persona is a *chance*, not automatic (deniability, and the
   humour of a deed misattributed). This is the existing **room-traffic / deed-spreading**
   system; the appearance layer only supplies *which persona acted*.
-- **No invisibility** (hard tenet). Lurking / scry-from-a-distance → redesign as a
+- **Presence is always disclosed to the player** (hard tenet). An invisibility effect
+  may hide traits but never bare presence (an OOC "invisible presence is here" tell).
+  Undisclosed lurking / scry-from-a-distance → redesign to surface presence, or use a
   separate persona.
 - **Recorded scenes freeze the presented persona.** A logged scene where Robert acted
   stores *Robert* forever — never re-resolved to Bob later, or it retroactively outs
