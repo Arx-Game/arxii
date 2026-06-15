@@ -46,6 +46,22 @@ and explicitly permission-gated. UI displays are by persona — never by
 account. Even staff tooling that necessarily reveals the linkage should
 require an explicit "you are about to view account-linked data" gate.
 
+### Named faces are public; concealment is opt-in
+
+A persona with a public name is shown **by name to everyone** — familiar or not.
+Obfuscation is something a player *does* (put on a mask, apply a disguise, present
+an anonymous throwaway persona), never the default state of being unknown. The
+classic MUD move — scrambling a stranger's name to an sdesc — conflates "I don't
+know you" with "you're hidden," and that conflation is an accessibility wall: a new
+player can't tell PCs from set-dressing, can't find RP, and bounces.
+
+The divide is **named/public vs unnamed/faceless**, spanning PCs and named NPCs
+alike ("if it has a name, you can talk to it"). An sdesc is therefore triggered by
+*concealment*, never by *unfamiliarity*. This composes with — does not weaken — the
+privacy rules above: what's protected is the **link between two faces** and a
+**deliberately anonymous face**, never the visibility of a public name. See
+`docs/systems/appearance_and_identity.md`.
+
 ## Cooperative RP bedrock
 
 ### PC antagonism only happens when both players want it

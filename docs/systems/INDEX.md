@@ -182,6 +182,16 @@ Physical appearance options (height, build, hair/eye colors).
 - **Integrates with:** character_sheets (appearance), species (height bands per species)
 - **Source:** `src/world/forms/`
 - **Details:** [forms.md](forms.md)
+### Appearance & Identity (architecture)
+How Persona (identity), Form (real body), disguise/illusion (fake overlay), and the
+true-form/natural baseline compose into what a viewer sees — plus the per-persona
+descriptor overlay, cosmetic editing, and shapeshift slots.
+
+- **Spans:** forms (body), scenes (Persona), character_sheets (anchor)
+- **Key ideas:** four-question model; `(Persona × FormTrait)` descriptor; single
+  render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise
+- **Status:** design (slices); depends on #1044
+- **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power.
 
