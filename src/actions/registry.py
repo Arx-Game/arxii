@@ -30,8 +30,10 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.positioning import MoveToPositionAction
 from actions.definitions.rounds import (
     EndRoundAction,
+    ForceResolveRoundAction,
     JoinRoundAction,
     LeaveRoundAction,
+    PassRoundAction,
     StartRoundAction,
 )
 from actions.definitions.traps import DisarmTrapAction
@@ -67,6 +69,8 @@ _ALL_ACTIONS: list[Action] = [
     LeaveRoundAction(),
     EndRoundAction(),
     DisarmTrapAction(),
+    PassRoundAction(),
+    ForceResolveRoundAction(),
 ]
 
 # Lookup by key

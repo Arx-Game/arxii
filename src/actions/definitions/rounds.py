@@ -15,8 +15,8 @@ from world.scenes.constants import (
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
-from world.scenes.models import SceneRound, SceneRoundParticipant
-from world.scenes.round_services import end_scene_round, start_scene_round
+from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
+from world.scenes.round_services import end_scene_round, resolve_scene_round, start_scene_round
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
 NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
@@ -182,3 +182,94 @@ class EndRoundAction(Action):
 
         end_scene_round(rnd)
         return ActionResult(success=True, message="The round ends.")
+
+
+@dataclass
+class PassRoundAction(Action):
+    """Pass for the current scene round — record an explicit no-action declaration.
+
+    Costs a turn: dispatching this inside an active social round records the pass
+    and lets ``dispatch_player_action`` drive presence-gated resolution. Do not
+    resolve here.
+    """
+
+    key: str = "pass_round"
+    name: str = "Pass"
+    icon: str = "forward"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = True
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        sheet = _sheet(actor)
+        room = actor.location
+
+        if room is None:
+            return ActionResult(success=False, message="You are not in a room.")
+        if sheet is None:
+            return ActionResult(success=False, message="No character sheet found.")
+
+        rnd = _active_round_for_room(room)
+        if rnd is None:
+            return ActionResult(success=False, message="There is no active round here.")
+
+        participant = SceneRoundParticipant.objects.filter(
+            scene_round=rnd,
+            character_sheet=sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        ).first()
+        if participant is None:
+            return ActionResult(success=False, message="You are not in this round.")
+
+        SceneActionDeclaration.objects.update_or_create(
+            scene_round=rnd,
+            round_number=rnd.round_number,
+            participant=participant,
+            defaults={
+                "is_pass": True,
+                "challenge_instance": None,
+                "challenge_approach": None,
+            },
+        )
+        return ActionResult(success=True, message="You pass.")
+
+
+@dataclass
+class ForceResolveRoundAction(Action):
+    """Force the active round to resolve now, sweeping undeclared participants as passes.
+
+    A GM meta-action, not a participant turn — ``costs_turn`` stays False. Ungated for
+    now (consistent with start/end having no permission prerequisites in this foundation).
+    """
+
+    key: str = "force_resolve_round"
+    name: str = "Force Resolve Round"
+    icon: str = "fast-forward"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.AREA
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        room = actor.location
+
+        if room is None:
+            return ActionResult(success=False, message="You are not in a room.")
+
+        rnd = _active_round_for_room(room)
+        if rnd is None:
+            return ActionResult(success=False, message="There is no active round here.")
+
+        if rnd.status != RoundStatus.DECLARING:
+            return ActionResult(success=False, message="The round is not gathering declarations.")
+
+        resolve_scene_round(rnd)
+        return ActionResult(success=True, message="You force the round to resolve.")
