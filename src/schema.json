@@ -25472,7 +25472,9 @@ components:
           type: boolean
           readOnly: true
         position_adjacency:
-          type: string
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionAdjacencyItem'
           readOnly: true
       required:
       - clashes
@@ -36420,6 +36422,25 @@ components:
       required:
       - interaction
       - resonance
+    PositionAdjacencyItem:
+      type: object
+      description: |-
+        Read-only serializer for a single PositionAdjacency entry.
+
+        Exposes the ADJACENT-reach neighbor graph for one position so the
+        frontend can pre-filter selectable targets by position before declaring.
+      properties:
+        position_id:
+          type: integer
+          readOnly: true
+        adjacent_position_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+      required:
+      - adjacent_position_ids
+      - position_id
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).

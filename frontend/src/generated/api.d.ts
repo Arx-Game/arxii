@@ -14410,7 +14410,7 @@ export interface components {
       readonly escalation_start_round: number | null;
       readonly escalation_tick_narration: string | null;
       readonly forced_escape: boolean;
-      readonly position_adjacency: string;
+      readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -20263,6 +20263,16 @@ export interface components {
       /** @description The interaction being endorsed. */
       interaction: number;
       resonance: number;
+    };
+    /**
+     * @description Read-only serializer for a single PositionAdjacency entry.
+     *
+     *     Exposes the ADJACENT-reach neighbor graph for one position so the
+     *     frontend can pre-filter selectable targets by position before declaring.
+     */
+    PositionAdjacencyItem: {
+      readonly position_id: number;
+      readonly adjacent_position_ids: number[];
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {

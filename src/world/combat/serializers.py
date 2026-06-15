@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
@@ -870,6 +871,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
 
+    @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
     def get_position_adjacency(self, obj: CombatEncounter) -> list[dict[str, object]]:
         """Return ADJACENT-reach position adjacency for the encounter's room.
 

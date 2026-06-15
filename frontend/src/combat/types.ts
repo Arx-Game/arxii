@@ -19,25 +19,15 @@ export type PositionSummary = components['schemas']['PositionSummary'];
 // ---------------------------------------------------------------------------
 // Position adjacency
 //
-// The generated schema types EncounterDetail.position_adjacency as `string`
-// (spectacular infers the wrong type from the SerializerMethodField). The
-// actual runtime shape is an array of PositionAdjacencyItem objects, matching
-// PositionAdjacencyItemSerializer on the backend. We re-type it here.
+// position_adjacency is now correctly typed in the generated schema (the
+// backend annotates get_position_adjacency with @extend_schema_field), so
+// EncounterDetail is a direct re-export. PositionAdjacencyItem is kept as a
+// convenience alias for the reach pre-filter consumers.
 // ---------------------------------------------------------------------------
 
-export interface PositionAdjacencyItem {
-  position_id: number;
-  adjacent_position_ids: number[];
-}
+export type PositionAdjacencyItem = components['schemas']['PositionAdjacencyItem'];
 
-/**
- * EncounterDetail with position_adjacency re-typed to the correct runtime shape.
- * The generated type has it as `string`; the backend serializes it as
- * `{ position_id: number; adjacent_position_ids: number[] }[]`.
- */
-export type EncounterDetail = Omit<components['schemas']['EncounterDetail'], 'position_adjacency'> & {
-  position_adjacency: PositionAdjacencyItem[];
-};
+export type EncounterDetail = components['schemas']['EncounterDetail'];
 
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —
 // the backend serializes these with varying shapes depending on action type.
