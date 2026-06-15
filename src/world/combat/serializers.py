@@ -102,6 +102,7 @@ class OpponentSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    current_position = serializers.SerializerMethodField()
     # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
     # ``id`` is the CombatOpponent PK the focused-target dispatch sends as
     # ``focused_opponent_target_id``; ``objectdb_id`` is the ObjectDB pk the
@@ -127,6 +128,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
+            "current_position",
         ]
 
     def _is_gm_or_staff(self) -> bool:
@@ -187,6 +189,14 @@ class OpponentSerializer(serializers.ModelSerializer):
             return obj.portrait.cloudinary_url
         return None
 
+    def get_current_position(self, obj) -> dict | None:
+        """Return the Position this opponent occupies, or None.
+
+        Public info — not gated by GM/staff visibility.
+        """
+        pos = obj.current_position
+        return {"id": pos.id, "name": pos.name} if pos is not None else None
+
 
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
@@ -211,6 +221,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     escalation_level = serializers.SerializerMethodField()
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
+    current_position = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -230,6 +241,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "escalation_level",
             "intensity_modifier",
             "control_modifier",
+            "current_position",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -446,6 +458,14 @@ class ParticipantSerializer(serializers.ModelSerializer):
         if persona is None or persona.thumbnail_id is None:
             return None
         return persona.thumbnail.cloudinary_url
+
+    def get_current_position(self, obj) -> dict | None:
+        """Return the Position this participant occupies, or None.
+
+        Public info — not gated by _can_view_vitals.
+        """
+        pos = obj.current_position
+        return {"id": pos.id, "name": pos.name} if pos is not None else None
 
 
 class RoundActionSerializer(serializers.ModelSerializer):

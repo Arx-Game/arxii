@@ -30807,8 +30807,18 @@ components:
             (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
             FK. ``None`` when neither supplies a thumbnail.
           readOnly: true
+        current_position:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the Position this opponent occupies, or None.
+
+            Public info — not gated by GM/staff visibility.
+          readOnly: true
       required:
       - active_conditions
+      - current_position
       - health
       - id
       - max_health
@@ -33508,6 +33518,15 @@ components:
           nullable: true
           description: Process-derived control bonus from the COMBAT engagement.
           readOnly: true
+        current_position:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the Position this participant occupies, or None.
+
+            Public info — not gated by _can_view_vitals.
+          readOnly: true
       required:
       - active_conditions
       - available_strain
@@ -33515,6 +33534,7 @@ components:
       - character_sheet_id
       - character_status
       - control_modifier
+      - current_position
       - escalation_level
       - fatigue
       - health
