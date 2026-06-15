@@ -42,6 +42,9 @@ if TYPE_CHECKING:
     from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
 
+ROUND_TICK_START = "start"
+ROUND_TICK_END = "end"
+
 
 def is_dead(character_sheet: CharacterSheet | None) -> bool:
     """Return True if the character's mortality marker is DEAD.
@@ -698,9 +701,9 @@ def resolve_vitals_consequence(
 
 
 def tick_round_for_targets(
-    targets: Iterable[ObjectDB],
+    targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
     *,
-    timing: Literal["start", "end"] = "end",
+    timing: Literal["start", "end"] = ROUND_TICK_END,
 ) -> None:
     """Apply one round's worth of per-target effects for a set of targets.
 
@@ -713,12 +716,14 @@ def tick_round_for_targets(
 
     target_list = [t for t in targets if t is not None]
     for target in target_list:
-        if timing == "start":
+        if timing == ROUND_TICK_START:
             process_round_start(target)
         else:
             process_round_end(target)
-    if timing == "end":
+    if timing == ROUND_TICK_END:
         for target in target_list:
-            sheet = getattr(target, "sheet_data", None)
-            if sheet is not None:
-                advance_bleed_out(sheet)
+            try:
+                sheet = target.sheet_data
+            except (AttributeError, ObjectDoesNotExist):
+                continue
+            advance_bleed_out(sheet)

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from world.scenes.constants import (
@@ -24,7 +26,10 @@ if TYPE_CHECKING:
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
     """Return the actor's CharacterSheet, or None if not present."""
-    return getattr(actor, "sheet_data", None)
+    try:
+        return actor.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None
 
 
 def _active_round_for_room(room: ObjectDB) -> SceneRound | None:
