@@ -60,6 +60,7 @@ from world.mechanics.services import get_available_actions
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.base import Action
     from actions.models import ActionTemplate
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import CharacterAnima
@@ -110,7 +111,7 @@ def dispatch_player_action(
 
     # REGISTRY: validate the key exists; no round gating — always immediate.
     if ref.backend == ActionBackend.REGISTRY:
-        return _dispatch_registry(character, ref, kwargs)
+        return _dispatch_registry(character, ref, kwargs, ctx)
 
     # Step 2: recover authoritative resolution inputs (validates ref against current availability).
     if ref.backend == ActionBackend.CHALLENGE:
@@ -138,6 +139,9 @@ def dispatch_player_action(
     if declaration_open:
         # Declaration window is open — defer to round resolution.
         ctx.record_declaration(sheet, player_action, kwargs)  # type: ignore[arg-type] — sheet is non-None: ctx only exists when a sheet resolved
+        # Attempt presence-gated resolution: once every present ACTIVE participant has
+        # declared, the social round resolves automatically.
+        _maybe_resolve_scene_round(ctx)
         return DispatchResult(backend=ref.backend, deferred=True)
 
     return _dispatch_immediate_challenge(character, avail, ctx)
@@ -147,8 +151,14 @@ def _dispatch_registry(
     character: ObjectDB,
     ref: ActionRef,
     kwargs: dict[str, Any],
+    ctx: RoundContext | None = None,
 ) -> DispatchResult:
-    """Resolve and run a REGISTRY action immediately (no round gating)."""
+    """Resolve and run a REGISTRY action immediately (no round gating).
+
+    A turn-costing REGISTRY action (``costs_turn``) still drives an active scene round
+    after it runs — a social round resolves if its present set is complete; a danger
+    round ticks immediately.
+    """
     action_obj = get_action(ref.registry_key or "")
     if action_obj is None:
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
@@ -158,6 +168,7 @@ def _dispatch_registry(
     if ref.position_id is not None:
         merged_kwargs["position_id"] = ref.position_id
     result = action_obj.run(actor=character, **merged_kwargs)
+    _drive_scene_round_for_turn_cost(action_obj, ctx)
     return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
 
 
@@ -219,6 +230,33 @@ def _tick_scene_round_if_active(ctx: RoundContext | None) -> None:
         from world.scenes.round_services import advance_scene_round_for_action  # noqa: PLC0415
 
         advance_scene_round_for_action(ctx.scene_round)
+
+
+def _drive_scene_round_for_turn_cost(action_obj: Action, ctx: RoundContext | None) -> None:
+    """Drive an active scene round after a turn-costing REGISTRY action.
+
+    No-op unless *action_obj* is turn-costing and a scene round is active. Social
+    (declaration-open) rounds gather-and-resolve via presence-gated resolution;
+    danger rounds tick immediately."""
+    if not action_obj.costs_turn or ctx is None:
+        return
+    if ctx.is_declaration_open:
+        _maybe_resolve_scene_round(ctx)
+    else:
+        _tick_scene_round_if_active(ctx)
+
+
+def _maybe_resolve_scene_round(ctx: RoundContext | None) -> None:
+    """Resolve an active SOCIAL scene round if the presence-gated completion rule is met.
+
+    Called after a turn-costing declaration/action. No-op for combat contexts and for
+    danger rounds (which tick immediately via ``_tick_scene_round_if_active``)."""
+    from world.scenes.round_context import SceneRoundContext  # noqa: PLC0415
+
+    if isinstance(ctx, SceneRoundContext):
+        from world.scenes.round_services import maybe_resolve_scene_round  # noqa: PLC0415
+
+        maybe_resolve_scene_round(ctx.scene_round)
 
 
 def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
