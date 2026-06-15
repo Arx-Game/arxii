@@ -7,6 +7,7 @@ Phase 1: positions + edges are room-anchored; gated edges block crossing
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -20,6 +21,20 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.mechanics.models import ChallengeInstance
+
+
+@dataclass(frozen=True)
+class PositionAdjacency:
+    """Adjacency entry for a single position under ADJACENT-reach semantics.
+
+    ``adjacent_position_ids`` contains every position reachable from
+    ``position_id`` via a single passable edge, regardless of gating
+    challenges (matching ``position_reachable``'s ADJACENT semantics:
+    gating challenges gate movement, not reach).
+    """
+
+    position_id: int
+    adjacent_position_ids: list[int] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +134,69 @@ def position_of(objectdb: ObjectDB) -> Position | None:
         return objectdb.object_position.position
     except ObjectPosition.DoesNotExist:
         return None
+
+
+def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
+    """Return the ADJACENT-reach adjacency map for every position in *room*.
+
+    When called via ``EncounterDetailSerializer``, the upstream viewset's
+    ``_base_queryset`` prefetches positions onto ``room.positions_cached`` and
+    passable edges onto each position as ``passable_edges_as_a`` /
+    ``passable_edges_as_b`` (all via ``Prefetch(to_attr=...)``).  This function
+    detects those attrs and builds the map in-memory with zero extra queries.
+
+    When the attrs are absent (e.g., unit-test direct calls), issues exactly
+    two queries:
+      1. All positions in the room (ordered by pk).
+      2. All passable edges whose position_a is in this room (canonical order
+         guarantees ``position_a.room == position_b.room`` per model constraint).
+
+    Gating challenges are deliberately ignored — ADJACENT reach can strike
+    across a movement-gated edge (matching ``position_reachable``'s ADJACENT
+    branch in this module).
+
+    Returns a ``PositionAdjacency`` per position in pk order; isolated
+    positions (no edges) have an empty ``adjacent_position_ids`` list.
+    """
+    # Prefer prefetched data (zero queries); fall back to DB when absent.
+    positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
+    if positions_cached is not None:
+        positions = sorted(positions_cached, key=lambda x: x.pk)
+        return [
+            PositionAdjacency(
+                position_id=p.pk,
+                # edges_as_a: p is position_a → neighbor is position_b_id
+                # edges_as_b: p is position_b → neighbor is position_a_id
+                adjacent_position_ids=sorted(
+                    {edge.position_b_id for edge in getattr(p, "passable_edges_as_a", [])}  # noqa: GETATTR_LITERAL
+                    | {edge.position_a_id for edge in getattr(p, "passable_edges_as_b", [])}  # noqa: GETATTR_LITERAL
+                ),
+            )
+            for p in positions
+        ]
+
+    # Fallback path: 2 queries.
+    positions = list(Position.objects.filter(room=room).order_by("pk"))
+    position_ids = {p.pk for p in positions}
+
+    # All passable edges in the room — canonical order means position_a.room
+    # == room, so filtering on position_a__room covers both endpoints.
+    edges = PositionEdge.objects.filter(
+        position_a__room=room,
+        is_passable=True,
+    ).values_list("position_a_id", "position_b_id")
+
+    # Build adjacency dict: position_id → sorted list of adjacent ids.
+    adj: dict[int, list[int]] = {p.pk: [] for p in positions}
+    for a_id, b_id in edges:
+        if a_id in position_ids and b_id in position_ids:
+            adj[a_id].append(b_id)
+            adj[b_id].append(a_id)
+
+    return [
+        PositionAdjacency(position_id=p.pk, adjacent_position_ids=sorted(adj[p.pk]))
+        for p in positions
+    ]
 
 
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:

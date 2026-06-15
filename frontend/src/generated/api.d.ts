@@ -14410,6 +14410,7 @@ export interface components {
       readonly escalation_start_round: number | null;
       readonly escalation_tick_narration: string | null;
       readonly forced_escape: boolean;
+      readonly position_adjacency: string;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -19986,6 +19987,7 @@ export interface components {
       readonly action_category:
         | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
         | null;
+      readonly reach: string | null;
     };
     /**
      * @description Write serializer - player creates feedback.

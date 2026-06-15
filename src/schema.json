@@ -25471,6 +25471,9 @@ components:
         forced_escape:
           type: boolean
           readOnly: true
+        position_adjacency:
+          type: string
+          readOnly: true
       required:
       - clashes
       - completed_at
@@ -25486,6 +25489,7 @@ components:
       - opponents
       - outcome
       - participants
+      - position_adjacency
       - resolution_order
     EncounterDetailRequest:
       type: object
@@ -35852,6 +35856,10 @@ components:
           oneOf:
           - $ref: '#/components/schemas/ActionCategoryEnum'
           - $ref: '#/components/schemas/NullEnum'
+        reach:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - action_category
       - action_template
@@ -35863,6 +35871,7 @@ components:
       - enhancements
       - prerequisite_met
       - prerequisite_reasons
+      - reach
       - ref
       - strain
       - target_spec

@@ -489,6 +489,24 @@ class RoundActionSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
+# Position adjacency serializer (for EncounterDetailSerializer.position_adjacency)
+# ---------------------------------------------------------------------------
+
+
+class PositionAdjacencyItemSerializer(serializers.Serializer):
+    """Read-only serializer for a single PositionAdjacency entry.
+
+    Exposes the ADJACENT-reach neighbor graph for one position so the
+    frontend can pre-filter selectable targets by position before declaring.
+    """
+
+    position_id = serializers.IntegerField(read_only=True)
+    adjacent_position_ids = serializers.ListField(
+        child=serializers.IntegerField(), read_only=True
+    )
+
+
+# ---------------------------------------------------------------------------
 # Clash state serializer (for EncounterDetailSerializer.clashes)
 # ---------------------------------------------------------------------------
 
@@ -660,6 +678,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
+    position_adjacency = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -706,6 +725,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "escalation_start_round",
             "escalation_tick_narration",
             "forced_escape",
+            "position_adjacency",
         ]
         extra_kwargs = {
             "outcome": {"read_only": True},
@@ -849,6 +869,25 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 .all()
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
+
+    def get_position_adjacency(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return ADJACENT-reach position adjacency for the encounter's room.
+
+        Each entry is ``{position_id: int, adjacent_position_ids: [int]}``.
+        Returns an empty list when the encounter has no room.
+
+        Uses ``room_position_adjacency`` from the positioning services, which
+        reads from ``room.positions_cached`` / per-position
+        ``passable_edges_as_a`` / ``passable_edges_as_b`` attrs when they
+        were prefetched by the viewset's ``_base_queryset`` — zero extra
+        queries on the warm path.
+        """
+        if obj.room_id is None:
+            return []
+        from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
+
+        entries = room_position_adjacency(obj.room)
+        return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

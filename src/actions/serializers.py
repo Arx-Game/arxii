@@ -131,6 +131,7 @@ class PlayerActionSerializer(serializers.Serializer):
     action_category = serializers.ChoiceField(
         choices=ActionCategory.choices, read_only=True, allow_null=True
     )
+    reach = serializers.CharField(read_only=True, allow_null=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""
