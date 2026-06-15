@@ -9,6 +9,8 @@ from world.conditions.constants import (
     BLEED_OUT_CONDITION_NAME,
     POISON_DAMAGE_TYPE_NAME,
     POISONED_CONDITION_NAME,
+    SLOW_POISON_CONDITION_NAME,
+    UNCONSCIOUS_CONDITION_NAME,
     DamageTickTiming,
 )
 from world.conditions.factories import (
@@ -23,6 +25,7 @@ from world.conditions.models import ConditionStage, ConditionTemplate, DamageTyp
 from world.conditions.services import (
     _process_round_tick,
     apply_condition,
+    batch_chronic_effect_tick,
     ensure_poison_content,
     get_active_conditions,
 )
@@ -255,3 +258,63 @@ class AcutePoisonCrossesDeathThresholdTests(TestCase):
             active_names,
             "Crossing the death threshold via poison must apply Bleeding-Out",
         )
+
+
+@tag("postgres")
+class ChronicPoisonTickTests(TestCase):
+    """Capped long-term chronic-effect tier (#520 §5.3 + §6).
+
+    @tag("postgres") — applying the long-term Slow Poison condition exercises the
+    PG-only DISTINCT ON query in the conditions apply/active path.
+    """
+
+    def _slow_poisoned(self, *, health: int, max_health: int = 100):
+        ensure_poison_content()
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        vitals = CharacterVitalsFactory(character_sheet=sheet, health=health, max_health=max_health)
+        slow = ConditionTemplate.get_by_name(SLOW_POISON_CONDITION_NAME)
+        apply_condition(target=character, condition=slow)
+        return sheet, character, vitals
+
+    def test_chronic_poison_reduces_health(self) -> None:
+        _sheet, _character, vitals = self._slow_poisoned(health=100)
+        summary = batch_chronic_effect_tick()
+        vitals.refresh_from_db()
+        self.assertLess(vitals.health, 100)
+        self.assertEqual(summary.ticked, 1)
+
+    def test_cap_never_kills_or_knocks_out(self) -> None:
+        _sheet, character, vitals = self._slow_poisoned(health=25)
+        for _ in range(50):
+            batch_chronic_effect_tick()
+        vitals.refresh_from_db()
+        self.assertGreater(vitals.health_percentage, 0.2)
+        active_names = {inst.condition.name for inst in get_active_conditions(character)}
+        self.assertNotIn(BLEED_OUT_CONDITION_NAME, active_names)
+        self.assertNotIn(UNCONSCIOUS_CONDITION_NAME, active_names)
+
+    def test_skips_character_in_active_round(self) -> None:
+        sheet, _character, vitals = self._slow_poisoned(health=100)
+        rnd = SceneRoundFactory(status=RoundStatus.DECLARING, round_number=1)
+        SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
+
+        summary = batch_chronic_effect_tick()
+
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.health, 100, "Active-round targets are owned by the acute tier")
+        self.assertEqual(summary.active_round_skipped, 1)
+
+    def test_acute_poison_not_advanced_by_chronic_tick(self) -> None:
+        ensure_poison_content()
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        vitals = CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
+        poisoned = ConditionTemplate.get_by_name(POISONED_CONDITION_NAME)
+        apply_condition(target=character, condition=poisoned)
+
+        summary = batch_chronic_effect_tick()
+
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.health, 100, "Acute poison (is_long_term=False) is not chronic")
+        self.assertEqual(summary.examined, 0)

@@ -729,6 +729,29 @@ def recompute_max_health(
     return new_max
 
 
+def apply_clamped_chronic_damage(character_sheet: CharacterSheet, amount: int) -> int:
+    """Reduce health by ``amount`` but never to/below the knockout floor, never increasing it.
+
+    The long-term tier MUST NOT incapacitate or kill (#520 §5.3): it never calls
+    process_damage_consequences and clamps post-damage health strictly above
+    KNOCKOUT_HEALTH_THRESHOLD * max_health. Returns the health actually removed.
+    """
+    if amount <= 0:
+        return 0
+    try:
+        vitals = character_sheet.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return 0
+    floor = int(KNOCKOUT_HEALTH_THRESHOLD * vitals.max_health) + 1  # strictly above the floor
+    new_health = max(vitals.health - amount, floor)
+    if new_health >= vitals.health:  # already at/below floor -> never heal, never raise
+        return 0
+    removed = vitals.health - new_health
+    vitals.health = new_health
+    vitals.save(update_fields=["health"])
+    return removed
+
+
 def get_vitals_consequence_config() -> VitalsConsequenceConfig:
     """Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.
 
