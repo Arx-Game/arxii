@@ -301,8 +301,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
 
     // Inspect the focused card's call — find the call for slot "focused".
     const focusedCall = mockReachCard.mock.calls.find(
-      (c) =>
-        (c[0] as { actionContext: { slot: string } }).actionContext.slot === 'focused'
+      (c) => (c[0] as { actionContext: { slot: string } }).actionContext.slot === 'focused'
     );
     expect(focusedCall).toBeDefined();
     const props = focusedCall![0] as {
@@ -625,10 +624,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
       ],
     });
 
-    render(
-      <YourTurn {...defaultProps({ encounter })} />,
-      { wrapper: createWrapper() }
-    );
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
 
     // Find the focused card call and inspect targets.
     const focusedCall = mockReachCard.mock.calls.find(
@@ -640,9 +636,13 @@ describe('YourTurn — reach pre-filter (#532)', () => {
     };
 
     // Opponent carries its position.
-    expect(targets).toContainEqual(expect.objectContaining({ id: 11, kind: 'opponent', positionId: 30 }));
+    expect(targets).toContainEqual(
+      expect.objectContaining({ id: 11, kind: 'opponent', positionId: 30 })
+    );
     // Ally carries its position.
-    expect(targets).toContainEqual(expect.objectContaining({ id: 7, kind: 'ally', positionId: 20 }));
+    expect(targets).toContainEqual(
+      expect.objectContaining({ id: 7, kind: 'ally', positionId: 20 })
+    );
   });
 
   it('reach is null when no technique is selected', () => {

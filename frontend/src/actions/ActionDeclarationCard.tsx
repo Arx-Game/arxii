@@ -230,7 +230,16 @@ function TargetButton({
 }
 
 function TargetPicker(props: TargetPickerProps) {
-  const { targetId, targetKind, onTargetChange, disabled, targets, reach, actorPositionId, positionAdjacency } = props;
+  const {
+    targetId,
+    targetKind,
+    onTargetChange,
+    disabled,
+    targets,
+    reach,
+    actorPositionId,
+    positionAdjacency,
+  } = props;
 
   // Scenes: no combatant list → kind-only selector.
   if (targets === undefined) {

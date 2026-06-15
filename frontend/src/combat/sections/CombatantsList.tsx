@@ -125,7 +125,9 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <p className="truncate text-xs font-medium text-foreground">{participant.character_name}</p>
+          <p className="truncate text-xs font-medium text-foreground">
+            {participant.character_name}
+          </p>
           {participant.current_position && (
             <span
               data-testid="position-badge"

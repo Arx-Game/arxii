@@ -49,7 +49,7 @@ describe('TargetPicker', () => {
         spec={makeSpec({
           filters: {
             in_same_scene: true,
-                  exclude_self: true,
+            exclude_self: true,
             must_be_conscious: false,
           },
         })}

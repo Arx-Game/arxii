@@ -502,9 +502,7 @@ class PositionAdjacencyItemSerializer(serializers.Serializer):
     """
 
     position_id = serializers.IntegerField(read_only=True)
-    adjacent_position_ids = serializers.ListField(
-        child=serializers.IntegerField(), read_only=True
-    )
+    adjacent_position_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
 
 
 # ---------------------------------------------------------------------------
