@@ -52,10 +52,6 @@ _REWARD_BOTH_PARENTS_SET = 2
 # smell (python:S1192).
 _CONSEQUENCE_FK = "checks.Consequence"
 
-# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-OBJECT_DB_MODEL = "objects.ObjectDB"
-ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
-
 
 # ---------------------------------------------------------------------------
 # Mission graph data model
@@ -328,7 +324,7 @@ class MissionNode(SharedMemoryModel):
         ),
     )
     locations = models.ManyToManyField(
-        ROOM_PROFILE_MODEL,
+        "evennia_extensions.RoomProfile",
         blank=True,
         related_name="+",
         help_text=(
@@ -497,7 +493,7 @@ class MissionOption(SharedMemoryModel):
         ),
     )
     locations = models.ManyToManyField(
-        ROOM_PROFILE_MODEL,
+        "evennia_extensions.RoomProfile",
         blank=True,
         related_name="+",
         help_text=(
@@ -993,7 +989,7 @@ class MissionInstance(SharedMemoryModel):
         help_text="Where the run currently sits; null = complete.",
     )
     spawned_room = models.ForeignKey(
-        ROOM_PROFILE_MODEL,
+        "evennia_extensions.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1005,7 +1001,7 @@ class MissionInstance(SharedMemoryModel):
         ),
     )
     anchor_room = models.ForeignKey(
-        ROOM_PROFILE_MODEL,
+        "evennia_extensions.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1095,7 +1091,7 @@ class MissionParticipant(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "objects.ObjectDB",
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -1243,7 +1239,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="deeds",
     )
     actor = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "objects.ObjectDB",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The acting participant's character — consequence follows the actor.",
@@ -1314,7 +1310,7 @@ class MissionGiver(SharedMemoryModel):
         help_text="How this giver reaches the player; selects the target's expected typeclass.",
     )
     target = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "objects.ObjectDB",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1433,7 +1429,7 @@ class MissionGiverCooldown(SharedMemoryModel):
     # Character is an ObjectDB here to match MissionParticipant.character — the
     # missions app keys runtime participation on the Evennia object, not a Persona.
     character = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -1469,7 +1465,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         related_name="reward_lines",
     )
     recipient = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "objects.ObjectDB",
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(

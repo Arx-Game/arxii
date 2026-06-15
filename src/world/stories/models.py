@@ -31,10 +31,6 @@ from world.stories.types import (
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
-# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-ACCOUNT_DB_MODEL = "accounts.AccountDB"
-CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
-
 
 class TrustCategory(SharedMemoryModel):
     """
@@ -64,7 +60,7 @@ class TrustCategory(SharedMemoryModel):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -149,7 +145,7 @@ class Story(SharedMemoryModel):
 
     # Ownership and management
     owners = models.ManyToManyField(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         related_name="owned_stories",
         help_text="Players who own and can manage this story",
     )
@@ -279,7 +275,7 @@ class StoryTrustRequirement(SharedMemoryModel):
     # Optional metadata
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -462,7 +458,7 @@ class PlayerTrust(SharedMemoryModel):
     """
 
     account = models.OneToOneField(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.CASCADE,
         related_name="trust_profile",
     )
@@ -585,12 +581,12 @@ class StoryFeedback(SharedMemoryModel):
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="feedback")
     reviewer = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.CASCADE,
         related_name="given_feedback",
     )
     reviewed_player = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.CASCADE,
         related_name="received_feedback",
     )
@@ -915,7 +911,7 @@ class Beat(SharedMemoryModel):
 
     # Consequence pools for beat outcomes (nullable; authoring is opt-in).
     success_consequences = models.ForeignKey(
-        CONSEQUENCE_POOL_MODEL,
+        "actions.ConsequencePool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -923,7 +919,7 @@ class Beat(SharedMemoryModel):
         help_text="ConsequencePool to fire when this beat resolves SUCCESS.",
     )
     failure_consequences = models.ForeignKey(
-        CONSEQUENCE_POOL_MODEL,
+        "actions.ConsequencePool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -931,7 +927,7 @@ class Beat(SharedMemoryModel):
         help_text="ConsequencePool to fire when this beat resolves FAILURE.",
     )
     expired_consequences = models.ForeignKey(
-        CONSEQUENCE_POOL_MODEL,
+        "actions.ConsequencePool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1538,7 +1534,7 @@ class StoryNote(SharedMemoryModel):
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="notes")
     author_account = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1675,7 +1671,7 @@ class SessionRequest(SharedMemoryModel):
         help_text="The GM currently expected to run this session.",
     )
     initiated_by_account = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1727,7 +1723,7 @@ class StoryGMOffer(SharedMemoryModel):
         related_name="story_offers_received",
     )
     offered_by_account = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
+        "accounts.AccountDB",
         on_delete=models.CASCADE,
         related_name="story_offers_made",
     )

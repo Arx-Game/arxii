@@ -29,10 +29,6 @@ if TYPE_CHECKING:
 
     from world.scenes.place_models import InteractionReceiver
 
-# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-INTERACTION_MODEL = "scenes.Interaction"
-
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
     """
@@ -192,7 +188,7 @@ class Persona(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="personas",
         help_text="The character sheet this persona belongs to.",
@@ -406,7 +402,7 @@ class PersonaDiscovery(SharedMemoryModel):
         help_text="The persona they were discovered to be the same person as (higher PK)",
     )
     discovered_by = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="persona_discoveries",
         help_text="The character who figured out these two personas are the same person",
@@ -751,14 +747,14 @@ class InteractionAction(SharedMemoryModel):
     """
 
     pose = models.ForeignKey(
-        INTERACTION_MODEL,
+        "scenes.Interaction",
         on_delete=models.CASCADE,
         related_name="action_links",
         db_constraint=False,
         help_text="The POSE Interaction that elaborates the action(s).",
     )
     action_interaction = models.ForeignKey(
-        INTERACTION_MODEL,
+        "scenes.Interaction",
         on_delete=models.CASCADE,
         related_name="pose_links",
         db_constraint=False,
@@ -810,7 +806,7 @@ class InteractionPowerLedgerEntry(SharedMemoryModel):
     """
 
     interaction = models.ForeignKey(
-        INTERACTION_MODEL,
+        "scenes.Interaction",
         on_delete=models.CASCADE,
         related_name="power_ledger_entries",
         db_constraint=False,
@@ -977,7 +973,7 @@ class SceneRoundParticipant(SharedMemoryModel):
         SceneRound, on_delete=models.CASCADE, related_name="participants"
     )
     character_sheet = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="scene_round_participations",
     )

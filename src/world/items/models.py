@@ -23,9 +23,6 @@ from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, Own
 # duplicated-literal SonarCloud smell (python:S1192).
 _CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
 _PERSONA_FK = "scenes.Persona"
-SOCIETY_MODEL = "societies.Society"
-CHECK_TYPE_MODEL = "checks.CheckType"
-FACET_MODEL = "magic.Facet"
 
 
 class QualityTier(SharedMemoryModel):
@@ -200,7 +197,7 @@ class ItemTemplate(SharedMemoryModel):
         help_text="Consequences applied when this item is used (null = not usable).",
     )
     on_use_check_type = models.ForeignKey(
-        CHECK_TYPE_MODEL,
+        "checks.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -859,7 +856,7 @@ class ItemFacet(SharedMemoryModel):
         related_name="item_facets",
     )
     facet = models.ForeignKey(
-        FACET_MODEL,
+        "magic.Facet",
         on_delete=models.PROTECT,
         related_name="item_attachments",
     )
@@ -1008,7 +1005,7 @@ class FashionPresentation(SharedMemoryModel):
         help_text="The outfit presented (record-keeping; the check reads equipped items).",
     )
     perceiving_society = models.ForeignKey(
-        SOCIETY_MODEL,
+        "societies.Society",
         on_delete=models.PROTECT,
         related_name="fashion_presentations",
     )
@@ -1039,12 +1036,12 @@ class FacetVogueMomentum(SharedMemoryModel):
     """
 
     society = models.ForeignKey(
-        SOCIETY_MODEL,
+        "societies.Society",
         on_delete=models.CASCADE,
         related_name="facet_momentum",
     )
     facet = models.ForeignKey(
-        FACET_MODEL,
+        "magic.Facet",
         on_delete=models.CASCADE,
         related_name="vogue_momentum",
     )
@@ -1082,7 +1079,7 @@ class ItemCheckModifier(SharedMemoryModel):
         help_text="Item template that carries this modifier.",
     )
     check_type = models.ForeignKey(
-        CHECK_TYPE_MODEL,
+        "checks.CheckType",
         on_delete=models.CASCADE,
         related_name="item_check_modifiers",
         help_text="The check type this modifier affects.",
@@ -1116,7 +1113,7 @@ class FacetCraftingConfig(SharedMemoryModel):
     """
 
     check_type = models.ForeignKey(
-        CHECK_TYPE_MODEL,
+        "checks.CheckType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1148,7 +1145,7 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     in_vogue_facets = models.ManyToManyField(
-        FACET_MODEL,
+        "magic.Facet",
         related_name="fashion_styles",
         blank=True,
         help_text="Facets that are currently fashionable in this style.",
@@ -1329,7 +1326,7 @@ class Trendsetter(SharedMemoryModel):
     """A crowned 'toast of the season' whose look set a society's trend (#514)."""
 
     society = models.ForeignKey(
-        SOCIETY_MODEL,
+        "societies.Society",
         on_delete=models.CASCADE,
         related_name="trendsetters",
     )
