@@ -7,6 +7,9 @@ collapse checks, and rest mechanics.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from world.action_points.models import ActionPointPool
@@ -19,6 +22,7 @@ from world.fatigue.constants import (
     CAPACITY_WILLPOWER_MULTIPLIER,
     COLLAPSE_RISK_ZONES,
     EFFORT_COST_MULTIPLIER,
+    EXHAUSTION_DAMAGE_TYPE_NAME,
     FATIGUE_ENDURANCE_STAT,
     MIN_FATIGUE_COST,
     REST_AP_COST,
@@ -29,9 +33,16 @@ from world.fatigue.constants import (
     FatigueZone,
 )
 from world.fatigue.models import FatiguePool
-from world.fatigue.types import RestResult
+from world.fatigue.types import FatigueCollapseResult, RestResult
 from world.traits.constants import PrimaryStat
 from world.traits.models import Trait, TraitType
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from evennia.objects.models import ObjectDB
+
+    from world.conditions.models import DamageType
 
 
 def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
@@ -241,11 +252,36 @@ def apply_technique_fatigue(
     if zone not in _TECHNIQUE_COLLAPSE_ZONES:
         return amount
 
-    endurance_passed = attempt_endurance_check(character_sheet, category)
-    if not endurance_passed:
-        attempt_power_through(character_sheet, category)
+    resolve_fatigue_collapse(character_sheet, category)
 
     return amount
+
+
+def resolve_fatigue_collapse(
+    character_sheet: CharacterSheet,
+    category: str,
+) -> FatigueCollapseResult:
+    """Run the fatigue collapse sequence for one category and apply strain damage.
+
+    Shared by the technique-cast path (apply_technique_fatigue), the action
+    pipeline (_execute_action_with_fatigue), and the round-resolution trigger so
+    the endurance -> power-through -> health-damage sequence lives in one place.
+
+    The caller is responsible for the *gate* (zone or effort) that decides whether
+    collapse risk applies; this assumes risk applies and rolls it. On a failed
+    endurance check the strain computed by attempt_power_through is applied to
+    health via apply_exhaustion_damage regardless of the power-through outcome.
+    """
+    if attempt_endurance_check(character_sheet, category):
+        return FatigueCollapseResult(collapsed=False, powered_through=False, strain_damage=0)
+
+    power_success, strain_damage = attempt_power_through(character_sheet, category)
+    apply_exhaustion_damage(character_sheet, strain_damage)
+    return FatigueCollapseResult(
+        collapsed=not power_success,
+        powered_through=power_success,
+        strain_damage=strain_damage,
+    )
 
 
 def should_check_collapse(
@@ -394,6 +430,89 @@ def attempt_power_through(
         target_difficulty=target_difficulty,
     )
     return result.success_level > 0, strain_damage
+
+
+def _ensure_exhaustion_damage_type() -> DamageType:
+    """Resolve (or create on demand) the authored 'exhaustion' DamageType.
+
+    Engine-required reference data, seeded in-code like _ensure_*_check_type rather
+    than via a fixture/data migration. Null wound/death pools fall back to the
+    VitalsConsequenceConfig defaults in process_damage_consequences.
+    """
+    from world.conditions.models import DamageType  # noqa: PLC0415
+
+    damage_type, _ = DamageType.objects.get_or_create(
+        name=EXHAUSTION_DAMAGE_TYPE_NAME,
+        defaults={
+            "description": "Health lost to fatigue collapse when a character overexerts.",
+        },
+    )
+    return damage_type
+
+
+def apply_exhaustion_damage(character_sheet: CharacterSheet, amount: int) -> None:
+    """Apply fatigue-collapse strain as actual health damage.
+
+    Mirrors mechanics._deal_damage: decrement health, persist, then run the
+    survivability pipeline (which may apply Unconscious/Bleeding-Out per the
+    consequence pools — the acute exhaustion outcome). No-ops for non-positive
+    strain or a sheet without a CharacterVitals row.
+    """
+    if amount <= 0:
+        return
+
+    from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+    try:
+        vitals = character_sheet.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return
+
+    vitals.health -= amount
+    vitals.save(update_fields=["health"])
+
+    process_damage_consequences(
+        character_sheet=character_sheet,
+        damage_dealt=amount,
+        damage_type=_ensure_exhaustion_damage_type(),
+    )
+
+
+def tick_fatigue_collapse_for_targets(
+    targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Evaluate non-cast over-capacity fatigue collapse for each target.
+
+    The acute, round-driven exhaustion trigger: a character sitting in the
+    OVEREXERTED/EXHAUSTED zone risks collapse on round resolution even without
+    casting. Reuses the technique-cast zone gate (_TECHNIQUE_COLLAPSE_ZONES) and
+    the shared resolve_fatigue_collapse sequence, so collapse damage routes
+    through the same acute path (can incapacitate/kill via the consequence pools).
+
+    Empty ``targets`` is a no-op — the AFK-safety primitive (no participants ->
+    no progression). Called by the shared round orchestrator
+    (vitals.tick_round_for_targets) on round resolution.
+    """
+    for target in targets:
+        if target is None:
+            continue
+        try:
+            sheet = target.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if sheet is None:
+            continue
+        try:
+            # Probe fatigue capability once; targets without a traits handler
+            # (NPCs / non-character objects in the round) are not fatigue-tracked.
+            capacities = {cat: get_fatigue_capacity(sheet, cat) for cat in FATIGUE_ENDURANCE_STAT}
+        except AttributeError:
+            continue
+        for category, capacity in capacities.items():
+            if capacity <= 0:
+                continue
+            if get_fatigue_zone(sheet, category) in _TECHNIQUE_COLLAPSE_ZONES:
+                resolve_fatigue_collapse(sheet, category)
 
 
 def reset_fatigue(character_sheet: CharacterSheet) -> None:

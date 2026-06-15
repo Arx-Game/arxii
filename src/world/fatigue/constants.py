@@ -2,6 +2,10 @@ from django.db import models
 
 from actions.constants import ActionCategory
 
+# Name of the authored DamageType applied when fatigue collapse strain reaches health.
+# Resolved/created on demand via _ensure_exhaustion_damage_type (no fixture/migration).
+EXHAUSTION_DAMAGE_TYPE_NAME = "exhaustion"
+
 
 class FatigueZone(models.TextChoices):
     FRESH = "fresh", "Fresh"

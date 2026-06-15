@@ -25,6 +25,20 @@ class ActionResult:
 
 
 @dataclass
+class FatigueCollapseResult:
+    """Outcome of running the fatigue collapse sequence for one category.
+
+    The caller decides *whether* collapse risk applies (zone/effort gate); this
+    captures the result of the endurance + power-through rolls and the strain
+    damage applied to health.
+    """
+
+    collapsed: bool
+    powered_through: bool
+    strain_damage: int
+
+
+@dataclass
 class RestResult:
     """Result of a rest attempt."""
 
