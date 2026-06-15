@@ -52,3 +52,24 @@ class RoundFactorySmokeTests(TestCase):
         p = SceneRoundParticipantFactory()
         assert p.scene_round_id is not None
         assert p.character_sheet_id is not None
+
+
+class SceneActionDeclarationTests(TestCase):
+    def test_scene_action_declaration_unique_per_participant_per_round(self):
+        from django.db import IntegrityError
+
+        from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
+        from world.scenes.models import SceneActionDeclaration
+
+        rnd = SceneRoundFactory()
+        participant = SceneRoundParticipantFactory(scene_round=rnd)
+        SceneActionDeclaration.objects.create(
+            scene_round=rnd, round_number=rnd.round_number, participant=participant, is_pass=True
+        )
+        with self.assertRaises(IntegrityError):
+            SceneActionDeclaration.objects.create(
+                scene_round=rnd,
+                round_number=rnd.round_number,
+                participant=participant,
+                is_pass=True,
+            )
