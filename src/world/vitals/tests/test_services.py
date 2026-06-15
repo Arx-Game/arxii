@@ -181,3 +181,46 @@ class ProcessDamageConsequencesTest(TestCase):
             damage_type=None,
         )
         assert result.message == "No vitals found"
+
+
+class MaybeDangerRoundOnBleedOutTest(TestCase):
+    """Unit tests for _maybe_danger_round_on_bleed_out helper."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+
+    def _char_in_room(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        sheet.character.db_location = self.room
+        sheet.character.save(update_fields=["db_location"])
+        return sheet
+
+    def test_non_combat_character_creates_danger_round(self) -> None:
+        """A character outside combat causes a DANGER SceneRound to be created."""
+        from world.scenes.models import SceneRound
+        from world.vitals.services import _maybe_danger_round_on_bleed_out
+
+        sheet = self._char_in_room()
+        _maybe_danger_round_on_bleed_out(sheet)
+        assert SceneRound.objects.filter(room=self.room).exists()
+
+    def test_in_combat_character_skips_danger_round(self) -> None:
+        """A character already in active combat does NOT create a SceneRound."""
+        from world.combat.constants import EncounterStatus, ParticipantStatus
+        from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+        from world.scenes.models import SceneRound
+        from world.vitals.services import _maybe_danger_round_on_bleed_out
+
+        sheet = self._char_in_room()
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        _maybe_danger_round_on_bleed_out(sheet)
+        assert not SceneRound.objects.filter(room=self.room).exists()
