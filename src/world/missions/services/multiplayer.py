@@ -149,14 +149,13 @@ def resolve_group_node(
             attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
             deeds = _resolve_joint(instance, node, presented, attempts)
         else:
-            option, actor = _tally_group_winner(instance, ballots)
+            option, actor = _tally_group_winner(ballots)
             deeds = _resolve_single_winner(instance, node, presented, option, actor)
         MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
     return deeds
 
 
 def _tally_group_winner(
-    instance: MissionInstance,
     ballots: list[MissionGroupBallot],
 ) -> tuple[MissionOption, MissionParticipant]:
     """The GROUP_VOTE winning option + acting participant from the ballots.
@@ -188,12 +187,14 @@ def _tally_group_winner(
     tied = [by_pk[pk] for pk in sorted(counts) if counts[pk] == top]
     winner = tied[0] if len(tied) == 1 else random.choice(tied)  # noqa: S311
 
-    holder = contract_holder(instance)
+    # The actor is a picker of the winner, holder preferred. ``is_contract_holder``
+    # is already loaded on each ballot's participant (select_related upstream), so
+    # we find the holder among the pickers in-memory — no ``contract_holder`` query.
     pickers = sorted(
         (ballot.participant for ballot in ballots if ballot.picked_option_id == winner.pk),
         key=lambda participant: participant.pk,
     )
-    actor = next((p for p in pickers if p.pk == holder.pk), pickers[0])
+    actor = next((p for p in pickers if p.is_contract_holder), pickers[0])
     return winner, actor
 
 
