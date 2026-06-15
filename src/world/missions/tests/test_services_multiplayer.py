@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
@@ -32,6 +32,7 @@ from world.missions.constants import (
     DeedRewardSink,
     JointCombine,
     MissionStatus,
+    NodeLocationMode,
     OptionKind,
     OptionSource,
 )
@@ -790,3 +791,67 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         self.assertEqual(len(holder_lines), 2)
         for line in holder_lines:
             self.assertEqual(line.amount, 50)
+
+
+class GroupOptionListLocationTests(TestCase):
+    """#887: build_group_option_list applies the location conjunct per participant."""
+
+    @staticmethod
+    def _room(name):
+        room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+        profile = RoomProfileFactory(objectdb=room)
+        return room, profile
+
+    @staticmethod
+    def _pc_in(room):
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        if room is not None:
+            character.db_location = room
+            character.save(update_fields=["db_location"])
+        return character
+
+    def _group_with_option(self, location_mode, *, node_room_profile=None):
+        template = MissionTemplateFactory(name=f"grp-loc-{location_mode}")
+        node = MissionNodeFactory(
+            template=template, key="entry", is_entry=True, location_mode=location_mode
+        )
+        if node_room_profile is not None:
+            node.locations.add(node_room_profile)
+        option = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            authored_ic_framing="A located deed",
+        )
+        instance = MissionInstanceFactory(template=template)
+        return template, node, option, instance
+
+    def test_rooms_node_surfaces_option_only_to_participants_in_that_room(self):
+        room_a, profile_a = self._room("Throne Room")
+        room_b, _ = self._room("Cellar")
+        char_a = self._pc_in(room_a)
+        char_b = self._pc_in(room_b)
+        _t, node, option, instance = self._group_with_option(
+            NodeLocationMode.ROOMS, node_room_profile=profile_a
+        )
+        MissionParticipantFactory(instance=instance, character=char_a, is_contract_holder=True)
+        MissionParticipantFactory(instance=instance, character=char_b)
+
+        presented = build_group_option_list(instance, node)
+        owners = {entry.owner for entry in presented if entry.option == option}
+        # Only the participant standing in room_a (the node's live room) sees it.
+        self.assertEqual(owners, {char_a})
+
+    def test_anywhere_node_surfaces_option_to_all_regardless_of_room(self):
+        room_a, _ = self._room("Hall")
+        char_a = self._pc_in(room_a)
+        char_b = self._pc_in(None)  # placeless
+        _t, node, option, instance = self._group_with_option(NodeLocationMode.ANYWHERE)
+        MissionParticipantFactory(instance=instance, character=char_a, is_contract_holder=True)
+        MissionParticipantFactory(instance=instance, character=char_b)
+
+        presented = build_group_option_list(instance, node)
+        owners = {entry.owner for entry in presented if entry.option == option}
+        self.assertEqual(owners, {char_a, char_b})
