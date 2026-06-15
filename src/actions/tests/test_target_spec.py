@@ -9,7 +9,6 @@ class TargetSpecTests(TestCase):
     def test_default_filters(self) -> None:
         f = TargetFilters()
         self.assertFalse(f.in_same_scene)
-        self.assertFalse(f.in_same_zone)
         self.assertFalse(f.exclude_self)
         self.assertFalse(f.must_be_conscious)
 

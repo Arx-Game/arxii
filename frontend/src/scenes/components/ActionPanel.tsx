@@ -655,7 +655,6 @@ export function ActionPanel({ sceneId }: Props) {
             cardinality: 'single',
             filters: {
               in_same_scene: true,
-              in_same_zone: false,
               exclude_self: false,
               must_be_conscious: false,
             },

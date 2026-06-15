@@ -43,7 +43,6 @@ export interface ActionRef {
 
 export interface TargetFilters {
   in_same_scene: boolean;
-  in_same_zone: boolean;
   exclude_self: boolean;
   must_be_conscious: boolean;
 }

@@ -89,7 +89,6 @@ class TargetFiltersSerializer(serializers.Serializer):
     """Read-only serializer for TargetFilters — boolean filter flags."""
 
     in_same_scene = serializers.BooleanField(read_only=True)
-    in_same_zone = serializers.BooleanField(read_only=True)
     exclude_self = serializers.BooleanField(read_only=True)
     must_be_conscious = serializers.BooleanField(read_only=True)
 

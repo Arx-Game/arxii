@@ -21915,7 +21915,6 @@ export interface components {
     /** @description Read-only serializer for TargetFilters — boolean filter flags. */
     TargetFilters: {
       readonly in_same_scene: boolean;
-      readonly in_same_zone: boolean;
       readonly exclude_self: boolean;
       readonly must_be_conscious: boolean;
     };

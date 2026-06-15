@@ -360,7 +360,6 @@ class TargetFilters:
     """Boolean filter flags applied client-side to candidate targets."""
 
     in_same_scene: bool = False
-    in_same_zone: bool = False
     exclude_self: bool = False
     must_be_conscious: bool = False
 

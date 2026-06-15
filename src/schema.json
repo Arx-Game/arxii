@@ -39888,9 +39888,6 @@ components:
         in_same_scene:
           type: boolean
           readOnly: true
-        in_same_zone:
-          type: boolean
-          readOnly: true
         exclude_self:
           type: boolean
           readOnly: true
@@ -39900,7 +39897,6 @@ components:
       required:
       - exclude_self
       - in_same_scene
-      - in_same_zone
       - must_be_conscious
     TargetKindEnum:
       enum:
