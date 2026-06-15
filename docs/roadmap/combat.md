@@ -761,7 +761,7 @@ tied to the combat subsystem.
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
-- **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps). Built (#521): VitalsPanel on the character sheet + owner/staff-gated `GET /api/vitals/<id>/` read endpoint
+- **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps). Built (#521): VitalsPanel on the character sheet + owner/staff-gated `GET /api/vitals/<id>/` read endpoint. Built (#520 Phase 5): exhaustion — fatigue-collapse `strain_damage` now routes to real health via `apply_exhaustion_damage` → `process_damage_consequences` (shared `resolve_fatigue_collapse`), fired by the live technique cast path and by a non-cast over-capacity trigger on scene-round resolution (`tick_round_for_targets`)
 - **Conditions** — permanent wounds/scars as ConditionTemplates with authored content
 
 ## Design Document

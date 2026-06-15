@@ -735,9 +735,13 @@ def tick_round_for_targets(
         else:
             process_round_end(target)
     if timing == ROUND_TICK_END:
+        from world.fatigue.services import tick_fatigue_collapse_for_targets  # noqa: PLC0415
+
         for target in target_list:
             try:
                 sheet = target.sheet_data
             except (AttributeError, ObjectDoesNotExist):
                 continue
             advance_bleed_out(sheet)
+        # Non-cast over-capacity exhaustion collapse (acute tier, #520 Phase 5).
+        tick_fatigue_collapse_for_targets(target_list)

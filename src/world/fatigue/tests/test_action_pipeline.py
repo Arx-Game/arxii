@@ -166,7 +166,7 @@ class ExecuteActionCollapseTests(TestCase):
         pool.set_current("physical", 35)
         pool.save()
 
-        with patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=True):
+        with patch("world.fatigue.services.attempt_endurance_check", return_value=True):
             result = execute_action_with_fatigue(
                 self.sheet, ActionCategory.PHYSICAL, 5, EffortLevel.MEDIUM
             )
@@ -194,7 +194,7 @@ class ExecuteActionCollapseTests(TestCase):
     def test_passes_endurance_no_collapse(self):
         """Passing endurance check means no collapse."""
         self._set_near_overexerted()
-        with patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=True):
+        with patch("world.fatigue.services.attempt_endurance_check", return_value=True):
             result = execute_action_with_fatigue(
                 self.sheet, ActionCategory.PHYSICAL, 5, EffortLevel.HIGH
             )
@@ -206,8 +206,8 @@ class ExecuteActionCollapseTests(TestCase):
         """Failing endurance but passing power through: powered_through=True with strain."""
         self._set_near_overexerted()
         with (
-            patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=False),
-            patch("world.fatigue.action_pipeline.attempt_power_through", return_value=(True, 3)),
+            patch("world.fatigue.services.attempt_endurance_check", return_value=False),
+            patch("world.fatigue.services.attempt_power_through", return_value=(True, 3)),
         ):
             result = execute_action_with_fatigue(
                 self.sheet, ActionCategory.PHYSICAL, 5, EffortLevel.HIGH
@@ -221,8 +221,8 @@ class ExecuteActionCollapseTests(TestCase):
         """Failing both endurance and power through: collapsed=True."""
         self._set_near_overexerted()
         with (
-            patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=False),
-            patch("world.fatigue.action_pipeline.attempt_power_through", return_value=(False, 2)),
+            patch("world.fatigue.services.attempt_endurance_check", return_value=False),
+            patch("world.fatigue.services.attempt_power_through", return_value=(False, 2)),
         ):
             result = execute_action_with_fatigue(
                 self.sheet, ActionCategory.PHYSICAL, 5, EffortLevel.HIGH

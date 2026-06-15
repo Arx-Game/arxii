@@ -15,10 +15,9 @@ from world.checks.types import CheckResult
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import (
     apply_fatigue,
-    attempt_endurance_check,
-    attempt_power_through,
     get_fatigue_penalty,
     get_fatigue_zone,
+    resolve_fatigue_collapse,
     should_check_collapse,
 )
 from world.fatigue.types import ActionResult
@@ -109,14 +108,10 @@ def _execute_action_with_fatigue(
     strain_damage = 0
 
     if collapse_triggered:
-        passed_endurance = attempt_endurance_check(character_sheet, fatigue_category)
-        if not passed_endurance:
-            power_success, strain = attempt_power_through(character_sheet, fatigue_category)
-            strain_damage = strain
-            if power_success:
-                powered_through = True
-            else:
-                collapsed = True
+        collapse = resolve_fatigue_collapse(character_sheet, fatigue_category)
+        collapsed = collapse.collapsed
+        powered_through = collapse.powered_through
+        strain_damage = collapse.strain_damage
 
     return ActionResult(
         fatigue_applied=fatigue_applied,
