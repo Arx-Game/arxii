@@ -1,11 +1,26 @@
 """Lifecycle services for non-combat scene rounds."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
-from world.scenes.constants import RoundStatus, SceneRoundParticipantStatus, SceneRoundStartReason
-from world.scenes.models import SceneRound
+from world.scenes.constants import (
+    ACTIVE_SCENE_ROUND_STATUSES,
+    RoundStatus,
+    SceneRoundParticipantStatus,
+    SceneRoundStartReason,
+)
+from world.scenes.models import SceneRound, SceneRoundParticipant
 from world.vitals.services import tick_round_for_targets
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.character_sheets.models import CharacterSheet
 
 
 @transaction.atomic
@@ -100,3 +115,33 @@ def _danger_persists(scene_round: SceneRound) -> bool:
     return ConditionInstance.objects.filter(
         target_id__in=char_ids, condition__name=BLEED_OUT_CONDITION_NAME
     ).exists()
+
+
+def _present_character_sheets(room: ObjectDB) -> list[CharacterSheet]:
+    """CharacterSheets of characters currently in ``room`` (walks room.contents; no per-object query)."""  # noqa: E501
+    present = []
+    for obj in room.contents:
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        present.append(sheet)
+    return present
+
+
+@transaction.atomic
+def auto_start_or_extend_danger_round(character_sheet: CharacterSheet) -> SceneRound | None:
+    """Ensure a DANGER scene round exists for the character's room and enrol all present
+    characters. Returns the round, or None if the character has no room. Caller guarantees
+    the character is NOT in active combat. One active round per room (foundation constraint)."""
+    room = character_sheet.character.location
+    if room is None:
+        return None
+    rnd = SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
+    if rnd is None:
+        rnd = SceneRound.objects.create(room=room, start_reason=SceneRoundStartReason.DANGER)
+        start_scene_round(rnd)
+        rnd.refresh_from_db()
+    for sheet in _present_character_sheets(room):
+        SceneRoundParticipant.objects.get_or_create(scene_round=rnd, character_sheet=sheet)
+    return rnd
