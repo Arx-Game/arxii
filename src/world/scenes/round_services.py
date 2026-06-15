@@ -3,7 +3,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from world.scenes.constants import RoundStatus, SceneRoundParticipantStatus
+from world.scenes.constants import RoundStatus, SceneRoundParticipantStatus, SceneRoundStartReason
 from world.scenes.models import SceneRound
 from world.vitals.services import tick_round_for_targets
 
@@ -61,3 +61,42 @@ def end_scene_round(scene_round: SceneRound) -> SceneRound:
     rnd.save(update_fields=["status", "completed_at"])
     scene_round.refresh_from_db()
     return scene_round
+
+
+@transaction.atomic
+def advance_scene_round_for_action(scene_round: SceneRound) -> SceneRound:
+    """Drive one tick of a scene round in response to a participant's action.
+
+    Cycles BETWEEN_ROUNDS -> DECLARING -> (tick) -> BETWEEN_ROUNDS, reusing the
+    foundation lifecycle services. For a DANGER-started round, auto-ends
+    (COMPLETED) once no ACTIVE participant is Bleeding-Out (stabilized/removed/dead).
+    """
+    rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
+    if rnd.status == RoundStatus.BETWEEN_ROUNDS:
+        start_scene_round(rnd)
+        rnd.refresh_from_db()
+    if rnd.status == RoundStatus.DECLARING:
+        advance_scene_round(rnd)
+        rnd.refresh_from_db()
+    if rnd.start_reason == SceneRoundStartReason.DANGER and not _danger_persists(rnd):
+        end_scene_round(rnd)
+        rnd.refresh_from_db()
+    scene_round.refresh_from_db()
+    return scene_round
+
+
+def _danger_persists(scene_round: SceneRound) -> bool:
+    """True if any ACTIVE participant still has a Bleeding-Out condition."""
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    char_ids = list(
+        scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
+            "character_sheet__character_id", flat=True
+        )
+    )
+    if not char_ids:
+        return False
+    return ConditionInstance.objects.filter(
+        target_id__in=char_ids, condition__name=BLEED_OUT_CONDITION_NAME
+    ).exists()
