@@ -17022,14 +17022,7 @@ export interface components {
        *     FK. ``None`` when neither supplies a thumbnail.
        */
       readonly thumbnail_media_url: string | null;
-      /**
-       * @description Return the Position this opponent occupies, or None.
-       *
-       *     Public info — not gated by GM/staff visibility.
-       */
-      readonly current_position: {
-        [key: string]: unknown;
-      } | null;
+      readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
      * @description Read serializer for combat opponents.
@@ -18684,14 +18677,7 @@ export interface components {
       readonly intensity_modifier: number | null;
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
-      /**
-       * @description Return the Position this participant occupies, or None.
-       *
-       *     Public info — not gated by _can_view_vitals.
-       */
-      readonly current_position: {
-        [key: string]: unknown;
-      } | null;
+      readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -20275,6 +20261,11 @@ export interface components {
       /** @description The interaction being endorsed. */
       interaction: number;
       resonance: number;
+    };
+    /** @description Compact public representation of a Position (id + name). */
+    PositionSummary: {
+      readonly id: number;
+      readonly name: string;
     };
     /** @description Serializes a PowerLedger (entries + total) for the cast result payload. */
     PowerLedger: {

@@ -30808,14 +30808,10 @@ components:
             FK. ``None`` when neither supplies a thumbnail.
           readOnly: true
         current_position:
-          type: object
-          additionalProperties: {}
-          nullable: true
-          description: |-
-            Return the Position this opponent occupies, or None.
-
-            Public info — not gated by GM/staff visibility.
+          allOf:
+          - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
+          nullable: true
       required:
       - active_conditions
       - current_position
@@ -33519,14 +33515,10 @@ components:
           description: Process-derived control bonus from the COMBAT engagement.
           readOnly: true
         current_position:
-          type: object
-          additionalProperties: {}
-          nullable: true
-          description: |-
-            Return the Position this participant occupies, or None.
-
-            Public info — not gated by _can_view_vitals.
+          allOf:
+          - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
+          nullable: true
       required:
       - active_conditions
       - available_strain
@@ -36419,6 +36411,19 @@ components:
       required:
       - interaction
       - resonance
+    PositionSummary:
+      type: object
+      description: Compact public representation of a Position (id + name).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
     PowerLedger:
       type: object
       description: Serializes a PowerLedger (entries + total) for the cast result
