@@ -34,6 +34,7 @@ from actions.definitions.rounds import (
     LeaveRoundAction,
     StartRoundAction,
 )
+from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -65,6 +66,7 @@ _ALL_ACTIONS: list[Action] = [
     JoinRoundAction(),
     LeaveRoundAction(),
     EndRoundAction(),
+    DisarmTrapAction(),
 ]
 
 # Lookup by key
