@@ -4,6 +4,7 @@ import factory
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.models import (
+    AppearanceChangeLog,
     Build,
     CharacterForm,
     CharacterFormState,
@@ -13,6 +14,7 @@ from world.forms.models import (
     FormTraitOption,
     FormType,
     HeightBand,
+    PersonaTraitDescriptor,
     SourceType,
     SpeciesFormTrait,
     TemporaryFormChange,
@@ -100,6 +102,7 @@ class CharacterFormValueFactory(factory.django.DjangoModelFactory):
     form = factory.SubFactory(CharacterFormFactory)
     trait = factory.SubFactory(FormTraitFactory)
     option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    natural_option = factory.SelfAttribute("option")
 
 
 class CharacterFormStateFactory(factory.django.DjangoModelFactory):
@@ -123,3 +126,28 @@ class TemporaryFormChangeFactory(factory.django.DjangoModelFactory):
     duration_type = DurationType.UNTIL_REMOVED
     expires_at = None
     expires_after_scenes = None
+
+
+class PersonaTraitDescriptorFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PersonaTraitDescriptor
+        django_get_or_create = ("persona", "trait")
+
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    trait = factory.SubFactory(FormTraitFactory)
+    text = "Crimson"
+
+
+class AppearanceChangeLogFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AppearanceChangeLog
+
+    form = factory.SubFactory(CharacterFormFactory)
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    trait = factory.SubFactory(FormTraitFactory)
+    from_option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    to_option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    from_text = ""
+    to_text = "Crimson"
+    actor_persona = factory.SelfAttribute("persona")
+    note = ""
