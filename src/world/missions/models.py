@@ -1148,6 +1148,75 @@ class MissionNodeSnapshot(SharedMemoryModel):
         return f"snapshot {self.node} / {self.participant}"
 
 
+class MissionGroupBallot(SharedMemoryModel):
+    """One participant's pick + vote at a group (multi-participant) node (#1036).
+
+    Backs the two-stage GROUP_VOTE flow. ``picked_option`` is the
+    participant's own stage-1 choice (from their per-viewer option list);
+    ``voted_option`` is their stage-2 vote for which *surfaced* option the
+    party should commit to (any member may vote for any picked option).
+    Resolution tallies the votes (plurality, random tiebreak), falling back
+    to the picks when no vote was cast, then resolves the single winning
+    option as a picker of it. Rows are ephemeral — cleared once the node
+    resolves. ``created_at`` of the earliest ballot opens the vote window
+    (see ``GROUP_VOTE_TIMEOUT_SECONDS``). One ballot per
+    (instance, node, participant).
+    """
+
+    instance = models.ForeignKey(
+        MissionInstance,
+        on_delete=models.CASCADE,
+        related_name="group_ballots",
+    )
+    node = models.ForeignKey(
+        MissionNode,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    participant = models.ForeignKey(
+        MissionParticipant,
+        on_delete=models.CASCADE,
+        related_name="group_ballots",
+    )
+    picked_option = models.ForeignKey(
+        MissionOption,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The participant's own stage-1 pick (from their option list).",
+    )
+    picked_approach = models.ForeignKey(
+        "mechanics.ChallengeApproach",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The ChallengeApproach the pick uses, when the option is CHALLENGE-sourced.",
+    )
+    voted_option = models.ForeignKey(
+        MissionOption,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Stage-2 vote for a surfaced option; null until the participant votes.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "node", "participant"],
+                name="unique_groupballot_instance_node_participant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ballot {self.participant_id} @ node {self.node_id}: "
+            f"pick={self.picked_option_id} vote={self.voted_option_id}"
+        )
+
+
 class MissionDeedRecord(SharedMemoryModel):
     """A recorded consequential act within a :class:`MissionInstance`.
 

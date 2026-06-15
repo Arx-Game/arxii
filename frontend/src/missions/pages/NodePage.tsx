@@ -41,7 +41,7 @@ import {
 import type { MissionNode } from '../types';
 import { useQuery } from '@tanstack/react-query';
 
-const CONFLICT_MODES: Array<MissionNode['conflict_mode']> = ['coinflip', 'vote', 'joint'];
+const CONFLICT_MODES: Array<MissionNode['conflict_mode']> = ['group_vote', 'joint'];
 
 export function NodePage() {
   const { id: idStr, nodeId } = useParams<{ id: string; nodeId: string }>();

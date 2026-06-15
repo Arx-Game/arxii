@@ -42,7 +42,7 @@ class MissionNodeInvariantTests(TestCase):
         fetched = MissionNode.objects.get(pk=self.entry.pk)
         self.assertEqual(fetched.key, "start")
         self.assertTrue(fetched.is_entry)
-        self.assertEqual(fetched.conflict_mode, ConflictMode.COINFLIP)
+        self.assertEqual(fetched.conflict_mode, ConflictMode.GROUP_VOTE)
         self.assertEqual(str(fetched), "node-tmpl:start")
 
     def test_second_entry_node_rejected(self) -> None:
@@ -50,7 +50,7 @@ class MissionNodeInvariantTests(TestCase):
             template=self.template,
             key="other",
             is_entry=True,
-            conflict_mode=ConflictMode.COINFLIP,
+            conflict_mode=ConflictMode.GROUP_VOTE,
         )
         with self.assertRaises(ValidationError):
             second.full_clean()
@@ -66,7 +66,7 @@ class MissionNodeInvariantTests(TestCase):
                 template=self.template,
                 key="start",
                 is_entry=False,
-                conflict_mode=ConflictMode.COINFLIP,
+                conflict_mode=ConflictMode.GROUP_VOTE,
             )
 
     def test_same_key_different_template_allowed(self) -> None:
@@ -120,7 +120,7 @@ class MissionNodeInvariantTests(TestCase):
         node = MissionNodeFactory.build(
             template=self.template,
             key="nj",
-            conflict_mode=ConflictMode.VOTE,
+            conflict_mode=ConflictMode.GROUP_VOTE,
             joint_combine=JointCombine.ALL,
         )
         with self.assertRaises(ValidationError):

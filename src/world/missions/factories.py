@@ -96,7 +96,7 @@ class MissionTemplateFactory(DjangoModelFactory):
 
 
 class MissionNodeFactory(DjangoModelFactory):
-    """Factory for MissionNode. Defaults to a non-entry COINFLIP node."""
+    """Factory for MissionNode. Defaults to a non-entry GROUP_VOTE node."""
 
     class Meta:
         model = MissionNode
@@ -104,7 +104,7 @@ class MissionNodeFactory(DjangoModelFactory):
     template = factory.SubFactory(MissionTemplateFactory)
     key = factory.Sequence(lambda n: f"node-{n}")
     is_entry = False
-    conflict_mode = ConflictMode.COINFLIP
+    conflict_mode = ConflictMode.GROUP_VOTE
     joint_combine = None
     joint_count = None
     deny_all_riders = False

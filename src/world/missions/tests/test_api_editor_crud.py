@@ -91,7 +91,7 @@ class NodeViewSetCRUDTests(TestCase):
                 "template": self.template.pk,
                 "key": "second",
                 "is_entry": False,
-                "conflict_mode": ConflictMode.COINFLIP,
+                "conflict_mode": ConflictMode.GROUP_VOTE,
                 "editor_x": 100,
                 "editor_y": 200,
             },

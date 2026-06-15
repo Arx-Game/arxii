@@ -3,10 +3,11 @@
 Covers:
   * Task 4.1 ``build_group_option_list`` — owner-tagged union across all
     participants; AUTHORED visibility scoped per participant.
-  * Task 4.2 ``select_group_choice`` — COINFLIP / VOTE / JOINT decisions.
-  * Task 4.3 ``group_resolve_node`` — actor attribution (moral consequence
-    follows the actor), JOINT per-participant deeds + single combined
-    routing, ``contract_holder``.
+  * Task 4.2 ``_tally_group_winner`` — GROUP_VOTE winner (plurality of
+    votes, random tie) + actor = picker (#1036).
+  * Task 4.3 ``resolve_group_node`` — ballot-driven; actor attribution
+    (moral consequence follows the actor), JOINT per-participant deeds +
+    single combined routing, ``contract_holder``.
 
 Real factory objects, no ORM mocks. ``force_check_outcome`` pins rolled
 outcome tiers deterministically; COINFLIP uses the codebase RNG
@@ -43,14 +44,18 @@ from world.missions.factories import (
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionDeedRewardLine, MissionOptionRouteReward
+from world.missions.models import (
+    MissionDeedRewardLine,
+    MissionGroupBallot,
+    MissionOptionRouteReward,
+)
 from world.missions.services import (
     build_group_option_list,
     build_option_list,
     contract_holder,
-    group_resolve_node,
-    select_group_choice,
+    resolve_group_node,
 )
+from world.missions.services.multiplayer import _tally_group_winner
 from world.traits.factories import CheckOutcomeFactory
 
 _PERFORM_CHECK = "world.missions.services.resolution.perform_check"
@@ -69,6 +74,24 @@ def _result_for(check_type: object, outcome: object) -> CheckResult:
         aspect_bonus=0,
         total_points=0,
     )
+
+
+def _seed_and_resolve(instance, node, picks, votes=None):
+    """Seed MissionGroupBallot rows from ``picks`` (+optional ``votes``), then resolve.
+
+    Mirrors the play surface's ballot collection for the engine tests (#1036):
+    GROUP_VOTE tallies the votes (fallback to picks), JOINT runs every pick.
+    """
+    votes = votes or {}
+    for participant, option in picks.items():
+        MissionGroupBallot.objects.create(
+            instance=instance,
+            node=node,
+            participant=participant,
+            picked_option=option,
+            voted_option=votes.get(participant),
+        )
+    return resolve_group_node(instance, node)
 
 
 class BuildGroupOptionListTests(TestCase):
@@ -157,12 +180,13 @@ class BuildGroupOptionListTests(TestCase):
         )
 
 
-class SelectGroupChoiceTests(TestCase):
-    """COINFLIP / VOTE / JOINT decision logic."""
+class TallyGroupWinnerTests(TestCase):
+    """GROUP_VOTE winner: plurality of votes (fallback to picks), random tie,
+    actor = a *picker* of the winning option (holder preferred) (#1036)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(name="sgc-tmpl")
+        cls.template = MissionTemplateFactory(name="tally-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.holder = MissionParticipantFactory(
             instance=cls.instance,
@@ -175,74 +199,48 @@ class SelectGroupChoiceTests(TestCase):
         cls.opt1 = MissionOptionFactory(node=cls.node, order=0)
         cls.opt2 = MissionOptionFactory(node=cls.node, order=1)
 
-    def _coinflip_node(self) -> object:
-        self.node.conflict_mode = ConflictMode.COINFLIP
-        self.node.save()
-        return self.node
+    def _ballots(self, picks, votes=None):
+        votes = votes or {}
+        return [
+            MissionGroupBallot.objects.create(
+                instance=self.instance,
+                node=self.node,
+                participant=participant,
+                picked_option=option,
+                voted_option=votes.get(participant),
+            )
+            for participant, option in picks.items()
+        ]
 
-    def _vote_node(self) -> object:
-        self.node.conflict_mode = ConflictMode.VOTE
-        self.node.save()
-        return self.node
+    def test_no_votes_falls_back_to_pick_plurality(self) -> None:
+        ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt1, self.p3: self.opt2})
+        option, actor = _tally_group_winner(self.instance, ballots)
+        self.assertEqual(option, self.opt1)
+        self.assertEqual(actor, self.holder)  # holder picked the winner
 
-    def _joint_node(self) -> object:
-        self.node.conflict_mode = ConflictMode.JOINT
-        self.node.joint_combine = JointCombine.ANY
-        self.node.save()
-        return self.node
-
-    def test_coinflip_all_same_pick_is_that_option(self) -> None:
-        node = self._coinflip_node()
-        picks = {self.holder: self.opt1, self.p2: self.opt1}
-        gc = select_group_choice(node, picks)
-        self.assertFalse(gc.is_joint)
-        self.assertEqual(gc.option, self.opt1)
-        # Deterministic actor tiebreak: lowest-pk picker of the winner.
-        self.assertEqual(gc.actor, self.holder)
-
-    def test_coinflip_distinct_picks_returns_one_of_them(self) -> None:
-        node = self._coinflip_node()
-        picks = {self.holder: self.opt1, self.p2: self.opt2}
-        gc = select_group_choice(node, picks)
-        self.assertFalse(gc.is_joint)
-        self.assertIn(gc.option, {self.opt1, self.opt2})
-        # Actor must be a participant who picked the winning option.
-        self.assertEqual(picks[gc.actor], gc.option)
-
-    def test_vote_plurality_winner(self) -> None:
-        node = self._vote_node()
-        picks = {self.holder: self.opt1, self.p2: self.opt1, self.p3: self.opt2}
-        gc = select_group_choice(node, picks)
-        self.assertEqual(gc.option, self.opt1)
-
-    def test_vote_tie_broken_by_contract_holder_pick(self) -> None:
-        node = self._vote_node()
-        # 1-1 tie; holder picked opt2 → opt2 wins, holder is actor.
-        picks = {self.holder: self.opt2, self.p2: self.opt1}
-        gc = select_group_choice(node, picks)
-        self.assertEqual(gc.option, self.opt2)
-        self.assertEqual(gc.actor, self.holder)
-
-    def test_vote_tie_no_holder_in_tie_lowest_option_pk(self) -> None:
-        node = self._vote_node()
-        # Holder absent from picks; 1-1 tie between opt1/opt2 →
-        # lowest option pk (opt1 created first).
-        picks = {self.p2: self.opt1, self.p3: self.opt2}
-        gc = select_group_choice(node, picks)
-        self.assertEqual(gc.option, self.opt1)
-        self.assertEqual(gc.actor, self.p2)
-
-    def test_joint_carries_all_attempts(self) -> None:
-        node = self._joint_node()
-        picks = {self.holder: self.opt1, self.p2: self.opt2}
-        gc = select_group_choice(node, picks)
-        self.assertTrue(gc.is_joint)
-        self.assertIsNone(gc.option)
-        self.assertIsNone(gc.actor)
-        self.assertEqual(
-            {(p, o) for p, o in gc.attempts},
-            {(self.holder, self.opt1), (self.p2, self.opt2)},
+    def test_votes_win_over_picks_and_actor_is_a_picker(self) -> None:
+        # Picks favour opt1, but the cast votes all go to opt2 → opt2 wins.
+        ballots = self._ballots(
+            {self.holder: self.opt1, self.p2: self.opt1, self.p3: self.opt2},
+            votes={self.holder: self.opt2, self.p2: self.opt2, self.p3: self.opt2},
         )
+        option, actor = _tally_group_winner(self.instance, ballots)
+        self.assertEqual(option, self.opt2)
+        # Actor must be the only PICKER of opt2 (p3), never a mere voter.
+        self.assertEqual(actor, self.p3)
+
+    def test_tie_breaks_at_random_among_tied(self) -> None:
+        ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt2})
+        option, actor = _tally_group_winner(self.instance, ballots)
+        self.assertIn(option, {self.opt1, self.opt2})
+        # Actor always picked whatever won.
+        picked_by_actor = {b.picked_option for b in ballots if b.participant == actor}
+        self.assertIn(option, picked_by_actor)
+
+    def test_actor_prefers_holder_among_pickers(self) -> None:
+        ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt1})
+        _, actor = _tally_group_winner(self.instance, ballots)
+        self.assertEqual(actor, self.holder)
 
 
 class ContractHolderTests(TestCase):
@@ -275,7 +273,7 @@ class GroupResolveCoinflipVoteTests(TestCase):
             template=cls.template,
             key="entry",
             is_entry=True,
-            conflict_mode=ConflictMode.VOTE,
+            conflict_mode=ConflictMode.GROUP_VOTE,
         )
         cls.dest = MissionNodeFactory(template=cls.template, key="dest")
         cls.holder = MissionParticipantFactory(
@@ -305,7 +303,7 @@ class GroupResolveCoinflipVoteTests(TestCase):
         # Both pick holder's option → holder wins, holder is actor.
         picks = {self.holder: self.opt_h, self.p2: self.opt_h}
         with force_check_outcome(self.success):
-            deeds = group_resolve_node(self.instance, self.entry, picks)
+            deeds = _seed_and_resolve(self.instance, self.entry, picks)
         self.assertEqual(len(deeds), 1)
         self.assertEqual(deeds[0].actor, self.char_h)
         self.instance.refresh_from_db()
@@ -390,7 +388,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.failure}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         self.assertEqual(len(deeds), 2)
         # Per-actor attribution: each deed records its own participant; the
         # success deed belongs to the holder, the failure deed to p2 — no
@@ -415,7 +413,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.failure}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         self.assertEqual(len(deeds), 2)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.lose_node)
@@ -432,7 +430,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.success}
             ),
         ):
-            group_resolve_node(instance, node, picks)
+            _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.win_node)
 
@@ -449,7 +447,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.failure}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         self.assertEqual(len(deeds), 2)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.lose_node)
@@ -466,7 +464,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.success}
             ),
         ):
-            group_resolve_node(instance, node, picks)
+            _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.win_node)
 
@@ -485,7 +483,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.failure, self.char_2: self.failure}
             ),
         ):
-            group_resolve_node(instance, node, picks)
+            _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.lose_node)
         self.assertEqual(instance.status, MissionStatus.ACTIVE)
@@ -523,7 +521,7 @@ class GroupResolveJointTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.success}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         self.assertEqual(len(deeds), 2)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.win_node)
@@ -577,7 +575,7 @@ class GroupResolveJointTests(TestCase):
                 )._finish_terminal,
             ) as term_spy,
         ):
-            group_resolve_node(instance, node, picks)
+            _seed_and_resolve(instance, node, picks)
         # ALL-success → combined success → win_node (non-terminal route);
         # finish_terminal is NOT called by the combined decision either.
         instance.refresh_from_db()
@@ -657,7 +655,7 @@ class GroupResolveJointTerminalRewardTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.success}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.status, MissionStatus.COMPLETE)
         # Emission MUST anchor on the holder's deed, NOT any per-attempt
@@ -716,7 +714,7 @@ class GroupResolveJointTerminalRewardTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.failure}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         # Sanity reference holds for later; for clarity also assert there
         # are exactly two deeds (one per participant).
         self.assertEqual(len(deeds), 2)
@@ -781,7 +779,7 @@ class GroupResolveJointTerminalRewardTests(TestCase):
                 {self.char_h: self.success, self.char_2: self.failure}
             ),
         ):
-            deeds = group_resolve_node(instance, node, picks)
+            deeds = _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.status, MissionStatus.COMPLETE)
         holder_deed = next(d for d in deeds if d.actor == self.char_h)

@@ -9,7 +9,7 @@ authored ``conflict_mode`` decides which option(s) actually resolve.
 Two invariants this module enforces:
 
   * **Moral consequence follows the actor.** The deed ``actor`` is always
-    the participant whose option actually performed. COINFLIP/VOTE resolve
+    the participant whose option actually performed. GROUP_VOTE resolves
     to ONE acting participant; JOINT runs every participant's own pick so
     each participant's per-act consequences attach to *their own*
     deed (Phase-3 ``resolve_option(actor=participant)`` already records
@@ -36,6 +36,8 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
@@ -45,14 +47,12 @@ from world.missions.services.resolution import (
     resolve_option,
 )
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
-from world.missions.types import GroupChoice
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionDeedRecord,
+        MissionGroupBallot,
         MissionInstance,
         MissionNode,
         MissionOption,
@@ -93,7 +93,7 @@ def build_group_option_list(
     list is appended verbatim; each ``PresentedOption.owner`` is already
     that participant's character (Phase 3 sets it). The merge is purely
     additive — players still pick; conflicting picks are arbitrated later
-    by :func:`select_group_choice`.
+    by :func:`resolve_group_node` (GROUP_VOTE tally / JOINT combine).
 
     The node's options are fetched ONCE and reused across every participant
     via :func:`present_options_for_character`, so the per-participant union
@@ -113,110 +113,88 @@ def build_group_option_list(
     return presented
 
 
-def _distinct_picked_options(
-    picks: Mapping[MissionParticipant, MissionOption],
-) -> list[MissionOption]:
-    """The distinct picked options, deterministically ordered by option pk."""
-    seen: dict[int, MissionOption] = {}
-    for option in picks.values():
-        seen.setdefault(option.pk, option)
-    return [seen[pk] for pk in sorted(seen)]
-
-
-def _pickers_of(
-    picks: Mapping[MissionParticipant, MissionOption],
-    option: MissionOption,
-) -> list[MissionParticipant]:
-    """Participants who picked ``option``, ordered by participant pk."""
-    return sorted(
-        (p for p, o in picks.items() if o.pk == option.pk),
-        key=lambda p: p.pk,
-    )
-
-
-def _picks_instance(
-    picks: Mapping[MissionParticipant, MissionOption],
-) -> MissionInstance:
-    """The shared instance the picking participants belong to.
-
-    All picks in a group resolution are for participants of one instance;
-    any participant resolves it (the identity map already holds it).
-    """
-    any_participant = next(iter(picks))
-    return any_participant.instance
-
-
-def _coinflip_choice(
-    picks: Mapping[MissionParticipant, MissionOption],
-) -> GroupChoice:
-    """Uniform-random among the DISTINCT picked options.
-
-    The acting participant is the lowest-pk participant who picked the
-    winning option (deterministic tiebreak among same-option pickers).
-    ``random.choice`` is the codebase's RNG convention (see
-    ``world.checks.outcome_utils.select_weighted``); there is no seedable
-    seam, so COINFLIP tests assert "one of the distinct picks" rather than
-    a fixed value.
-    """
-    distinct = _distinct_picked_options(picks)
-    winner = random.choice(distinct)  # noqa: S311
-    actor = _pickers_of(picks, winner)[0]
-    return GroupChoice(is_joint=False, option=winner, actor=actor)
-
-
-def _vote_choice(
-    picks: Mapping[MissionParticipant, MissionOption],
-) -> GroupChoice:
-    """Plurality winner; tie broken by the contract-holder's pick, else
-    lowest option pk. Acting participant = the contract-holder when they
-    picked the winner, else the lowest-pk picker of the winner."""
-    distinct = _distinct_picked_options(picks)
-    counts: dict[int, int] = {option.pk: len(_pickers_of(picks, option)) for option in distinct}
-    top = max(counts.values())
-    tied = [option for option in distinct if counts[option.pk] == top]
-
-    holder = contract_holder(_picks_instance(picks))
-    holder_pick = picks.get(holder)
-
-    if len(tied) == 1:
-        winner = tied[0]
-    elif holder_pick is not None and any(o.pk == holder_pick.pk for o in tied):
-        winner = next(o for o in tied if o.pk == holder_pick.pk)
-    else:
-        winner = min(tied, key=lambda o: o.pk)
-
-    if holder_pick is not None and holder_pick.pk == winner.pk:
-        actor = holder
-    else:
-        actor = _pickers_of(picks, winner)[0]
-    return GroupChoice(is_joint=False, option=winner, actor=actor)
-
-
-def select_group_choice(
+def resolve_group_node(
+    instance: MissionInstance,
     node: MissionNode,
-    picks: Mapping[MissionParticipant, MissionOption],
-) -> GroupChoice:
-    """Resolve contested picks per ``node.conflict_mode``.
+) -> list[MissionDeedRecord]:
+    """Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).
 
-    COINFLIP — uniform-random among the distinct picked options.
-    VOTE — plurality; tie → contract-holder's pick if among the tied,
-    else lowest option pk.
-    JOINT — no single winner; the returned ``GroupChoice`` carries the
-    full set of (participant, option) attempts (the orchestrator runs each
-    and combines per ``joint_combine``/``joint_count``).
+    GROUP_VOTE — winner = plurality of the stage-2 votes (falling back to the
+    stage-1 picks when nobody voted), ties broken at random; it resolves ONCE
+    via the Phase-3 path as a *picker* of the winning option (holder preferred),
+    so moral consequence follows the actor.
+    JOINT — every participant's own pick resolves in parallel; the combined
+    result routes once.
 
-    ``picks`` is an input mapping (participant → their chosen option); the
-    return is the typed :class:`GroupChoice`, never a bare dict.
+    Ballots are deleted after resolution. Returns the resulting deeds; an empty
+    list when no ballots exist (nothing to resolve).
     """
-    if node.conflict_mode == ConflictMode.JOINT:
-        attempts = tuple(
-            sorted(picks.items(), key=lambda item: item[0].pk),
+    from world.missions.models import MissionGroupBallot  # noqa: PLC0415
+
+    ballots = list(
+        MissionGroupBallot.objects.filter(instance=instance, node=node).select_related(
+            "participant", "picked_option", "voted_option"
         )
-        return GroupChoice(is_joint=True, attempts=attempts)
-    if node.conflict_mode == ConflictMode.VOTE:
-        return _vote_choice(picks)
-    # ConflictMode.COINFLIP
-    return _coinflip_choice(picks)
+    )
+    if not ballots:
+        return []
+    # Resolution + ballot cleanup are one atomic unit: ``resolve_option`` always
+    # creates a fresh (non-idempotent) deed, so a mid-resolution raise must roll
+    # back any partial deeds rather than leave the node wedged with stale ballots
+    # that a retry would double-resolve.
+    with transaction.atomic():
+        presented = build_group_option_list(instance, node)
+        if node.conflict_mode == ConflictMode.JOINT:
+            picks = {ballot.participant: ballot.picked_option for ballot in ballots}
+            attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
+            deeds = _resolve_joint(instance, node, presented, attempts)
+        else:
+            option, actor = _tally_group_winner(instance, ballots)
+            deeds = _resolve_single_winner(instance, node, presented, option, actor)
+        MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
+    return deeds
+
+
+def _tally_group_winner(
+    instance: MissionInstance,
+    ballots: list[MissionGroupBallot],
+) -> tuple[MissionOption, MissionParticipant]:
+    """The GROUP_VOTE winning option + acting participant from the ballots.
+
+    Winner = plurality of cast votes (``voted_option``); when nobody voted, fall
+    back to the stage-1 picks. Ties break uniformly at random (the COINFLIP
+    element folded in). The actor is a *picker* of the winning option — the
+    contract holder when they picked it, else the lowest-pk picker. Votes choose
+    the option; picks choose who can actually perform it.
+
+    Votes are filtered to options still *surfaced* (currently picked by someone)
+    at tally time — a participant can re-pick after others voted for their old
+    option, which would otherwise leave a vote-winner with no picker. This keeps
+    the winner always pickable (``pickers`` is never empty).
+    """
+    surfaced = {ballot.picked_option_id for ballot in ballots}
+    voted = [
+        ballot.voted_option
+        for ballot in ballots
+        if ballot.voted_option_id is not None and ballot.voted_option_id in surfaced
+    ]
+    tally = voted or [ballot.picked_option for ballot in ballots]
+    counts: dict[int, int] = {}
+    by_pk: dict[int, MissionOption] = {}
+    for option in tally:
+        counts[option.pk] = counts.get(option.pk, 0) + 1
+        by_pk[option.pk] = option
+    top = max(counts.values())
+    tied = [by_pk[pk] for pk in sorted(counts) if counts[pk] == top]
+    winner = tied[0] if len(tied) == 1 else random.choice(tied)  # noqa: S311
+
+    holder = contract_holder(instance)
+    pickers = sorted(
+        (ballot.participant for ballot in ballots if ballot.picked_option_id == winner.pk),
+        key=lambda participant: participant.pk,
+    )
+    actor = next((p for p in pickers if p.pk == holder.pk), pickers[0])
+    return winner, actor
 
 
 def _approach_for_pick(
@@ -318,55 +296,42 @@ def _combined_route(
     return pool[0]
 
 
-def group_resolve_node(
+def _resolve_single_winner(
     instance: MissionInstance,
     node: MissionNode,
-    picks: Mapping[MissionParticipant, MissionOption],
+    presented: list[PresentedOption],
+    option: MissionOption,
+    actor: MissionParticipant,
 ) -> list[MissionDeedRecord]:
-    """Resolve a multi-participant ``node`` from each participant's pick.
+    """Resolve ONE winning option once, as ``actor`` (the GROUP_VOTE path).
 
-    COINFLIP / VOTE — one winning option resolves once via Phase-3
-    ``resolve_option`` as the selected acting participant; the returned
-    deed's ``actor`` is that participant's character (moral consequence
-    follows the actor). Returns ``[deed]``.
-
-    JOINT — every participant runs their OWN pick via Phase-3
-    ``resolve_option(actor=participant)`` so each participant's check and
-    per-act consequences attach to their own deed (no
-    cross-attribution). The combined success is then computed per
-    ``joint_combine``/``joint_count`` and the node ROUTING/terminal is
-    performed ONCE — based on that combined boolean — by reusing the
-    Phase-3 routing/terminal helpers against the contract-holder pick's
-    route-set. Returns the list of every per-participant deed.
-
-    Phase 4 does NOT apply contractual consequences (cooldown,
-    giver-standing, failure penalty) — those are contract-holder-scoped
-    and applied in Phase 5. This function only ensures the deed ``actor``
-    is the correct participant and keeps the holder identifiable via
-    :func:`contract_holder`.
+    Phase-3 ``resolve_option`` performs the check, applies the route
+    consequence, and advances/terminates the run — we reimplement none of it.
+    Moral consequence follows ``actor`` (a picker of the winning option).
     """
-    gc = select_group_choice(node, picks)
+    approach = _approach_for_pick(presented, actor, option)
+    deed = resolve_option(instance, node, option, actor, chosen_approach=approach)
+    return [deed]
 
-    # Build the owner-tagged group option list ONCE; bindings for every
-    # pick are recovered from it (no per-attempt re-query).
-    presented = build_group_option_list(instance, node)
 
-    if not gc.is_joint:
-        # COINFLIP / VOTE: exactly one option resolves once, as the
-        # selected acting participant — Phase-3 resolve_option performs
-        # the check, applies the route consequence, and
-        # advances/terminates the run. We do NOT reimplement any of that.
-        # select_group_choice guarantees option+actor are set when
-        # is_joint is False (only JOINT leaves them None).
-        actor = gc.actor
-        winning_option = gc.option
-        if actor is None or winning_option is None:
-            msg = "non-JOINT GroupChoice must carry option and actor"
-            raise ValueError(msg)
-        approach = _approach_for_pick(presented, actor, winning_option)
-        deed = resolve_option(instance, node, winning_option, actor, chosen_approach=approach)
-        return [deed]
+def _resolve_joint(
+    instance: MissionInstance,
+    node: MissionNode,
+    presented: list[PresentedOption],
+    attempts: tuple[tuple[MissionParticipant, MissionOption], ...],
+) -> list[MissionDeedRecord]:
+    """JOINT: every participant runs their OWN pick; combined result routes once.
 
+    Each ``resolve_option(actor=participant)`` records that participant's deed
+    and applies their own check + per-act consequences (no cross-attribution).
+    The combined success (per ``joint_combine``/``joint_count``) drives a single
+    routing/terminal decision against the contract holder's pick route-set.
+
+    Phase 4 does NOT apply contractual consequences (cooldown, giver-standing,
+    failure penalty) — those are contract-holder-scoped and applied in Phase 5.
+
+    ``attempts`` is the (participant, option) set, ordered by participant pk.
+    """
     # JOINT: run every participant's own pick via Phase-3 resolve_option
     # in the routing-free mode (advance=False — Phase-5a I-1). Each call
     # records that participant as the deed actor and applies that
@@ -378,11 +343,10 @@ def group_resolve_node(
     # reward-line / contractual side effects can no longer be neutralized
     # by an "overwrite" trick.
     holder = contract_holder(instance)
-    holder_option: MissionOption | None = None
+    attempt_option: dict[int, MissionOption] = {}
     deeds: list[MissionDeedRecord] = []
-    for participant, option in gc.attempts:
-        if participant.pk == holder.pk:
-            holder_option = option
+    for participant, option in attempts:
+        attempt_option[participant.pk] = option
         approach = _approach_for_pick(presented, participant, option)
         deeds.append(
             resolve_option(
@@ -395,45 +359,36 @@ def group_resolve_node(
             )
         )
 
-    if holder_option is None:
-        msg = (
-            "JOINT node group_resolve_node requires the contract holder to "
-            "have submitted a pick (its route-set carries the combined "
-            "routing decision)."
-        )
-        raise ValueError(msg)
+    # The combined decision routes through one anchor participant's option
+    # route-set. Normally that's the contract holder; on a timeout/partial
+    # where the holder never picked, fall back to the lowest-pk attempt so the
+    # node still resolves rather than raising (#1036). ``attempts`` is non-empty.
+    anchor = holder if holder.pk in attempt_option else attempts[0][0]
+    anchor_option = attempt_option[anchor.pk]
 
     # ROUTE ONCE based on the COMBINED result. _combined_route maps the
-    # boolean to the holder pick's authored route via the same
+    # boolean to the anchor pick's authored route via the same
     # CheckOutcome.success_level classification; _route_next_node /
     # _finish_terminal are the Phase-3 routing/terminal helpers reused
     # verbatim (not duplicated). DESIGN: JOINT nodes route by combined
     # success/failure BUCKET (best success-tier route / worst failure-tier
     # route), NOT per rolled tier — authors must author JOINT route-sets
-    # accordingly.
-    #
-    # Because per-attempt resolve_option calls used ``advance=False``, the
-    # instance position/status was never touched mid-loop; the compensation
-    # block that previously restored ACTIVE/cleared completed_at after a
-    # transient terminal is no longer needed.
+    # accordingly. Per-attempt resolve_option calls used ``advance=False``, so
+    # the instance position/status was never touched mid-loop.
     combined_success = _joint_combined_success(node, deeds)
-    route = _combined_route(holder_option, combined_success)
+    route = _combined_route(anchor_option, combined_success)
     next_node, candidate = _route_next_node(route)
-    # The JOINT decision's anchor is the contract holder's deed (the holder's
-    # option route-set drives _combined_route). Per-attempt deeds carried
-    # advance=False, so no candidate/reward emission happened mid-loop — this
-    # is the single combined-decision emission.
-    holder_deed = next(d for d in deeds if d.actor_id == holder.character_id)
+    anchor_deed = next(d for d in deeds if d.actor_id == anchor.character_id)
     if candidate is not None:
         # #941: record the fired random-set candidate on the anchor deed and
         # emit its reward bundle once (on selection, like the solo path).
-        holder_deed.route_candidate = candidate
-        holder_deed.save(update_fields=["route_candidate"])
-        emit_candidate_rewards(instance, candidate, holder_deed)
+        anchor_deed.route_candidate = candidate
+        anchor_deed.save(update_fields=["route_candidate"])
+        emit_candidate_rewards(instance, candidate, anchor_deed)
     if next_node is None:
         _finish_terminal(instance)
         # Phase 5b.0: JOINT terminal emits the route's reward lines ONCE.
-        emit_terminal_rewards(instance, route, holder_deed)
+        emit_terminal_rewards(instance, route, anchor_deed)
     else:
         instance.current_node = next_node
         instance.save()

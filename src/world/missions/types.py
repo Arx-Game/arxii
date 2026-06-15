@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionOption,
-        MissionParticipant,
         MissionRewardQueue,
     )
 
@@ -71,31 +70,6 @@ class ChallengeOption:
     auto_succeeds: bool
     difficulty: int
     owner: ObjectDB
-
-
-@dataclass(frozen=True)
-class GroupChoice:
-    """The resolution decision for a multi-participant :class:`MissionNode`.
-
-    Produced by ``world.missions.services.multiplayer.select_group_choice``
-    from the per-participant ``picks`` and the node's ``conflict_mode``.
-
-    * COINFLIP / VOTE — a *single* winning option is chosen and one acting
-      participant is selected (``option`` and ``actor`` set; ``attempts``
-      empty). The Phase-3 ``resolve_option`` then performs that one option as
-      ``actor`` (moral consequence follows the actor).
-    * JOINT — there is NO single winner. ``attempts`` carries the full set of
-      (participant, option) pairs; every participant runs their own pick and
-      the orchestrator combines the per-participant outcomes per the node's
-      ``joint_combine`` / ``joint_count``. ``option`` and ``actor`` are None.
-
-    Not a bare dict — ``attempts`` is an immutable tuple of typed pairs.
-    """
-
-    is_joint: bool
-    option: MissionOption | None = None
-    actor: MissionParticipant | None = None
-    attempts: tuple[tuple[MissionParticipant, MissionOption], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -194,6 +168,48 @@ class ResolvedBeat:
     is_terminal: bool
     next_beat: BeatView | None
     epilogue: str
+
+
+@dataclass(frozen=True)
+class GroupBallotState:
+    """One participant's pick/vote in the group-vote window (#1036)."""
+
+    character_id: int
+    picked_option_id: int | None
+    voted_option_id: int | None
+
+
+@dataclass(frozen=True)
+class GroupBeatView:
+    """The group-decision beat — surfaced options + the party's ballots (#1036).
+
+    ``options`` is the UNION group option list (every participant's live
+    options, owner-tagged). ``phase`` is ``"pick"`` until every participant
+    has picked, then ``"vote"``. ``expires_at`` is the ISO deadline (None
+    until the first pick opens the window).
+    """
+
+    instance_id: int
+    node_key: str
+    flavor_text: str
+    conflict_mode: str
+    phase: str
+    options: tuple[BeatOption, ...]
+    ballots: tuple[GroupBallotState, ...]
+    expires_at: str | None
+
+
+@dataclass(frozen=True)
+class GroupBeatResult:
+    """A group pick/vote/beat response (#1036).
+
+    Exactly one side is set: ``group_beat`` while the party is still
+    collecting picks/votes, or ``resolved`` once the node resolved (all voted
+    or the window timed out).
+    """
+
+    group_beat: GroupBeatView | None
+    resolved: ResolvedBeat | None
 
 
 @dataclass(frozen=True)

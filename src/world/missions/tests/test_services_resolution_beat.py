@@ -31,8 +31,8 @@ from world.missions.factories import (
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionInstance, MissionNode, MissionOption
-from world.missions.services import beat as beat_service, group_resolve_node, resolve_option
+from world.missions.models import MissionGroupBallot, MissionInstance, MissionNode, MissionOption
+from world.missions.services import beat as beat_service, resolve_group_node, resolve_option
 from world.stories.factories import BeatFactory
 from world.stories.models import Beat
 from world.traits.factories import CheckOutcomeFactory
@@ -173,11 +173,15 @@ class JointTerminalBeatSeamTests(TestCase):
 
         # Every per-attempt perform_check returns success → JointCombine.ANY
         # ⇒ combined success ⇒ terminal route via _combined_route.
+        for participant, picked in picks.items():
+            MissionGroupBallot.objects.create(
+                instance=instance, node=node, participant=participant, picked_option=picked
+            )
         with patch(
             _PERFORM_CHECK,
             return_value=_result_for(self.sneak, self.success),
         ):
-            group_resolve_node(instance, node, picks)
+            resolve_group_node(instance, node)
 
         triggers = beat_service.get_triggers()
         self.assertEqual(len(triggers), 1)

@@ -6,9 +6,10 @@ Public surface:
     (Phase 3) — the runtime resolution engine. A CHALLENGE-sourced option
     fans out per qualifying ``ChallengeApproach`` via
     :func:`world.missions.services.challenge_options.challenge_options_for_character`.
-  * :func:`build_group_option_list`, :func:`select_group_choice`,
-    :func:`group_resolve_node`, :func:`contract_holder` (Phase 4) — the
-    multi-participant orchestrator (reuses Phase-3 ``resolve_option``).
+  * :func:`build_group_option_list`, :func:`resolve_group_node`,
+    :func:`contract_holder` (Phase 4 / #1036) — the multi-participant
+    orchestrator (reuses Phase-3 ``resolve_option``); GROUP_VOTE resolves the
+    two-stage ballot, JOINT runs every pick.
   * :func:`share_mission` (Phase 5a) — adds a non-contract-holder
     participant. Mission acceptance now flows through the unified
     NPCServiceOffer framework's MISSION effect handler (`issue_mission`
@@ -38,8 +39,7 @@ from world.missions.services.mission_graph import validate_mission_option
 from world.missions.services.multiplayer import (
     build_group_option_list,
     contract_holder,
-    group_resolve_node,
-    select_group_choice,
+    resolve_group_node,
 )
 from world.missions.services.play import beat_for, resolve_beat_option
 from world.missions.services.resolution import (
@@ -66,12 +66,11 @@ __all__ = [
     "emit_candidate_rewards",
     "emit_terminal_rewards",
     "enter_node",
-    "group_resolve_node",
     "journal_for",
     "on_mission_complete_for_beat",
     "resolve_beat_option",
+    "resolve_group_node",
     "resolve_option",
-    "select_group_choice",
     "share_mission",
     "staff_assign_mission",
     "validate_mission_option",
