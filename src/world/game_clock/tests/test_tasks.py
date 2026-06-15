@@ -337,6 +337,7 @@ class Scope6TaskRegistrationTests(TestCase):
         keys = {t.task_key for t in get_registered_tasks()}
         self.assertIn("magic.anima_regen_daily", keys)
         self.assertIn("conditions.decay_daily", keys)
+        self.assertIn("conditions.chronic_daily", keys)
 
     def test_scope6_tasks_callables_runnable(self) -> None:
         """Smoke test: both new tasks' callables can be invoked without error."""
