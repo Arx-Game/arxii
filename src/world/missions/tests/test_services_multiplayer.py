@@ -214,7 +214,7 @@ class TallyGroupWinnerTests(TestCase):
 
     def test_no_votes_falls_back_to_pick_plurality(self) -> None:
         ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt1, self.p3: self.opt2})
-        option, actor = _tally_group_winner(self.instance, ballots)
+        option, actor = _tally_group_winner(ballots)
         self.assertEqual(option, self.opt1)
         self.assertEqual(actor, self.holder)  # holder picked the winner
 
@@ -224,14 +224,14 @@ class TallyGroupWinnerTests(TestCase):
             {self.holder: self.opt1, self.p2: self.opt1, self.p3: self.opt2},
             votes={self.holder: self.opt2, self.p2: self.opt2, self.p3: self.opt2},
         )
-        option, actor = _tally_group_winner(self.instance, ballots)
+        option, actor = _tally_group_winner(ballots)
         self.assertEqual(option, self.opt2)
         # Actor must be the only PICKER of opt2 (p3), never a mere voter.
         self.assertEqual(actor, self.p3)
 
     def test_tie_breaks_at_random_among_tied(self) -> None:
         ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt2})
-        option, actor = _tally_group_winner(self.instance, ballots)
+        option, actor = _tally_group_winner(ballots)
         self.assertIn(option, {self.opt1, self.opt2})
         # Actor always picked whatever won.
         picked_by_actor = {b.picked_option for b in ballots if b.participant == actor}
@@ -239,7 +239,7 @@ class TallyGroupWinnerTests(TestCase):
 
     def test_actor_prefers_holder_among_pickers(self) -> None:
         ballots = self._ballots({self.holder: self.opt1, self.p2: self.opt1})
-        _, actor = _tally_group_winner(self.instance, ballots)
+        _, actor = _tally_group_winner(ballots)
         self.assertEqual(actor, self.holder)
 
 

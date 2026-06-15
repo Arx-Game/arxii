@@ -332,14 +332,43 @@ def _resolve_group_if_ready(
     return None
 
 
-def _group_beat_view(instance: MissionInstance, node: MissionNode) -> GroupBeatView:
-    """Compose the group beat: union option list + every ballot's pick/vote."""
-    presented = build_group_option_list(instance, node)
-    ballots = (
+def _resolve_if_expired(
+    instance: MissionInstance, node: MissionNode
+) -> list[MissionDeedRecord] | None:
+    """Resolve the group node only if its vote window has elapsed; else None.
+
+    The cheap start-of-action check: a fresh pick/vote can't *complete* the round
+    before it's even recorded, so the only reason to resolve up front is a window
+    that already expired (someone returning after the party left). The full
+    readiness check (``_resolve_group_if_ready``) runs after the write.
+    """
+    deadline = _group_window_deadline(instance, node)
+    if deadline is not None and timezone.now() >= deadline:
+        return resolve_group_node(instance, node)
+    return None
+
+
+def _group_beat_view(
+    instance: MissionInstance,
+    node: MissionNode,
+    *,
+    presented: list[PresentedOption] | None = None,
+) -> GroupBeatView:
+    """Compose the group beat: union option list + every ballot's pick/vote.
+
+    Pass ``presented`` when the caller already built the group option list (e.g.
+    ``submit_group_pick`` after locating the picked entry) to avoid a second
+    per-participant fan-out. The ballots are fetched once and the deadline / phase
+    derived from them in Python (no extra ``Min``/``count`` queries).
+    """
+    if presented is None:
+        presented = build_group_option_list(instance, node)
+    ballots = list(
         MissionGroupBallot.objects.filter(instance=instance, node=node)
         .select_related("participant")
         .order_by("participant__pk")
     )
+    n_active = instance.participants.count()
     ballot_states = tuple(
         GroupBallotState(
             character_id=ballot.participant.character_id,
@@ -348,13 +377,17 @@ def _group_beat_view(instance: MissionInstance, node: MissionNode) -> GroupBeatV
         )
         for ballot in ballots
     )
-    deadline = _group_window_deadline(instance, node)
+    earliest = min((ballot.created_at for ballot in ballots), default=None)
+    deadline = (
+        earliest + timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS) if earliest is not None else None
+    )
+    phase = PHASE_VOTE if (n_active > 0 and len(ballots) >= n_active) else PHASE_PICK
     return GroupBeatView(
         instance_id=instance.pk,
         node_key=node.key,
         flavor_text=node.flavor_text,
         conflict_mode=node.conflict_mode,
-        phase=PHASE_VOTE if _all_picked(instance, node) else PHASE_PICK,
+        phase=phase,
         options=tuple(_beat_option(presented_option) for presented_option in presented),
         ballots=ballot_states,
         expires_at=deadline.isoformat() if deadline is not None else None,
@@ -385,7 +418,7 @@ def group_beat(instance: MissionInstance, character: ObjectDB) -> GroupBeatResul
     """Present the group decision beat, resolving first if the window expired."""
     participant_for(instance, character)
     node = _group_node(instance)
-    if _resolve_group_if_ready(instance, node) is not None:
+    if _resolve_if_expired(instance, node) is not None:
         return _resolved_group_result(instance, character)
     return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
 
@@ -400,12 +433,13 @@ def submit_group_pick(
     """Record ``character``'s stage-1 pick (must be one of their own live options)."""
     participant = participant_for(instance, character)
     node = _group_node(instance)
-    if _resolve_group_if_ready(instance, node) is not None:
+    if _resolve_if_expired(instance, node) is not None:
         return _resolved_group_result(instance, character)
+    presented = build_group_option_list(instance, node)
     entry = next(
         (
             presented_option
-            for presented_option in build_group_option_list(instance, node)
+            for presented_option in presented
             if presented_option.option.pk == option_id
             and presented_option.owner.pk == character.pk
             and (presented_option.approach.pk if presented_option.approach else None) == approach_id
@@ -428,7 +462,11 @@ def submit_group_pick(
     # None here and opens the vote phase instead).
     if _resolve_group_if_ready(instance, node) is not None:
         return _resolved_group_result(instance, character)
-    return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
+    # Reuse the option list already built above (the union doesn't change when a
+    # pick is recorded) so the beat view doesn't re-run the per-participant fan-out.
+    return GroupBeatResult(
+        group_beat=_group_beat_view(instance, node, presented=presented), resolved=None
+    )
 
 
 def cast_group_vote(
@@ -440,7 +478,7 @@ def cast_group_vote(
     """Record ``character``'s stage-2 vote; auto-resolve when all have voted."""
     participant = participant_for(instance, character)
     node = _group_node(instance)
-    if _resolve_group_if_ready(instance, node) is not None:
+    if _resolve_if_expired(instance, node) is not None:
         return _resolved_group_result(instance, character)
     if not _all_picked(instance, node):
         raise BeatActionError(_ERR_VOTE_NOT_OPEN)
