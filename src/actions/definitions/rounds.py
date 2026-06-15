@@ -217,6 +217,8 @@ class PassRoundAction(Action):
         rnd = _active_round_for_room(room)
         if rnd is None:
             return ActionResult(success=False, message="There is no active round here.")
+        if rnd.start_reason == SceneRoundStartReason.DANGER:
+            return ActionResult(success=False, message="You cannot pass during a danger round.")
 
         participant = SceneRoundParticipant.objects.filter(
             scene_round=rnd,
@@ -267,6 +269,8 @@ class ForceResolveRoundAction(Action):
         rnd = _active_round_for_room(room)
         if rnd is None:
             return ActionResult(success=False, message="There is no active round here.")
+        if rnd.start_reason == SceneRoundStartReason.DANGER:
+            return ActionResult(success=False, message="A danger round resolves on its own.")
 
         if rnd.status != RoundStatus.DECLARING:
             return ActionResult(success=False, message="The round is not gathering declarations.")

@@ -182,6 +182,12 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     if rnd.status != RoundStatus.DECLARING:
         msg = f"Cannot resolve scene round: status is {rnd.status}, expected declaring."
         raise ValueError(msg)
+    if rnd.start_reason == SceneRoundStartReason.DANGER:
+        # Danger rounds are the #1046 acute tier: they tick via advance_scene_round_for_action
+        # and auto-end on _danger_persists. They must never be resolved as a social round
+        # (that would bypass the danger auto-end). This is the social-only resolver.
+        msg = "Cannot resolve a danger round as a social round; it ticks via the acute tier."
+        raise ValueError(msg)
     rnd.status = RoundStatus.RESOLVING
     rnd.save(update_fields=["status"])
 

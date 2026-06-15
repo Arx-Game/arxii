@@ -239,6 +239,19 @@ class PassRoundActionTests(TestCase):
         self.assertIsNotNone(action)
         self.assertTrue(action.costs_turn)
 
+    def test_pass_round_danger_round_returns_failure_no_row(self) -> None:
+        """A danger round is the acute tier; passing is a social-round concept only."""
+        from actions.definitions.rounds import PassRoundAction
+        from world.scenes.constants import SceneRoundStartReason
+
+        self.round.start_reason = SceneRoundStartReason.DANGER
+        self.round.save(update_fields=["start_reason"])
+
+        result = PassRoundAction().execute(actor=self.actor)
+
+        self.assertFalse(result.success)
+        self.assertFalse(SceneActionDeclaration.objects.filter(scene_round=self.round).exists())
+
 
 class ForceResolveRoundActionTests(TestCase):
     """force_resolve_round resolves a DECLARING round even when partially declared."""
@@ -302,3 +315,18 @@ class ForceResolveRoundActionTests(TestCase):
         from actions.registry import get_action
 
         self.assertIsNotNone(get_action("force_resolve_round"))
+
+    def test_force_resolve_danger_round_returns_failure_unchanged(self) -> None:
+        """force_resolve must not resolve a DANGER round (it bypasses the acute auto-end)."""
+        from actions.definitions.rounds import ForceResolveRoundAction
+        from world.scenes.constants import SceneRoundStartReason
+
+        self.round.start_reason = SceneRoundStartReason.DANGER
+        self.round.save(update_fields=["start_reason"])
+
+        result = ForceResolveRoundAction().execute(actor=self.actor)
+
+        self.assertFalse(result.success)
+        self.round.refresh_from_db()
+        self.assertEqual(self.round.round_number, 1)
+        self.assertEqual(self.round.status, RoundStatus.DECLARING)
