@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
     from world.checks.types import ModifierBreakdown, PendingResolution
     from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+    from world.conditions.types import RoundTickResult
     from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
 
@@ -778,6 +779,34 @@ def resolve_vitals_consequence(
     return pending
 
 
+def _apply_round_tick_damage(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM
+    result: RoundTickResult,
+) -> None:
+    """Apply acute DoT damage from a RoundTickResult to the target's health.
+
+    Mirrors mechanics._deal_damage: decrement health, then run the survivability
+    pipeline (acute tier — may wound/knockout/kill, which is correct for in-round
+    poison). No-op for targets without vitals.
+    """
+    if not result.damage_dealt:
+        return
+    try:
+        vitals = target.sheet_data.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    for damage_type, amount in result.damage_dealt:
+        if amount <= 0:
+            continue
+        vitals.health -= amount
+        vitals.save(update_fields=["health"])
+        process_damage_consequences(
+            character_sheet=target.sheet_data,
+            damage_dealt=amount,
+            damage_type=damage_type,
+        )
+
+
 def tick_round_for_targets(
     targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
     *,
@@ -795,9 +824,10 @@ def tick_round_for_targets(
     target_list = [t for t in targets if t is not None]
     for target in target_list:
         if timing == ROUND_TICK_START:
-            process_round_start(target)
+            result = process_round_start(target)
         else:
-            process_round_end(target)
+            result = process_round_end(target)
+        _apply_round_tick_damage(target, result)
     if timing == ROUND_TICK_END:
         from world.fatigue.services import tick_fatigue_collapse_for_targets  # noqa: PLC0415
 

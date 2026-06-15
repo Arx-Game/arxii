@@ -9,6 +9,8 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.conditions.services import _process_round_tick
+from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.services import tick_round_for_targets
 
 
 class AcuteTickExcludesLongTermTests(TestCase):
@@ -43,3 +45,28 @@ class AcuteTickExcludesLongTermTests(TestCase):
         amounts = [amt for _dt, amt in result.damage_dealt]
         self.assertIn(5, amounts)
         self.assertNotIn(99, amounts)
+
+
+class AcuteDotDamagesHealthTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.target = cls.sheet.character
+        cls.vitals = CharacterVitalsFactory(character_sheet=cls.sheet, health=100, max_health=100)
+        cls.dtype = DamageTypeFactory(name="poison-dmg")
+        cls.template = ConditionTemplateFactory(name="Poisoned-dmg")
+        ConditionDamageOverTimeFactory(
+            condition=cls.template,
+            damage_type=cls.dtype,
+            base_damage=10,
+            tick_timing=DamageTickTiming.END_OF_ROUND,
+            is_long_term=False,
+            scales_with_severity=False,
+            scales_with_stacks=False,
+        )
+        ConditionInstanceFactory(target=cls.target, condition=cls.template)
+
+    def test_end_tick_reduces_health_by_dot(self):
+        tick_round_for_targets([self.target], timing="end")
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.health, 90)
