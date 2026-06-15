@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any
 from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.errors import ActionDispatchError
 from actions.registry import get_action
-from actions.round_context import get_active_round_context
+from actions.round_context import RoundContext, get_active_round_context
 from actions.types import (
     ActionRef,
     DispatchResult,
@@ -65,6 +65,13 @@ if TYPE_CHECKING:
     from world.magic.models import CharacterAnima
     from world.mechanics.types import AvailableAction
     from world.scenes.action_availability import AvailableEnhancement
+
+
+# Sentinel for "caller did not supply a round context" — distinguishes from None (no active round).
+# Used as the default value for the optional ``ctx`` parameter on _combat_actions and
+# _clash_contribution_actions so that passing ``ctx=None`` (no active round, already resolved)
+# and passing nothing (not yet resolved) are distinguishable.
+_UNSET = object()
 
 
 def dispatch_player_action(
@@ -166,7 +173,26 @@ def dispatch_player_action(
         avail.resolved_challenge_approach,  # type: ignore[arg-type]
         avail.capability_source,
     )
+
+    # Post-dispatch tick: a CHALLENGE action costs a turn; advance the scene round if active.
+    _tick_scene_round_if_active(ctx)
+
     return DispatchResult(backend=ActionBackend.CHALLENGE, deferred=False, detail=resolution)
+
+
+def _tick_scene_round_if_active(ctx: RoundContext | None) -> None:
+    """Advance the scene round (tick DoTs) if *ctx* is a ``SceneRoundContext``.
+
+    Called after an immediate CHALLENGE resolution. COMBAT cannot occur inside a scene round
+    (``get_active_round_context`` returns combat context first), so only CHALLENGE reaches the
+    immediate-resolution path while a scene round is active.
+    """
+    from world.scenes.round_context import SceneRoundContext  # noqa: PLC0415
+
+    if isinstance(ctx, SceneRoundContext):
+        from world.scenes.round_services import advance_scene_round_for_action  # noqa: PLC0415
+
+        advance_scene_round_for_action(ctx.scene_round)
 
 
 def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
@@ -199,9 +225,15 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     """
     actions: list[PlayerAction] = []
 
+    # Resolve the round context once and share it across helpers that need it.
+    # _combat_actions and _clash_contribution_actions both require the same lookup;
+    # resolving once here halves the SceneRoundParticipant query cost.
+    sheet = _get_character_sheet(character)
+    ctx = get_active_round_context(sheet) if sheet is not None else None
+
     actions.extend(_challenge_actions(character))
-    actions.extend(_combat_actions(character))
-    actions.extend(_clash_contribution_actions(character))
+    actions.extend(_combat_actions(character, ctx=ctx))
+    actions.extend(_clash_contribution_actions(character, ctx=ctx))
     actions.extend(_scene_actions(character))
     actions.extend(_positioning_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
@@ -239,7 +271,10 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
     return result
 
 
-def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
+def _combat_actions(
+    character: ObjectDB,
+    ctx: RoundContext | None = _UNSET,  # type: ignore[assignment]
+) -> list[PlayerAction]:
     """Return COMBAT ``PlayerAction``s when the character is in an active declaring round.
 
     Only produces actions when:
@@ -253,13 +288,20 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
     candidates only; authoritative per-target / passive-slot / status
     validation happens at declare/dispatch time (``DeclareActionSerializer.validate``
     / ``CombatRoundContext.record_declaration``).
+
+    Args:
+        character: The character's ``ObjectDB`` instance.
+        ctx: Pre-resolved ``RoundContext`` (or ``None`` if no active round) from the caller.
+            Pass ``_UNSET`` (the default) to let this function resolve it.
+            Pass the caller's already-resolved context to avoid a redundant DB lookup.
     """
     # Resolve CharacterSheet from the character ObjectDB
     sheet = _get_character_sheet(character)
     if sheet is None:
         return []
 
-    ctx = get_active_round_context(sheet)
+    if ctx is _UNSET:
+        ctx = get_active_round_context(sheet)
     if ctx is None or not ctx.is_declaration_open:
         return []
 
@@ -307,7 +349,10 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
     return result
 
 
-def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
+def _clash_contribution_actions(
+    character: ObjectDB,
+    ctx: RoundContext | None = _UNSET,  # type: ignore[assignment]
+) -> list[PlayerAction]:
     """Return COMBAT ``PlayerAction``s for each active clash in the character's encounter.
 
     For each ``ACTIVE`` clash the character's encounter contains, emits TWO descriptors:
@@ -332,6 +377,12 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
     Each descriptor carries an ``ActionRef`` with ``backend=COMBAT``,
     ``clash_id=<Clash.pk>``, and ``clash_action_slot=<ClashActionSlot value>``.
     A future dispatcher reads these fields to route to ``declare_clash_contribution``.
+
+    Args:
+        character: The character's ``ObjectDB`` instance.
+        ctx: Pre-resolved ``RoundContext`` (or ``None`` if no active round) from the caller.
+            Pass ``_UNSET`` (the default) to let this function resolve it.
+            Pass the caller's already-resolved context to avoid a redundant DB lookup.
     """
     sheet = _get_character_sheet(character)
     if sheet is None:
@@ -339,7 +390,8 @@ def _clash_contribution_actions(character: ObjectDB) -> list[PlayerAction]:
 
     # Clash contribution declarations are only meaningful during DECLARING phase —
     # same gate as _combat_actions.  Return early if the window is closed.
-    ctx = get_active_round_context(sheet)
+    if ctx is _UNSET:
+        ctx = get_active_round_context(sheet)
     if ctx is None or not ctx.is_declaration_open:
         return []
 
