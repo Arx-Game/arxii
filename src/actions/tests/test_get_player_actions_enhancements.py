@@ -128,13 +128,15 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # ModifierTarget, CharacterEngagement, IntensityTier). Two extra queries come from
         # the pre-existing CombatParticipant lookups in _combat_actions and
         # _clash_contribution_actions (one per call site; deduplicating those is out of
-        # scope for this PR).
+        # scope for this PR). The scene-round branch in get_active_round_context (#520)
+        # adds one SceneRoundParticipant lookup per call site when no combat context exists,
+        # raising the per-call cost by 2 (from 12 → 14).
         #
-        # Cap set at 12 to give margin without masking regressions. Raise only with a
+        # Cap set at 14 to give margin without masking regressions. Raise only with a
         # documented justification — the goal remains a single-digit cost.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            12,
+            14,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

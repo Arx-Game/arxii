@@ -80,18 +80,27 @@ def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     A non-``None`` return means a round is currently in progress and player
     actions must be declaration-gated rather than dispatched immediately.
 
-    The resolver imports from ``world.combat.round_context`` at call-time to
-    keep the top-level ``actions`` package free of combat imports.  Future
-    non-combat tempo providers would add a branch here without changing
-    callers.
+    Combat is checked first (§6 of the unified-player-action spec): a character
+    in both a combat encounter and a scene round is gated by combat. If no
+    active combat context exists, the scene-round provider is consulted. Future
+    tempo providers would add a branch here without changing callers.
+
+    All resolver imports happen at call-time to keep the top-level ``actions``
+    package free of cross-app imports.
 
     Args:
         character: The ``CharacterSheet`` instance for the acting character.
 
     Returns:
         A ``RoundContext`` if the character is currently in an active
-        (non-completed) encounter as an ACTIVE participant, else ``None``.
+        (non-completed) round as an ACTIVE participant, else ``None``.
     """
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
 
-    return resolve_combat_round_context(character)
+    combat_ctx = resolve_combat_round_context(character)
+    if combat_ctx is not None:
+        return combat_ctx
+
+    from world.scenes.round_context import resolve_scene_round_context  # noqa: PLC0415
+
+    return resolve_scene_round_context(character)
