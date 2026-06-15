@@ -1,7 +1,8 @@
 """Tests for Task 4 / #533: technique reach gate at declare_action time.
 
-Verifies that declare_action raises ValueError when a technique's reach
-requirement cannot be satisfied by the combatants' current positions.
+Verifies that declare_action raises ActionDispatchError when a technique's
+reach requirement cannot be satisfied by the combatants' current positions,
+and that the dispatch endpoint surfaces this as HTTP 400.
 
 Uses setUp (not setUpTestData) because factories create Evennia ObjectDB
 instances (DbHolder — not deepcopyable, which breaks setUpTestData).
@@ -10,7 +11,11 @@ instances (DbHolder — not deepcopyable, which breaks setUpTestData).
 from __future__ import annotations
 
 from django.test import TestCase
+from rest_framework import status as http_status
+from rest_framework.test import APIClient
 
+from actions.errors import ActionDispatchError
+from evennia_extensions.factories import AccountFactory
 from world.areas.positioning.services import (
     connect_positions,
     create_position,
@@ -26,6 +31,7 @@ from world.combat.services import declare_action
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import TechniqueReach
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.roster.factories import RosterTenureFactory
 from world.vitals.models import CharacterVitals
 
 
@@ -82,7 +88,7 @@ class DeclareActionReachGateOpponentTests(TestCase):
             action_category=ActionCategory.PHYSICAL,
             reach=TechniqueReach.SAME,
         )
-        with self.assertRaisesRegex(ValueError, "[Rr]each|out of reach"):
+        with self.assertRaises(ActionDispatchError) as cm:
             declare_action(
                 self.participant,
                 focused_action=technique,
@@ -90,6 +96,8 @@ class DeclareActionReachGateOpponentTests(TestCase):
                 effort_level=EffortLevel.MEDIUM,
                 focused_opponent_target=self.opponent,
             )
+        self.assertEqual(cm.exception.code, ActionDispatchError.TARGET_OUT_OF_REACH)
+        self.assertIn("out of reach", cm.exception.user_message)
 
     def test_any_reach_against_adjacent_opponent_succeeds(self) -> None:
         """Technique with reach=ANY can target opponent in any position."""
@@ -157,3 +165,53 @@ class DeclareActionReachGateLenientTests(TestCase):
             focused_opponent_target=self.opponent,
         )
         self.assertEqual(action.focused_opponent_target, self.opponent)
+
+
+class DispatchOutOfReachReturns400Tests(TestCase):
+    """DispatchActionView returns HTTP 400 when technique reach is violated.
+
+    Verifies the view's error-handling boundary: ``ActionDispatchError`` with
+    ``TARGET_OUT_OF_REACH`` must surface as HTTP 400 with the user message.
+    ``dispatch_player_action`` is mocked so the test focuses purely on the
+    view's try/except path rather than the full combat round setup.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.objects.models import ObjectDB
+
+        cls.account = AccountFactory()
+        cls.character = ObjectDB.objects.create(db_key="ReachDispatchChar")
+        cls.tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.character,
+            player_data__account=cls.account,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _url(self) -> str:
+        return f"/api/actions/characters/{self.character.pk}/dispatch/"
+
+    def test_out_of_reach_dispatch_returns_400(self) -> None:
+        """When dispatch raises TARGET_OUT_OF_REACH, the view returns HTTP 400."""
+        from unittest.mock import patch
+
+        payload = {
+            "ref": {
+                "backend": "combat",
+                "technique_id": 1,
+            },
+            "kwargs": {
+                "effort_level": EffortLevel.MEDIUM,
+            },
+        }
+        with patch(
+            "actions.views.dispatch_player_action",
+            side_effect=ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH),
+        ):
+            response = self.client.post(self._url(), payload, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        detail = response.json().get("detail", "")
+        self.assertIn("out of reach", detail)

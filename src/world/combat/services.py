@@ -1251,8 +1251,9 @@ def _validate_technique_reach(
         return
 
     if not technique_can_reach(attacker_objectdb, focused_action, target_objectdb):
-        msg = "Target is out of reach for this technique."
-        raise ValueError(msg)
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+
+        raise ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH)
 
 
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
