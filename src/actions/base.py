@@ -53,6 +53,12 @@ class Action:
     target_filters: TargetFilters | None = None
     action_category: ActionCategory | None = None
 
+    # Tempo: when True, dispatching this action inside an active scene round costs a
+    # turn (triggers the round's resolution check / tick). Default False — pure utility
+    # actions (look/say) never cost a turn. CHALLENGE/COMBAT backends are inherently
+    # turn-costing and do not consult this flag. Spec: #520 §4.5.
+    costs_turn: bool = False
+
     intent_event: str | None = None
     result_event: str | None = None
 
