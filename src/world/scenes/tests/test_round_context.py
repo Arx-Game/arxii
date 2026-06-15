@@ -14,7 +14,7 @@ class SceneRoundContextTests(TestCase):
         ctx = resolve_scene_round_context(sheet)
         assert ctx is not None
         assert ctx.round_id == (rnd.pk, 2)
-        assert ctx.is_declaration_open is True
+        assert ctx.is_declaration_open is False
 
     def test_no_round_returns_none(self):
         sheet = CharacterSheetFactory()

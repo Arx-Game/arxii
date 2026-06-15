@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 from actions.round_context import RoundContext
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
-    RoundStatus,
     SceneRoundParticipantStatus,
 )
 from world.scenes.models import SceneRoundParticipant
@@ -33,7 +32,10 @@ class SceneRoundContext(RoundContext):
 
     @property
     def is_declaration_open(self) -> bool:
-        return self._scene_round.status == RoundStatus.DECLARING
+        # Scene rounds resolve actions immediately and tick on action — they never
+        # declaration-gate (the tempo seam still reports the active round so dispatch
+        # can fire the per-action tick).
+        return False
 
     def record_declaration(
         self,
@@ -41,9 +43,7 @@ class SceneRoundContext(RoundContext):
         player_action: Any,
         kwargs: dict[str, Any],
     ) -> None:
-        # Foundation: non-combat declaration storage/resolution lands in the
-        # acute-tier plan. This context gates dispatch (is_declaration_open) but
-        # does not yet persist declarations.
+        # Unreachable while is_declaration_open is False; kept as a stub.
         msg = "scene-round declarations land in the acute-tier plan"
         raise NotImplementedError(msg)
 
