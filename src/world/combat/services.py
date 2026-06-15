@@ -1061,26 +1061,25 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
     # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
-    from world.conditions.services import process_round_start  # noqa: PLC0415
+    from world.vitals.services import tick_round_for_targets  # noqa: PLC0415
 
     active_participants_start = CombatParticipant.objects.filter(
         encounter=enc,
         status=ParticipantStatus.ACTIVE,
     ).select_related("character_sheet__character")
-    for p in active_participants_start:
-        process_round_start(p.character_sheet.character)
-        # Permanent idempotency safety net: any participant that reached this
-        # point without a combat engagement (however they were created) gets
-        # one ensured here so all downstream engagement-dependent paths are safe.
-        _ensure_combat_engagement(p)
-
     active_opponents_start = CombatOpponent.objects.filter(
         encounter=enc,
         status=OpponentStatus.ACTIVE,
     ).select_related("objectdb")
-    for opp in active_opponents_start:
-        if opp.objectdb is not None:
-            process_round_start(opp.objectdb)
+    start_targets = [p.character_sheet.character for p in active_participants_start]
+    start_targets += [opp.objectdb for opp in active_opponents_start if opp.objectdb is not None]
+    tick_round_for_targets(start_targets, timing="start")
+
+    for p in active_participants_start:
+        # Permanent idempotency safety net: any participant that reached this
+        # point without a combat engagement (however they were created) gets
+        # one ensured here so all downstream engagement-dependent paths are safe.
+        _ensure_combat_engagement(p)
 
     # --- Escalation tick (#872): opted-in encounters build pressure each round ---
     from world.combat.escalation import (  # noqa: PLC0415
@@ -3745,47 +3744,24 @@ def resolve_round(
         resolution_order,
     )
 
-    # --- Bleed-out progression ---
-    # Each round, advance every participant's active Bleeding-Out condition.
-    # advance_bleed_out rolls the stage resist check, advances on failure, and
-    # marks life_state=DEAD at the terminal stage (closing the old divergence
-    # where combat wrote status=DEAD but not life_state).
-    from world.conditions.constants import (  # noqa: PLC0415
-        BLEED_OUT_CONDITION_NAME,
-    )
-    from world.vitals.services import advance_bleed_out  # noqa: PLC0415
-
-    # ConditionInstance.target → ObjectDB (related_name="condition_instances").
-    bleeding_participants = list(
-        CombatParticipant.objects.filter(
-            encounter=encounter,
-            character_sheet__character__condition_instances__condition__name=(
-                BLEED_OUT_CONDITION_NAME
-            ),
-        )
-        .select_related("character_sheet__character")
-        .distinct()
-    )
-    for p in bleeding_participants:
-        advance_bleed_out(p.character_sheet)
-
-    # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events ---
-    from world.conditions.services import process_round_end  # noqa: PLC0415
+    # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events,
+    # and advance bleed-out for every active participant / opponent.
+    # tick_round_for_targets(timing="end") calls process_round_end then
+    # advance_bleed_out for each target that has a sheet_data — covering all
+    # active bleeding participants (superset of the old pre-filtered query).
+    from world.vitals.services import tick_round_for_targets  # noqa: PLC0415
 
     active_participants = CombatParticipant.objects.filter(
         encounter=encounter,
         status=ParticipantStatus.ACTIVE,
     ).select_related("character_sheet__character")
-    for p in active_participants:
-        process_round_end(p.character_sheet.character)
-
     active_opponents_end = CombatOpponent.objects.filter(
         encounter=encounter,
         status=OpponentStatus.ACTIVE,
     ).select_related("objectdb")
-    for opp in active_opponents_end:
-        if opp.objectdb is not None:
-            process_round_end(opp.objectdb)
+    end_targets = [p.character_sheet.character for p in active_participants]
+    end_targets += [opp.objectdb for opp in active_opponents_end if opp.objectdb is not None]
+    tick_round_for_targets(end_targets, timing="end")
 
     # --- Boss phase transitions ---
     result.phase_transitions = _check_boss_transitions(encounter)
