@@ -868,6 +868,13 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
         choices=DamageTickTiming.choices,
         default=DamageTickTiming.START_OF_ROUND,
     )
+    is_long_term = models.BooleanField(
+        default=False,
+        help_text=(
+            "Long-term/chronic DoT: skipped by the per-round acute tick and instead "
+            "advanced by the daily batch_chronic_effect_tick with a non-lethal clamp."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

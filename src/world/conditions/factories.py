@@ -201,6 +201,7 @@ class ConditionDamageOverTimeFactory(DjangoModelFactory):
     scales_with_severity = True
     scales_with_stacks = True
     tick_timing = DamageTickTiming.START_OF_ROUND
+    is_long_term = False
 
 
 class ConditionDamageInteractionFactory(DjangoModelFactory):

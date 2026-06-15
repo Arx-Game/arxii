@@ -1597,7 +1597,9 @@ def _process_round_tick(
         query = Q(condition=instance.condition)
         if instance.current_stage:
             query |= Q(stage=instance.current_stage)
-        dot_effects = ConditionDamageOverTime.objects.filter(query, tick_timing=timing)
+        dot_effects = ConditionDamageOverTime.objects.filter(
+            query, tick_timing=timing, is_long_term=False
+        )
 
         for dot in dot_effects:
             damage = dot.base_damage
