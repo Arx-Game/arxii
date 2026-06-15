@@ -47,7 +47,7 @@ class SceneRoundModelTests(TestCase):
 
 class RoundFactorySmokeTests(TestCase):
     def test_factories_build(self):
-        from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
+        from world.scenes.factories import SceneRoundParticipantFactory
 
         p = SceneRoundParticipantFactory()
         assert p.scene_round_id is not None

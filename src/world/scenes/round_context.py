@@ -20,11 +20,11 @@ if TYPE_CHECKING:
 class SceneRoundContext(RoundContext):
     """RoundContext backed by a SceneRound the character actively participates in."""
 
-    def __init__(self, scene_round: "SceneRound") -> None:
+    def __init__(self, scene_round: SceneRound) -> None:
         self._scene_round = scene_round
 
     @property
-    def scene_round(self) -> "SceneRound":
+    def scene_round(self) -> SceneRound:
         return self._scene_round
 
     @property
@@ -37,17 +37,18 @@ class SceneRoundContext(RoundContext):
 
     def record_declaration(
         self,
-        character: "CharacterSheet",  # noqa: ARG002
-        player_action: Any,  # noqa: ARG002
-        kwargs: dict[str, Any],  # noqa: ARG002
+        character: CharacterSheet,
+        player_action: Any,
+        kwargs: dict[str, Any],
     ) -> None:
         # Foundation: non-combat declaration storage/resolution lands in the
         # acute-tier plan. This context gates dispatch (is_declaration_open) but
         # does not yet persist declarations.
-        raise NotImplementedError("scene-round declarations land in the acute-tier plan")
+        msg = "scene-round declarations land in the acute-tier plan"
+        raise NotImplementedError(msg)
 
 
-def resolve_scene_round_context(character: "CharacterSheet") -> SceneRoundContext | None:
+def resolve_scene_round_context(character: CharacterSheet) -> SceneRoundContext | None:
     """Return a SceneRoundContext for the character's active scene round, or None."""
     participant = (
         SceneRoundParticipant.objects.filter(

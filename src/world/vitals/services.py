@@ -698,7 +698,7 @@ def resolve_vitals_consequence(
 
 
 def tick_round_for_targets(
-    targets: "Iterable[ObjectDB]",
+    targets: Iterable[ObjectDB],
     *,
     timing: Literal["start", "end"] = "end",
 ) -> None:
