@@ -129,47 +129,21 @@ class CombatRoundContext(RoundContext):
             # REGISTRY actions are immediate utility; they are never round-declared.
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 
-    @transaction.atomic
-    def _record_combat_declaration(
+    def _merge_slot_into_existing(
         self,
-        participant: CombatParticipant,
-        player_action: Any,
+        slot: str,
+        technique: Any,
+        existing: CombatRoundAction | None,
         kwargs: dict[str, Any],
-    ) -> None:
-        """Upsert a CombatRoundAction and clear any competing challenge declaration."""
-        from world.magic.models import Technique  # noqa: PLC0415
+    ) -> tuple[Any, Any, Any, Any, CombatOpponent | None, CombatParticipant | None]:
+        """Apply the named slot's technique onto the existing CombatRoundAction's slots.
 
-        if _EFFORT_LEVEL_KEY not in kwargs:
-            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-
-        # Clear any prior challenge declaration for this (encounter, round, participant).
-        RoundChallengeDeclaration.objects.filter(
-            encounter=self._encounter,
-            round_number=self._encounter.round_number,
-            participant=participant,
-        ).delete()
-
-        try:
-            technique = Technique.objects.get(pk=player_action.ref.technique_id)
-        except Technique.DoesNotExist as exc:
-            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
-
+        Reads the existing row's slot values, overwrites only the slot this
+        dispatch names, and returns the merged
+        ``(focused, physical, social, mental, opponent_target, ally_target)``.
+        """
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.constants import ActionCategory  # noqa: PLC0415
-        from world.combat.services import declare_action  # noqa: PLC0415
-        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
-
-        # The frontend dispatches the focused action and each passive as SEPARATE
-        # /dispatch/ calls, every one routing through here. To land them all on a
-        # single CombatRoundAction row we read the existing row, apply only the
-        # slot this call names, and write the merged full row back through
-        # declare_action (which itself does a full-row update_or_create).
-        slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
-
-        existing = CombatRoundAction.objects.filter(
-            participant=participant,
-            round_number=self._encounter.round_number,
-        ).first()
 
         focused = existing.focused_action if existing else None
         physical = existing.physical_passive if existing else None
@@ -201,6 +175,53 @@ class CombatRoundContext(RoundContext):
             social = technique
         elif slot == CombatActionSlot.PASSIVE_MENTAL:
             mental = technique
+
+        return focused, physical, social, mental, opponent_target, ally_target
+
+    @transaction.atomic
+    def _record_combat_declaration(
+        self,
+        participant: CombatParticipant,
+        player_action: Any,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Upsert a CombatRoundAction and clear any competing challenge declaration."""
+        from world.magic.models import Technique  # noqa: PLC0415
+
+        if _EFFORT_LEVEL_KEY not in kwargs:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+        # Clear any prior challenge declaration for this (encounter, round, participant).
+        RoundChallengeDeclaration.objects.filter(
+            encounter=self._encounter,
+            round_number=self._encounter.round_number,
+            participant=participant,
+        ).delete()
+
+        try:
+            technique = Technique.objects.get(pk=player_action.ref.technique_id)
+        except Technique.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+        from actions.constants import CombatActionSlot  # noqa: PLC0415
+        from world.combat.services import declare_action  # noqa: PLC0415
+        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+
+        # The frontend dispatches the focused action and each passive as SEPARATE
+        # /dispatch/ calls, every one routing through here. To land them all on a
+        # single CombatRoundAction row we read the existing row, apply only the
+        # slot this call names, and write the merged full row back through
+        # declare_action (which itself does a full-row update_or_create).
+        slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
+
+        existing = CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=self._encounter.round_number,
+        ).first()
+
+        focused, physical, social, mental, opponent_target, ally_target = (
+            self._merge_slot_into_existing(slot, technique, existing, kwargs)
+        )
 
         effort = (
             kwargs.get(_EFFORT_LEVEL_KEY)

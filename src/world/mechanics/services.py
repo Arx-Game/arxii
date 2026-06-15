@@ -824,6 +824,72 @@ def get_available_actions(
     return actions
 
 
+def _build_action_for_source(  # noqa: PLR0913
+    character: ObjectDB,
+    ci: ChallengeInstance,
+    template: ChallengeTemplate,
+    approach: ChallengeApproach,
+    app: Application,
+    source: CapabilitySource,
+    cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
+) -> AvailableAction | None:
+    """Build the AvailableAction for one (approach, source) pair, or None if it is skipped."""
+    if not _source_meets_effect_requirements(app, approach, source):
+        return None
+
+    reasons: list[str] = []
+    prereq_met = _evaluate_prerequisites(
+        character,
+        ci,
+        app,
+        source,
+        cap_prereq_cache,
+        reasons,
+    )
+
+    difficulty = None
+    if prereq_met:
+        difficulty = _get_difficulty_indicator_for_check(
+            character,
+            approach.check_type,
+            template.severity,
+        )
+        if difficulty == DifficultyIndicator.IMPOSSIBLE:
+            return None
+
+    # Resolve check_type and action_template from the already-loaded approach.
+    # If the approach has an action_template override, that template's check_type
+    # is authoritative; otherwise fall back to the approach's own check_type.
+    override_template = approach.action_template  # may be None (null FK)
+    if override_template is not None:
+        resolved_check_type = override_template.check_type
+        resolved_action_template = override_template
+    else:
+        resolved_check_type = approach.check_type
+        resolved_action_template = None
+
+    return AvailableAction(
+        application_id=app.id,
+        application_name=app.name,
+        capability_source=source,
+        challenge_instance_id=ci.id,
+        challenge_name=template.name,
+        approach_id=approach.id,
+        check_type_name=approach.check_type.name,
+        display_name=approach.display_name or app.name,
+        custom_description=approach.custom_description,
+        difficulty_indicator=difficulty,
+        prerequisite_met=prereq_met,
+        prerequisite_reasons=reasons,
+        resolved_check_type=resolved_check_type,
+        resolved_action_template=resolved_action_template,
+        # Carry the already-loaded instances for dispatch_player_action
+        # — no additional queries; ci and approach are from prefetched data.
+        resolved_challenge_instance=ci,
+        resolved_challenge_approach=approach,
+    )
+
+
 def _match_approaches(  # noqa: PLR0913
     character: ObjectDB,
     ci: ChallengeInstance,
@@ -843,62 +909,11 @@ def _match_approaches(  # noqa: PLR0913
         matching_sources = cap_id_to_sources.get(app.capability_id, [])
 
         for source in matching_sources:
-            if not _source_meets_effect_requirements(app, approach, source):
-                continue
-
-            reasons: list[str] = []
-            prereq_met = _evaluate_prerequisites(
-                character,
-                ci,
-                app,
-                source,
-                cap_prereq_cache,
-                reasons,
+            action = _build_action_for_source(
+                character, ci, template, approach, app, source, cap_prereq_cache
             )
-
-            difficulty = None
-            if prereq_met:
-                difficulty = _get_difficulty_indicator_for_check(
-                    character,
-                    approach.check_type,
-                    template.severity,
-                )
-                if difficulty == DifficultyIndicator.IMPOSSIBLE:
-                    continue
-
-            # Resolve check_type and action_template from the already-loaded approach.
-            # If the approach has an action_template override, that template's check_type
-            # is authoritative; otherwise fall back to the approach's own check_type.
-            override_template = approach.action_template  # may be None (null FK)
-            if override_template is not None:
-                resolved_check_type = override_template.check_type
-                resolved_action_template = override_template
-            else:
-                resolved_check_type = approach.check_type
-                resolved_action_template = None
-
-            actions.append(
-                AvailableAction(
-                    application_id=app.id,
-                    application_name=app.name,
-                    capability_source=source,
-                    challenge_instance_id=ci.id,
-                    challenge_name=template.name,
-                    approach_id=approach.id,
-                    check_type_name=approach.check_type.name,
-                    display_name=approach.display_name or app.name,
-                    custom_description=approach.custom_description,
-                    difficulty_indicator=difficulty,
-                    prerequisite_met=prereq_met,
-                    prerequisite_reasons=reasons,
-                    resolved_check_type=resolved_check_type,
-                    resolved_action_template=resolved_action_template,
-                    # Carry the already-loaded instances for dispatch_player_action
-                    # — no additional queries; ci and approach are from prefetched data.
-                    resolved_challenge_instance=ci,
-                    resolved_challenge_approach=approach,
-                )
-            )
+            if action is not None:
+                actions.append(action)
 
 
 def _evaluate_prerequisites(  # noqa: PLR0913

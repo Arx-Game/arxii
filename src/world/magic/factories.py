@@ -98,6 +98,8 @@ from world.traits.factories import TraitFactory
 _CAPABILITY_TYPE_FACTORY = "world.conditions.factories.CapabilityTypeFactory"
 # Flow-step parameter sentinel that binds the step's payload to the event payload.
 _PAYLOAD_PARAM = "@payload"
+# Progression unlock URL path for path-crossing seed rows.
+_MAGIC_PROGRESSION_PATH = "/magic/progression"
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -2691,14 +2693,20 @@ def seed_magic_progression(prospect_paths=None):
         (PathStage.PROSPECT, K.TECHNIQUE_DEVELOPMENT, "techniques", "/techniques/build", 3),
         (PathStage.PROSPECT, K.ANIMA_RITUAL, "anima", "/rituals", 4),
         (PathStage.POTENTIAL, K.SECOND_GIFT, "second_gift", "", 0),
-        (PathStage.POTENTIAL, K.STAGE_CROSSING, "cross_potential", "/magic/progression", 1),
+        (PathStage.POTENTIAL, K.STAGE_CROSSING, "cross_potential", _MAGIC_PROGRESSION_PATH, 1),
         (PathStage.PUISSANT, K.SECOND_GIFT, "second_gift", "", 0),
-        (PathStage.PUISSANT, K.STAGE_CROSSING, "cross_puissant", "/magic/progression", 1),
+        (PathStage.PUISSANT, K.STAGE_CROSSING, "cross_puissant", _MAGIC_PROGRESSION_PATH, 1),
         (PathStage.TRUE, K.SECOND_GIFT, "second_gift", "", 0),
-        (PathStage.TRUE, K.STAGE_CROSSING, "cross_true", "/magic/progression", 1),
+        (PathStage.TRUE, K.STAGE_CROSSING, "cross_true", _MAGIC_PROGRESSION_PATH, 1),
         (PathStage.GRAND, K.SECOND_GIFT, "second_gift", "", 0),
-        (PathStage.GRAND, K.STAGE_CROSSING, "cross_grand", "/magic/progression", 1),
-        (PathStage.TRANSCENDENT, K.STAGE_CROSSING, "cross_transcendent", "/magic/progression", 0),
+        (PathStage.GRAND, K.STAGE_CROSSING, "cross_grand", _MAGIC_PROGRESSION_PATH, 1),
+        (
+            PathStage.TRANSCENDENT,
+            K.STAGE_CROSSING,
+            "cross_transcendent",
+            _MAGIC_PROGRESSION_PATH,
+            0,
+        ),
     ]
 
     entries = {}

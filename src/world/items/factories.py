@@ -27,6 +27,9 @@ from world.items.models import (
 )
 from world.mechanics.factories import ModifierTargetFactory
 
+# SubFactory import path, extracted to satisfy S1192.
+_SOCIETY_FACTORY = "world.societies.factories.SocietyFactory"
+
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
     """Factory for QualityTier."""
@@ -226,7 +229,7 @@ class FacetVogueMomentumFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = FacetVogueMomentum
 
-    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    society = factory.SubFactory(_SOCIETY_FACTORY)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
     points = 0
 
@@ -244,7 +247,7 @@ class FashionPresentationFactory(factory.django.DjangoModelFactory):
     event = factory.SubFactory("world.events.factories.EventFactory")
     presenter = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     outfit = None
-    perceiving_society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    perceiving_society = factory.SubFactory(_SOCIETY_FACTORY)
     base_score = 0
     acclaim = 0
 
@@ -255,7 +258,7 @@ class TrendsetterFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Trendsetter
 
-    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    society = factory.SubFactory(_SOCIETY_FACTORY)
     persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     fashion_style = factory.SubFactory(FashionStyleFactory)
 

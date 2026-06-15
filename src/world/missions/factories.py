@@ -36,6 +36,9 @@ from world.missions.models import (
     MissionTemplate,
 )
 
+# SubFactory import path, extracted to satisfy S1192.
+_CHARACTER_FACTORY = "evennia_extensions.factories.CharacterFactory"
+
 
 class MissionCategoryFactory(DjangoModelFactory):
     """Factory for the MissionCategory lookup model."""
@@ -177,7 +180,7 @@ class MissionParticipantFactory(DjangoModelFactory):
         model = MissionParticipant
 
     instance = factory.SubFactory(MissionInstanceFactory)
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory(_CHARACTER_FACTORY)
     is_contract_holder = False
 
 
@@ -199,7 +202,7 @@ class MissionDeedRecordFactory(DjangoModelFactory):
         model = MissionDeedRecord
 
     instance = factory.SubFactory(MissionInstanceFactory)
-    actor = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    actor = factory.SubFactory(_CHARACTER_FACTORY)
     node = factory.SubFactory(MissionNodeFactory)
     option = factory.SubFactory(MissionOptionFactory)
     outcome = None
@@ -237,7 +240,7 @@ class MissionDeedRewardLineFactory(DjangoModelFactory):
         model = MissionDeedRewardLine
 
     deed = factory.SubFactory(MissionDeedRecordFactory)
-    recipient = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    recipient = factory.SubFactory(_CHARACTER_FACTORY)
     kind = DeedRewardKind.IMMEDIATE
     sink = DeedRewardSink.MONEY
     amount = 100

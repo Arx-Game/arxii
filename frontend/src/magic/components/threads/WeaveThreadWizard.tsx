@@ -215,6 +215,52 @@ const INITIAL_STATE: WizardState = {
 };
 
 // ---------------------------------------------------------------------------
+// Step 1 kind button — extracted so the per-kind onClick handler is not nested
+// inside renderStep1 → .map() → arrow (keeps function nesting under 4 levels).
+// ---------------------------------------------------------------------------
+
+interface KindButtonProps {
+  kind: TargetKind;
+  hasUnlock: boolean;
+  onSelect: (kind: TargetKind) => void;
+}
+
+function KindButton({ kind, hasUnlock, onSelect }: KindButtonProps) {
+  const meta = KIND_META[kind] ?? { label: kind, supported: false };
+  const noUnlock = !hasUnlock;
+  const notSupported = !meta.supported;
+  const disabled = noUnlock || notSupported;
+
+  let tooltipText = '';
+  if (noUnlock && !notSupported) {
+    tooltipText = `Acquire a Thread Weaving Unlock for ${meta.label} first. Browse Teachers to find one.`;
+  } else if (notSupported && meta.unsupportedNote) {
+    tooltipText = meta.unsupportedNote;
+  }
+
+  return (
+    <button
+      type="button"
+      data-testid={`kind-button-${kind}`}
+      disabled={disabled}
+      title={tooltipText || undefined}
+      onClick={() => onSelect(kind)}
+      className={[
+        'flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors',
+        disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-accent hover:text-accent-foreground',
+      ].join(' ')}
+    >
+      <span className="flex-1">
+        <span className="font-medium">{meta.label}</span>
+        {disabled && tooltipText && (
+          <span className="ml-2 text-xs text-muted-foreground">({tooltipText})</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -359,6 +405,10 @@ export function WeaveThreadWizard({
   // Step 1: Kind picker
   // ---------------------------------------------------------------------------
 
+  function handleSelectKind(kind: TargetKind) {
+    selectKind(kind).catch(() => {});
+  }
+
   function renderStep1() {
     return (
       <div className="space-y-3" data-testid="wizard-step-1">
@@ -366,44 +416,14 @@ export function WeaveThreadWizard({
           Choose what your Thread will be anchored to.
         </p>
         <div className="grid gap-2">
-          {ALL_KINDS.map((kind) => {
-            const meta = KIND_META[kind] ?? { label: kind, supported: false };
-            const hasUnlock = eligibility[kind] === true;
-            const noUnlock = !hasUnlock;
-            const notSupported = !meta.supported;
-            const disabled = noUnlock || notSupported;
-
-            let tooltipText = '';
-            if (noUnlock && !notSupported) {
-              tooltipText = `Acquire a Thread Weaving Unlock for ${meta.label} first. Browse Teachers to find one.`;
-            } else if (notSupported && meta.unsupportedNote) {
-              tooltipText = meta.unsupportedNote;
-            }
-
-            return (
-              <button
-                key={kind}
-                type="button"
-                data-testid={`kind-button-${kind}`}
-                disabled={disabled}
-                title={tooltipText || undefined}
-                onClick={() => selectKind(kind).catch(() => {})}
-                className={[
-                  'flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors',
-                  disabled
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:bg-accent hover:text-accent-foreground',
-                ].join(' ')}
-              >
-                <span className="flex-1">
-                  <span className="font-medium">{meta.label}</span>
-                  {disabled && tooltipText && (
-                    <span className="ml-2 text-xs text-muted-foreground">({tooltipText})</span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
+          {ALL_KINDS.map((kind) => (
+            <KindButton
+              key={kind}
+              kind={kind}
+              hasUnlock={eligibility[kind] === true}
+              onSelect={handleSelectKind}
+            />
+          ))}
         </div>
       </div>
     );

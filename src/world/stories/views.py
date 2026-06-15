@@ -2320,6 +2320,33 @@ def _build_staff_per_gm_inputs() -> _StaffPerGMInputs:
     )
 
 
+def _episodes_ready_for_gm(gm_id: int, inputs: "_StaffPerGMInputs") -> int:
+    """Count the active lead stories whose current episode has an eligible transition.
+
+    Pure per-GM arithmetic over the batched inputs (no queries). A story whose
+    progress is missing/episode-less, or whose progression requirement is unmet,
+    contributes zero.
+    """
+    from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
+
+    episodes_ready_count = 0
+    for story in inputs.lead_stories_by_gm.get(gm_id, []):
+        progress = inputs.first_active_progress_by_story.get(story.pk)
+        if progress is None or progress.current_episode is None:
+            continue
+        try:
+            eligible = _eligible_transitions_from_prefetched(
+                progress,
+                inputs.progression_reqs_by_episode,
+                inputs.transitions_by_episode,
+            )
+        except ProgressionRequirementNotMetError:
+            continue
+        if eligible:
+            episodes_ready_count += 1
+    return episodes_ready_count
+
+
 def _collect_per_gm_queue_depth() -> list[PerGMQueueDepthEntry]:
     """Assemble the per-GM queue depth section from batched inputs.
 
@@ -2343,7 +2370,6 @@ def _collect_per_gm_queue_depth() -> list[PerGMQueueDepthEntry]:
     preload is exactly one extra query independent of N.
     """
     from world.gm.models import GMProfile  # noqa: PLC0415
-    from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
 
     inputs = _build_staff_per_gm_inputs()
 
@@ -2366,21 +2392,7 @@ def _collect_per_gm_queue_depth() -> list[PerGMQueueDepthEntry]:
         gm = gm_by_id.get(gm_id)
         if gm is None:
             continue
-        episodes_ready_count = 0
-        for story in inputs.lead_stories_by_gm.get(gm_id, []):
-            progress = inputs.first_active_progress_by_story.get(story.pk)
-            if progress is None or progress.current_episode is None:
-                continue
-            try:
-                eligible = _eligible_transitions_from_prefetched(
-                    progress,
-                    inputs.progression_reqs_by_episode,
-                    inputs.transitions_by_episode,
-                )
-            except ProgressionRequirementNotMetError:
-                continue
-            if eligible:
-                episodes_ready_count += 1
+        episodes_ready_count = _episodes_ready_for_gm(gm_id, inputs)
 
         per_gm_queue.append(
             {

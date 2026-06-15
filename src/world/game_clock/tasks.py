@@ -111,6 +111,38 @@ def _fetch_ap_modifier_map(
     return mod_lookup, target_pk_map
 
 
+def _select_pools_to_regen(  # noqa: PLR0913 - regen computation needs full pool context
+    pools: list,
+    *,
+    base_regen: int,
+    locked_character_ids: set[int],
+    mod_lookup: dict,
+    regen_pk: int | None,
+    max_pk: int | None,
+) -> list:
+    """Apply effective regen to each eligible pool and collect those that changed.
+
+    Skips protagonism-locked characters and pools already at/over their
+    effective maximum or with zero effective regen. Mutates ``pool.current``
+    in place on the pools that regenerate and returns that list.
+    """
+    to_update = []
+    for pool in pools:
+        if pool.character_id in locked_character_ids:
+            continue
+
+        mods = mod_lookup.get(pool.character_id, {})
+        effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
+        effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
+
+        if pool.current >= effective_max or effective_regen == 0:
+            continue
+
+        pool.current = min(effective_max, pool.current + effective_regen)
+        to_update.append(pool)
+    return to_update
+
+
 def _apply_ap_regen(regen_target_name: str, base_regen: int, *, stamp_daily: bool = False) -> int:
     """Shared batch regen logic for daily and weekly AP regeneration.
 
@@ -146,20 +178,14 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int, *, stamp_daily: boo
     regen_pk = pks.get(regen_target_name)
     max_pk = pks.get("ap_maximum")
 
-    to_update: list[ActionPointPool] = []
-    for pool in pools:
-        if pool.character_id in locked_character_ids:
-            continue
-
-        mods = mod_lookup.get(pool.character_id, {})
-        effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
-        effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
-
-        if pool.current >= effective_max or effective_regen == 0:
-            continue
-
-        pool.current = min(effective_max, pool.current + effective_regen)
-        to_update.append(pool)
+    to_update: list[ActionPointPool] = _select_pools_to_regen(
+        pools,
+        base_regen=base_regen,
+        locked_character_ids=locked_character_ids,
+        mod_lookup=mod_lookup,
+        regen_pk=regen_pk,
+        max_pk=max_pk,
+    )
 
     if to_update:
         fields = ["current"]

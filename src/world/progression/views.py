@@ -66,6 +66,9 @@ from world.scenes.models import Interaction, SceneParticipation
 DEFAULT_TRANSACTION_LIMIT = 50
 MAX_TRANSACTION_LIMIT = 200
 
+# Repeated 404 detail message, extracted to satisfy S1192.
+NO_CHARACTER_FOUND_MESSAGE = "No character found."
+
 
 class TransactionPagination(LimitOffsetPagination):
     """Pagination for progression transaction lists."""
@@ -409,7 +412,9 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         """GET — return current intent or {"intent": null}."""
         sheet = self._get_sheet(request)
         if sheet is None:
-            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             intent = PathIntent.objects.select_related("intended_path").get(character_sheet=sheet)
@@ -422,7 +427,9 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         """PUT — declare or replace the intent for this character."""
         sheet = self._get_sheet(request)
         if sheet is None:
-            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
 
         serializer = PathIntentDeclareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -442,7 +449,9 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         """DELETE — clear the intent (idempotent)."""
         sheet = self._get_sheet(request)
         if sheet is None:
-            return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
 
         PathIntent.objects.filter(character_sheet=sheet).delete()
         PathIntent.flush_instance_cache()
