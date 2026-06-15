@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -145,3 +148,109 @@ def auto_start_or_extend_danger_round(character_sheet: CharacterSheet) -> SceneR
     for sheet in _present_character_sheets(room):
         SceneRoundParticipant.objects.get_or_create(scene_round=rnd, character_sheet=sheet)
     return rnd
+
+
+def scene_round_is_complete(scene_round: SceneRound) -> bool:
+    """Presence-gated completion: True when every ACTIVE participant present in the room
+    has a declaration/pass row for the current round. Absent participants are implicit
+    passes (never block). No timer — presence is the idle signal (AFK-safety)."""
+    present_ids = {s.character_id for s in _present_character_sheets(scene_round.room)}
+    active = scene_round.participants.filter(
+        status=SceneRoundParticipantStatus.ACTIVE
+    ).select_related("character_sheet")
+    declared_ids = set(
+        scene_round.action_declarations.filter(round_number=scene_round.round_number).values_list(
+            "participant_id", flat=True
+        )
+    )
+    present_active = [p for p in active if p.character_sheet.character_id in present_ids]
+    if not present_active:
+        return False  # nobody present to drive resolution
+    return all(p.pk in declared_ids for p in present_active)
+
+
+@transaction.atomic
+def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
+    """Unconditionally resolve a DECLARING social round: execute declared CHALLENGE actions
+    in initiative order, fire the shared END tick, delete the round's bridge rows, then
+    advance to the next round (DECLARING).
+
+    Callers gate WHEN to resolve: ``maybe_resolve_scene_round`` resolves only once the
+    presence-gated completion rule is met; a GM force-resolve calls this directly to resolve
+    an incomplete round (undeclared present participants are swept as implicit passes)."""
+    rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
+    if rnd.status != RoundStatus.DECLARING:
+        msg = f"Cannot resolve scene round: status is {rnd.status}, expected declaring."
+        raise ValueError(msg)
+    rnd.status = RoundStatus.RESOLVING
+    rnd.save(update_fields=["status"])
+
+    _resolve_scene_declarations(rnd)
+
+    targets = [
+        p.character_sheet.character
+        for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
+            "character_sheet__character"
+        )
+    ]
+    tick_round_for_targets(targets, timing="end")
+
+    rnd.status = RoundStatus.BETWEEN_ROUNDS
+    rnd.save(update_fields=["status"])
+    start_scene_round(rnd)  # -> DECLARING, round_number += 1
+    scene_round.refresh_from_db()
+    return scene_round
+
+
+def maybe_resolve_scene_round(scene_round: SceneRound) -> SceneRound:
+    """Resolve iff the presence-gated completion rule is met. No-op otherwise."""
+    if scene_round.status == RoundStatus.DECLARING and scene_round_is_complete(scene_round):
+        return resolve_scene_round(scene_round)
+    return scene_round
+
+
+def _resolve_scene_declarations(scene_round: SceneRound) -> None:
+    """Resolve declared CHALLENGE actions for the round in initiative order, re-validating
+    eligibility via get_available_actions (mirrors combat _resolve_declared_challenges),
+    then delete ALL bridge rows for the round. Pass rows resolve to nothing."""
+    from world.mechanics.challenge_resolution import resolve_challenge  # noqa: PLC0415
+    from world.mechanics.services import get_available_actions  # noqa: PLC0415
+
+    declarations = list(
+        scene_round.action_declarations.filter(round_number=scene_round.round_number, is_pass=False)
+        .select_related(
+            "participant",
+            "participant__character_sheet",
+            "participant__character_sheet__character",
+            "challenge_instance",
+            "challenge_instance__location",
+            "challenge_approach",
+        )
+        .order_by("participant__initiative_order", "declared_at", "pk")
+    )
+    for decl in declarations:
+        character = decl.participant.character_sheet.character
+        challenge_instance = decl.challenge_instance
+        approach = decl.challenge_approach
+        location = challenge_instance.location
+        available_actions = get_available_actions(character, location)
+        matching = next(
+            (
+                a
+                for a in available_actions
+                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
+            ),
+            None,
+        )
+        if matching is None:
+            logger.warning(
+                "Skipping deferred scene challenge declaration for participant %s "
+                "(challenge_instance=%s, approach=%s): no matching AvailableAction.",
+                decl.participant_id,
+                challenge_instance.pk,
+                approach.pk,
+            )
+            continue
+        resolve_challenge(character, challenge_instance, approach, matching.capability_source)
+
+    scene_round.action_declarations.filter(round_number=scene_round.round_number).delete()
