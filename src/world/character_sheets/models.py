@@ -453,6 +453,19 @@ class CharacterSheet(SharedMemoryModel):
 
         return self.personas.get(persona_type=PersonaType.PRIMARY)
 
+    def clean(self) -> None:
+        """Validate ``active_persona`` is one of this sheet's own faces (#981).
+
+        Defense-in-depth: ``scenes.services.set_active_persona`` is the only
+        intended writer and already validates ownership, but this guards
+        admin / ``full_clean`` callers from planting a cross-sheet
+        (foreign-identity) active persona that the resolver would then serve.
+        """
+        super().clean()
+        if self.active_persona_id is not None and self.active_persona.character_sheet_id != self.pk:
+            msg = "Active persona must be one of this character's own personas."
+            raise ValidationError({"active_persona": msg})
+
     @cached_property
     def cached_payload_personas(self) -> list[Persona]:
         """PRIMARY + ESTABLISHED personas, ordered for the account payload.

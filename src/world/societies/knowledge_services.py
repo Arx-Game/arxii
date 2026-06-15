@@ -80,16 +80,19 @@ def scene_witness_personas(scene: Scene) -> list[Persona]:
     )
     covered_sheet_ids = {p.character_sheet_id for p in interacted}
 
+    # #981: list each silent participant under their ACTIVE face (the persona
+    # they're presenting), never their primary — surfacing a primary for someone
+    # present as an ESTABLISHED alt would out the alt↔primary link.
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
     silent: list[Persona] = []
     for participation in scene.participations.select_related("account"):
         for entry in RosterEntry.objects.for_account(participation.account):
             sheet = entry.character_sheet
             if sheet.pk in covered_sheet_ids:
                 continue
-            primary = sheet.primary_persona
-            if primary is not None:
-                silent.append(primary)
-                covered_sheet_ids.add(sheet.pk)
+            silent.append(active_persona_for_sheet(sheet))
+            covered_sheet_ids.add(sheet.pk)
     return interacted + silent
 
 

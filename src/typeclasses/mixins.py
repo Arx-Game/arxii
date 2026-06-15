@@ -185,8 +185,13 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
         return None
     import contextlib
 
+    # #981: gate the board on the looker's ACTIVE face (the telnet mirror of
+    # RankingDisplayViewSet) so examining a board while wearing an alt's face is
+    # gated as that alt, not the primary — never leak the other faces.
+    from world.scenes.services import active_persona_for_sheet
+
     viewer_persona = None
     if looker is not None:
         with contextlib.suppress(AttributeError, Persona.DoesNotExist):
-            viewer_persona = looker.sheet_data.primary_persona
+            viewer_persona = active_persona_for_sheet(looker.sheet_data)
     return render_ranking_display(display, viewer_persona)
