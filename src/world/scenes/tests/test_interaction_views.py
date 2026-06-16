@@ -533,6 +533,58 @@ class PoseSubmitViewTests(APITestCase):
         assert resp.status_code == 400
         mock_broadcast.assert_not_called()
 
+    def test_submit_pose_rejects_blank_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "   "},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+
+    def test_submit_pose_rejects_oversized_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "a" * 10_001},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+
+    def test_submit_pose_rejects_null_bytes_in_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "hello\x00world"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+
+    def test_submit_pose_rejects_javascript_link_in_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "[click](javascript:void(0))"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+
+    def test_submit_pose_accepts_markdown_link_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "[my site](https://example.com)"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_submit_pose_accepts_mention_content(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "@Alice waves hello"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
 
 class ActionLinksSerializerTests(APITestCase):
     """action_links field is populated by the list endpoint for POSE interactions."""
