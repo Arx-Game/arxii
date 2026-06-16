@@ -18,6 +18,7 @@ class EffectType(models.TextChoices):
     LEGEND_AWARD = "legend_award", "Award Legend"
     CAPTURE = "capture", "Capture"
     ESCAPE_CAPTIVITY = "escape_captivity", "Escape Captivity"
+    RESCUE_CAPTIVE = "rescue_captive", "Rescue Captive"
 
 
 class EffectTarget(models.TextChoices):

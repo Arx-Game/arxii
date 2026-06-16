@@ -23,6 +23,7 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.models import MissionInstance
+from world.missions.services.run import grant_rescue_mission
 from world.scenes.factories import SceneFactory
 from world.societies.factories import OrganizationFactory
 from world.vitals.models import CharacterVitals
@@ -385,6 +386,61 @@ class EscapeCaptivityHandlerTests(TestCase):
         bare = CharacterFactory(db_key="no_sheet_escape")
 
         result = apply_effect(self._effect(), ResolutionContext(character=bare))
+
+        assert result.applied is False
+        assert result.skip_reason is not None
+
+
+class RescueCaptiveHandlerTests(TestCase):
+    """The RESCUE_CAPTIVE effect frees the run's rescue_target (#931 Phase 4)."""
+
+    def _effect(self):
+        return ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.RESCUE_CAPTIVE,
+        )
+
+    def _rescue_instance(self, captive_sheet):
+        rescuer = CharacterFactory(db_key="rescuer")
+        CharacterSheetFactory(character=rescuer)
+        template = _captive_loop_template("rescue-run")
+        return rescuer, grant_rescue_mission(template, rescuer, captive_sheet)
+
+    def test_rescue_frees_the_runs_target(self) -> None:
+        captive = CharacterSheetFactory()
+        capture_character(captive=captive)
+        rescuer, instance = self._rescue_instance(captive)
+
+        result = apply_effect(
+            self._effect(),
+            ResolutionContext(character=rescuer, mission_instance=instance),
+        )
+
+        assert result.applied
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+        captivity = Captivity.objects.get(captive=captive)
+        assert captivity.status == CaptivityStatus.RESCUED
+
+    def test_rescue_skips_off_the_mission_path(self) -> None:
+        # No mission_instance on the context (e.g. a non-mission resolution).
+        rescuer = CharacterFactory(db_key="lone_rescuer")
+        CharacterSheetFactory(character=rescuer)
+
+        result = apply_effect(self._effect(), ResolutionContext(character=rescuer))
+
+        assert result.applied is False
+        assert result.skip_reason is not None
+
+    def test_rescue_skips_when_target_not_held(self) -> None:
+        # A rescue run whose target was already freed before the route fired.
+        captive = CharacterSheetFactory()
+        rescuer, instance = self._rescue_instance(captive)
+
+        result = apply_effect(
+            self._effect(),
+            ResolutionContext(character=rescuer, mission_instance=instance),
+        )
 
         assert result.applied is False
         assert result.skip_reason is not None

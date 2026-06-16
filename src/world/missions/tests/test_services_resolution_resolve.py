@@ -18,8 +18,13 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.captivity.constants import CaptivityStatus
+from world.captivity.models import Captivity
+from world.captivity.services import capture_character
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory, ConsequenceFactory
+from world.character_sheets.types import LifecycleState
+from world.checks.constants import EffectType
+from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import (
@@ -46,6 +51,7 @@ from world.missions.models import (
     MissionOptionRouteReward,
 )
 from world.missions.services import resolve_option
+from world.missions.services.run import grant_rescue_mission
 from world.traits.factories import CheckOutcomeFactory
 
 _APPLY = "world.missions.services.resolution.apply_resolution"
@@ -661,3 +667,55 @@ class TerminalRewardEmissionTests(TestCase):
         with force_check_outcome(self.success):
             deed = resolve_option(self.instance, self.entry, option, self.actor)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)
+
+
+class ResolveRescueRouteTests(TestCase):
+    """A rescue run's success route frees its rescue_target end-to-end (#931).
+
+    Proves the full seam: resolve_option carries the MissionInstance on the
+    ResolutionContext, so a RESCUE_CAPTIVE consequence effect reaches the run's
+    rescue_target and frees the held captive. No mocks — the real consequence
+    pipeline runs.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.success = CheckOutcomeFactory(name="RescueSuccess", success_level=3)
+        cls.sneak = CheckTypeFactory(name="RescueSneak")
+
+        cls.template = MissionTemplateFactory(name="rescue-route-tmpl", risk_tier=4)
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.option = MissionOptionFactory(
+            node=cls.entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=cls.sneak,
+        )
+        # Terminal success route carrying a RESCUE_CAPTIVE consequence effect.
+        conseq = ConsequenceFactory(outcome_tier=cls.success)
+        ConsequenceEffectFactory(consequence=conseq, effect_type=EffectType.RESCUE_CAPTIVE)
+        MissionOptionRouteFactory(
+            option=cls.option,
+            outcome_tier=cls.success,
+            target_node=None,  # terminal — completes the run
+            consequence=conseq,
+        )
+
+    def test_success_route_frees_the_captive(self) -> None:
+        captive = CharacterSheetFactory()
+        capture_character(captive=captive)
+        rescuer = CharacterFactory(db_key="route-rescuer")
+        CharacterSheetFactory(character=rescuer)
+        instance = grant_rescue_mission(self.template, rescuer, captive)
+        actor = instance.participants.get(is_contract_holder=True)
+
+        with force_check_outcome(self.success):
+            resolve_option(instance, self.entry, self.option, actor)
+
+        captive.refresh_from_db()
+        self.assertEqual(captive.lifecycle_state, LifecycleState.ALIVE)
+        captivity = Captivity.objects.get(captive=captive)
+        self.assertEqual(captivity.status, CaptivityStatus.RESCUED)
+        instance.refresh_from_db()
+        self.assertEqual(instance.status, MissionStatus.COMPLETE)
