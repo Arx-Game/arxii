@@ -60,8 +60,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 import math
+from typing import TYPE_CHECKING
 
 from django.db import transaction
+
+if TYPE_CHECKING:
+    from world.magic.models.endorsement import EntryFlourishRecord
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -464,6 +468,63 @@ def create_scene_entry_endorsement(
         scene_entry_endorsement=endorsement,
     )
     return endorsement
+
+
+@transaction.atomic
+def create_entry_flourish(
+    character_sheet: CharacterSheet,
+    resonance: Resonance,
+    *,
+    scene: Scene | None,
+    amount: int | None = None,
+) -> EntryFlourishRecord:
+    """Record a successful entry flourish and fire the resonance grant.
+
+    Called after the Entrance social action resolves successfully. The resonance
+    was declared by the player as their flourish's expression.
+
+    Validates the character has claimed the resonance, then creates the
+    EntryFlourishRecord and fires grant_resonance atomically.
+
+    Args:
+        character_sheet: The character performing the flourish.
+        resonance: The resonance the character expressed during their entrance.
+        scene: Scene context; None if outside a scene.
+        amount: Override the config default; None uses entry_flourish_grant.
+
+    Returns:
+        The created EntryFlourishRecord.
+
+    Raises:
+        EndorsementValidationError: If the character hasn't claimed this resonance.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    if not CharacterResonance.objects.filter(
+        character_sheet=character_sheet, resonance=resonance
+    ).exists():
+        msg = "Character has not claimed this resonance"
+        raise EndorsementValidationError(msg)
+
+    cfg = get_resonance_gain_config()
+    granted = amount if amount is not None else cfg.entry_flourish_grant
+
+    record = EntryFlourishRecord.objects.create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+        scene=scene,
+        granted_amount=granted,
+    )
+    grant_resonance(
+        character_sheet,
+        resonance,
+        granted,
+        source=GainSource.ENTRY_FLOURISH,
+        entry_flourish=record,
+    )
+    return record
 
 
 def residence_trickle_tick() -> ResonanceDailyTickSummary:
