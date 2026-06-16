@@ -1078,6 +1078,18 @@ class MissionInstance(SharedMemoryModel):
             "for trigger-based and legacy seed rows (which skip the gate)."
         ),
     )
+    rescue_target = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The captive this run aims to free (#931 Phase 4 rescue). Resolves "
+            "'where is the captive' through their cell; the success route frees "
+            "them. Null for non-rescue runs."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.template.name} ({self.status})"

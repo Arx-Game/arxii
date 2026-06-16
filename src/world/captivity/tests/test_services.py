@@ -9,6 +9,7 @@ from world.captivity.models import Captivity
 from world.captivity.services import (
     capture_character,
     capture_party,
+    rescue_captive,
     resolve_captivity,
 )
 from world.character_sheets.factories import CharacterSheetFactory
@@ -200,3 +201,21 @@ class ResolveCaptivityTests(TestCase):
 
         with self.assertRaises(ValueError):
             resolve_captivity(captivity, status=CaptivityStatus.HELD)
+
+
+class RescueCaptiveTests(TestCase):
+    def test_rescue_frees_a_held_captive(self) -> None:
+        captive = CharacterSheetFactory()
+        captivity = capture_character(captive=captive)
+
+        freed = rescue_captive(captive)
+
+        assert freed is True
+        captivity.refresh_from_db()
+        assert captivity.status == CaptivityStatus.RESCUED
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+
+    def test_rescue_is_a_noop_when_not_held(self) -> None:
+        captive = CharacterSheetFactory()
+        assert rescue_captive(captive) is False
