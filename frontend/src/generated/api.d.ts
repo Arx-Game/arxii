@@ -16770,6 +16770,11 @@ export interface components {
        *     Used by player-submission forms to attach a reporter_persona.
        */
       readonly primary_persona_id: number | null;
+      /**
+       * @description The face currently worn — the durable ``active_persona`` (#981) if set,
+       *     else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
+       */
+      readonly active_persona_id: number | null;
     };
     NPCRole: {
       readonly id: number;

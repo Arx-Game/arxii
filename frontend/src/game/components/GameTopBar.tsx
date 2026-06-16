@@ -4,6 +4,8 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
 
+import { PersonaSwitcher } from './PersonaSwitcher';
+
 interface GameTopBarProps {
   characters: MyRosterEntry[];
 }
@@ -53,7 +55,10 @@ export function GameTopBar({ characters }: GameTopBarProps) {
             <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
             <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
           </Avatar>
-          <span className="text-sm font-medium">{active}</span>
+          <PersonaSwitcher
+            characterSheetId={activeCharacter.character_id}
+            activePersonaId={activeCharacter.active_persona_id}
+          />
         </div>
       ) : null}
 

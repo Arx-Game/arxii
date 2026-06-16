@@ -73,6 +73,7 @@ vi.mock('@/roster/queries', () => ({
         name: 'Aerande',
         character_id: 10,
         primary_persona_id: 99,
+        active_persona_id: 99,
         profile_picture_url: null,
       },
     ],

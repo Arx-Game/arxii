@@ -11,6 +11,8 @@ export interface MyRosterEntry {
   character_id: number;
   profile_picture_url: string | null;
   primary_persona_id: number | null;
+  /** The face currently worn (durable active_persona, else primary) — #981/#1043. */
+  active_persona_id: number | null;
 }
 
 export interface CharacterGallery {

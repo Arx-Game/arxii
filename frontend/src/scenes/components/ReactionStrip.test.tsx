@@ -18,6 +18,7 @@ vi.mock('@/roster/queries', () => ({
         character_id: 42,
         profile_picture_url: null,
         primary_persona_id: 7,
+        active_persona_id: 7,
       },
     ],
   })),
