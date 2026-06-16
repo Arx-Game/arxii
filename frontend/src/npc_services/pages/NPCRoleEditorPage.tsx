@@ -228,13 +228,19 @@ function OfferCard({
     (offer.eligibility_rule as PredicateNode) ?? EMPTY_RULE
   );
   const [weight, setWeight] = useState(details?.weight?.toString() ?? '');
+  const [reqOverride, setReqOverride] = useState<PredicateNode>(
+    (details?.requirements_override as PredicateNode) ?? EMPTY_RULE
+  );
+  const [roleCooldown, setRoleCooldown] = useState(details?.role_cooldown_duration ?? '');
+  const [drawPriority, setDrawPriority] = useState(details?.draw_priority?.toString() ?? '');
 
   // Only validate/coerce once the predicate-leaf catalog has loaded — otherwise
   // every leaf reads as "unknown" and a valid persisted rule becomes un-saveable.
   const ruleErrors = leavesQuery.isSuccess ? validatePredicate(rule, leaves) : [];
+  const reqErrors = leavesQuery.isSuccess ? validatePredicate(reqOverride, leaves) : [];
 
   const save = () => {
-    if (ruleErrors.length > 0) return;
+    if (ruleErrors.length > 0 || reqErrors.length > 0) return;
     patchOffer.mutate({
       id: offer.id,
       body: {
@@ -246,8 +252,18 @@ function OfferCard({
       },
     });
     if (offer.kind === 'mission' && details) {
-      // null weight intentionally falls back to MissionTemplate.base_weight.
-      patchDetails.mutate({ id: details.id, body: { weight: numOrNull(weight) } });
+      // Null weight / cooldown intentionally fall back to the MissionTemplate.
+      patchDetails.mutate({
+        id: details.id,
+        body: {
+          weight: numOrNull(weight),
+          requirements_override: leavesQuery.isSuccess
+            ? coercePredicate(reqOverride, leaves)
+            : reqOverride,
+          role_cooldown_duration: roleCooldown.trim() || null,
+          draw_priority: numOrNull(drawPriority) ?? 0,
+        },
+      });
     }
   };
 
@@ -293,9 +309,40 @@ function OfferCard({
 
       {offer.kind === 'mission' &&
         (details ? (
-          <Field label="Weight">
-            <Input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} />
-          </Field>
+          <div className="space-y-3 rounded-md border border-dashed p-3">
+            <p className="text-xs font-medium text-muted-foreground">Mission details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Weight (POOL draw)">
+                <Input
+                  type="number"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="blank → template default"
+                />
+              </Field>
+              <Field label="Draw priority">
+                <Input
+                  type="number"
+                  value={drawPriority}
+                  onChange={(e) => setDrawPriority(e.target.value)}
+                  placeholder="0 = general pool"
+                />
+              </Field>
+            </div>
+            <Field label="Role cooldown (e.g. 7 00:00:00)">
+              <Input
+                value={roleCooldown}
+                onChange={(e) => setRoleCooldown(e.target.value)}
+                placeholder="blank → template cooldown"
+              />
+            </Field>
+            <PredicateBuilder
+              label="Requirements override"
+              value={reqOverride}
+              onChange={setReqOverride}
+            />
+            {reqErrors.length > 0 && <p className="text-sm text-destructive">{reqErrors[0]}</p>}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             This mission offer has no MissionOfferDetails row yet — pick a template via the
@@ -314,7 +361,9 @@ function OfferCard({
       <Button
         size="sm"
         onClick={save}
-        disabled={ruleErrors.length > 0 || patchOffer.isPending || !label.trim()}
+        disabled={
+          ruleErrors.length > 0 || reqErrors.length > 0 || patchOffer.isPending || !label.trim()
+        }
       >
         {patchOffer.isPending ? 'Saving…' : 'Save offer'}
       </Button>
