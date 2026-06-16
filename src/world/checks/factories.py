@@ -206,9 +206,9 @@ def create_social_check_types() -> dict[str, CheckType]:
 
 
 def create_social_action_templates() -> list[ActionTemplate]:
-    """Create social ActionTemplates linked to social CheckTypes.
+    """Create social ActionTemplates linked to social CheckTypes and ConsequencePools.
 
-    Calls create_social_check_types() first to ensure CheckTypes exist.
+    Calls create_social_check_types() and create_social_consequence_pools() first.
     Uses get_or_create — safe to call multiple times.
 
     Returns:
@@ -217,6 +217,7 @@ def create_social_action_templates() -> list[ActionTemplate]:
     from actions.factories import ActionTemplateFactory
 
     check_types = create_social_check_types()
+    pools = create_social_consequence_pools()
 
     templates: list[ActionTemplate] = []
     for name, ct_name, target_type, icon in _SOCIAL_ACTION_TEMPLATES:
@@ -224,12 +225,17 @@ def create_social_action_templates() -> list[ActionTemplate]:
         template = ActionTemplateFactory(
             name=name,
             check_type=check_types[ct_name],
-            consequence_pool=None,
+            consequence_pool=pools[name],
             target_type=target_type,
             icon=icon,
             category="social",
             grants_entry_flourish=grants_entry_flourish,
         )
+        # django_get_or_create won't update consequence_pool on existing rows;
+        # ensure it is wired even when the template already existed.
+        if template.consequence_pool_id != pools[name].pk:
+            template.consequence_pool = pools[name]
+            template.save(update_fields=["consequence_pool"])
         templates.append(template)
 
     return templates
