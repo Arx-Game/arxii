@@ -1479,6 +1479,30 @@ class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
     granted_amount = 10
 
 
+class DramaticMomentTypeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.DramaticMomentType"
+        django_get_or_create = ("label",)
+
+    label = factory.Sequence(lambda n: f"DramaticMomentType{n}")
+    description = factory.Faker("sentence")
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    resonance_amount = 15
+    magnitude = "small"
+    risk = "none"
+    reach = None
+
+
+class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.DramaticMomentTag"
+
+    moment_type = factory.SubFactory(DramaticMomentTypeFactory)
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    scene = None
+    tagged_by = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+
+
 def with_corruption_at_stage(sheet, resonance, stage: int):
     """Test helper: set up a corrupted character at a given stage.
 
