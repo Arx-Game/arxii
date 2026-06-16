@@ -545,8 +545,10 @@ def create_dramatic_moment_tag(
 
     Raises:
         EndorsementValidationError: If the character hasn't claimed the resonance.
+        DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.exceptions import DramaticMomentCapExceeded  # noqa: PLC0415
     from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
@@ -555,6 +557,14 @@ def create_dramatic_moment_tag(
     ).exists():
         msg = "Character has not claimed this resonance"
         raise EndorsementValidationError(msg)
+
+    existing = DramaticMomentTag.objects.filter(
+        moment_type=moment_type,
+        character_sheet=character_sheet,
+        scene=scene,
+    ).count()
+    if existing >= moment_type.per_scene_cap:
+        raise DramaticMomentCapExceeded(DramaticMomentCapExceeded.user_message)
 
     tag = DramaticMomentTag.objects.create(
         moment_type=moment_type,
@@ -583,7 +593,12 @@ def create_dramatic_moment_tag(
             magnitude=moment_type.magnitude,
             risk=moment_type.risk,
             reach=moment_type.reach or None,
-            origin_area=None,
+            archetypes=list(moment_type.archetypes.all()),
+            origin_area=(
+                scene.location.area
+                if scene and hasattr(scene, "location") and scene.location
+                else None
+            ),
             title=moment_type.label,
         )
 

@@ -337,6 +337,18 @@ class AudereMajoraPathError(AudereMajoraOfferError):
 
 
 # =============================================================================
+# Dramatic moment exceptions (#544)
+# =============================================================================
+
+
+class DramaticMomentCapExceeded(Exception):
+    """Raised when a dramatic moment tag would exceed the per_scene_cap for the type."""
+
+    user_message = "This dramatic moment has already been awarded its maximum times this scene."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({user_message})
+
+
+# =============================================================================
 # Technique Builder exceptions (#537)
 # =============================================================================
 

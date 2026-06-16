@@ -5,7 +5,7 @@ from django.test import TestCase
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
-from world.magic.exceptions import EndorsementValidationError
+from world.magic.exceptions import DramaticMomentCapExceeded, EndorsementValidationError
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTagFactory,
@@ -15,6 +15,8 @@ from world.magic.factories import (
 from world.magic.models import CharacterResonance, ResonanceGrant
 from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.magic.services.gain import create_dramatic_moment_tag
+from world.scenes.factories import SceneFactory
+from world.societies.models import PhilosophicalArchetype
 
 
 class DramaticMomentTypeModelTest(TestCase):
@@ -113,3 +115,105 @@ class CreateDramaticMomentTagServiceTest(TestCase):
                 tagged_by=self.tagger,
                 scene=None,
             )
+
+
+class DramaticMomentCapTest(TestCase):
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=0,
+            lifetime_earned=0,
+        )
+        self.moment_type = DramaticMomentTypeFactory(
+            resonance=self.resonance,
+            resonance_amount=5,
+            per_scene_cap=1,
+        )
+        self.tagger = AccountFactory()
+        self.scene = SceneFactory()
+
+    def test_cap_blocks_when_limit_reached(self):
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=self.scene,
+        )
+        with self.assertRaises(DramaticMomentCapExceeded):
+            create_dramatic_moment_tag(
+                character_sheet=self.sheet,
+                moment_type=self.moment_type,
+                tagged_by=self.tagger,
+                scene=self.scene,
+            )
+
+    def test_cap_independent_per_sheet(self):
+        other_sheet = CharacterSheetFactory()
+        CharacterResonanceFactory(
+            character_sheet=other_sheet,
+            resonance=self.resonance,
+            balance=0,
+            lifetime_earned=0,
+        )
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=self.scene,
+        )
+        # Different sheet in same scene — cap is independent, should not raise
+        create_dramatic_moment_tag(
+            character_sheet=other_sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=self.scene,
+        )
+
+    def test_cap_independent_per_scene(self):
+        other_scene = SceneFactory()
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=self.scene,
+        )
+        # Same sheet, different scene — cap is independent, should not raise
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=other_scene,
+        )
+
+
+class DramaticMomentArchetypesTest(TestCase):
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=0,
+            lifetime_earned=0,
+        )
+        self.moment_type = DramaticMomentTypeFactory(
+            resonance=self.resonance,
+            resonance_amount=10,
+        )
+        self.tagger = AccountFactory()
+
+    def test_archetypes_passed_to_renown_award(self):
+        archetype = PhilosophicalArchetype.objects.create(name="Heroic-Test")
+        self.moment_type.archetypes.add(archetype)
+        with patch("world.societies.renown.fire_renown_award") as mock_award:
+            create_dramatic_moment_tag(
+                character_sheet=self.sheet,
+                moment_type=self.moment_type,
+                tagged_by=self.tagger,
+                scene=None,
+            )
+            call_kwargs = mock_award.call_args[1]
+            self.assertIn(archetype, call_kwargs["archetypes"])
