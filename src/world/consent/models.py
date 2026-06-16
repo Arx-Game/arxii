@@ -143,3 +143,66 @@ class VisibilityMixin(models.Model):
             return self.visible_to_groups.filter(members__tenure=viewer).exists()
 
         return False
+
+
+class SocialConsentPreference(SharedMemoryModel):
+    """Per-tenure opt-out/whitelist for social action targeting (#544).
+
+    One row per RosterTenure (unique). Default: all social actions allowed.
+    If require_whitelist=True, only tenures in SocialConsentWhitelist may
+    target this character with social actions.
+    """
+
+    tenure = models.OneToOneField(
+        RosterTenure,
+        on_delete=models.CASCADE,
+        related_name="social_consent_preference",
+        help_text="One preference record per tenure.",
+    )
+    allow_social_actions = models.BooleanField(
+        default=True,
+        help_text="If False, this character never appears as a valid social action target.",
+    )
+    require_whitelist = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, only tenures in SocialConsentWhitelist may target this character. "
+            "Only meaningful when allow_social_actions=True."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Social Consent Preference"
+        verbose_name_plural = "Social Consent Preferences"
+
+    def __str__(self) -> str:
+        return f"SocialConsentPreference({self.tenure_id})"
+
+
+class SocialConsentWhitelist(SharedMemoryModel):
+    """Explicit whitelist entry: allowed_tenure may target owner_tenure socially (#544).
+
+    Only consulted when owner_tenure.social_consent_preference.require_whitelist=True.
+    """
+
+    owner_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.CASCADE,
+        related_name="social_consent_whitelist_owned",
+        help_text="Tenure that owns the preference (receives social actions).",
+    )
+    allowed_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.CASCADE,
+        related_name="social_consent_whitelist_allowed",
+        help_text="Tenure permitted to target owner_tenure with social actions.",
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["owner_tenure", "allowed_tenure"]
+        verbose_name = "Social Consent Whitelist Entry"
+        verbose_name_plural = "Social Consent Whitelist Entries"
+
+    def __str__(self) -> str:
+        return f"SocialConsentWhitelist({self.owner_tenure_id} ← {self.allowed_tenure_id})"
