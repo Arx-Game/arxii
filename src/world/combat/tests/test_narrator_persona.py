@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from world.combat.narrator import NARRATOR_PERSONA_NAME, get_or_create_narrator_persona
 from world.scenes.models import Persona
+from world.scenes.narrator import NARRATOR_PERSONA_NAME, get_or_create_narrator_persona
 
 
 class NarratorPersonaTest(TestCase):
