@@ -133,6 +133,40 @@ export function RichTextInput({
     [autocompleteState, value, onChange]
   );
 
+  const handleLinkInsert = React.useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentValue = textarea.value;
+    const selected = currentValue.slice(start, end);
+
+    let insert: string;
+    let cursorStart: number;
+    let cursorEnd: number;
+
+    if (selected.length > 0) {
+      // Wrap selection as label; select the URL placeholder so user can type it
+      insert = `[${selected}](https://)`;
+      cursorStart = start + 1 + selected.length + 2; // position of 'h' in 'https://'
+      cursorEnd = cursorStart + 'https://'.length;
+    } else {
+      // No selection: insert template with cursor inside [] so user types label first
+      insert = '[](https://)';
+      cursorStart = start + 1;
+      cursorEnd = start + 1;
+    }
+
+    const newValue = currentValue.slice(0, start) + insert + currentValue.slice(end);
+    onChange(newValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = cursorStart;
+      textarea.selectionEnd = cursorEnd;
+    });
+  }, [onChange]);
+
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Handle autocomplete navigation first
@@ -197,6 +231,11 @@ export function RichTextInput({
           handleWrap('~~', '~~');
           return;
         }
+        if (e.key === 'k') {
+          e.preventDefault();
+          handleLinkInsert();
+          return;
+        }
       }
 
       // Enter to submit, Shift+Enter for newline
@@ -209,7 +248,15 @@ export function RichTextInput({
       // Pass through to parent handler
       onKeyDown?.(e);
     },
-    [autocompleteState, filteredItems, handleAutocompleteSelect, handleWrap, onSubmit, onKeyDown]
+    [
+      autocompleteState,
+      filteredItems,
+      handleAutocompleteSelect,
+      handleWrap,
+      handleLinkInsert,
+      onSubmit,
+      onKeyDown,
+    ]
   );
 
   const handleChange = React.useCallback(
@@ -280,6 +327,16 @@ export function RichTextInput({
           onClick={() => handleWrap('~~', '~~')}
         >
           S
+        </button>
+        <button
+          type="button"
+          title="Link (Ctrl+K)"
+          aria-label="Link"
+          className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-accent hover:text-accent-foreground"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={handleLinkInsert}
+        >
+          🔗
         </button>
         <div className="mx-1 h-4 w-px bg-border" />
         <ColorPicker onSelectColor={handleColorSelect} />
