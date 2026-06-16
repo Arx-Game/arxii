@@ -355,66 +355,6 @@ class CharacterCodexKnowledge(SharedMemoryModel):
         return self.status == CodexKnowledgeStatus.KNOWN
 
 
-class CodexClue(NaturalKeyMixin, SharedMemoryModel):
-    """A clue that hints at the existence of a Codex entry and grants research progress."""
-
-    entry = models.ForeignKey(
-        CodexEntry,
-        on_delete=models.CASCADE,
-        related_name="clues",
-        help_text="The entry this clue hints at.",
-    )
-    name = models.CharField(
-        max_length=200,
-        help_text="Name of the clue (e.g., 'Torn Journal Page').",
-    )
-    description = models.TextField(
-        help_text="What the player sees when they find this clue.",
-    )
-    research_value = models.PositiveIntegerField(
-        default=1,
-        help_text="Research progress granted when this clue is found.",
-    )
-
-    objects = NaturalKeyManager()
-
-    class NaturalKeyConfig:
-        fields = ["entry", "name"]
-        dependencies = ["codex.CodexEntry"]
-
-    class Meta:
-        unique_together = ["entry", "name"]
-        verbose_name = "Codex Clue"
-        verbose_name_plural = "Codex Clues"
-
-    def __str__(self) -> str:
-        return f"{self.name} -> {self.entry.name}"
-
-
-class CharacterClueKnowledge(SharedMemoryModel):
-    """Tracks which clues a character has found (prevents duplicate research value)."""
-
-    roster_entry = models.ForeignKey(
-        RosterEntry,
-        on_delete=models.CASCADE,
-        related_name="clue_knowledge",
-    )
-    clue = models.ForeignKey(
-        CodexClue,
-        on_delete=models.CASCADE,
-        related_name="character_knowledge",
-    )
-    found_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ["roster_entry", "clue"]
-        verbose_name = "Character Clue Knowledge"
-        verbose_name_plural = "Character Clue Knowledge"
-
-    def __str__(self) -> str:
-        return f"{self.roster_entry}: found {self.clue.name}"
-
-
 class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
     """
     A teaching offer from one player's tenure to others.

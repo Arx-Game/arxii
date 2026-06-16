@@ -1,0 +1,25 @@
+from django.contrib import admin
+
+from world.clues.models import CharacterClue, Clue
+
+
+@admin.register(Clue)
+class ClueAdmin(admin.ModelAdmin):
+    """Authoring surface for clues — add/remove/rename freely (data, not code)."""
+
+    list_display = ["name", "target_kind", "get_active_target_name", "resolution_mode"]
+    list_filter = ["target_kind", "resolution_mode"]
+    search_fields = ["name", "description"]
+
+    @admin.display(description="Target")
+    def get_active_target_name(self, obj: Clue) -> str:
+        return obj.get_active_target_name()
+
+
+@admin.register(CharacterClue)
+class CharacterClueAdmin(admin.ModelAdmin):
+    """Read-only debugging view of who holds which clues."""
+
+    list_display = ["roster_entry", "clue", "found_at"]
+    list_filter = ["clue__target_kind"]
+    readonly_fields = ["found_at"]

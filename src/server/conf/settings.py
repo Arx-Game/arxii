@@ -76,6 +76,7 @@ INSTALLED_APPS += [
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
     "world.codex.apps.CodexConfig",
+    "world.clues.apps.CluesConfig",
     "world.conditions.apps.ConditionsConfig",
     "world.mechanics.apps.MechanicsConfig",
     "world.checks.apps.ChecksConfig",
