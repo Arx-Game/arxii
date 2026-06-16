@@ -99,6 +99,10 @@ export function CombatTurnPanel({
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
 
+  // Open Encounter join/leave mutations — must be called unconditionally (rules of hooks).
+  const { mutate: joinEncounter, isPending: isJoining } = useJoinMutation(encounterId);
+  const { mutate: leaveEncounter, isPending: isLeaving } = useLeaveMutation(encounterId);
+
   function toggleSection(section: SectionName) {
     setCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -157,9 +161,6 @@ export function CombatTurnPanel({
   const isOpenEncounter = encounter.encounter_type === 'open_encounter';
   const isBetweenRounds = encounter.status === 'between_rounds';
 
-  const { mutate: joinEncounter, isPending: isJoining } = useJoinMutation(encounterId);
-  const { mutate: leaveEncounter, isPending: isLeaving } = useLeaveMutation(encounterId);
-
   // Audere active strip — the viewer's own participant row (matched by
   // character_sheet_id) carries the Audere condition in active_conditions while
   // the breakthrough is live. active_conditions entries are ConditionInstances
@@ -215,6 +216,7 @@ export function CombatTurnPanel({
       {/* Open Encounter join/leave — only between rounds */}
       {isOpenEncounter && isBetweenRounds && !isParticipant && (
         <button
+          type="button"
           data-testid="open-encounter-join-btn"
           onClick={() => joinEncounter(characterSheetId)}
           disabled={isJoining}
@@ -225,6 +227,7 @@ export function CombatTurnPanel({
       )}
       {isOpenEncounter && isBetweenRounds && isParticipant && (
         <button
+          type="button"
           data-testid="open-encounter-leave-btn"
           onClick={() => leaveEncounter()}
           disabled={isLeaving}
