@@ -105,6 +105,50 @@ class EntranceAction(_SocialTemplateAction):
     template_name = "Entrance"
     category = "social"
 
+    def execute(self, actor: ObjectDB, context: ActionContext, **kwargs) -> ActionResult:
+        from actions.models import ActionTemplate  # noqa: PLC0415
+        from actions.services import start_action_resolution  # noqa: PLC0415
+        from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+        template = ActionTemplate.objects.get(name=self.template_name)
+        resolution_ctx = ResolutionContext(action_context=context)
+        result = start_action_resolution(
+            character=actor,
+            template=template,
+            target_difficulty=0,
+            context=resolution_ctx,
+        )
+
+        if template.grants_entry_flourish:
+            resonance_id = kwargs.get("resonance_id")
+            if resonance_id is not None:
+                self._fire_entry_flourish(actor, resonance_id)
+
+        return result
+
+    @staticmethod
+    def _fire_entry_flourish(actor: ObjectDB, resonance_id: int) -> None:
+        """Fire the entry flourish resonance grant. Best-effort — exceptions are logged."""
+        try:
+            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+            from world.magic.models import Resonance  # noqa: PLC0415
+            from world.magic.services.gain import create_entry_flourish  # noqa: PLC0415
+
+            sheet = CharacterSheet.objects.filter(character=actor).first()
+            if sheet is None:
+                return
+            resonance = Resonance.objects.get(pk=resonance_id)
+            create_entry_flourish(sheet, resonance, scene=None)
+        except Exception:  # noqa: BLE001
+            import logging  # noqa: PLC0415
+
+            logging.getLogger(__name__).warning(
+                "Entry flourish failed for actor %s, resonance_id %s",
+                actor.pk,
+                resonance_id,
+                exc_info=True,
+            )
+
 
 # Module-level singletons — registered in actions/registry.py
 intimidate = IntimidateAction()

@@ -126,6 +126,9 @@ _SOCIAL_ACTION_TEMPLATES = [
     ("Entrance", "Presence", "area", "sparkles"),
 ]
 
+# Template name for the Entrance social action — grants entry flourish resonance.
+_ENTRANCE_TEMPLATE_NAME = "Entrance"
+
 
 def create_social_check_types() -> dict[str, CheckType]:
     """Create the Social CheckCategory, 6 CheckTypes, and placeholder trait weights.
@@ -179,6 +182,7 @@ def create_social_action_templates() -> list[ActionTemplate]:
 
     templates: list[ActionTemplate] = []
     for name, ct_name, target_type, icon in _SOCIAL_ACTION_TEMPLATES:
+        grants_entry_flourish = name == _ENTRANCE_TEMPLATE_NAME
         template = ActionTemplateFactory(
             name=name,
             check_type=check_types[ct_name],
@@ -186,6 +190,7 @@ def create_social_action_templates() -> list[ActionTemplate]:
             target_type=target_type,
             icon=icon,
             category="social",
+            grants_entry_flourish=grants_entry_flourish,
         )
         templates.append(template)
 
