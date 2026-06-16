@@ -158,4 +158,40 @@ describe('parseFormattedContent', () => {
     });
     expect(result[1]).toEqual({ type: 'text', content: ', and more' });
   });
+
+  it('parses markdown link [text](url) as link with display text as content', () => {
+    const result = parseFormattedContent('[click here](https://example.com)');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      type: 'link',
+      content: 'click here',
+      url: 'https://example.com',
+    });
+  });
+
+  it('parses markdown link surrounded by text', () => {
+    const result = parseFormattedContent('visit [my site](https://example.com) today');
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({ type: 'text', content: 'visit ' });
+    expect(result[1]).toEqual({ type: 'link', content: 'my site', url: 'https://example.com' });
+    expect(result[2]).toEqual({ type: 'text', content: ' today' });
+  });
+
+  it('rejects non-http markdown link — renders as plain text', () => {
+    const result = parseFormattedContent('[evil](javascript:void(0))');
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('text');
+  });
+
+  it('bare URL and markdown link coexist', () => {
+    const result = parseFormattedContent('https://bare.com and [label](https://md.com)');
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({
+      type: 'link',
+      content: 'https://bare.com',
+      url: 'https://bare.com',
+    });
+    expect(result[1]).toEqual({ type: 'text', content: ' and ' });
+    expect(result[2]).toEqual({ type: 'link', content: 'label', url: 'https://md.com' });
+  });
 });

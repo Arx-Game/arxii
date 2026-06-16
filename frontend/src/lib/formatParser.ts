@@ -55,13 +55,16 @@ interface Token {
     | 'italicMarker'
     | 'strikeMarker'
     | 'url'
+    | 'markdownLink'
     | 'text';
   start: number;
   end: number;
   /** For colorStart: the resolved hex value. */
   hex?: string;
-  /** For url: the matched URL string. */
+  /** For url / markdownLink: the matched URL string. */
   url?: string;
+  /** For markdownLink: the display text between [ and ]. */
+  displayText?: string;
 }
 
 // Pattern for color codes: |r, |[123], etc. and |n for reset
@@ -70,6 +73,7 @@ const COLOR_RESET_RE = /\|n/g;
 const BOLD_RE = /\*\*/g;
 const STRIKE_RE = /~~/g;
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+const MARKDOWN_LINK_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
 
 /** Trailing punctuation that is unlikely to be part of a URL. */
 const TRAILING_PUNCT = new Set(['.', ',', ')', '!', '?', ':', ';']);
@@ -128,6 +132,18 @@ function collectTokens(text: string): Token[] {
     if (url.length > 0) {
       tokens.push({ kind: 'url', start: m.index, end, url });
     }
+  }
+
+  // Markdown links [display](https://url)
+  MARKDOWN_LINK_RE.lastIndex = 0;
+  while ((m = MARKDOWN_LINK_RE.exec(text)) !== null) {
+    tokens.push({
+      kind: 'markdownLink',
+      start: m.index,
+      end: m.index + m[0].length,
+      url: m[2],
+      displayText: m[1],
+    });
   }
 
   // Sort by position
@@ -354,27 +370,39 @@ export function parseFormattedContent(text: string): Segment[] {
     }
   }
 
-  // Add URL ranges
+  // Add URL and markdown-link ranges
   for (let i = 0; i < tokens.length; i++) {
     if (consumed.has(i)) continue;
-    if (tokens[i].kind === 'url') {
-      // Check URL isn't inside an already-matched range
+    const t = tokens[i];
+    if (t.kind === 'url' || t.kind === 'markdownLink') {
       let inside = false;
       for (const r of ranges) {
-        if (tokens[i].start >= r.fullStart && tokens[i].end <= r.fullEnd) {
+        if (t.start >= r.fullStart && t.end <= r.fullEnd) {
           inside = true;
           break;
         }
       }
       if (!inside) {
-        ranges.push({
-          type: 'link',
-          contentStart: tokens[i].start,
-          contentEnd: tokens[i].end,
-          fullStart: tokens[i].start,
-          fullEnd: tokens[i].end,
-          url: tokens[i].url,
-        });
+        if (t.kind === 'markdownLink') {
+          const displayLen = t.displayText?.length ?? 0;
+          ranges.push({
+            type: 'link',
+            contentStart: t.start + 1,
+            contentEnd: t.start + 1 + displayLen,
+            fullStart: t.start,
+            fullEnd: t.end,
+            url: t.url,
+          });
+        } else {
+          ranges.push({
+            type: 'link',
+            contentStart: t.start,
+            contentEnd: t.end,
+            fullStart: t.start,
+            fullEnd: t.end,
+            url: t.url,
+          });
+        }
         consumed.add(i);
       }
     }
