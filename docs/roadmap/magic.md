@@ -1318,7 +1318,31 @@ Cross-references:
     `frontend/src/combat/components/panels/YourTurn.tsx`.
   - E2E smoke test for `/threads`.
   - Teacher display name in `TeachingOfferCard` (currently shows "Teacher #N").
-- Aura farming mechanics — how perception at scenes feeds into resonance strength
+- **Aura farming v1 — Social action conditions + entry flourish (#544 / #545) — SHIPPED:**
+  What was built:
+  - `GainSource.ENTRY_FLOURISH` and `GainSource.DRAMATIC_MOMENT` discriminator values added to the
+    typed-FK grant ledger; `ResonanceGrant` now supports both sources.
+  - `EntryFlourishRecord` — actor-side ledger row created atomically by `create_entry_flourish()`
+    when a character executes the Entrance social action successfully in a scene with
+    `ActionTemplate.grants_entry_flourish=True`.
+  - `DramaticMomentType` (staff-authored lookup) + `DramaticMomentTag` (per-event tag);
+    `create_dramatic_moment_tag()` fires a resonance grant and a renown award for the
+    tagged character's primary persona.
+  - `ResonanceGainConfig.entry_flourish_grant` tuning knob (default 4).
+  - 6 social action singletons (`EntranceAction`, `IntimidateAction`, `PersuadeAction`,
+    `DeceiveAction`, `FlirtAction`, `PerformAction`) registered in `actions/registry.py` with
+    `TargetKind.PERSONA` and scene-scoped consent filtering.
+  - `SocialConsentPreference` (allow/require-whitelist) + `SocialConsentWhitelist` (per-pair
+    allowlist) in `world/consent/`; `_social_consent_exclusions()` threads consent exclusions
+    into `TargetFilters.excluded_persona_ids` for all social actions.
+  - `ActionTemplate.grants_entry_flourish` BooleanField; Entrance template seeded with
+    `True`; `create_social_consequence_pools()` seeds one `ConsequencePool` per social action
+    (6 pools × 3 consequence entries), wired into `create_social_action_templates()`.
+
+  Deferred (follow-ups):
+  - Staff UI for `DramaticMomentType` authoring and tagging workflow.
+  - Frontend action panel wiring for the 6 new social action singletons.
+  - Scene-perception leaderboard / aura ranking surface.
 - Fashion-to-resonance integration (requires Items & Crafting systems —
   designed in `docs/architecture/items-fashion-mantles.md`,
   implementation phased across 4 PRs)
