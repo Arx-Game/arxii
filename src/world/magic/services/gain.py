@@ -65,6 +65,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
     from world.magic.models.endorsement import EntryFlourishRecord
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -525,6 +526,68 @@ def create_entry_flourish(
         entry_flourish=record,
     )
     return record
+
+
+@transaction.atomic
+def create_dramatic_moment_tag(
+    *,
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    tagged_by: AccountDB,
+    scene: Scene | None,
+) -> DramaticMomentTag:
+    """Tag a character's dramatic scene moment and fire resonance + renown.
+
+    Both the resonance grant and the renown award fire in one atomic transaction.
+    If the character has no primary persona, the renown step is skipped — the
+    resonance grant still fires. Fire_renown_award's best-effort notification
+    runs outside the transaction by design (see fire_renown_award docstring).
+
+    Raises:
+        EndorsementValidationError: If the character hasn't claimed the resonance.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    if not CharacterResonance.objects.filter(
+        character_sheet=character_sheet, resonance=moment_type.resonance
+    ).exists():
+        msg = "Character has not claimed this resonance"
+        raise EndorsementValidationError(msg)
+
+    tag = DramaticMomentTag.objects.create(
+        moment_type=moment_type,
+        character_sheet=character_sheet,
+        scene=scene,
+        tagged_by=tagged_by,
+    )
+    grant_resonance(
+        character_sheet,
+        moment_type.resonance,
+        moment_type.resonance_amount,
+        source=GainSource.DRAMATIC_MOMENT,
+        dramatic_moment=tag,
+    )
+
+    try:
+        persona = character_sheet.primary_persona
+    except Persona.DoesNotExist:
+        persona = None
+
+    if persona is not None:
+        from world.societies.renown import fire_renown_award  # noqa: PLC0415
+
+        fire_renown_award(
+            persona=persona,
+            magnitude=moment_type.magnitude,
+            risk=moment_type.risk,
+            reach=moment_type.reach or None,
+            origin_area=None,
+            title=moment_type.label,
+        )
+
+    return tag
 
 
 def residence_trickle_tick() -> ResonanceDailyTickSummary:
