@@ -50,6 +50,19 @@ class DramaticMomentType(SharedMemoryModel):
         blank=True,
         help_text="Override reach; if null, derived from magnitude default.",
     )
+    per_scene_cap = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Maximum number of times this moment type may be awarded to a given "
+            "character within a single scene."
+        ),
+    )
+    archetypes = models.ManyToManyField(
+        "societies.PhilosophicalArchetype",
+        blank=True,
+        related_name="dramatic_moment_types",
+        help_text="Philosophical archetypes forwarded to fire_renown_award for reputation shaping.",
+    )
 
     class Meta:
         ordering = ["label"]

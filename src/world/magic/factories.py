@@ -1491,6 +1491,7 @@ class DramaticMomentTypeFactory(factory.django.DjangoModelFactory):
     magnitude = "small"
     risk = "none"
     reach = None
+    per_scene_cap = 1
 
 
 class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
