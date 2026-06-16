@@ -95,6 +95,22 @@ class ResonanceGrant(SharedMemoryModel):
             "resolution paid this contributor's grant. Plan 1+."
         ),
     )
+    source_entry_flourish = models.ForeignKey(
+        "magic.EntryFlourishRecord",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="resonance_grants",
+        help_text="Set when source=ENTRY_FLOURISH.",
+    )
+    source_dramatic_moment = models.ForeignKey(
+        "magic.DramaticMomentTag",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="resonance_grants",
+        help_text="Set when source=DRAMATIC_MOMENT.",
+    )
 
     class Meta:
         indexes = [
@@ -120,6 +136,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -135,6 +153,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -150,6 +170,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -165,6 +187,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -180,6 +204,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
@@ -198,6 +224,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
@@ -212,6 +240,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
@@ -228,6 +258,8 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
@@ -243,8 +275,44 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
                     & Q(source_sanctum_details__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
                 )
                 | ~Q(source="PROJECT_CONTRIBUTION"),
+            ),
+            # ENTRY_FLOURISH (#545): exactly source_entry_flourish populated, others null
+            models.CheckConstraint(
+                name="res_grant_entry_flourish_shape",
+                check=(
+                    Q(source="ENTRY_FLOURISH")
+                    & Q(source_entry_flourish__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                )
+                | ~Q(source="ENTRY_FLOURISH"),
+            ),
+            # DRAMATIC_MOMENT (#545): exactly source_dramatic_moment populated, others null
+            models.CheckConstraint(
+                name="res_grant_dramatic_moment_shape",
+                check=(
+                    Q(source="DRAMATIC_MOMENT")
+                    & Q(source_dramatic_moment__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                )
+                | ~Q(source="DRAMATIC_MOMENT"),
             ),
         ]
 
