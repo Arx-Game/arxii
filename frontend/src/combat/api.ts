@@ -105,6 +105,69 @@ export async function postUpgradeCombo(
 }
 
 // ---------------------------------------------------------------------------
+// Join encounter (player self-join)
+// ---------------------------------------------------------------------------
+
+/**
+ * Player self-joins an Open Encounter.
+ * POST /api/combat/{encounterId}/join/
+ * Body: { character_sheet_id: number }
+ * 400 if already joined; 403 if not in encounter room.
+ */
+export async function postJoin(
+  encounterId: number,
+  characterSheetId: number
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/join/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_sheet_id: characterSheetId }),
+  });
+  if (!res.ok) {
+    let detail = 'Failed to join encounter';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
+// Leave encounter (player voluntary exit)
+// ---------------------------------------------------------------------------
+
+/**
+ * Player voluntarily leaves an Open Encounter between rounds.
+ * POST /api/combat/{encounterId}/leave/
+ * No body required. 400 if not between_rounds; 403 non-participant.
+ */
+export async function postLeave(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/leave/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    let detail = 'Failed to leave encounter';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
 // Flee declaration
 // ---------------------------------------------------------------------------
 
