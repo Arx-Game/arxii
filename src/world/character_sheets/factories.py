@@ -12,10 +12,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
-    Characteristic,
-    CharacteristicValue,
     CharacterSheet,
-    CharacterSheetValue,
     Gender,
     Pronouns,
 )
@@ -140,42 +137,6 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     permanent_description = ""
 
 
-class CharacteristicFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Characteristic instances."""
-
-    class Meta:
-        model = Characteristic
-
-    name = factory.Sequence(lambda n: f"test_characteristic_{n}")
-    display_name = factory.LazyAttribute(lambda obj: obj.name.replace("_", " ").title())
-    description = factory.Faker("sentence")
-    is_active = True
-
-
-class CharacteristicValueFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CharacteristicValue instances."""
-
-    class Meta:
-        model = CharacteristicValue
-
-    characteristic = factory.SubFactory(CharacteristicFactory)
-    value = factory.Sequence(lambda n: f"value_{n}")
-    display_value = factory.LazyAttribute(
-        lambda obj: obj.value.replace("_", " ").title(),
-    )
-    is_active = True
-
-
-class CharacterSheetValueFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CharacterSheetValue instances."""
-
-    class Meta:
-        model = CharacterSheetValue
-
-    character_sheet = factory.SubFactory(CharacterSheetFactory)
-    characteristic_value = factory.SubFactory(CharacteristicValueFactory)
-
-
 # Specialized factories for common test scenarios
 
 
@@ -210,7 +171,13 @@ class CompleteCharacterFactory:
 
 
 class CharacterWithCharacteristicsFactory:
-    """Factory for creating a character with physical characteristics."""
+    """Create a character with appearance traits (FormTrait-backed).
+
+    Keeps the legacy ``characteristics={name: value}`` interface so callers read
+    unchanged, but builds the character's TRUE-form ``FormTrait`` values — the single
+    appearance source. ``height`` is a no-op here (it lives on the height system, not
+    a FormTrait).
+    """
 
     @classmethod
     def create(
@@ -218,180 +185,33 @@ class CharacterWithCharacteristicsFactory:
         character_name: str = "TestChar",
         characteristics: dict[str, str] | None = None,
     ) -> dict:
-        """
-        Create a character with specified characteristics.
-
-        Args:
-            character_name: Name for the character
-            characteristics: Dict of characteristic_name: value pairs
-                          Default: {"eye_color": "blue", "hair_color": "brown"}
-        """
         if characteristics is None:
             characteristics = {
                 "eye_color": "blue",
                 "hair_color": "brown",
-                "height": "average",
                 "skin_tone": "fair",
             }
 
-        # Create complete character
+        from world.forms.factories import CharacterFormValueFactory
+        from world.forms.models import CharacterForm, FormTrait, FormTraitOption, FormType
+
         data = CompleteCharacterFactory.create(character_name)
-        sheet = data["sheet"]
+        character = data["character"]
 
-        # Create characteristics and values
-        char_values = []
+        form, _ = CharacterForm.objects.get_or_create(character=character, form_type=FormType.TRUE)
         for char_name, value in characteristics.items():
-            # Create or get characteristic
-            characteristic, _ = Characteristic.objects.get_or_create(
+            # Height isn't a FormTrait (test shim); it lives on the height system.
+            if char_name == "height":  # noqa: STRING_LITERAL
+                continue
+            trait, _ = FormTrait.objects.get_or_create(
                 name=char_name,
-                defaults={
-                    "display_name": char_name.replace("_", " ").title(),
-                    "description": f"The character's {char_name.replace('_', ' ')}",
-                },
+                defaults={"display_name": char_name.replace("_", " ").title()},
             )
-
-            # Create or get characteristic value
-            char_value, _ = CharacteristicValue.objects.get_or_create(
-                characteristic=characteristic,
-                value=value,
-                defaults={"display_value": value.replace("_", " ").title()},
+            option, _ = FormTraitOption.objects.get_or_create(
+                trait=trait,
+                name=str(value).lower(),
+                defaults={"display_name": str(value).replace("_", " ").title()},
             )
+            CharacterFormValueFactory(form=form, trait=trait, option=option)
 
-            # Link to character sheet
-            sheet_value = CharacterSheetValueFactory(
-                character_sheet=sheet,
-                characteristic_value=char_value,
-            )
-            char_values.append(sheet_value)
-
-        data["characteristic_values"] = char_values
         return data
-
-
-class BasicCharacteristicsSetupFactory:
-    """Factory for creating the basic characteristics system used in migrations."""
-
-    @classmethod
-    def create(cls) -> dict:
-        """Create basic characteristics that match the migration data."""
-        characteristics = {}
-
-        # Eye colors
-        eye_color, _ = Characteristic.objects.get_or_create(
-            name="eye_color",
-            defaults={
-                "display_name": "Eye Color",
-                "description": "The color of the character's eyes",
-            },
-        )
-        eye_colors = ["blue", "green", "brown", "hazel", "gray", "amber", "violet"]
-        eye_values = []
-        for color in eye_colors:
-            value, _ = CharacteristicValue.objects.get_or_create(
-                characteristic=eye_color,
-                value=color,
-                defaults={"display_value": color.title()},
-            )
-            eye_values.append(value)
-
-        characteristics["eye_color"] = {
-            "characteristic": eye_color,
-            "values": eye_values,
-        }
-
-        # Hair colors
-        hair_color, _ = Characteristic.objects.get_or_create(
-            name="hair_color",
-            defaults={
-                "display_name": "Hair Color",
-                "description": "The color of the character's hair",
-            },
-        )
-        hair_colors = [
-            "black",
-            "brown",
-            "blonde",
-            "red",
-            "gray",
-            "white",
-            "auburn",
-            "silver",
-        ]
-        hair_values = []
-        for color in hair_colors:
-            value, _ = CharacteristicValue.objects.get_or_create(
-                characteristic=hair_color,
-                value=color,
-                defaults={"display_value": color.title()},
-            )
-            hair_values.append(value)
-
-        characteristics["hair_color"] = {
-            "characteristic": hair_color,
-            "values": hair_values,
-        }
-
-        # Heights
-        height, _ = Characteristic.objects.get_or_create(
-            name="height",
-            defaults={
-                "display_name": "Height",
-                "description": "The character's height category",
-            },
-        )
-        heights = ["very_short", "short", "average", "tall", "very_tall"]
-        height_displays = ["Very Short", "Short", "Average Height", "Tall", "Very Tall"]
-        height_values = []
-        for height_val, display in zip(heights, height_displays, strict=False):
-            value, _ = CharacteristicValue.objects.get_or_create(
-                characteristic=height,
-                value=height_val,
-                defaults={"display_value": display},
-            )
-            height_values.append(value)
-
-        characteristics["height"] = {"characteristic": height, "values": height_values}
-
-        # Skin tones
-        skin_tone, _ = Characteristic.objects.get_or_create(
-            name="skin_tone",
-            defaults={
-                "display_name": "Skin Tone",
-                "description": "The character's skin tone",
-            },
-        )
-        skin_tones = [
-            "very_pale",
-            "pale",
-            "fair",
-            "olive",
-            "tan",
-            "brown",
-            "dark_brown",
-            "very_dark",
-        ]
-        tone_displays = [
-            "Very Pale",
-            "Pale",
-            "Fair",
-            "Olive",
-            "Tan",
-            "Brown",
-            "Dark Brown",
-            "Very Dark",
-        ]
-        tone_values = []
-        for tone_val, display in zip(skin_tones, tone_displays, strict=False):
-            value, _ = CharacteristicValue.objects.get_or_create(
-                characteristic=skin_tone,
-                value=tone_val,
-                defaults={"display_value": display},
-            )
-            tone_values.append(value)
-
-        characteristics["skin_tone"] = {
-            "characteristic": skin_tone,
-            "values": tone_values,
-        }
-
-        return characteristics

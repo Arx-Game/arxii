@@ -37,7 +37,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         super().__init__(character)
         self._sheet_cache = None
         self._display_data_cache = None
-        self._characteristics_cache = None
+        self._presented_appearance_cache = None
         self._classes_cache = None
         self._personas_cache = None
 
@@ -51,21 +51,19 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             )
         return self._sheet_cache
 
-    def _get_characteristics(self):
-        """Get character characteristics data, with caching."""
-        if self._characteristics_cache is None:
-            from world.character_sheets.models import CharacterSheetValue
+    def _get_presented_appearance(self):
+        """Map of FormTrait name -> presented display (descriptor or normalized), cached.
 
-            # Build a dict of characteristic name -> display_value for easy access
-            self._characteristics_cache = {}
-            sheet = self._get_sheet()
-            for csv in CharacterSheetValue.objects.filter(
-                character_sheet=sheet,
-            ).select_related("characteristic_value__characteristic"):
-                char_name = csv.characteristic_value.characteristic.name.lower()
-                display_value = csv.characteristic_value.display_value
-                self._characteristics_cache[char_name] = display_value
-        return self._characteristics_cache
+        The single source for appearance, shared with the web serializer via
+        ``forms.services.get_presented_appearance``.
+        """
+        if self._presented_appearance_cache is None:
+            from world.forms.services import get_presented_appearance
+
+            self._presented_appearance_cache = {
+                trait.trait_name: trait.display for trait in get_presented_appearance(self.obj)
+            }
+        return self._presented_appearance_cache
 
     def _get_classes(self):
         """Get character class levels, with caching."""
@@ -213,46 +211,6 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         """Character's available personas."""
         return self._get_personas()
 
-    def get_characteristic(self, name):
-        """Get a characteristic value by name."""
-        characteristics = self._get_characteristics()
-        return characteristics.get(name.lower(), None)
-
-    def set_characteristic(self, name, value):
-        """Set a characteristic value by name."""
-        from world.character_sheets.models import (
-            Characteristic,
-            CharacteristicValue,
-            CharacterSheetValue,
-        )
-
-        sheet = self._get_sheet()
-
-        # Only allow setting existing characteristics
-        characteristic = Characteristic.objects.get(name=name.lower())
-
-        # Get or create the characteristic value
-        characteristic_value, _created = CharacteristicValue.objects.get_or_create(
-            characteristic=characteristic,
-            value=str(value).lower(),
-            defaults={"display_value": str(value).replace("_", " ").title()},
-        )
-
-        # Remove any existing value for this characteristic
-        CharacterSheetValue.objects.filter(
-            character_sheet=sheet,
-            characteristic_value__characteristic=characteristic,
-        ).delete()
-
-        # Create the new character sheet value
-        CharacterSheetValue.objects.create(
-            character_sheet=sheet,
-            characteristic_value=characteristic_value,
-        )
-
-        # Clear the characteristics cache
-        self._characteristics_cache = None
-
     def set_age(self, age):
         """Set the character's age."""
         sheet = self._get_sheet()
@@ -265,7 +223,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         """Clear all cached data, forcing fresh lookups."""
         self._sheet_cache = None
         self._display_data_cache = None
-        self._characteristics_cache = None
+        self._presented_appearance_cache = None
         self._classes_cache = None
         self._personas_cache = None
 
@@ -344,23 +302,26 @@ class CharacterItemDataHandler(BaseItemDataHandler):
     # Explicit characteristic properties that the sheet command expects
     @property
     def eye_color(self) -> str:
-        """Character's eye color characteristic."""
-        return self.get_characteristic("eye_color") or ""
+        """Character's eye color, presented (descriptor or normalized)."""
+        return self._get_presented_appearance().get("eye_color", "")
 
     @property
     def hair_color(self) -> str:
-        """Character's hair color characteristic."""
-        return self.get_characteristic("hair_color") or ""
+        """Character's hair color, presented (descriptor or normalized)."""
+        return self._get_presented_appearance().get("hair_color", "")
 
     @property
     def height(self) -> str:
-        """Character's height characteristic."""
-        return self.get_characteristic("height") or ""
+        """Character's apparent height band display (e.g. 'Tall')."""
+        from world.forms.services import get_apparent_height
+
+        _inches, band = get_apparent_height(self.obj)
+        return band.display_name if band else ""
 
     @property
     def skin_tone(self) -> str:
-        """Character's skin tone characteristic."""
-        return self.get_characteristic("skin_tone") or ""
+        """Character's skin tone, presented (descriptor or normalized)."""
+        return self._get_presented_appearance().get("skin_tone", "")
 
     # Additional sheet properties that may be accessed directly
     @property

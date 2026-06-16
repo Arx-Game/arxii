@@ -10,11 +10,7 @@ import pytest
 
 from world.character_sheets.factories import (
     CharacterFactory,
-    CharacteristicFactory,
-    CharacteristicValueFactory,
     CharacterSheetFactory,
-    CharacterSheetValueFactory,
-    CharacterWithCharacteristicsFactory,
     GenderFactory,
     ObjectDisplayDataFactory,
 )
@@ -126,84 +122,6 @@ class ObjectDisplayDataModelTests(TestCase):
         self.display_data.longname = ""
         result = self.display_data.get_display_name()
         assert result == self.character.db_key
-
-
-class CharacteristicModelTests(TestCase):
-    """Test Characteristic and related models."""
-
-    def test_characteristic_value_display_value_default(self):
-        """Test that display_value defaults to value when not provided."""
-        characteristic = CharacteristicFactory(name="test_eye_color")
-        char_value = CharacteristicValueFactory(
-            characteristic=characteristic,
-            value="dark_blue",
-        )
-
-        # display_value should be set automatically
-        assert char_value.display_value == "Dark Blue"
-
-    def test_characteristic_value_str_representation(self):
-        """Test string representation."""
-        characteristic = CharacteristicFactory(
-            name="test_eye_color_2",
-            display_name="Test Eye Color",
-        )
-        char_value = CharacteristicValueFactory(
-            characteristic=characteristic,
-            value="blue",
-            display_value="Bright Blue",
-        )
-
-        expected = "Test Eye Color: Bright Blue"
-        assert str(char_value) == expected
-
-    def test_characteristic_str_representation(self):
-        """Test characteristic string representation."""
-        characteristic = CharacteristicFactory(display_name="Eye Color")
-        assert str(characteristic) == "Eye Color"
-
-
-class CharacterSheetValueModelTests(TestCase):
-    """Test CharacterSheetValue linking model."""
-
-    def test_character_sheet_value_str_representation(self):
-        """Test string representation."""
-        data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"eye_color": "blue"},
-        )
-        sheet_value = data["characteristic_values"][0]
-
-        expected = f"{data['character'].db_key}: Eye Color: Blue"
-        assert str(sheet_value) == expected
-
-    def test_unique_character_characteristic_constraint(self):
-        """Test that a character can only have one value per characteristic."""
-        characteristic = CharacteristicFactory(name="test_unique_constraint")
-        blue_value = CharacteristicValueFactory(
-            characteristic=characteristic,
-            value="blue",
-        )
-        green_value = CharacteristicValueFactory(
-            characteristic=characteristic,
-            value="green",
-        )
-
-        sheet = CharacterSheetFactory()
-
-        # First assignment should work
-        CharacterSheetValueFactory(
-            character_sheet=sheet,
-            characteristic_value=blue_value,
-        )
-
-        # Second assignment to same characteristic should fail
-        from django.core.exceptions import ValidationError
-
-        with pytest.raises(ValidationError):
-            CharacterSheetValueFactory(
-                character_sheet=sheet,
-                characteristic_value=green_value,
-            )
 
 
 class CharacterSheetPronounTests(TestCase):
