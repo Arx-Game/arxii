@@ -9,6 +9,7 @@ from world.captivity.models import Captivity, CaptivityConfig
 from world.captivity.services import (
     capture_character,
     capture_party,
+    escape_captivity,
     rescue_captive,
     resolve_captivity,
     resolve_capture_setup,
@@ -221,6 +222,24 @@ class RescueCaptiveTests(TestCase):
     def test_rescue_is_a_noop_when_not_held(self) -> None:
         captive = CharacterSheetFactory()
         assert rescue_captive(captive) is False
+
+
+class EscapeCaptivityTests(TestCase):
+    def test_escape_frees_a_held_captive(self) -> None:
+        captive = CharacterSheetFactory()
+        captivity = capture_character(captive=captive)
+
+        freed = escape_captivity(captive)
+
+        assert freed is True
+        captivity.refresh_from_db()
+        assert captivity.status == CaptivityStatus.ESCAPED
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+
+    def test_escape_is_a_noop_when_not_held(self) -> None:
+        captive = CharacterSheetFactory()
+        assert escape_captivity(captive) is False
 
 
 class CaptivityConfigTests(TestCase):
