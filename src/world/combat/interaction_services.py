@@ -253,31 +253,6 @@ def render_flee_outcome_narration(
     return f"{actor_label} tries to break away but cannot escape."
 
 
-def render_challenge_outcome_narration(
-    *,
-    actor_label: str,
-    challenge_name: str,
-    approach_name: str,
-    outcome_label: str,
-    success_level: int,
-) -> str:
-    """Render a one-line, deterministic outcome narration for a resolved challenge.
-
-    Pure function — no DB access, no randomness. Sibling of
-    ``render_action_outcome_narration`` for the challenge-resolution path. The
-    caller supplies primitives extracted from the ``ChallengeResolutionResult``
-    and the resolving participant, so this stays DB-free and unit-testable.
-
-    Examples:
-        "Kira attempts Scale the Wall (Athletics) and succeeds (Decisive Success)."
-        "Kira attempts Scale the Wall (Athletics) and fails (Failure)."
-    """
-    verb = "succeeds" if success_level > 0 else "fails"
-    return (
-        f"{actor_label} attempts {challenge_name} ({approach_name}) and {verb} ({outcome_label})."
-    )
-
-
 # Per-tier resolution clause for clash-outcome narration. Keys are
 # ``ClashResolution`` members (str-valued TextChoices, so a raw value string
 # from a resolved clash matches the same key). ``{opponent}`` is interpolated
