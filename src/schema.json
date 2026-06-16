@@ -10121,6 +10121,8 @@ paths:
         schema:
           type: string
           enum:
+          - DRAMATIC_MOMENT
+          - ENTRY_FLOURISH
           - OUTFIT_TRICKLE
           - POSE_ENDORSEMENT
           - PROJECT_CONTRIBUTION
@@ -10142,6 +10144,8 @@ paths:
           * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
           * `PROJECT_CONTRIBUTION` - Project contribution payout
           * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+          * `ENTRY_FLOURISH` - Entry flourishing
+          * `DRAMATIC_MOMENT` - Dramatic moment
       tags:
       - magic
       security:
@@ -37385,6 +37389,8 @@ components:
             * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
             * `PROJECT_CONTRIBUTION` - Project contribution payout
             * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+            * `ENTRY_FLOURISH` - Entry flourishing
+            * `DRAMATIC_MOMENT` - Dramatic moment
         granted_at:
           type: string
           format: date-time
@@ -39004,6 +39010,8 @@ components:
       - SANCTUM_OWNER_BONUS
       - PROJECT_CONTRIBUTION
       - SANCTUM_DISSOLUTION_RECOVERY
+      - ENTRY_FLOURISH
+      - DRAMATIC_MOMENT
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -39015,6 +39023,8 @@ components:
         * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
         * `PROJECT_CONTRIBUTION` - Project contribution payout
         * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+        * `ENTRY_FLOURISH` - Entry flourishing
+        * `DRAMATIC_MOMENT` - Dramatic moment
     Specialization:
       type: object
       description: Serializer for Specialization model.
