@@ -73,7 +73,7 @@ const COLOR_RESET_RE = /\|n/g;
 const BOLD_RE = /\*\*/g;
 const STRIKE_RE = /~~/g;
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
-const MARKDOWN_LINK_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const MARKDOWN_LINK_RE = /\[([^\]\n]{1,500})\]\((https?:\/\/[^\s)]{1,2048})\)/g;
 
 /** Trailing punctuation that is unlikely to be part of a URL. */
 const TRAILING_PUNCT = new Set(['.', ',', ')', '!', '?', ':', ';']);
