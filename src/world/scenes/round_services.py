@@ -257,6 +257,22 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
                 approach.pk,
             )
             continue
-        resolve_challenge(character, challenge_instance, approach, matching.capability_source)
+        outcome = resolve_challenge(
+            character, challenge_instance, approach, matching.capability_source
+        )
+        if outcome.check_result is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                broadcast_scene_outcome,
+                render_challenge_outcome_narration,
+            )
+
+            narration = render_challenge_outcome_narration(
+                actor_label=character.db_key,
+                challenge_name=outcome.challenge_name,
+                approach_name=outcome.approach_name,
+                outcome_label=outcome.check_result.outcome_name,
+                success_level=outcome.check_result.success_level,
+            )
+            broadcast_scene_outcome(scene_round=scene_round, narration=narration)
 
     scene_round.action_declarations.filter(round_number=scene_round.round_number).delete()

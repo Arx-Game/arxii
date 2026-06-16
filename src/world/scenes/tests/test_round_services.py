@@ -1,11 +1,14 @@
+from unittest import mock
+from unittest.mock import MagicMock
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.scenes.constants import RoundStatus, SceneRoundStartReason
+from world.scenes.constants import InteractionMode, RoundStatus, SceneRoundStartReason
 from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
-from world.scenes.models import SceneActionDeclaration
+from world.scenes.models import Interaction, SceneActionDeclaration
 from world.scenes.round_services import (
     advance_scene_round,
     end_scene_round,
@@ -204,3 +207,119 @@ class SceneRoundResolutionTests(TestCase):
         assert self.rnd.status == RoundStatus.DECLARING
         assert self.rnd.round_number == 2
         assert SceneActionDeclaration.objects.filter(scene_round=self.rnd).count() == 0
+
+
+class SceneRoundOutcomeBroadcastTests(TestCase):
+    """_resolve_scene_declarations broadcasts an OUTCOME narration for each resolved challenge."""
+
+    def setUp(self):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.mechanics.factories import ChallengeApproachFactory, ChallengeInstanceFactory
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.rnd = SceneRoundFactory(
+            room=self.room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            start_reason=SceneRoundStartReason.OPT_IN,
+        )
+        self.sheet = CharacterSheetFactory()
+        self.sheet.character.db_location = self.room
+        self.sheet.character.db_key = "Kira"
+        self.sheet.character.save(update_fields=["db_location", "db_key"])
+        self.participant = SceneRoundParticipantFactory(
+            scene_round=self.rnd,
+            character_sheet=self.sheet,
+            initiative_order=0,
+        )
+        self.challenge_instance = ChallengeInstanceFactory(location=self.room)
+        self.approach = ChallengeApproachFactory(
+            challenge_template=self.challenge_instance.template
+        )
+
+    def _declare_challenge(self):
+        return SceneActionDeclaration.objects.create(
+            scene_round=self.rnd,
+            round_number=self.rnd.round_number,
+            participant=self.participant,
+            challenge_instance=self.challenge_instance,
+            challenge_approach=self.approach,
+            is_pass=False,
+        )
+
+    def _fake_resolution_result(self, *, success_level: int = 1):
+        check_result = MagicMock()
+        check_result.outcome_name = "Decisive Success" if success_level > 0 else "Failure"
+        check_result.success_level = success_level
+        outcome = MagicMock()
+        outcome.challenge_name = self.challenge_instance.template.name
+        outcome.approach_name = self.approach.display_name
+        outcome.check_result = check_result
+        return outcome
+
+    def test_outcome_interaction_created_on_challenge_resolution(self):
+        self._declare_challenge()
+        fake_result = self._fake_resolution_result(success_level=1)
+        fake_action = MagicMock()
+        fake_action.challenge_instance_id = self.challenge_instance.pk
+        fake_action.approach_id = self.approach.pk
+        fake_action.capability_source = None
+        with (
+            mock.patch(
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
+            ),
+        ):
+            resolve_scene_round(self.rnd)
+        assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).count() == 1
+
+    def test_outcome_interaction_content_matches_narration(self):
+        self._declare_challenge()
+        fake_result = self._fake_resolution_result(success_level=1)
+        fake_action = MagicMock()
+        fake_action.challenge_instance_id = self.challenge_instance.pk
+        fake_action.approach_id = self.approach.pk
+        fake_action.capability_source = None
+        with (
+            mock.patch(
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
+            ),
+        ):
+            resolve_scene_round(self.rnd)
+        interaction = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        assert "Kira" in interaction.content
+        assert "succeeds" in interaction.content
+
+    def test_no_outcome_when_check_result_is_none(self):
+        self._declare_challenge()
+        fake_result = self._fake_resolution_result()
+        fake_result.check_result = None
+        fake_action = MagicMock()
+        fake_action.challenge_instance_id = self.challenge_instance.pk
+        fake_action.approach_id = self.approach.pk
+        fake_action.capability_source = None
+        with (
+            mock.patch(
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
+            ),
+        ):
+            resolve_scene_round(self.rnd)
+        assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).count() == 0
+
+    def test_pass_declarations_produce_no_outcome_interaction(self):
+        SceneActionDeclaration.objects.create(
+            scene_round=self.rnd,
+            round_number=self.rnd.round_number,
+            participant=self.participant,
+            is_pass=True,
+        )
+        resolve_scene_round(self.rnd)
+        assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).count() == 0
