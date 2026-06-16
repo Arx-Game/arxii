@@ -38,6 +38,8 @@ vi.mock('@/combat/queries', () => ({
     isError: false,
   }),
   useEndEncounter: vi.fn(),
+  useJoinMutation: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  useLeaveMutation: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -204,6 +206,14 @@ beforeEach(() => {
     isPending: false,
   });
   (combatQueries.useEndEncounter as ReturnType<typeof vi.fn>).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  });
+  (combatQueries.useJoinMutation as ReturnType<typeof vi.fn>).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  });
+  (combatQueries.useLeaveMutation as ReturnType<typeof vi.fn>).mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
   });
@@ -485,5 +495,56 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
     });
 
     expect(screen.getByRole('status')).toHaveTextContent('Abandoned');
+  });
+});
+
+describe('CombatTurnPanel — Open Encounter join/leave', () => {
+  it('shows Join button for non-participant in open encounter between rounds', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'between_rounds',
+      is_participant: false,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByTestId('open-encounter-join-btn')).toBeInTheDocument();
+  });
+
+  it('shows Leave button for participant in open encounter between rounds', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'between_rounds',
+      is_participant: true,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByTestId('open-encounter-leave-btn')).toBeInTheDocument();
+  });
+
+  it('hides both buttons for party_combat encounters', () => {
+    mockEncounter({
+      encounter_type: 'party_combat',
+      status: 'between_rounds',
+      is_participant: false,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByTestId('open-encounter-join-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('open-encounter-leave-btn')).not.toBeInTheDocument();
+  });
+
+  it('hides join button when encounter is not between_rounds', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'declaring',
+      is_participant: false,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByTestId('open-encounter-join-btn')).not.toBeInTheDocument();
   });
 });
