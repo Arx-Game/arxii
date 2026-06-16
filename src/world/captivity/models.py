@@ -100,3 +100,55 @@ class Captivity(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Captivity({self.captive.character.key}: {self.get_status_display()})"
+
+
+class CaptivityConfig(SharedMemoryModel):
+    """Singleton (pk=1) — the one logical default for the captivity loops (#931 Phase 4).
+
+    Every capture uses these defaults unless the CAPTURE consequence effect carries
+    its own overrides (override-then-default), so a marquee captor (an Ariwn dungeon)
+    can hand-craft its cell + loops while everything else falls through to one
+    authored default. Templates are authored content; a null template means that loop
+    simply isn't granted until one is authored. Player-visible text is authored in the
+    deployment's own voice — nothing here ships prose.
+    """
+
+    captive_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Default mission granted to the captive on capture — its options carry "
+            "the escape + get-word-out CHALLENGE loops. Null = no captive loop yet."
+        ),
+    )
+    rescue_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Default rescue mission surfaced to allies at the capture site / cell.",
+    )
+    cell_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Default cell room name (player-visible — author in your voice).",
+    )
+    cell_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Default cell room description (player-visible — author in your voice).",
+    )
+
+    @classmethod
+    def load(cls) -> CaptivityConfig:
+        """Fetch (or lazily create) the singleton row."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return "Captivity defaults"

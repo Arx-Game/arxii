@@ -426,7 +426,7 @@ def _apply_capture(
     already held, so a capture consequence never crashes a resolution.
     """
     from world.captivity.exceptions import AlreadyCapturedError  # noqa: PLC0415
-    from world.captivity.services import capture_character  # noqa: PLC0415
+    from world.captivity.services import capture_character, resolve_capture_setup  # noqa: PLC0415
 
     target = _resolve_target(effect, context)
     try:
@@ -439,6 +439,16 @@ def _apply_capture(
             skip_reason="Target has no CharacterSheet",
         )
 
+    # Per-capture override layered over the one CaptivityConfig default. Only the
+    # cell flavor is consumed here; the captive/rescue templates are resolved for
+    # the loop-granting slice that follows.
+    setup = resolve_capture_setup(
+        captive_template=effect.capture_captive_template,
+        rescue_template=effect.capture_rescue_template,
+        cell_name=effect.capture_cell_name,
+        cell_description=effect.capture_cell_description,
+    )
+
     try:
         capture_character(
             captive=sheet,
@@ -448,6 +458,9 @@ def _apply_capture(
             # TARGET capture. target.location may be None; the service allows it.
             return_location=target.location,
             offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
+            # Empty string → let the spawner fall back to its placeholder flavor.
+            cell_name=setup.cell_name or None,
+            cell_description=setup.cell_description or None,
             # Captives taken in one encounter (same scene + captor) share a
             # cell — the shared-cell default, honoured on the per-character
             # consequence path. No scene → per-character cells (group_key None).
