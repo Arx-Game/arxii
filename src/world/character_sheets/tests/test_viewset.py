@@ -489,6 +489,21 @@ class TestAppearanceSection(TestCase):
         assert trait_map["Hair Color"] == "Black"
         assert trait_map["Eye Color"] == "Green"
 
+    def test_form_traits_show_active_persona_descriptor(self) -> None:
+        """A descriptor on the active persona overrides the normalized value."""
+        from world.forms.factories import PersonaTraitDescriptorFactory
+        from world.forms.models import FormTrait
+
+        PersonaTraitDescriptorFactory(
+            persona=self.sheet.primary_persona,
+            trait=FormTrait.objects.get(name="hair_color"),
+            text="Crimson",
+        )
+
+        trait_map = {t["trait"]: t["value"] for t in self._get_appearance()["form_traits"]}
+        assert trait_map["Hair Color"] == "Crimson"  # descriptor wins
+        assert trait_map["Eye Color"] == "Green"  # no descriptor → normalized
+
 
 class TestAppearanceNoTrueForm(TestCase):
     """Tests for appearance section when no TRUE form exists."""
@@ -1849,7 +1864,7 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        24 queries breakdown (SharedMemoryModel caching reduces some lookups):
+        25 queries breakdown (SharedMemoryModel caching reduces some lookups):
          1-4.  Session management (check, savepoint, insert, release)
          5.    CharacterSheet + select_related (character, identity FKs,
                build, aura, roster_entry, profile_picture__media)
@@ -1869,10 +1884,11 @@ class TestCharacterSheetQueryCount(TestCase):
         19.    motif resonance facet_assignments (nested Prefetch)
         20.    goals
         21.    personas + thumbnails (via Prefetch select_related)
-        22-24. Session management (savepoint, update, release)
+        22.    persona trait_descriptors (nested Prefetch — appearance overlay)
+        23-25. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(24):
+        with self.assertNumQueries(25):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
