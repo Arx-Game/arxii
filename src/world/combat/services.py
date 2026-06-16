@@ -871,7 +871,7 @@ def leave_encounter(participant: CombatParticipant) -> None:
     """Allow a participant to voluntarily leave an Open Encounter between rounds.
 
     Unlike flee (a check-gated exit), this is unconditional. If the departing
-    participant is the last active player, the encounter completes as ABANDONED.
+    participant is the last active participant, the encounter completes as ABANDONED.
 
     Raises ValueError when the encounter is not in BETWEEN_ROUNDS status.
     """
@@ -881,6 +881,10 @@ def leave_encounter(participant: CombatParticipant) -> None:
             f"Cannot leave: encounter status is "
             f"'{enc.get_status_display()}', expected 'Between Rounds'."
         )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = f"Cannot leave: participant status is '{participant.status}'."
         raise ValueError(msg)
 
     remove_participant(participant)

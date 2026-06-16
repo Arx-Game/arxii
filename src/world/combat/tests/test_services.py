@@ -413,6 +413,13 @@ class LeaveEncounterTest(TestCase):
         encounter.refresh_from_db()
         assert encounter.status == EncounterStatus.BETWEEN_ROUNDS
 
+    def test_leave_already_removed_raises(self) -> None:
+        _encounter, participant = self._make_between_rounds_encounter()
+        participant.status = ParticipantStatus.REMOVED
+        participant.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="participant status"):
+            leave_encounter(participant)
+
 
 class DeclareFleeTest(TestCase):
     """Tests for declare_flee service function."""
