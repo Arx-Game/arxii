@@ -46,7 +46,12 @@ from world.character_sheets.types import (
 )
 from world.classes.models import PathStage
 from world.distinctions.models import CharacterDistinction
-from world.forms.models import CharacterForm, CharacterFormValue, FormType
+from world.forms.models import (
+    CharacterForm,
+    CharacterFormValue,
+    FormType,
+    PersonaTraitDescriptor,
+)
 from world.goals.models import CharacterGoal
 from world.magic.constants import RitualExecutionKind
 from world.magic.models import (
@@ -60,6 +65,7 @@ from world.magic.models import (
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure
+from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.traits.models import CharacterTraitValue, TraitType
@@ -167,17 +173,39 @@ _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
+def _resolve_active_persona(sheet: CharacterSheet) -> Persona | None:
+    """The presented face, resolved from prefetched ``cached_personas`` (0 queries).
+
+    Mirrors ``scenes.services.active_persona_for_sheet`` (the ``active_persona`` FK,
+    else the PRIMARY persona) but reads the prefetch so the builder stays query-free.
+    """
+    personas: list[Persona] = sheet.cached_personas
+    active_id = sheet.active_persona_id
+    if active_id is not None:
+        return next((p for p in personas if p.pk == active_id), None)
+    return next((p for p in personas if p.persona_type == PersonaType.PRIMARY), None)
+
+
 def _build_appearance(sheet: CharacterSheet) -> AppearanceSection:
-    """Build the appearance section dict from a CharacterSheet."""
+    """Build the appearance section: normalized TRUE-form traits overlaid with the
+    active persona's descriptors (descriptor, else normalized) — mirroring the telnet
+    ``item_data`` composition. Query-free: reads prefetched forms + personas.
+    """
     character = sheet.character
 
-    # Get form traits from the TRUE form (prefetched + filtered via to_attr).
+    active = _resolve_active_persona(sheet)
+    descriptors: dict[int, str] = (
+        {d.trait_id: d.text for d in active.cached_trait_descriptors} if active is not None else {}
+    )
+
     true_forms: list[CharacterForm] = character.cached_true_forms
     if true_forms:
-        true_form = true_forms[0]
         form_traits: list[FormTraitEntry] = [
-            FormTraitEntry(trait=fv.trait.display_name, value=fv.option.display_name)
-            for fv in true_form.cached_values
+            FormTraitEntry(
+                trait=fv.trait.display_name,
+                value=descriptors.get(fv.trait_id) or fv.option.display_name,
+            )
+            for fv in true_forms[0].cached_values
         ]
     else:
         form_traits = []
@@ -525,7 +553,15 @@ _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
 _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "personas",
-        queryset=Persona.objects.select_related("thumbnail"),
+        queryset=Persona.objects.select_related("thumbnail").prefetch_related(
+            # Each persona's per-trait descriptors, so the appearance builder can
+            # overlay the active face's descriptors at zero extra queries.
+            Prefetch(
+                "trait_descriptors",
+                queryset=PersonaTraitDescriptor.objects.select_related("trait"),
+                to_attr="cached_trait_descriptors",
+            )
+        ),
         to_attr="cached_personas",
     ),
 )
