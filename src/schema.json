@@ -3390,6 +3390,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/leave/:
+    post:
+      operationId: combat_leave_create
+      description: |-
+        Player voluntarily leaves an Open Encounter between rounds.
+
+        Only valid in BETWEEN_ROUNDS status. If the departing player is the last
+        active participant, the encounter completes as ABANDONED.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/my_action/:
     get:
       operationId: combat_my_action_retrieve

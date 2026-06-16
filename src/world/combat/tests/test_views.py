@@ -805,3 +805,38 @@ class DeclareAndResolveE2ETest(TestCase):
                 "Condition application via the API resolve path may be broken."
             ),
         )
+
+
+class LeaveViewTest(CombatEncounterViewSetTestBase):
+    """Tests for POST /api/combat/{id}/leave/."""
+
+    def setUp(self) -> None:
+        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.save(update_fields=["status"])
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player_account)
+
+    def test_leave_removes_participant(self) -> None:
+        response = self.client.post(f"/api/combat/{self.encounter.pk}/leave/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
+
+    def test_leave_returns_encounter_json(self) -> None:
+        response = self.client.post(f"/api/combat/{self.encounter.pk}/leave/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertIn("id", response.data)
+
+    def test_leave_blocked_for_non_participant(self) -> None:
+        outsider = AccountFactory(username="outsider_leave")
+        non_participant_client = APIClient()
+        non_participant_client.force_authenticate(user=outsider)
+        response = non_participant_client.post(f"/api/combat/{self.encounter.pk}/leave/")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_leave_returns_400_when_not_between_rounds(self) -> None:
+        self.encounter.status = EncounterStatus.DECLARING
+        self.encounter.round_number = 1
+        self.encounter.save(update_fields=["status", "round_number"])
+        response = self.client.post(f"/api/combat/{self.encounter.pk}/leave/")
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)

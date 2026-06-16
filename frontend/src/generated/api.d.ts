@@ -2360,6 +2360,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player voluntarily leaves an Open Encounter between rounds.
+     *
+     *     Only valid in BETWEEN_ROUNDS status. If the departing player is the last
+     *     active participant, the encounter completes as ABANDONED.
+     */
+    post: operations['combat_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/my_action/': {
     parameters: {
       query?: never;
@@ -25835,6 +25857,32 @@ export interface operations {
     };
   };
   combat_join_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_leave_create: {
     parameters: {
       query?: never;
       header?: never;
