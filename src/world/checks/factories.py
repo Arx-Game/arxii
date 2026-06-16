@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import factory
 from factory.django import DjangoModelFactory
 
+from actions.models import ConsequencePool, ConsequencePoolEntry
 from world.checks.models import (
     CheckCategory,
     CheckType,
@@ -129,6 +130,43 @@ _SOCIAL_ACTION_TEMPLATES = [
 # Template name for the Entrance social action — grants entry flourish resonance.
 _ENTRANCE_TEMPLATE_NAME = "Entrance"
 
+# Pool name prefix for social consequence pools.
+_SOCIAL_POOL_PREFIX = "Social"
+
+# (action_name, outcome_tier_name, label, weight)
+_SOCIAL_POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
+    "Intimidate": [
+        ("Failure", "Intimidation falls flat", 1),
+        ("Partial Success", "Target rattled but holds firm", 2),
+        ("Success", "Target cowed and compliant", 1),
+    ],
+    "Persuade": [
+        ("Failure", "Argument dismissed outright", 1),
+        ("Partial Success", "Target intrigued but unconvinced", 2),
+        ("Success", "Target fully persuaded", 1),
+    ],
+    "Deceive": [
+        ("Failure", "Lie detected immediately", 1),
+        ("Partial Success", "Partial deception holds", 2),
+        ("Success", "Target completely deceived", 1),
+    ],
+    "Flirt": [
+        ("Failure", "Advance rebuffed", 1),
+        ("Partial Success", "Interest piqued but guarded", 2),
+        ("Success", "Charm lands completely", 1),
+    ],
+    "Perform": [
+        ("Failure", "Performance falls flat", 1),
+        ("Partial Success", "Audience politely attentive", 2),
+        ("Success", "Audience captivated", 1),
+    ],
+    "Entrance": [
+        ("Failure", "Entrance goes unnoticed", 1),
+        ("Partial Success", "Attention caught briefly", 2),
+        ("Success", "All eyes arrested", 1),
+    ],
+}
+
 
 def create_social_check_types() -> dict[str, CheckType]:
     """Create the Social CheckCategory, 6 CheckTypes, and placeholder trait weights.
@@ -195,3 +233,42 @@ def create_social_action_templates() -> list[ActionTemplate]:
         templates.append(template)
 
     return templates
+
+
+def create_social_consequence_pools() -> dict[str, ConsequencePool]:
+    """Create one ConsequencePool per social action, each seeded with 3 Consequences.
+
+    Pools are named ``"Social: <ActionName>"``.  Consequences are linked to
+    standard CheckOutcome tiers ("Failure", "Partial Success", "Success").
+
+    Safe to call multiple times — uses get_or_create throughout.
+
+    Returns:
+        Dict mapping action name (e.g. ``"Intimidate"``) to its ConsequencePool.
+    """
+    from world.traits.factories import CheckOutcomeFactory
+
+    pools: dict[str, ConsequencePool] = {}
+
+    for action_name, consequence_specs in _SOCIAL_POOL_CONSEQUENCES.items():
+        pool_name = f"{_SOCIAL_POOL_PREFIX}: {action_name}"
+        pool, _ = ConsequencePool.objects.get_or_create(
+            name=pool_name,
+            defaults={"description": f"Consequence pool for {action_name} social action."},
+        )
+        pools[action_name] = pool
+
+        for outcome_name, label, weight in consequence_specs:
+            outcome = CheckOutcomeFactory(name=outcome_name)
+            consequence, _ = Consequence.objects.get_or_create(
+                outcome_tier=outcome,
+                label=label,
+                defaults={"weight": weight, "character_loss": False},
+            )
+            ConsequencePoolEntry.objects.get_or_create(
+                pool=pool,
+                consequence=consequence,
+                defaults={"weight_override": None, "is_excluded": False},
+            )
+
+    return pools
