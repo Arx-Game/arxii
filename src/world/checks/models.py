@@ -262,6 +262,39 @@ class ConsequenceEffect(SharedMemoryModel):
             " the captive un-loseable while the player is away."
         ),
     )
+    # Phase-4 per-capture overrides (#931). Each falls through to the one
+    # CaptivityConfig default when left unset, so a marquee captor hand-crafts
+    # its own cell + loops here while routine captures use the singleton.
+    capture_captive_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Override mission granted to this captive (escape + get-word-out loops)."
+            " Unset = the CaptivityConfig default."
+        ),
+    )
+    capture_rescue_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Override rescue mission for this capture. Unset = the CaptivityConfig default.",
+    )
+    capture_cell_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Override cell room name. Unset = the CaptivityConfig default.",
+    )
+    capture_cell_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override cell room description. Unset = the CaptivityConfig default.",
+    )
 
     class Meta:
         ordering = ["execution_order"]

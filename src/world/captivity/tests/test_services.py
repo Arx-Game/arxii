@@ -5,17 +5,19 @@ from evennia.objects.models import ObjectDB
 
 from world.captivity.constants import CaptivityStatus
 from world.captivity.exceptions import AlreadyCapturedError, NotHeldError
-from world.captivity.models import Captivity
+from world.captivity.models import Captivity, CaptivityConfig
 from world.captivity.services import (
     capture_character,
     capture_party,
     rescue_captive,
     resolve_captivity,
+    resolve_capture_setup,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
+from world.missions.factories import MissionTemplateFactory
 from world.scenes.factories import SceneFactory
 
 
@@ -219,3 +221,57 @@ class RescueCaptiveTests(TestCase):
     def test_rescue_is_a_noop_when_not_held(self) -> None:
         captive = CharacterSheetFactory()
         assert rescue_captive(captive) is False
+
+
+class CaptivityConfigTests(TestCase):
+    def test_load_is_a_singleton(self) -> None:
+        first = CaptivityConfig.load()
+        second = CaptivityConfig.load()
+        assert first.pk == 1
+        assert second.pk == first.pk
+        assert CaptivityConfig.objects.count() == 1
+
+
+class ResolveCaptureSetupTests(TestCase):
+    def test_falls_through_to_the_config_default(self) -> None:
+        config = CaptivityConfig.load()
+        config.captive_template = MissionTemplateFactory(name="default-cell-loop")
+        config.rescue_template = MissionTemplateFactory(name="default-rescue")
+        config.cell_name = "The Common Gaol"
+        config.cell_description = "A default holding cell."
+        config.save()
+
+        setup = resolve_capture_setup()
+
+        assert setup.captive_template == config.captive_template
+        assert setup.rescue_template == config.rescue_template
+        assert setup.cell_name == "The Common Gaol"
+        assert setup.cell_description == "A default holding cell."
+
+    def test_override_wins_over_the_config_default(self) -> None:
+        config = CaptivityConfig.load()
+        config.captive_template = MissionTemplateFactory(name="default-cell-loop")
+        config.cell_name = "The Common Gaol"
+        config.save()
+        override_loop = MissionTemplateFactory(name="ariwn-dungeon-loop")
+
+        setup = resolve_capture_setup(
+            captive_template=override_loop,
+            cell_name="The Blood Crypt",
+        )
+
+        # The marquee captor's hand-crafted cell + loop win.
+        assert setup.captive_template == override_loop
+        assert setup.cell_name == "The Blood Crypt"
+        # Anything the override leaves unset still falls through to the default.
+        assert setup.rescue_template == config.rescue_template
+
+    def test_empty_config_yields_empty_flavor_for_spawner_fallback(self) -> None:
+        # No config set and no override → empty strings, so capture_character's
+        # own placeholder cell flavor is what ends up used.
+        setup = resolve_capture_setup()
+
+        assert setup.captive_template is None
+        assert setup.rescue_template is None
+        assert setup.cell_name == ""
+        assert setup.cell_description == ""

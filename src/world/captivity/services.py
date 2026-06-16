@@ -20,7 +20,8 @@ from django.utils import timezone
 
 from world.captivity.constants import RESOLVED_STATUSES, CaptivityStatus
 from world.captivity.exceptions import AlreadyCapturedError, NotHeldError
-from world.captivity.models import Captivity
+from world.captivity.models import Captivity, CaptivityConfig
+from world.captivity.types import CaptureSetup
 from world.character_sheets.types import LifecycleState
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.missions.models import MissionTemplate
     from world.societies.models import Organization
 
 # PLACEHOLDER cell flavor — rewrite in the project voice before launch.
@@ -207,6 +209,30 @@ def rescue_captive(captive: CharacterSheet) -> bool:
         return False
     resolve_captivity(captivity, status=CaptivityStatus.RESCUED)
     return True
+
+
+def resolve_capture_setup(
+    *,
+    captive_template: MissionTemplate | None = None,
+    rescue_template: MissionTemplate | None = None,
+    cell_name: str = "",
+    cell_description: str = "",
+) -> CaptureSetup:
+    """Resolve one capture's loops + cell flavor: per-capture override, else default.
+
+    Each argument is the value carried on the CAPTURE consequence effect (empty /
+    ``None`` when that effect leaves it unset). Anything unset falls through to the
+    one :class:`world.captivity.models.CaptivityConfig` singleton — so a marquee
+    captor (an Ariwn dungeon) hand-crafts its own cell + loops via the effect while
+    every routine capture lands on the one authored default.
+    """
+    config = CaptivityConfig.load()
+    return CaptureSetup(
+        captive_template=captive_template or config.captive_template,
+        rescue_template=rescue_template or config.rescue_template,
+        cell_name=cell_name or config.cell_name,
+        cell_description=cell_description or config.cell_description,
+    )
 
 
 def _active_group_cell(group_key: str) -> InstancedRoom | None:

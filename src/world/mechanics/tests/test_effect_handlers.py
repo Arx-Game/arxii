@@ -209,6 +209,23 @@ class CaptureHandlerTests(TestCase):
         assert captivity.captor_organization == org
         assert captivity.offscreen_loss_allowed is True
 
+    def test_capture_uses_the_effects_override_cell_flavor(self) -> None:
+        # The per-capture override on the CAPTURE effect names the spawned cell,
+        # proving override-then-default reaches the room the captive lands in.
+        character, sheet = self._captive_at_site("flavored_target")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+            capture_cell_name="The Blood Crypt",
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.cell.room.db_key == "The Blood Crypt"
+
     def test_capture_skips_without_sheet(self) -> None:
         bare = CharacterFactory(db_key="no_sheet_capture")
         effect = ConsequenceEffectFactory(
