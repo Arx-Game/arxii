@@ -65,6 +65,7 @@ from world.combat.constants import (
     CombatManeuver,
     EncounterOutcome,
     EncounterStatus,
+    EncounterType,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -864,6 +865,47 @@ def join_encounter(
     _ensure_combat_engagement(participant)
     acknowledge_encounter_risk(encounter, character_sheet)
     return participant
+
+
+@transaction.atomic
+def leave_encounter(participant: CombatParticipant) -> None:
+    """Allow a participant to voluntarily leave an Open Encounter between rounds.
+
+    Unlike flee (a check-gated exit), this is unconditional. If the departing
+    participant is the last active participant, the encounter completes as ABANDONED.
+
+    Raises ValueError when:
+    - the encounter is not in BETWEEN_ROUNDS status,
+    - the encounter type is not OPEN_ENCOUNTER, or
+    - the participant is not ACTIVE.
+    """
+    enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
+    if enc.status != EncounterStatus.BETWEEN_ROUNDS:
+        msg = (
+            f"Cannot leave: encounter status is "
+            f"'{enc.get_status_display()}', expected 'Between Rounds'."
+        )
+        raise ValueError(msg)
+    if enc.encounter_type != EncounterType.OPEN_ENCOUNTER:
+        msg = (
+            f"Cannot leave: encounter type is "
+            f"'{enc.get_encounter_type_display()}', expected 'Open Encounter'."
+        )
+        raise ValueError(msg)
+    # Re-read participant under the same transaction lock to avoid stale status reads.
+    participant = CombatParticipant.objects.select_for_update().get(pk=participant.pk)
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = f"Cannot leave: participant status is '{participant.status}'."
+        raise ValueError(msg)
+
+    remove_participant(participant)
+
+    any_active = CombatParticipant.objects.filter(
+        encounter=enc,
+        status=ParticipantStatus.ACTIVE,
+    ).exists()
+    if not any_active:
+        complete_encounter(enc, outcome=EncounterOutcome.ABANDONED)
 
 
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
@@ -3226,7 +3268,7 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
 
 def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
-    """GM force-end: completes as ABANDONED (#876 §8) — the sole ABANDONED producer."""
+    """GM force-end: completes as ABANDONED (#876 §8)."""
     complete_encounter(encounter, outcome=EncounterOutcome.ABANDONED)
     return encounter
 

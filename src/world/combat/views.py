@@ -56,6 +56,7 @@ from world.combat.services import (
     declare_flee,
     end_encounter,
     join_encounter,
+    leave_encounter,
     remove_participant,
     resolve_round,
     revert_combo_upgrade,
@@ -100,6 +101,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "revert_combo",
             "flee",
             "cover",
+            "leave",
         ):
             return [IsAuthenticated(), IsEncounterParticipant()]
         if self.action == "join":
@@ -597,6 +599,32 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def leave(self, request: Request, pk: int | None = None) -> Response:
+        """Player voluntarily leaves an Open Encounter between rounds.
+
+        Only valid in BETWEEN_ROUNDS status. If the departing player is the last
+        active participant, the encounter completes as ABANDONED.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            leave_encounter(participant)
+        except ValueError:
+            return Response(
+                {"detail": _ERR_INVALID_STATUS},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        encounter.participants_cached = [
+            p for p in encounter.participants_cached if p.pk != participant.pk
+        ]
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])

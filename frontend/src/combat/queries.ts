@@ -259,6 +259,30 @@ export function useFleeMutation(encounterId: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Join / Leave mutation hooks (Open Encounters)
+// ---------------------------------------------------------------------------
+
+/**
+ * Player self-joins an Open Encounter.
+ * POST /api/combat/{encounterId}/join/
+ * Arg: characterSheetId (number). Invalidates encounter key on success.
+ */
+export function useJoinMutation(encounterId: number) {
+  return useEncounterMutation(encounterId, (characterSheetId: number) =>
+    api.postJoin(encounterId, characterSheetId)
+  );
+}
+
+/**
+ * Player voluntarily leaves an Open Encounter between rounds.
+ * POST /api/combat/{encounterId}/leave/
+ * Invalidates encounter key on success.
+ */
+export function useLeaveMutation(encounterId: number) {
+  return useEncounterMutation(encounterId, () => api.postLeave(encounterId));
+}
+
+// ---------------------------------------------------------------------------
 // End encounter mutation hook (GM only)
 // ---------------------------------------------------------------------------
 

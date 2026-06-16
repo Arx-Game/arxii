@@ -15,7 +15,13 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
 import { AudereMajoraOfferGate } from '@/magic/components/AudereMajoraOfferGate';
-import { useAvailableActions, useCombatEncounter, useConsequenceOutcomes } from './queries';
+import {
+  useAvailableActions,
+  useCombatEncounter,
+  useConsequenceOutcomes,
+  useJoinMutation,
+  useLeaveMutation,
+} from './queries';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
@@ -93,6 +99,10 @@ export function CombatTurnPanel({
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
 
+  // Open Encounter join/leave mutations — must be called unconditionally (rules of hooks).
+  const { mutate: joinEncounter, isPending: isJoining } = useJoinMutation(encounterId);
+  const { mutate: leaveEncounter, isPending: isLeaving } = useLeaveMutation(encounterId);
+
   function toggleSection(section: SectionName) {
     setCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -148,6 +158,9 @@ export function CombatTurnPanel({
   const isParticipant = encounter.is_participant;
   const roundNumber = encounter.round_number ?? 0;
 
+  const isOpenEncounter = encounter.encounter_type === 'open_encounter';
+  const isBetweenRounds = encounter.status === 'between_rounds';
+
   // Audere active strip — the viewer's own participant row (matched by
   // character_sheet_id) carries the Audere condition in active_conditions while
   // the breakthrough is live. active_conditions entries are ConditionInstances
@@ -199,6 +212,30 @@ export function CombatTurnPanel({
           Audere
         </div>
       ) : null}
+
+      {/* Open Encounter join/leave — only between rounds */}
+      {isOpenEncounter && isBetweenRounds && !isParticipant && (
+        <button
+          type="button"
+          data-testid="open-encounter-join-btn"
+          onClick={() => joinEncounter(characterSheetId)}
+          disabled={isJoining}
+          className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {isJoining ? 'Joining…' : 'Join Encounter'}
+        </button>
+      )}
+      {isOpenEncounter && isBetweenRounds && isParticipant && (
+        <button
+          type="button"
+          data-testid="open-encounter-leave-btn"
+          onClick={() => leaveEncounter()}
+          disabled={isLeaving}
+          className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
+        >
+          {isLeaving ? 'Leaving…' : 'Leave Encounter'}
+        </button>
+      )}
 
       {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
           CombatantsList → ActiveState → RoundFlow */}
