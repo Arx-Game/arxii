@@ -260,7 +260,7 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
         outcome = resolve_challenge(
             character, challenge_instance, approach, matching.capability_source
         )
-        if outcome.check_result is not None:
+        if outcome is not None and outcome.check_result is not None:
             from world.scenes.interaction_services import (  # noqa: PLC0415
                 broadcast_scene_outcome,
                 render_challenge_outcome_narration,
