@@ -91,6 +91,13 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="Base social fatigue charged on resolution, scaled by effort_level.",
     )
+    grants_entry_flourish = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, a successful dispatch of this action triggers an entry flourish "
+            "resonance grant for the actor (used by the Entrance social action)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Action Template"

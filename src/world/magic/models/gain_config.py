@@ -39,6 +39,13 @@ class ResonanceGainConfig(SharedMemoryModel):
         default=0,
         help_text="ISO weekday (Monday=0) for the weekly pose-endorsement settlement tick cue.",
     )
+    entry_flourish_grant = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Flat resonance grant awarded to a character when they perform a "
+            "successful entry flourish (Entrance action with resonance declared)."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

@@ -3,7 +3,12 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from world.consent.models import ConsentGroup, ConsentGroupMember
+from world.consent.models import (
+    ConsentGroup,
+    ConsentGroupMember,
+    SocialConsentPreference,
+    SocialConsentWhitelist,
+)
 
 
 class ConsentGroupFactory(DjangoModelFactory):
@@ -24,3 +29,20 @@ class ConsentGroupMemberFactory(DjangoModelFactory):
 
     group = factory.SubFactory(ConsentGroupFactory)
     tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+
+
+class SocialConsentPreferenceFactory(DjangoModelFactory):
+    class Meta:
+        model = SocialConsentPreference
+
+    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    allow_social_actions = True
+    require_whitelist = False
+
+
+class SocialConsentWhitelistFactory(DjangoModelFactory):
+    class Meta:
+        model = SocialConsentWhitelist
+
+    owner_tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    allowed_tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")

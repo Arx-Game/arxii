@@ -65,7 +65,9 @@ from world.magic.models.aura import (
 from world.magic.models.cantrips import Cantrip
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
+from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.models.endorsement import (
+    EntryFlourishRecord,
     PoseEndorsement,
     PresentationEndorsement,
     SceneEntryEndorsement,
@@ -194,9 +196,14 @@ __all__ = [
     "CodexEntryRitualGrant",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
+    # dramatic moment tagging (#545)
     "DistinctionRitualGrant",
+    "DramaticMomentTag",
+    "DramaticMomentType",
     "EffectType",
     "EffectTypeManager",
+    # endorsement — entry flourish (#545)
+    "EntryFlourishRecord",
     "Facet",
     "FacetManager",
     "Gift",

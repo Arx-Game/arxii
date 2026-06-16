@@ -47,6 +47,8 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.items.models import ItemFacet
     from world.magic.models import (
+        DramaticMomentTag,
+        EntryFlourishRecord,
         PoseEndorsement,
         Resonance as ResonanceModel,
         SanctumDetails,
@@ -75,6 +77,8 @@ def grant_resonance(  # noqa: PLR0913
     outfit_item_facet: ItemFacet | None = None,
     sanctum_details: SanctumDetails | None = None,
     project: Project | None = None,
+    entry_flourish: EntryFlourishRecord | None = None,
+    dramatic_moment: DramaticMomentTag | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -92,6 +96,8 @@ def grant_resonance(  # noqa: PLR0913
         outfit_item_facet: Required for OUTFIT_TRICKLE source.
         sanctum_details: Required for SANCTUM_WEAVING / SANCTUM_OWNER_BONUS (Plan 4 §F).
         project: Required for PROJECT_CONTRIBUTION (Plan 1+).
+        entry_flourish: Required for ENTRY_FLOURISH source.
+        dramatic_moment: Required for DRAMATIC_MOMENT source.
 
     Returns:
         The updated CharacterResonance instance.
@@ -112,6 +118,8 @@ def grant_resonance(  # noqa: PLR0913
         outfit_item_facet=outfit_item_facet,
         sanctum_details=sanctum_details,
         project=project,
+        entry_flourish=entry_flourish,
+        dramatic_moment=dramatic_moment,
     )
 
     cr, _ = CharacterResonance.objects.get_or_create(
@@ -135,6 +143,8 @@ def grant_resonance(  # noqa: PLR0913
         outfit_item_facet=outfit_item_facet,
         source_sanctum_details=sanctum_details,
         source_project=project,
+        source_entry_flourish=entry_flourish,
+        source_dramatic_moment=dramatic_moment,
     )
     return cr
 
@@ -148,6 +158,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     outfit_item_facet: ItemFacet | None = None,
     sanctum_details: SanctumDetails | None = None,
     project: Project | None = None,
+    entry_flourish: EntryFlourishRecord | None = None,
+    dramatic_moment: DramaticMomentTag | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -164,6 +176,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             outfit_item_facet=outfit_item_facet,
             sanctum_details=sanctum_details,
             project=project,
+            entry_flourish=entry_flourish,
+            dramatic_moment=dramatic_moment,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -187,6 +201,8 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
         "sanctum_details",
     ),
     GainSource.PROJECT_CONTRIBUTION: lambda **kw: (kw["project"], "project"),
+    GainSource.ENTRY_FLOURISH: lambda **kw: (kw["entry_flourish"], "entry_flourish"),
+    GainSource.DRAMATIC_MOMENT: lambda **kw: (kw["dramatic_moment"], "dramatic_moment"),
 }
 
 

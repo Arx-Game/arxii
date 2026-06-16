@@ -367,6 +367,7 @@ class TargetFilters:
     in_same_scene: bool = False
     exclude_self: bool = False
     must_be_conscious: bool = False
+    excluded_persona_ids: frozenset[int] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

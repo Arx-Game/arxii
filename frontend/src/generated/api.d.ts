@@ -20723,6 +20723,8 @@ export interface components {
        *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
        *     * `PROJECT_CONTRIBUTION` - Project contribution payout
        *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+       *     * `ENTRY_FLOURISH` - Entry flourishing
+       *     * `DRAMATIC_MOMENT` - Dramatic moment
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -21499,6 +21501,8 @@ export interface components {
      *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
      *     * `PROJECT_CONTRIBUTION` - Project contribution payout
      *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+     *     * `ENTRY_FLOURISH` - Entry flourishing
+     *     * `DRAMATIC_MOMENT` - Dramatic moment
      * @enum {string}
      */
     SourceEnum:
@@ -21510,7 +21514,9 @@ export interface components {
       | 'SANCTUM_WEAVING'
       | 'SANCTUM_OWNER_BONUS'
       | 'PROJECT_CONTRIBUTION'
-      | 'SANCTUM_DISSOLUTION_RECOVERY';
+      | 'SANCTUM_DISSOLUTION_RECOVERY'
+      | 'ENTRY_FLOURISH'
+      | 'DRAMATIC_MOMENT';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -31607,8 +31613,12 @@ export interface operations {
          *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
          *     * `PROJECT_CONTRIBUTION` - Project contribution payout
          *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+         *     * `ENTRY_FLOURISH` - Entry flourishing
+         *     * `DRAMATIC_MOMENT` - Dramatic moment
          */
         source?:
+          | 'DRAMATIC_MOMENT'
+          | 'ENTRY_FLOURISH'
           | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
           | 'PROJECT_CONTRIBUTION'

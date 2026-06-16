@@ -169,3 +169,50 @@ class PresentationEndorsement(EndorsementBase):
 
     def __str__(self) -> str:
         return f"PresentationEndorsement({self.endorser_sheet_id}->{self.presentation_id})"
+
+
+class EntryFlourishRecord(SharedMemoryModel):
+    """Actor-side record of a successful entry flourish (Entrance action).
+
+    Written when a character successfully performs the Entrance social action
+    with a declared resonance. No peer endorser — the resonance grant is
+    actor-initiated and immediately applied (unlike PoseEndorsement which
+    requires a peer and settles weekly).
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="entry_flourish_records",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="entry_flourish_records",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="entry_flourish_records",
+        help_text="Scene context for the flourish; nullable if performed outside a scene.",
+    )
+    granted_amount = models.PositiveIntegerField(
+        help_text="Resonance granted; captured from ResonanceGainConfig at creation time.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["character_sheet", "created_at"],
+                name="entry_flourish_sheet_time_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"EntryFlourishRecord("
+            f"{self.character_sheet_id} +{self.granted_amount} {self.resonance_id})"
+        )
