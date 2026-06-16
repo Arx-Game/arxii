@@ -190,6 +190,25 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
     complete_instanced_room(room)
 
 
+def rescue_captive(captive: CharacterSheet) -> bool:
+    """Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.
+
+    Resolves the captive's active HELD captivity as ``RESCUED`` (flips lifecycle
+    back to ALIVE, relocates them, tears the cell down once empty — all via
+    :func:`resolve_captivity`). Idempotent: returns ``False`` if the captive is
+    not currently held (already freed / never captured), so a double-fire of the
+    rescue route is harmless.
+    """
+    captivity = Captivity.objects.filter(
+        captive=captive,
+        status=CaptivityStatus.HELD,
+    ).first()
+    if captivity is None:
+        return False
+    resolve_captivity(captivity, status=CaptivityStatus.RESCUED)
+    return True
+
+
 def _active_group_cell(group_key: str) -> InstancedRoom | None:
     """The still-active cell already spawned for this capture group, if any.
 

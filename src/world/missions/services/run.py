@@ -27,6 +27,7 @@ from world.missions.services.resolution import enter_node
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionTemplate
 
 
@@ -72,6 +73,33 @@ def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> Miss
     instance = MissionInstance.objects.create(
         template=template,
         anchor_room=anchor_room_for(character),
+    )
+    MissionParticipant.objects.create(
+        instance=instance,
+        character=character,
+        is_contract_holder=True,
+    )
+    enter_node(instance, _entry_node(template))
+    return instance
+
+
+@transaction.atomic
+def grant_rescue_mission(
+    template: MissionTemplate,
+    character: ObjectDB,
+    rescue_target: CharacterSheet,
+) -> MissionInstance:
+    """Grant a rescue run targeting a captive (#931 Phase 4 rescue).
+
+    Mirrors :func:`staff_assign_mission` but stamps ``rescue_target`` so the run
+    knows whom it frees — its success route resolves the captive's captivity. The
+    caller (a capture-site / captive-room trigger, or an explicit ally grant)
+    supplies the authored rescue template.
+    """
+    instance = MissionInstance.objects.create(
+        template=template,
+        anchor_room=anchor_room_for(character),
+        rescue_target=rescue_target,
     )
     MissionParticipant.objects.create(
         instance=instance,
