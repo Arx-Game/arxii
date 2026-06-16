@@ -12,12 +12,21 @@ from world.forms.factories import (
     FormTraitFactory,
     FormTraitOptionFactory,
     HeightBandFactory,
+    PersonaTraitDescriptorFactory,
     SpeciesFormTraitFactory,
     TemporaryFormChangeFactory,
 )
-from world.forms.models import CharacterFormState, DurationType, FormType
+from world.forms.models import (
+    AppearanceChangeLog,
+    CharacterFormState,
+    CharacterFormValue,
+    DurationType,
+    FormType,
+)
 from world.forms.services import (
+    NonCosmeticTraitError,
     calculate_weight,
+    change_appearance,
     create_true_form,
     get_apparent_build,
     get_apparent_form,
@@ -26,6 +35,8 @@ from world.forms.services import (
     get_cg_form_options,
     get_cg_height_bands,
     get_height_band,
+    get_presented_appearance,
+    reset_trait_to_natural,
     revert_to_true_form,
     switch_form,
 )
@@ -384,3 +395,84 @@ class CGHelperFunctionsTest(TestCase):
         builds = get_cg_builds()
         self.assertIn(self.cg_build, builds)
         self.assertNotIn(self.non_cg_build, builds)
+
+
+class ChangeAppearanceTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.sheet.primary_persona
+        cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color", is_cosmetic=True)
+        cls.brown = FormTraitOptionFactory(trait=cls.hair, name="brown", display_name="Brown")
+        cls.blue = FormTraitOptionFactory(trait=cls.hair, name="blue", display_name="Blue")
+        cls.height = FormTraitFactory(name="height", display_name="Height", is_cosmetic=False)
+        cls.tall = FormTraitOptionFactory(trait=cls.height, name="tall", display_name="Tall")
+
+    def setUp(self):
+        self.form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        CharacterFormValueFactory(
+            form=self.form, trait=self.hair, option=self.brown, natural_option=self.brown
+        )
+
+    def test_changes_current_preserves_natural_and_logs(self):
+        change_appearance(
+            self.character,
+            self.hair,
+            self.blue,
+            persona=self.persona,
+            descriptor="Robin's-egg",
+            note="visited a stylist",
+        )
+        value = CharacterFormValue.objects.get(form=self.form, trait=self.hair)
+        self.assertEqual(value.option, self.blue)
+        self.assertEqual(value.natural_option, self.brown)
+        log = AppearanceChangeLog.objects.get(form=self.form, trait=self.hair)
+        self.assertEqual(log.from_option, self.brown)
+        self.assertEqual(log.to_option, self.blue)
+        self.assertEqual(log.to_text, "Robin's-egg")
+        self.assertEqual(log.note, "visited a stylist")
+
+    def test_rejects_non_cosmetic_trait(self):
+        with self.assertRaises(NonCosmeticTraitError):
+            change_appearance(self.character, self.height, self.tall, persona=self.persona)
+
+    def test_clearing_descriptor_removes_it(self):
+        change_appearance(
+            self.character, self.hair, self.blue, persona=self.persona, descriptor="Crimson"
+        )
+        change_appearance(self.character, self.hair, self.blue, persona=self.persona, descriptor="")
+        presented = {p.trait_name: p for p in get_presented_appearance(self.character)}
+        self.assertEqual(presented["hair_color"].descriptor, "")
+        self.assertEqual(presented["hair_color"].display, "Blue")
+
+    def test_reset_to_natural(self):
+        change_appearance(self.character, self.hair, self.blue, persona=self.persona)
+        reset_trait_to_natural(self.character, self.hair, persona=self.persona)
+        value = CharacterFormValue.objects.get(form=self.form, trait=self.hair)
+        self.assertEqual(value.option, self.brown)
+
+
+class GetPresentedAppearanceTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.sheet.primary_persona
+        cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color", is_cosmetic=True)
+        cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
+
+    def setUp(self):
+        self.form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        CharacterFormValueFactory(form=self.form, trait=self.hair, option=self.red)
+
+    def test_descriptor_overlays_normalized(self):
+        PersonaTraitDescriptorFactory(persona=self.persona, trait=self.hair, text="Crimson")
+        presented = {p.trait_name: p for p in get_presented_appearance(self.character)}
+        self.assertEqual(presented["hair_color"].normalized, "Red")
+        self.assertEqual(presented["hair_color"].descriptor, "Crimson")
+        self.assertEqual(presented["hair_color"].display, "Crimson")
+
+    def test_blank_descriptor_falls_back_to_normalized(self):
+        presented = {p.trait_name: p for p in get_presented_appearance(self.character)}
+        self.assertEqual(presented["hair_color"].display, "Red")

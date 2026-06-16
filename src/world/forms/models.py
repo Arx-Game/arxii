@@ -92,6 +92,13 @@ class FormTrait(NaturalKeyMixin, SharedMemoryModel):
     display_name = models.CharField(max_length=100, help_text="Display name for UI")
     trait_type = models.CharField(max_length=20, choices=TraitType.choices, default=TraitType.STYLE)
     sort_order = models.PositiveSmallIntegerField(default=0)
+    is_cosmetic = models.BooleanField(
+        default=False,
+        help_text=(
+            "Player may self-edit this trait cosmetically (hair dye, makeup, restyle) "
+            "without magic. Fixed traits (height, species markers) stay False."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -266,6 +273,17 @@ class CharacterFormValue(SharedMemoryModel):
     option = models.ForeignKey(
         FormTraitOption, on_delete=models.CASCADE, related_name="character_values"
     )
+    natural_option = models.ForeignKey(
+        FormTraitOption,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="natural_for_values",
+        help_text=(
+            "The original/natural value — the 'reset to natural' target. Set at "
+            "creation; cosmetic edits change ``option`` but never this."
+        ),
+    )
 
     class Meta:
         unique_together = [["form", "trait"]]
@@ -355,3 +373,93 @@ class TemporaryFormChange(SharedMemoryModel):
             return timezone.now() > self.expires_at
         # Game time and scene-based require external tracking
         return False
+
+
+class PersonaTraitDescriptor(SharedMemoryModel):
+    """A persona's free-text flavor for one appearance trait (red hair -> 'Crimson').
+
+    Scoped per ``(persona, trait)`` so one shared physical form can read differently
+    under different personas. The descriptor is identity-bearing and therefore never
+    auto-copied across a character's personas (the descriptor privacy invariant —
+    enforced once multi-persona creation lands, slice 2). Absence of a row means "no
+    descriptor": rendering falls back to the normalized option's display value.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="trait_descriptors",
+        help_text="The presented face this descriptor belongs to.",
+    )
+    trait = models.ForeignKey(
+        FormTrait,
+        on_delete=models.CASCADE,
+        related_name="persona_descriptors",
+        help_text="The appearance trait this describes.",
+    )
+    text = models.CharField(
+        max_length=120,
+        help_text="Free-text flavor for the trait (e.g. 'Robin's-egg', 'Crimson').",
+    )
+
+    class Meta:
+        unique_together = [["persona", "trait"]]
+        ordering = ["persona", "trait"]
+        verbose_name = "Persona Trait Descriptor"
+        verbose_name_plural = "Persona Trait Descriptors"
+
+    def __str__(self):
+        return f"{self.persona}: {self.trait.display_name}='{self.text}'"
+
+
+class AppearanceChangeLog(SharedMemoryModel):
+    """Append-only record of an appearance edit, for continuity across roster handoffs.
+
+    Captures what changed, who changed it, and an optional note, so a player who
+    inherits a roster character can see that the blue hair was dyed — and what it was
+    before.
+    """
+
+    form = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.CASCADE,
+        related_name="appearance_changes",
+        help_text="The real form whose trait was edited.",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appearance_changes",
+        help_text="The persona presenting when the edit was made (descriptor owner).",
+    )
+    trait = models.ForeignKey(
+        FormTrait, on_delete=models.CASCADE, related_name="appearance_changes"
+    )
+    from_option = models.ForeignKey(
+        FormTraitOption, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    to_option = models.ForeignKey(
+        FormTraitOption, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    from_text = models.CharField(max_length=120, blank=True, help_text="Prior descriptor.")
+    to_text = models.CharField(max_length=120, blank=True, help_text="New descriptor.")
+    actor_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appearance_changes_made",
+        help_text="Who made the change (own persona for self-edits; null for system/staff).",
+    )
+    note = models.CharField(max_length=255, blank=True, help_text="Optional in-fiction note.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Appearance Change Log"
+        verbose_name_plural = "Appearance Change Logs"
+
+    def __str__(self):
+        return f"{self.form}: {self.trait.display_name} change"

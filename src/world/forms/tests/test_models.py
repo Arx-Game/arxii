@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.factories import (
+    AppearanceChangeLogFactory,
     BuildFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
@@ -14,10 +15,17 @@ from world.forms.factories import (
     FormTraitFactory,
     FormTraitOptionFactory,
     HeightBandFactory,
+    PersonaTraitDescriptorFactory,
     SpeciesFormTraitFactory,
     TemporaryFormChangeFactory,
 )
-from world.forms.models import DurationType, FormType, TemporaryFormChange, TraitType
+from world.forms.models import (
+    DurationType,
+    FormType,
+    PersonaTraitDescriptor,
+    TemporaryFormChange,
+    TraitType,
+)
 from world.species.factories import SpeciesFactory
 
 
@@ -204,3 +212,51 @@ class FormTraitOptionHeightModifierTest(TestCase):
         # For traits that reduce apparent height
         option = FormTraitOptionFactory(height_modifier_inches=-2)
         self.assertEqual(option.height_modifier_inches, -2)
+
+
+class FormTraitIsCosmeticTest(TestCase):
+    def test_defaults_to_false(self):
+        trait = FormTraitFactory(name="height", display_name="Height")
+        self.assertFalse(trait.is_cosmetic)
+
+    def test_can_be_set(self):
+        trait = FormTraitFactory(name="hair_color", display_name="Hair Color", is_cosmetic=True)
+        self.assertTrue(trait.is_cosmetic)
+
+
+class CharacterFormValueNaturalOptionTest(TestCase):
+    def test_natural_option_defaults_to_current_in_factory(self):
+        value = CharacterFormValueFactory()
+        self.assertEqual(value.natural_option_id, value.option_id)
+
+    def test_natural_option_can_diverge_from_current(self):
+        value = CharacterFormValueFactory()
+        new_option = FormTraitOptionFactory(trait=value.trait, name="dyed", display_name="Blue")
+        value.option = new_option
+        value.save()
+        self.assertNotEqual(value.option_id, value.natural_option_id)
+
+
+class PersonaTraitDescriptorModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.descriptor = PersonaTraitDescriptorFactory(text="Crimson")
+
+    def test_str_includes_text(self):
+        self.assertIn("Crimson", str(self.descriptor))
+
+    def test_unique_per_persona_and_trait(self):
+        with self.assertRaises(IntegrityError):
+            PersonaTraitDescriptor.objects.create(
+                persona=self.descriptor.persona,
+                trait=self.descriptor.trait,
+                text="Rusty Auburn",
+            )
+
+
+class AppearanceChangeLogModelTest(TestCase):
+    def test_records_change(self):
+        log = AppearanceChangeLogFactory(from_text="", to_text="Crimson")
+        self.assertEqual(log.to_text, "Crimson")
+        self.assertEqual(log.from_text, "")
+        self.assertEqual(log.actor_persona, log.persona)

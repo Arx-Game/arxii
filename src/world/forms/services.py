@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db.models import Prefetch, QuerySet
 
 from world.forms.models import (
+    AppearanceChangeLog,
     Build,
     CharacterForm,
     CharacterFormState,
@@ -9,10 +14,25 @@ from world.forms.models import (
     FormTraitOption,
     FormType,
     HeightBand,
+    PersonaTraitDescriptor,
     SpeciesFormTrait,
     TemporaryFormChange,
 )
+from world.forms.types import PresentedTrait
 from world.species.models import Species
+
+if TYPE_CHECKING:
+    from world.scenes.models import Persona
+
+
+class NonCosmeticTraitError(ValueError):
+    """Raised when a player tries to cosmetically self-edit a fixed trait.
+
+    Carries a fixed ``user_message`` (per ``feedback_codeql_exceptions``) so the edit
+    endpoint can surface a safe string without leaking internals.
+    """
+
+    user_message = "That feature can't be changed cosmetically."
 
 
 def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
@@ -137,14 +157,165 @@ def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) ->
         is_player_created=False,
     )
 
-    # Create form values
+    # Create form values; the initial value is also the natural baseline.
     for trait, option in selections.items():
-        CharacterFormValue.objects.create(form=form, trait=trait, option=option)
+        CharacterFormValue.objects.create(
+            form=form, trait=trait, option=option, natural_option=option
+        )
 
     # Create/update form state
     CharacterFormState.objects.update_or_create(character=character, defaults={"active_form": form})
 
     return form
+
+
+# --- Appearance editing & presentation (slice 1) ---
+
+
+def _true_form(character) -> CharacterForm:
+    """The character's real/true form. Raises if character creation never ran."""
+    return CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+
+
+def change_appearance(  # noqa: PLR0913
+    character,
+    trait: FormTrait,
+    new_option: FormTraitOption,
+    *,
+    persona: Persona,
+    descriptor: str | None = None,
+    note: str = "",
+    actor_persona: Persona | None = None,
+) -> CharacterFormValue:
+    """Cosmetically edit one trait of the character's real form (hair dye, restyle).
+
+    A real, in-place change — not a disguise. Only ``is_cosmetic`` traits are editable;
+    the natural baseline is preserved, the active persona's descriptor is updated, and
+    the change is logged for roster continuity. ``descriptor=None`` leaves the descriptor
+    untouched; ``descriptor=""`` clears it (render falls back to the normalized value).
+    """
+    if not trait.is_cosmetic:
+        raise NonCosmeticTraitError
+    if new_option.trait_id != trait.id:
+        msg = "Option does not belong to this trait"
+        raise ValueError(msg)
+
+    form = _true_form(character)
+    value, created = CharacterFormValue.objects.get_or_create(
+        form=form,
+        trait=trait,
+        defaults={"option": new_option, "natural_option": new_option},
+    )
+    if created:
+        from_option = None
+    else:
+        from_option = value.option
+        if value.option_id != new_option.id:
+            value.option = new_option
+            value.save(update_fields=["option"])
+
+    existing = PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).first()
+    from_text = existing.text if existing else ""
+    to_text = from_text
+    if descriptor is not None:
+        cleaned = descriptor.strip()
+        if cleaned:
+            PersonaTraitDescriptor.objects.update_or_create(
+                persona=persona, trait=trait, defaults={"text": cleaned}
+            )
+            to_text = cleaned
+        else:
+            PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).delete()
+            to_text = ""
+
+    AppearanceChangeLog.objects.create(
+        form=form,
+        persona=persona,
+        trait=trait,
+        from_option=from_option,
+        to_option=new_option,
+        from_text=from_text,
+        to_text=to_text,
+        actor_persona=actor_persona or persona,
+        note=note,
+    )
+    return value
+
+
+def reset_trait_to_natural(
+    character,
+    trait: FormTrait,
+    *,
+    persona: Persona,
+    actor_persona: Persona | None = None,
+    note: str = "",
+) -> CharacterFormValue:
+    """Restore one trait to its natural (origin) value — "wash out the dye."""
+    form = _true_form(character)
+    value = CharacterFormValue.objects.get(form=form, trait=trait)
+    if value.natural_option_id is None or value.option_id == value.natural_option_id:
+        return value
+    from_option = value.option
+    value.option = value.natural_option
+    value.save(update_fields=["option"])
+    AppearanceChangeLog.objects.create(
+        form=form,
+        persona=persona,
+        trait=trait,
+        from_option=from_option,
+        to_option=value.natural_option,
+        from_text="",
+        to_text="",
+        actor_persona=actor_persona or persona,
+        note=note or "reset to natural",
+    )
+    return value
+
+
+def get_presented_appearance(character) -> list[PresentedTrait]:
+    """Compose what a viewer sees: real-form normalized traits overlaid with the active
+    persona's descriptors. The single source for telnet and web (replacing the legacy
+    Characteristic read and the TRUE-form-only web read).
+
+    Slice 1: the real form is the true form; per-viewer gating and disguise overlays
+    arrive in later slices.
+    """
+    # Lazy imports avoid a forms<->scenes import cycle at module load.
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        form = _true_form(character)
+    except CharacterForm.DoesNotExist:
+        return []
+
+    descriptors: dict[int, str] = {}
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is not None:
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            persona = None
+        if persona is not None:
+            descriptors = {
+                row.trait_id: row.text
+                for row in PersonaTraitDescriptor.objects.filter(persona=persona)
+            }
+
+    presented: list[PresentedTrait] = []
+    for value in form.values.select_related("trait", "option").order_by("trait__sort_order"):
+        text = descriptors.get(value.trait_id, "")
+        normalized = value.option.display_name
+        presented.append(
+            PresentedTrait(
+                trait_name=value.trait.name,
+                trait_display=value.trait.display_name,
+                normalized=normalized,
+                descriptor=text,
+                display=text or normalized,
+            )
+        )
+    return presented
 
 
 # --- Height/Build Service Functions ---
