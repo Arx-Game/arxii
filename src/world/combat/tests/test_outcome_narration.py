@@ -4,10 +4,10 @@ from django.test import SimpleTestCase
 
 from world.combat.interaction_services import (
     render_action_outcome_narration,
-    render_challenge_outcome_narration,
     render_clash_outcome_narration,
 )
 from world.combat.types import ActionOutcome, OpponentDamageResult
+from world.scenes.interaction_services import render_challenge_outcome_narration
 
 
 def _opp_dmg(*, damage_dealt: int, defeated: bool = False) -> OpponentDamageResult:

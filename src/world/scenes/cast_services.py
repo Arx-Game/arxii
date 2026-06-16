@@ -17,6 +17,7 @@ matrix:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -29,7 +30,6 @@ from world.combat.cast_seed import (
     encounter_requiring_risk_acknowledgement,
     seed_or_feed_encounter_from_cast,
 )
-from world.combat.narrator import get_or_create_narrator_persona
 from world.combat.services import acknowledge_encounter_risk
 from world.magic.models.techniques import CharacterTechnique
 from world.magic.narration import render_cast_outcome_narration
@@ -42,6 +42,7 @@ from world.scenes.action_constants import (
 from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
+from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
 
 if TYPE_CHECKING:
@@ -103,7 +104,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     captured: dict[str, PowerLedger] = {}
 
-    def _resolve_fn(*, power: int, ledger: PowerLedger):  # noqa: ARG001 — power is the pipeline's
+    def _resolve_fn(*, power: int, ledger: PowerLedger) -> PendingActionResolution:  # noqa: ARG001 — power is the pipeline's
         captured["ledger"] = ledger
         return start_action_resolution(
             character=character,
@@ -321,7 +322,9 @@ def resolve_accepted_cast(
 
     from world.magic.exceptions import MagicError  # noqa: PLC0415
 
-    def _resolve(pull: CastPullDeclaration | None, note: str | None):
+    def _resolve(
+        pull: CastPullDeclaration | None, note: str | None
+    ) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
         with transaction.atomic():
             return _resolve_and_pose_cast(
                 request=action_request,
@@ -431,7 +434,7 @@ def _create_cast_request(  # noqa: PLR0913
     technique: Technique,
     status: str,
     strain_commitment: int = 0,
-    resolved_at=None,
+    resolved_at: datetime | None = None,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
 

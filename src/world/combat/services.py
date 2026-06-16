@@ -3545,8 +3545,8 @@ def _resolve_declared_challenges(
 
         # Broadcast a durable, Narrator-authored OUTCOME line for this challenge,
         # mirroring the per-action broadcast in _resolve_pc_action (#644).
-        from world.combat.interaction_services import (  # noqa: PLC0415
-            broadcast_action_outcome,
+        from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+        from world.scenes.interaction_services import (  # noqa: PLC0415
             render_challenge_outcome_narration,
         )
 

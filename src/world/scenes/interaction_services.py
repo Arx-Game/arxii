@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import SceneRound
 
 DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
@@ -805,3 +806,66 @@ def record_mutter_interaction(
         mode=InteractionMode.MUTTER,
     )
     return full, fragment
+
+
+def render_challenge_outcome_narration(
+    *,
+    actor_label: str,
+    challenge_name: str,
+    approach_name: str,
+    outcome_label: str,
+    success_level: int,
+) -> str:
+    """Render a one-line, deterministic outcome narration for a resolved challenge.
+
+    Pure function — no DB access, no randomness. The caller supplies primitives
+    extracted from the ``ChallengeResolutionResult`` and the resolving participant,
+    so this stays DB-free and unit-testable.
+
+    Examples:
+        "Kira attempts Scale the Wall (Athletics) and succeeds (Decisive Success)."
+        "Kira attempts Scale the Wall (Athletics) and fails (Failure)."
+    """
+    verb = "succeeds" if success_level > 0 else "fails"
+    return (
+        f"{actor_label} attempts {challenge_name} ({approach_name}) and {verb} ({outcome_label})."
+    )
+
+
+def broadcast_scene_outcome(
+    *,
+    scene_round: SceneRound,
+    narration: str,
+) -> Interaction | None:
+    """Persist a Narrator-authored OUTCOME interaction and broadcast it to the room.
+
+    Scene-scoped analog of ``world.combat.interaction_services.broadcast_action_outcome``.
+    Uses the scene_round's scene FK (nullable) for the scene log link and broadcasts
+    to the room via the existing WebSocket delivery path.
+
+    Returns the created Interaction, or None when narration is empty.
+    """
+    if not narration:
+        return None
+
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    narrator = get_or_create_narrator_persona()
+    interaction = create_interaction(
+        persona=narrator,
+        content=narration,
+        mode=InteractionMode.OUTCOME,
+        scene=scene_round.scene,
+    )
+
+    room = scene_round.room
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+    )
+    _broadcast_to_location(room, payload)
+    return interaction
