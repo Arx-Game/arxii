@@ -10,7 +10,6 @@ from django.test import TestCase
 
 from commands.account.sheet import CmdSheet
 from world.character_sheets.factories import (
-    BasicCharacteristicsSetupFactory,
     CharacterFactory,
     CharacterSheetFactory,
     CharacterWithCharacteristicsFactory,
@@ -24,16 +23,12 @@ class SheetCommandTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        # Create basic characteristics for tests
-        BasicCharacteristicsSetupFactory.create()
-
-        # Create test character with full data
+        # Create test character with FormTrait-backed appearance
         self.char_data = CharacterWithCharacteristicsFactory.create(
             character_name="TestHero",
             characteristics={
                 "eye_color": "blue",
                 "hair_color": "brown",
-                "height": "tall",
                 "skin_tone": "fair",
             },
         )
@@ -123,7 +118,6 @@ class SheetCommandTests(TestCase):
         assert "Physical Characteristics" in output
         assert "Eye Color: Blue" in output
         assert "Hair Color: Brown" in output
-        assert "Height: Tall" in output
         assert "Skin Tone: Fair" in output
 
     def test_sheet_command_description_displayed(self):

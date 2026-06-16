@@ -8,9 +8,13 @@
 - **`CharacterSheet`**: Primary character data (age, gender, concept, description, background, demographics). Anchor for character-related FKs. Has `primary_persona` cached property and thin `display_*` delegates that call through to the primary persona.
 - **`Heritage`**: Origin story types (Sleeper, Misbegotten, Normal) - SharedMemoryModel
 - **`Gender`** / **`Pronouns`**: Canonical lookup tables - SharedMemoryModel
-- **`Characteristic`**: Physical trait types (eye_color, hair_color, etc.) - SharedMemoryModel
-- **`CharacteristicValue`**: Specific values per trait type - SharedMemoryModel
-- **`CharacterSheetValue`**: Links characters to their chosen characteristic values
+
+**Appearance is NOT here.** Skin/eye/hair (and other physical traits) live in the
+`forms` app (`FormTrait`/`FormTraitOption`/`CharacterForm`), with per-persona flavor
+in `forms.PersonaTraitDescriptor`. Read the composed result via
+`forms.services.get_presented_appearance` (the single source for telnet `item_data`
+and the web serializer). The legacy `Characteristic`/`CharacteristicValue`/
+`CharacterSheetValue` models were retired in favour of that (#1119).
 
 ### `services.py`
 - **`create_character_with_sheet()`**: The blessed character creation path. Atomically creates the Character typeclass, CharacterSheet, and PRIMARY Persona in a single transaction. Factories and the character_creation app both use this.

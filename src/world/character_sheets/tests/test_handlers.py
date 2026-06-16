@@ -4,7 +4,6 @@ Tests for character data handlers.
 Tests the CharacterDataHandler's custom methods and caching behavior.
 """
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.test import TestCase
 import pytest
 
@@ -13,7 +12,6 @@ from evennia_extensions.data_handlers import (
 )
 from evennia_extensions.models import ObjectDisplayData
 from world.character_sheets.factories import (
-    BasicCharacteristicsSetupFactory,
     CharacterFactory,
     CharacterSheetFactory,
     CharacterWithCharacteristicsFactory,
@@ -125,11 +123,7 @@ class CharacterDataHandlerTests(TestCase):
         assert self.handler.permanent_description == "A noble warrior"
 
     def test_characteristic_access(self):
-        """Test characteristic value access."""
-        # Create basic characteristics setup
-        BasicCharacteristicsSetupFactory.create()
-
-        # Create character with characteristics
+        """item_data exposes appearance traits (FormTrait-backed, descriptor-aware)."""
         data = CharacterWithCharacteristicsFactory.create(
             characteristics={"eye_color": "blue", "hair_color": "brown"},
         )
@@ -139,48 +133,25 @@ class CharacterDataHandlerTests(TestCase):
         assert handler.eye_color == "Blue"
         assert handler.hair_color == "Brown"
 
-    def test_get_characteristic_method(self):
-        """Test generic characteristic getter."""
-        # Create basic characteristics
-        BasicCharacteristicsSetupFactory.create()
+    def test_skin_tone_reflects_descriptor(self):
+        """A persona descriptor overrides the normalized value in item_data."""
+        from world.forms.factories import PersonaTraitDescriptorFactory
+        from world.forms.models import FormTrait
 
-        # Create character with characteristics
         data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"height": "tall", "skin_tone": "fair"},
+            characteristics={"skin_tone": "fair"},
+        )
+        character = data["character"]
+        skin_trait = FormTrait.objects.get(name="skin_tone")
+        PersonaTraitDescriptorFactory(
+            persona=character.sheet_data.primary_persona,
+            trait=skin_trait,
+            text="Porcelain",
         )
 
-        handler = CharacterDataHandler(data["character"])
+        handler = CharacterDataHandler(character)
 
-        assert handler.get_characteristic("height") == "Tall"
-        assert handler.get_characteristic("skin_tone") == "Fair"
-        assert handler.get_characteristic("nonexistent") is None
-
-    def test_characteristic_caching(self):
-        """Test that characteristics are cached properly."""
-        # Create characteristics
-        BasicCharacteristicsSetupFactory.create()
-        data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"eye_color": "blue"},
-        )
-
-        handler = CharacterDataHandler(data["character"])
-
-        # First access (should cache)
-        color1 = handler.eye_color
-
-        # Modify characteristic directly
-        sheet_value = data["characteristic_values"][0]
-        from world.character_sheets.models import CharacteristicValue
-
-        new_value = CharacteristicValue.objects.get(value="green")
-        sheet_value.characteristic_value = new_value
-        sheet_value.save()
-
-        # Second access should still be cached
-        color2 = handler.eye_color
-
-        assert color1 == "Blue"
-        assert color2 == "Blue"  # Still cached
+        assert handler.skin_tone == "Porcelain"
 
     def test_set_age_method(self):
         """Test setting age updates database."""
@@ -189,42 +160,6 @@ class CharacterDataHandlerTests(TestCase):
         # Should be reflected in fresh handler
         new_handler = CharacterDataHandler(self.character)
         assert new_handler.age == 30
-
-    def test_set_characteristic_method(self):
-        """Test setting characteristic values."""
-        # Create basic characteristics
-        BasicCharacteristicsSetupFactory.create()
-
-        handler = CharacterDataHandler(self.character)
-        handler.set_characteristic("eye_color", "blue")
-
-        # Should be accessible
-        assert handler.eye_color == "Blue"
-
-        # Should persist to new handler
-        new_handler = CharacterDataHandler(self.character)
-        assert new_handler.eye_color == "Blue"
-
-    def test_set_characteristic_replaces_existing(self):
-        """Test that setting characteristic replaces existing value."""
-        # Create basic characteristics
-        BasicCharacteristicsSetupFactory.create()
-
-        handler = CharacterDataHandler(self.character)
-        handler.set_characteristic("eye_color", "blue")
-        assert handler.eye_color == "Blue"
-
-        # Change to different value
-        handler.set_characteristic("eye_color", "green")
-
-        # Should reflect new value (after cache clear)
-        new_handler = CharacterDataHandler(self.character)
-        assert new_handler.eye_color == "Green"
-
-    def test_set_characteristic_invalid_raises_error(self):
-        """Test that invalid characteristic/value combinations raise errors."""
-        with pytest.raises(ObjectDoesNotExist):
-            self.handler.set_characteristic("nonexistent", "value")
 
     def test_display_name_methods(self):
         """Test display name helper methods."""

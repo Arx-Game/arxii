@@ -1,10 +1,7 @@
 from django.contrib import admin
 
 from world.character_sheets.models import (
-    Characteristic,
-    CharacteristicValue,
     CharacterSheet,
-    CharacterSheetValue,
     Gender,
     Pronouns,
 )
@@ -118,37 +115,3 @@ class CharacterSheetAdmin(admin.ModelAdmin):
 # CharacterDescription admin removed - display data now handled by:
 # - evennia_extensions.ObjectDisplayData for basic display info
 # - world.scenes.Persona for character identities and contextual appearances
-
-
-@admin.register(Characteristic)
-class CharacteristicAdmin(admin.ModelAdmin):
-    list_display = ["name", "display_name", "is_active", "values_count"]
-    list_filter = ["is_active"]
-    search_fields = ["name", "display_name"]
-
-    def values_count(self, obj):
-        return obj.values.count()
-
-    values_count.short_description = "Number of Values"
-
-
-class CharacteristicValueInline(admin.TabularInline):
-    model = CharacteristicValue
-    extra = 1
-
-
-@admin.register(CharacteristicValue)
-class CharacteristicValueAdmin(admin.ModelAdmin):
-    list_display = ["characteristic", "value", "display_value", "is_active"]
-    list_filter = ["characteristic", "is_active"]
-    search_fields = ["value", "display_value"]
-
-
-class CharacterSheetValueInline(admin.TabularInline):
-    model = CharacterSheetValue
-    extra = 1
-
-
-# Add inlines to make editing easier
-CharacteristicAdmin.inlines = [CharacteristicValueInline]
-CharacterSheetAdmin.inlines = [CharacterSheetValueInline]
