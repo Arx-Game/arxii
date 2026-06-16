@@ -36,11 +36,20 @@ from actions.definitions.rounds import (
     PassRoundAction,
     StartRoundAction,
 )
+from actions.definitions.social import (
+    deceive,
+    entrance,
+    flirt,
+    intimidate,
+    perform,
+    persuade,
+)
 from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
-_ALL_ACTIONS: list[Action] = [
+# Social singletons are plain classes (not Action subclasses) but share the same interface.
+_ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     LookAction(),
     LookAtItemAction(),
     InventoryAction(),
@@ -71,6 +80,12 @@ _ALL_ACTIONS: list[Action] = [
     DisarmTrapAction(),
     PassRoundAction(),
     ForceResolveRoundAction(),
+    intimidate,
+    persuade,
+    deceive,
+    flirt,
+    perform,
+    entrance,
 ]
 
 # Lookup by key

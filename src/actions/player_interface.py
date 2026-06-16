@@ -855,7 +855,7 @@ def _enrich_player_actions(
             enhancements_by_action_key=enhancements_by_action_key,
         )
         action.enhancements = enhancements
-        action.target_spec = _target_spec_for_action(action)
+        action.target_spec = _target_spec_for_action(action, character=character)
         action.action_category = _action_category_for_action(action)
         if enhancements and strain_cap is not None:
             action.strain = StrainAvailability(cap=strain_cap)
@@ -958,14 +958,103 @@ def _resolve_action_key(action: PlayerAction) -> str:
     return ""
 
 
-def _target_spec_for_action(action: PlayerAction) -> TargetSpec | None:
+def _tenure_persona_ids(tenure: object) -> set[int]:
+    """Return persona PKs attached to *tenure*'s roster entry's character sheet.
+
+    Returns an empty set if the relationship chain is broken.
+    """
+    try:
+        sheet = tenure.roster_entry.character_sheet  # type: ignore[union-attr]
+        return set(sheet.personas.values_list("pk", flat=True))
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _tenure_blocks_actor(tenure: object, actor_tenure: object | None) -> bool:
+    """Return True if *tenure*'s consent preference excludes *actor_tenure*.
+
+    False when no preference row exists (default: allow).
+    """
+    from world.consent.models import SocialConsentPreference  # noqa: PLC0415
+
+    try:
+        pref = tenure.social_consent_preference  # type: ignore[union-attr]
+    except SocialConsentPreference.DoesNotExist:
+        return False
+
+    if not pref.allow_social_actions:
+        return True
+
+    if pref.require_whitelist and actor_tenure is not None:
+        from world.consent.models import SocialConsentWhitelist  # noqa: PLC0415
+
+        return not SocialConsentWhitelist.objects.filter(
+            owner_tenure=tenure,
+            allowed_tenure=actor_tenure,
+        ).exists()
+
+    return False
+
+
+def _social_consent_exclusions(character: ObjectDB) -> frozenset[int]:
+    """Return persona IDs of characters that don't consent to social actions from *character*.
+
+    Checks SocialConsentPreference for all tenures participating in the character's
+    current scene. Returns a frozenset of Persona PKs to exclude from the target picker.
+    """
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+    from world.scenes.models import Scene, SceneParticipation  # noqa: PLC0415
+
+    location = character.db_location
+    if location is None:
+        return frozenset()
+
+    scene = (
+        Scene.objects.filter(location=location, end_time__isnull=True)
+        .order_by("-start_time")
+        .first()
+    )
+    if scene is None:
+        return frozenset()
+
+    actor_sheet = _get_character_sheet(character)
+    actor_tenure: RosterTenure | None = None
+    if actor_sheet is not None:
+        actor_tenure = RosterTenure.objects.filter(
+            roster_entry__character_sheet=actor_sheet,
+            end_date__isnull=True,
+        ).first()
+
+    participations = list(SceneParticipation.objects.filter(scene=scene).select_related("account"))
+    excluded: set[int] = set()
+
+    for participation in participations:
+        account = participation.account
+        if account is None:
+            continue
+        tenures = list(
+            RosterTenure.objects.filter(
+                player_data__account=account,
+                end_date__isnull=True,
+            )
+        )
+        for tenure in tenures:
+            if _tenure_blocks_actor(tenure, actor_tenure):
+                excluded.update(_tenure_persona_ids(tenure))
+
+    return frozenset(excluded)
+
+
+def _target_spec_for_action(
+    action: PlayerAction, character: ObjectDB | None = None
+) -> TargetSpec | None:
     """Synthesize a ``TargetSpec`` for *action* by inspecting available metadata.
 
     Resolution order:
     1. Hand-coded ``Action`` subclass via the dispatch ref's ``registry_key``;
        read its ``target_kind`` and ``target_filters`` class fields.
     2. Data-driven social ``ActionTemplate`` (category=="social"): synthesize
-       a PERSONA + SINGLE + in_same_scene/exclude_self default.
+       a PERSONA + SINGLE + in_same_scene/exclude_self + consent exclusions.
     3. Anything else: ``None`` (self-action or shape we don't know yet).
     """
     if action.ref.registry_key:
@@ -979,10 +1068,15 @@ def _target_spec_for_action(action: PlayerAction) -> TargetSpec | None:
 
     template = action.action_template
     if template is not None and _template_is_social(template):
+        excluded = _social_consent_exclusions(character) if character is not None else frozenset()
         return TargetSpec(
             kind=TargetKind.PERSONA,
             cardinality=TargetType.SINGLE,
-            filters=TargetFilters(in_same_scene=True, exclude_self=True),
+            filters=TargetFilters(
+                in_same_scene=True,
+                exclude_self=True,
+                excluded_persona_ids=excluded,
+            ),
         )
 
     return None
