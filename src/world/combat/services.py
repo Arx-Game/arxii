@@ -866,6 +866,33 @@ def join_encounter(
     return participant
 
 
+@transaction.atomic
+def leave_encounter(participant: CombatParticipant) -> None:
+    """Allow a participant to voluntarily leave an Open Encounter between rounds.
+
+    Unlike flee (a check-gated exit), this is unconditional. If the departing
+    participant is the last active player, the encounter completes as ABANDONED.
+
+    Raises ValueError when the encounter is not in BETWEEN_ROUNDS status.
+    """
+    enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
+    if enc.status != EncounterStatus.BETWEEN_ROUNDS:
+        msg = (
+            f"Cannot leave: encounter status is "
+            f"'{enc.get_status_display()}', expected 'Between Rounds'."
+        )
+        raise ValueError(msg)
+
+    remove_participant(participant)
+
+    any_active = CombatParticipant.objects.filter(
+        encounter=enc,
+        status=ParticipantStatus.ACTIVE,
+    ).exists()
+    if not any_active:
+        complete_encounter(enc, outcome=EncounterOutcome.ABANDONED)
+
+
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     """Declare intent to flee -- passives-only maneuver, auto-ready.
 
@@ -3226,7 +3253,7 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
 
 def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
-    """GM force-end: completes as ABANDONED (#876 §8) — the sole ABANDONED producer."""
+    """GM force-end: completes as ABANDONED (#876 §8)."""
     complete_encounter(encounter, outcome=EncounterOutcome.ABANDONED)
     return encounter
 
