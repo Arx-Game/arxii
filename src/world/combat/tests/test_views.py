@@ -13,7 +13,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
+from world.combat.constants import ActionCategory, EncounterStatus, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -812,7 +812,8 @@ class LeaveViewTest(CombatEncounterViewSetTestBase):
 
     def setUp(self) -> None:
         self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
-        self.encounter.save(update_fields=["status"])
+        self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
+        self.encounter.save(update_fields=["status", "encounter_type"])
         self.client = APIClient()
         self.client.force_authenticate(user=self.player_account)
 

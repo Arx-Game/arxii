@@ -65,6 +65,7 @@ from world.combat.constants import (
     CombatManeuver,
     EncounterOutcome,
     EncounterStatus,
+    EncounterType,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -873,7 +874,10 @@ def leave_encounter(participant: CombatParticipant) -> None:
     Unlike flee (a check-gated exit), this is unconditional. If the departing
     participant is the last active participant, the encounter completes as ABANDONED.
 
-    Raises ValueError when the encounter is not in BETWEEN_ROUNDS status.
+    Raises ValueError when:
+    - the encounter is not in BETWEEN_ROUNDS status,
+    - the encounter type is not OPEN_ENCOUNTER, or
+    - the participant is not ACTIVE.
     """
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
     if enc.status != EncounterStatus.BETWEEN_ROUNDS:
@@ -882,7 +886,14 @@ def leave_encounter(participant: CombatParticipant) -> None:
             f"'{enc.get_status_display()}', expected 'Between Rounds'."
         )
         raise ValueError(msg)
-
+    if enc.encounter_type != EncounterType.OPEN_ENCOUNTER:
+        msg = (
+            f"Cannot leave: encounter type is "
+            f"'{enc.get_encounter_type_display()}', expected 'Open Encounter'."
+        )
+        raise ValueError(msg)
+    # Re-read participant under the same transaction lock to avoid stale status reads.
+    participant = CombatParticipant.objects.select_for_update().get(pk=participant.pk)
     if participant.status != ParticipantStatus.ACTIVE:
         msg = f"Cannot leave: participant status is '{participant.status}'."
         raise ValueError(msg)

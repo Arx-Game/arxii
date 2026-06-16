@@ -17,6 +17,7 @@ from world.combat.constants import (
     CombatManeuver,
     EncounterOutcome,
     EncounterStatus,
+    EncounterType,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -376,7 +377,10 @@ class LeaveEncounterTest(TestCase):
     """Tests for leave_encounter service function."""
 
     def _make_between_rounds_encounter(self) -> tuple:
-        encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            encounter_type=EncounterType.OPEN_ENCOUNTER,
+        )
         CombatOpponentFactory(encounter=encounter)
         participant = CombatParticipantFactory(
             encounter=encounter,
@@ -405,7 +409,10 @@ class LeaveEncounterTest(TestCase):
         assert encounter.outcome == EncounterOutcome.ABANDONED
 
     def test_leave_with_other_participants_encounter_continues(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            encounter_type=EncounterType.OPEN_ENCOUNTER,
+        )
         CombatOpponentFactory(encounter=encounter)
         leaver = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
         _stayer = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
@@ -418,6 +425,16 @@ class LeaveEncounterTest(TestCase):
         participant.status = ParticipantStatus.REMOVED
         participant.save(update_fields=["status"])
         with pytest.raises(ValueError, match="participant status"):
+            leave_encounter(participant)
+
+    def test_leave_blocked_when_party_combat(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            encounter_type=EncounterType.PARTY_COMBAT,
+        )
+        CombatOpponentFactory(encounter=encounter)
+        participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        with pytest.raises(ValueError, match="Open Encounter"):
             leave_encounter(participant)
 
 
