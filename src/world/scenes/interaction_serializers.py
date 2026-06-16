@@ -1,3 +1,5 @@
+import re as _re
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
@@ -13,6 +15,13 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import PersonaPayload, ReactionAggregation
+
+_MAX_POSE_LENGTH = 10_000
+
+_DANGEROUS_LINK_RE = _re.compile(
+    r"\[[^\]]*\]\((?!https?://)",
+    _re.IGNORECASE,
+)
 
 
 class InlineActionInteractionSerializer(serializers.ModelSerializer):
@@ -299,6 +308,21 @@ class PoseSubmitSerializer(serializers.Serializer):
             return None
         if not Scene.objects.filter(pk=value).exists():
             msg = "Scene not found."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate_content(self, value: str) -> str:
+        if not value.strip():
+            msg = "Pose content cannot be blank."
+            raise serializers.ValidationError(msg)
+        if len(value) > _MAX_POSE_LENGTH:
+            msg = f"Pose content exceeds the maximum length of {_MAX_POSE_LENGTH} characters."
+            raise serializers.ValidationError(msg)
+        if "\x00" in value:
+            msg = "Pose content contains invalid characters."
+            raise serializers.ValidationError(msg)
+        if _DANGEROUS_LINK_RE.search(value):
+            msg = "Links must use http:// or https:// URLs."
             raise serializers.ValidationError(msg)
         return value
 

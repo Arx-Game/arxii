@@ -122,6 +122,35 @@ describe('RichTextInput', () => {
     expect(textarea).not.toHaveAttribute('placeholder');
   });
 
+  it('renders a Link toolbar button', () => {
+    render(<RichTextInput {...defaultProps} />);
+    expect(screen.getByTitle('Link (Ctrl+K)')).toBeInTheDocument();
+  });
+
+  it('Ctrl+K inserts link template with no selection', () => {
+    const onChange = vi.fn();
+    render(<RichTextInput value="" onChange={onChange} onSubmit={vi.fn()} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    Object.defineProperty(textarea, 'selectionStart', { value: 0, writable: true });
+    Object.defineProperty(textarea, 'selectionEnd', { value: 0, writable: true });
+    fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
+
+    expect(onChange).toHaveBeenCalledWith('[](https://)');
+  });
+
+  it('Ctrl+K wraps selected text as link label', () => {
+    const onChange = vi.fn();
+    render(<RichTextInput value="visit example" onChange={onChange} onSubmit={vi.fn()} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    Object.defineProperty(textarea, 'selectionStart', { value: 6, writable: true });
+    Object.defineProperty(textarea, 'selectionEnd', { value: 13, writable: true });
+    fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
+
+    expect(onChange).toHaveBeenCalledWith('visit [example](https://)');
+  });
+
   describe('@mention autocomplete', () => {
     const characters = [
       { name: 'Alice', thumbnail_url: null },

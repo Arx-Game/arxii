@@ -1,10 +1,24 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { RenderOptions } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement, ReactNode } from 'react';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 
+// Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+function render(ui: ReactElement, options?: RenderOptions) {
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return rtlRender(ui, { wrapper: Wrapper, ...options });
+}
+
 const sendMock = vi.fn();
 const submitPoseMock = vi.fn(() => Promise.resolve());
+const fetchSceneMock = vi.fn();
 
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({ send: sendMock }),
@@ -12,6 +26,10 @@ vi.mock('@/hooks/useGameSocket', () => ({
 
 vi.mock('@/scenes/queries', () => ({
   submitPose: (...args: unknown[]) => submitPoseMock(...(args as [])),
+  fetchScene: (...args: unknown[]) => fetchSceneMock(...(args as [])),
+  sceneKeys: {
+    detail: (id: string) => ['scene', String(id)] as const,
+  },
 }));
 
 vi.mock('@/store/hooks', () => ({
@@ -58,6 +76,8 @@ describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
     submitPoseMock.mockClear();
+    fetchSceneMock.mockClear();
+    queryClient.clear();
   });
 
   it('renders ghost text with mode label when composerMode is provided', () => {
@@ -276,5 +296,33 @@ describe('CommandInput', () => {
 
     expect(sendMock).toHaveBeenCalledWith('Alice', 'pose stands ready');
     expect(submitPoseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('mention autocomplete source', () => {
+  beforeEach(() => {
+    queryClient.clear();
+  });
+
+  it('uses scene participants when sceneId is provided', async () => {
+    fetchSceneMock.mockResolvedValue({
+      id: 42,
+      name: 'Test Scene',
+      participants: [{ id: 1, name: 'ScenePersona', roster_entry: null }],
+      is_active: true,
+      is_owner: false,
+      description: '',
+      date_started: '',
+      location: null,
+    });
+
+    render(<CommandInput character="Alice" sceneId="42" />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    Object.defineProperty(textarea, 'selectionStart', { value: 1, writable: true });
+    fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } });
+
+    await screen.findByText('ScenePersona');
+    expect(screen.queryByText('Bob')).not.toBeInTheDocument();
   });
 });

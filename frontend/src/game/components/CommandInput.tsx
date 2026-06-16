@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
@@ -6,7 +7,8 @@ import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
-import { submitPose } from '@/scenes/queries';
+import { submitPose, fetchScene, sceneKeys } from '@/scenes/queries';
+import type { SceneDetail } from '@/scenes/queries';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
@@ -85,6 +87,12 @@ export function CommandInput({
     if (!activeCharacter) return [];
     const room = state.game.sessions[activeCharacter]?.room;
     return room?.characters ?? [];
+  });
+
+  const { data: sceneDetail } = useQuery<SceneDetail>({
+    queryKey: sceneKeys.detail(sceneId ?? ''),
+    queryFn: () => fetchScene(sceneId!),
+    enabled: !!sceneId,
   });
 
   const handleSubmit = useCallback(() => {
@@ -214,6 +222,16 @@ export function CommandInput({
     return text;
   }, [composerMode, actionAttachment, isEntrance]);
 
+  const autocompleteItems = useMemo(() => {
+    if (sceneId && sceneDetail?.participants) {
+      return sceneDetail.participants.map((p) => ({
+        name: p.name,
+        thumbnail_url: null as string | null,
+      }));
+    }
+    return roomCharacters;
+  }, [sceneId, sceneDetail?.participants, roomCharacters]);
+
   // Append @name when a pending target arrives
   useEffect(() => {
     if (targetToAppend) {
@@ -269,7 +287,7 @@ export function CommandInput({
           ) : undefined
         }
         ghostText={ghostText}
-        autocompleteItems={roomCharacters}
+        autocompleteItems={autocompleteItems}
       />
     </div>
   );
