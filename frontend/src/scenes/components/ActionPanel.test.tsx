@@ -48,6 +48,7 @@ vi.mock('@/roster/queries', () => ({
         character_id: 42,
         profile_picture_url: null,
         primary_persona_id: null,
+        active_persona_id: null,
       },
     ],
   })),
@@ -211,6 +212,7 @@ describe('ActionPanel', () => {
           character_id: 42,
           profile_picture_url: null,
           primary_persona_id: 77,
+          active_persona_id: 77,
         },
       ],
     } as ReturnType<typeof useMyRosterEntriesQuery>);

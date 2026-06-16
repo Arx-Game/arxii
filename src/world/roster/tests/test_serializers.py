@@ -495,3 +495,22 @@ class MyRosterEntrySerializerTestCase(TestCase):
         entry = RosterEntryFactory(character_sheet__primary_persona=False)
         data = MyRosterEntrySerializer(entry).data
         assert data["primary_persona_id"] is None
+
+    def test_active_persona_id_defaults_to_primary(self):
+        """active_persona_id falls back to the PRIMARY when no face is worn."""
+        data = MyRosterEntrySerializer(self.entry).data
+        assert data["active_persona_id"] == self.entry.character_sheet.primary_persona.pk
+
+    def test_active_persona_id_returns_worn_face(self):
+        """active_persona_id reflects the durable active_persona when set."""
+        from world.scenes.constants import PersonaType
+        from world.scenes.factories import PersonaFactory
+
+        entry = RosterEntryFactory()
+        sheet = entry.character_sheet
+        alt = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
+        sheet.active_persona = alt
+        sheet.save(update_fields=["active_persona"])
+
+        data = MyRosterEntrySerializer(entry).data
+        assert data["active_persona_id"] == alt.pk

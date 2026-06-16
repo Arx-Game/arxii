@@ -84,6 +84,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     )
     profile_picture_url = serializers.SerializerMethodField()
     primary_persona_id = serializers.SerializerMethodField()
+    active_persona_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -93,6 +94,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "character_id",
             "profile_picture_url",
             "primary_persona_id",
+            "active_persona_id",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
@@ -114,6 +116,13 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             return obj.character_sheet.primary_persona.pk
         except ObjectDoesNotExist:
             return None
+
+    def get_active_persona_id(self, obj: RosterEntry) -> int | None:
+        """The face currently worn — the durable ``active_persona`` (#981) if set,
+        else the PRIMARY. Lets the top-bar switcher highlight the worn identity."""
+        if obj.character_sheet.active_persona_id is not None:
+            return obj.character_sheet.active_persona_id
+        return self.get_primary_persona_id(obj)
 
 
 class RosterEntryListSerializer(serializers.ModelSerializer):

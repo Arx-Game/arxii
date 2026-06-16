@@ -30305,7 +30305,15 @@ components:
 
             Used by player-submission forms to attach a reporter_persona.
           readOnly: true
+        active_persona_id:
+          type: integer
+          nullable: true
+          description: |-
+            The face currently worn — the durable ``active_persona`` (#981) if set,
+            else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
+          readOnly: true
       required:
+      - active_persona_id
       - character_id
       - id
       - name

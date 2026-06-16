@@ -88,6 +88,7 @@ function makeRosterEntry(overrides: Partial<MyRosterEntry> = {}): MyRosterEntry 
     character_id: CHARACTER_ID,
     profile_picture_url: null,
     primary_persona_id: null,
+    active_persona_id: null,
     ...overrides,
   };
 }
