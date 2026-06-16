@@ -1,16 +1,16 @@
-import React from 'react';
 import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
 import type { RenderOptions } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement, ReactNode } from 'react';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 
 // Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function render(ui: React.ReactElement, options?: RenderOptions) {
-  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+function render(ui: ReactElement, options?: RenderOptions) {
+  const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
   return rtlRender(ui, { wrapper: Wrapper, ...options });
@@ -77,6 +77,7 @@ describe('CommandInput', () => {
     sendMock.mockClear();
     submitPoseMock.mockClear();
     fetchSceneMock.mockClear();
+    queryClient.clear();
   });
 
   it('renders ghost text with mode label when composerMode is provided', () => {

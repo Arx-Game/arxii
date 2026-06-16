@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
@@ -223,7 +222,7 @@ export function CommandInput({
     return text;
   }, [composerMode, actionAttachment, isEntrance]);
 
-  const autocompleteItems = React.useMemo(() => {
+  const autocompleteItems = useMemo(() => {
     if (sceneId && sceneDetail?.participants) {
       return sceneDetail.participants.map((p) => ({
         name: p.name,
