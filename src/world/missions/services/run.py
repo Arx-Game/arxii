@@ -110,6 +110,29 @@ def grant_rescue_mission(
     return instance
 
 
+@transaction.atomic
+def grant_captive_mission(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
+    """Grant a captive their own loop on capture (#931 Phase 4 captive agency).
+
+    Mirrors :func:`staff_assign_mission` — no ``rescue_target`` (the captive frees
+    themselves, they don't rescue another). The grant happens after the captive is
+    moved into the cell, so ``anchor_room_for`` anchors the run to the cell: the
+    escape + get-word-out options are the captive's agency from inside it. The
+    caller supplies the authored (override-then-default) captive template.
+    """
+    instance = MissionInstance.objects.create(
+        template=template,
+        anchor_room=anchor_room_for(character),
+    )
+    MissionParticipant.objects.create(
+        instance=instance,
+        character=character,
+        is_contract_holder=True,
+    )
+    enter_node(instance, _entry_node(template))
+    return instance
+
+
 def share_mission(
     instance: MissionInstance,
     other_character: ObjectDB,

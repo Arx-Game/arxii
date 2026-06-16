@@ -235,6 +235,26 @@ def resolve_capture_setup(
     )
 
 
+def escape_captivity(captive: CharacterSheet) -> bool:
+    """Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.
+
+    The terminal verb of the captive's escape option: resolves their active HELD
+    captivity as ``ESCAPED`` (flips lifecycle back to ALIVE, relocates them, tears
+    the cell down once empty — all via :func:`resolve_captivity`). Idempotent:
+    returns ``False`` if the captive is not currently held, so a double-fire of a
+    success route is harmless. The sibling of :func:`rescue_captive`, which ends the
+    same captivity from an ally's side.
+    """
+    captivity = Captivity.objects.filter(
+        captive=captive,
+        status=CaptivityStatus.HELD,
+    ).first()
+    if captivity is None:
+        return False
+    resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)
+    return True
+
+
 def _active_group_cell(group_key: str) -> InstancedRoom | None:
     """The still-active cell already spawned for this capture group, if any.
 

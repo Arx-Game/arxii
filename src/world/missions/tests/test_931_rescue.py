@@ -12,7 +12,7 @@ from world.missions.factories import (
     MissionOptionFactory,
     MissionTemplateFactory,
 )
-from world.missions.services.run import grant_rescue_mission
+from world.missions.services.run import grant_captive_mission, grant_rescue_mission
 
 
 def _graph(name: str):
@@ -41,5 +41,20 @@ class GrantRescueMissionTests(TestCase):
         assert instance.rescue_target == captive
         assert instance.participants.filter(
             character=rescuer,
+            is_contract_holder=True,
+        ).exists()
+
+
+class GrantCaptiveMissionTests(TestCase):
+    def test_grants_the_captive_their_own_loop(self) -> None:
+        captive = CharacterFactory()
+        CharacterSheetFactory(character=captive)
+
+        instance = grant_captive_mission(_graph("captive-loop"), captive)
+
+        # The captive holds their own run; no rescue target (they free themselves).
+        assert instance.rescue_target is None
+        assert instance.participants.filter(
+            character=captive,
             is_contract_holder=True,
         ).exists()

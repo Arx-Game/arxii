@@ -8,6 +8,7 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.factories import CharacterFactory
 from world.captivity.constants import CaptivityStatus
 from world.captivity.models import Captivity
+from world.captivity.services import capture_character
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectTarget, EffectType
@@ -15,6 +16,13 @@ from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.conditions.factories import DamageTypeFactory
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
+from world.missions.constants import OptionKind, OptionSource
+from world.missions.factories import (
+    MissionNodeFactory,
+    MissionOptionFactory,
+    MissionTemplateFactory,
+)
+from world.missions.models import MissionInstance
 from world.scenes.factories import SceneFactory
 from world.societies.factories import OrganizationFactory
 from world.vitals.models import CharacterVitals
@@ -150,6 +158,21 @@ class DealDamageHandlerTests(TestCase):
         assert result.applied is False
 
 
+def _captive_loop_template(name: str):
+    """Minimal grantable template: entry node → one BRANCH option to a terminal."""
+    template = MissionTemplateFactory(name=name)
+    entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+    second = MissionNodeFactory(template=template, key="second")
+    MissionOptionFactory(
+        node=entry,
+        option_kind=OptionKind.BRANCH,
+        source_kind=OptionSource.AUTHORED,
+        authored_ic_framing="PLACEHOLDER try the door",
+        branch_target=second,
+    )
+    return template
+
+
 class CaptureHandlerTests(TestCase):
     """Tests for the CAPTURE effect handler (#931).
 
@@ -226,6 +249,40 @@ class CaptureHandlerTests(TestCase):
         captivity = Captivity.objects.get(captive=sheet)
         assert captivity.cell.room.db_key == "The Blood Crypt"
 
+    def test_capture_grants_the_captive_their_loop(self) -> None:
+        # With a captive template on the effect (override-then-default), the
+        # captured character is handed their own escape + get-word-out run.
+        character, _sheet = self._captive_at_site("looped_target")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+            capture_captive_template=_captive_loop_template("cell-loop"),
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied
+        instance = MissionInstance.objects.get(template__name="cell-loop")
+        assert instance.participants.filter(
+            character=character,
+            is_contract_holder=True,
+        ).exists()
+
+    def test_capture_without_a_template_grants_no_loop(self) -> None:
+        # No template authored anywhere → capture still stands, no run created.
+        character, _ = self._captive_at_site("loopless_target")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied
+        assert MissionInstance.objects.count() == 0
+
     def test_capture_skips_without_sheet(self) -> None:
         bare = CharacterFactory(db_key="no_sheet_capture")
         effect = ConsequenceEffectFactory(
@@ -291,3 +348,43 @@ class CaptureGroupingTests(TestCase):
         second = self._capture("grp_none_b", scene=None)
 
         assert first.cell_id != second.cell_id
+
+
+class EscapeCaptivityHandlerTests(TestCase):
+    """The ESCAPE_CAPTIVITY effect frees the target from their own captivity (#931)."""
+
+    def _effect(self):
+        return ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.ESCAPE_CAPTIVITY,
+        )
+
+    def test_escape_frees_a_held_captive(self) -> None:
+        character = CharacterFactory(db_key="escapee")
+        sheet = CharacterSheetFactory(character=character)
+        capture_character(captive=sheet)
+
+        result = apply_effect(self._effect(), ResolutionContext(character=character))
+
+        assert result.applied
+        sheet.refresh_from_db()
+        assert sheet.lifecycle_state == LifecycleState.ALIVE
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.status == CaptivityStatus.ESCAPED
+
+    def test_escape_skips_when_target_not_held(self) -> None:
+        character = CharacterFactory(db_key="free_already")
+        CharacterSheetFactory(character=character)
+
+        result = apply_effect(self._effect(), ResolutionContext(character=character))
+
+        assert result.applied is False
+        assert result.skip_reason is not None
+
+    def test_escape_skips_without_sheet(self) -> None:
+        bare = CharacterFactory(db_key="no_sheet_escape")
+
+        result = apply_effect(self._effect(), ResolutionContext(character=bare))
+
+        assert result.applied is False
+        assert result.skip_reason is not None

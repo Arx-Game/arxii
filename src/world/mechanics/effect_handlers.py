@@ -474,9 +474,56 @@ def _apply_capture(
             skip_reason="Target already held",
         )
 
+    # Hand the captive their own loop from inside the cell — the escape +
+    # get-word-out options on the resolved (override-then-default) template.
+    # No template authored yet → no loop granted; capture still stands.
+    if setup.captive_template is not None:
+        from world.missions.services.run import grant_captive_mission  # noqa: PLC0415
+
+        grant_captive_mission(setup.captive_template, target)
+
     return AppliedEffect(
         effect_type=EffectType.CAPTURE,
         description=f"Captured {target.db_key}",
+        applied=True,
+    )
+
+
+def _apply_escape_captivity(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Free the resolved target from their own captivity (#931 Phase 4).
+
+    The terminal effect of a captive's escape option: a success route attaches
+    this, and the captive walks. Skips gracefully if the target has no sheet or
+    isn't currently held (a stale or double-fired route), so it never crashes a
+    resolution. The ally-side sibling is the rescue route's RESCUE handling.
+    """
+    from world.captivity.services import escape_captivity  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    try:
+        sheet = target.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.ESCAPE_CAPTIVITY,
+            description="Target has no character sheet",
+            applied=False,
+            skip_reason="Target has no CharacterSheet",
+        )
+
+    if not escape_captivity(sheet):
+        return AppliedEffect(
+            effect_type=EffectType.ESCAPE_CAPTIVITY,
+            description=f"{target.db_key} is not currently held",
+            applied=False,
+            skip_reason="Target not held",
+        )
+
+    return AppliedEffect(
+        effect_type=EffectType.ESCAPE_CAPTIVITY,
+        description=f"{target.db_key} escaped captivity",
         applied=True,
     )
 
@@ -497,4 +544,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.MAGICAL_SCARS: _apply_magical_scars,
     EffectType.LEGEND_AWARD: _legend_award,
     EffectType.CAPTURE: _apply_capture,
+    EffectType.ESCAPE_CAPTIVITY: _apply_escape_captivity,
 }
