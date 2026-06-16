@@ -66,6 +66,7 @@ from world.magic.models.cantrips import Cantrip
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.endorsement import (
+    EntryFlourishRecord,
     PoseEndorsement,
     PresentationEndorsement,
     SceneEntryEndorsement,
@@ -197,6 +198,8 @@ __all__ = [
     "DistinctionRitualGrant",
     "EffectType",
     "EffectTypeManager",
+    # endorsement — entry flourish (#545)
+    "EntryFlourishRecord",
     "Facet",
     "FacetManager",
     "Gift",

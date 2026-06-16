@@ -1469,6 +1469,16 @@ class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
     weight = 1
 
 
+class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.EntryFlourishRecord"
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    scene = None
+    granted_amount = 10
+
+
 def with_corruption_at_stage(sheet, resonance, stage: int):
     """Test helper: set up a corrupted character at a given stage.
 
