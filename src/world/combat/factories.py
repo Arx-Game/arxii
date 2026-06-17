@@ -514,9 +514,11 @@ class EncounterScalingConfigFactory(factory_django.DjangoModelFactory):
 def seed_scaling_defaults() -> EncounterScalingConfig:
     """Seed all four encounter-scaling config tables with authored defaults (#566).
 
-    Idempotent — uses update_or_create at every layer so staff edits to any
-    individual row survive re-runs (only the lookup key is matched; the defaults
-    are applied only on create, not on subsequent calls).
+    Idempotent on row identity (one row per enum value / the pk=1 singleton),
+    but NOT edit-preserving: it uses update_or_create at every layer, so
+    re-running RESETS every row to the authored defaults, overwriting any staff
+    edits. This is intentional for pre-launch seeding from authored constants;
+    do not call it where staff tuning must survive.
 
     Creates/updates:
     - One OpponentTierTemplate per OpponentTier (5 rows)
@@ -526,8 +528,6 @@ def seed_scaling_defaults() -> EncounterScalingConfig:
 
     Returns the EncounterScalingConfig singleton.
     """
-    from decimal import Decimal
-
     for tier, stats in DEFAULT_TIER_TEMPLATES.items():
         OpponentTierTemplate.objects.update_or_create(tier=tier, defaults=stats)
 
