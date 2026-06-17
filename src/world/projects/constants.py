@@ -13,6 +13,7 @@ class ProjectKind(models.TextChoices):
 
     BUILDING_CONSTRUCTION = "BUILDING_CONSTRUCTION", "Building Construction"
     ROOM_FEATURE_PROGRESSION = "ROOM_FEATURE_PROGRESSION", "Room Feature Progression"
+    RESEARCH = "RESEARCH", "Research"
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
 
 

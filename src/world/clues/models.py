@@ -113,3 +113,31 @@ class CharacterClue(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.roster_entry}: {self.clue.name}"
+
+
+class ResearchProjectDetails(SharedMemoryModel):
+    """Per-kind details for a RESEARCH ``Project`` (#1146): the clue being researched.
+
+    The Project framework keeps per-kind data in a separate model with a OneToOne back
+    to the Project (the BUILDING_CONSTRUCTION analogue). On completion the RESEARCH
+    handler grants this clue's target to everyone who contributed.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="research_details",
+    )
+    clue = models.ForeignKey(
+        Clue,
+        on_delete=models.CASCADE,
+        related_name="research_projects",
+        help_text="The clue whose target this project researches toward.",
+    )
+
+    class Meta:
+        verbose_name = "Research Project Details"
+        verbose_name_plural = "Research Project Details"
+
+    def __str__(self) -> str:
+        return f"Research<{self.clue.name}> (project #{self.project_id})"
