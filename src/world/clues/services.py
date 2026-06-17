@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import RoomProfile
     from world.checks.models import CheckType
+    from world.predicates.predicates import CharacterPredicateContext
     from world.roster.models import RosterEntry
 
 
@@ -95,6 +96,7 @@ def search_room(
     Returns the clues found this search (empty if the searcher has no roster entry).
     """
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.predicates.predicates import evaluate  # noqa: PLC0415
 
     roster_entry = _roster_entry_for(character)
     if roster_entry is None:
@@ -103,6 +105,7 @@ def search_room(
         CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
     )
     found: list[Clue] = []
+    context = None  # CharacterPredicateContext, built lazily only when a clue is gated
     placements = RoomClue.objects.filter(room_profile=room_profile, is_active=True).select_related(
         "clue"
     )
@@ -110,6 +113,13 @@ def search_room(
         clue = placement.clue
         if clue.pk in held_ids:
             continue
+        # Access gate: a placement may restrict WHO can discover it (identity / org /
+        # resonance) via a predicate rule. Empty rule = open to anyone (the default).
+        if placement.eligibility_rule:
+            if context is None:
+                context = _predicate_context(character)
+            if not evaluate(placement.eligibility_rule, context):
+                continue
         result = perform_check(
             character, search_check_type, target_difficulty=placement.detect_difficulty
         )
@@ -120,6 +130,26 @@ def search_room(
             grant_clue_target(clue, roster_entry)
         found.append(clue)
     return found
+
+
+def _predicate_context(character: ObjectDB) -> CharacterPredicateContext:
+    """Build the predicate context for ``character`` (mask-aware, like missions).
+
+    Resolves the presented persona so persona-keyed leaves gate on the right identity;
+    a sheet-less / primary-persona-less character yields ``None`` (those leaves then
+    fail closed), matching the mission trigger-dispatch convention.
+    """
+    from world.predicates.predicates import CharacterPredicateContext  # noqa: PLC0415
+    from world.scenes.services import (  # noqa: PLC0415
+        MissingPrimaryPersonaError,
+        persona_for_character,
+    )
+
+    try:
+        persona = persona_for_character(character)
+    except MissingPrimaryPersonaError:
+        persona = None
+    return CharacterPredicateContext(character, presented_persona=persona)
 
 
 def _roster_entry_for(character: ObjectDB) -> RosterEntry | None:
