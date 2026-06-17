@@ -241,6 +241,13 @@ class ItemTemplate(SharedMemoryModel):
             "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
         ),
     )
+    style_capacity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Number of Style slots this template can carry. "
+            "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
+        ),
+    )
     gear_archetype = models.CharField(
         max_length=20,
         choices=GearArchetype.choices,
@@ -599,6 +606,18 @@ class ItemInstance(SharedMemoryModel):
         """
         return list(self.item_facets.select_related("facet", "attachment_quality_tier"))
 
+    @cached_property
+    def cached_item_styles(self) -> list[ItemStyle]:
+        """Styles attached to this item instance (#546).
+
+        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
+        this directly. When accessed without prefetch, falls back to a fresh
+        query.
+
+        To invalidate: del instance.cached_item_styles
+        """
+        return list(self.item_styles.select_related("style", "attachment_quality_tier"))
+
     @property
     def is_broken(self) -> bool:
         return self.durability is not None and self.durability == 0
@@ -842,7 +861,38 @@ class CurrencyBalance(SharedMemoryModel):
         return f"{self.character}: {self.gold} gold"
 
 
-class ItemFacet(SharedMemoryModel):
+class ItemAttachment(SharedMemoryModel):
+    """Abstract base for tag models that attach a vocabulary term to an ItemInstance.
+
+    Carries the three housekeeping fields shared by every attachment subclass:
+    who applied it, at what quality, and when. The ``%(class)s`` token in the
+    related_names expands to the concrete subclass name (e.g. ``itemfacet``,
+    ``itemstyle``), giving each subclass its own distinct reverse accessor on
+    AccountDB and QualityTier without collision.
+
+    Concrete subclasses MUST declare their own ``item_instance`` FK with an
+    explicit ``related_name`` so the hot ItemInstance accessors stay stable.
+    """
+
+    applied_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_applications",
+    )
+    attachment_quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.PROTECT,
+        related_name="%(class)s_attachments",
+    )
+    applied_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class ItemFacet(ItemAttachment):
     """A single facet attached to an item instance.
 
     Spec D §4.2. Items carry facets either at craft time or via post-craft
@@ -863,19 +913,6 @@ class ItemFacet(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="item_attachments",
     )
-    applied_by_account = models.ForeignKey(
-        "accounts.AccountDB",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="facet_applications",
-    )
-    attachment_quality_tier = models.ForeignKey(
-        "items.QualityTier",
-        on_delete=models.PROTECT,
-        related_name="facet_attachments",
-    )
-    applied_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
@@ -887,6 +924,37 @@ class ItemFacet(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.facet}"
+
+
+class ItemStyle(ItemAttachment):
+    """A single aesthetic style tag attached to an item instance (#546).
+
+    Parallel to ItemFacet: each row records which Style vocabulary term has
+    been applied to the item, at what quality, and by whom. Items may carry
+    multiple styles up to their template's ``style_capacity``.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="item_styles",
+    )
+    style = models.ForeignKey(
+        "items.Style",
+        on_delete=models.PROTECT,
+        related_name="item_attachments",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "style"],
+                name="items_unique_itemstyle_per_instance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} ← {self.style}"
 
 
 class Outfit(SharedMemoryModel):
@@ -1153,6 +1221,28 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Facets that are currently fashionable in this style.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Style(NaturalKeyMixin, SharedMemoryModel):
+    """A staff-curated aesthetic vocabulary word (e.g. "Seductive", "Menacing", "Regal").
+
+    Phase A of the magical-aesthetic-axis (#546). Later phases tag items with
+    styles and bind them to resonances.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
 
     objects = NaturalKeyManager()
 

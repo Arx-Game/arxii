@@ -84,6 +84,24 @@ class FacetAlreadyAttached(ItemError):
     )
 
 
+class StyleCapacityExceeded(ItemError):
+    """The item already carries the maximum number of styles its template allows (#546)."""
+
+    user_message = "This item has no remaining style slots."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"This item has no remaining style slots."},
+    )
+
+
+class StyleAlreadyAttached(ItemError):
+    """That style is already attached to this item (#546)."""
+
+    user_message = "That style is already attached to this item."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That style is already attached to this item."},
+    )
+
+
 class FashionPresentationError(ItemError):
     """A fashion presentation or peer judging could not be completed (#514).
 

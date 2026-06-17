@@ -1167,4 +1167,29 @@ class ContextConsequencePool(SharedMemoryModel):
         return f"{self.property.name} → {self.consequence_pool.name}"
 
 
+class AestheticAxisConfig(SharedMemoryModel):
+    """Singleton (pk=1) tuning the aesthetic-axis coherence walk (#546).
+
+    Real columns, no JSON. Lazy-created by ``get_aesthetic_config()``; consume
+    via that getter rather than direct ORM access.
+    """
+
+    base_magnitude = models.PositiveIntegerField(
+        default=5,
+        help_text="Base bonus (integer) awarded per matched style facet during the coherence walk.",
+    )
+    full_combination_bonus = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.50"),
+        help_text=(
+            "Multiplier applied when a resonance's FULL bound style-set is worn. "
+            "e.g. 1.50 = 50 %% bonus on top of the summed base magnitudes."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return "AestheticAxisConfig"  # noqa: STRING_LITERAL - display literal, not an identifier
+
+
 from world.mechanics.engagement import CharacterEngagement  # noqa: F401, E402

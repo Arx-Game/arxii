@@ -42,9 +42,11 @@ if TYPE_CHECKING:
         EquippedItem,
         ItemFacet,
         ItemInstance,
+        ItemStyle,
         Mantle,
         MantleLevelClearance,
         Outfit,
+        Style,
     )
     from world.magic.models import Facet
 
@@ -64,7 +66,12 @@ class CharacterEquipmentHandler:
     @property
     def _equipped(self) -> list[EquippedItem]:
         if self._cached is None:
-            from world.items.models import EquippedItem, ItemFacet, TemplateSlot  # noqa: PLC0415
+            from world.items.models import (  # noqa: PLC0415
+                EquippedItem,
+                ItemFacet,
+                ItemStyle,
+                TemplateSlot,
+            )
 
             qs = (
                 EquippedItem.objects.filter(character=self._character)
@@ -81,6 +88,14 @@ class CharacterEquipmentHandler:
                             "attachment_quality_tier",
                         ),
                         to_attr="cached_item_facets",
+                    ),
+                    Prefetch(
+                        "item_instance__item_styles",
+                        queryset=ItemStyle.objects.select_related(
+                            "style",
+                            "attachment_quality_tier",
+                        ),
+                        to_attr="cached_item_styles",
                     ),
                     Prefetch(
                         "item_instance__template__slots",
@@ -105,6 +120,14 @@ class CharacterEquipmentHandler:
             for equipped in self._equipped
             for item_facet in equipped.item_instance.cached_item_facets
             if item_facet.facet_id == facet.pk
+        ]
+
+    def item_styles_for(self, style: Style) -> list[ItemStyle]:
+        return [
+            item_style
+            for equipped in self._equipped
+            for item_style in equipped.item_instance.cached_item_styles
+            if item_style.style_id == style.pk
         ]
 
     def invalidate(self) -> None:

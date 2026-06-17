@@ -61,6 +61,51 @@ class CharacterEquipmentHandlerTests(TestCase):
             list(self.character.equipped_items.item_facets_for(self.facet_a))
 
 
+class CharacterEquipmentHandlerStyleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemStyleFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            StyleFactory,
+        )
+
+        cls.character = CharacterFactory(db_key="StyleHandlerTestChar")
+        tpl = ItemTemplateFactory(style_capacity=2)
+        cls.q = QualityTierFactory()
+        cls.instance = ItemInstanceFactory(template=tpl, quality_tier=cls.q)
+        cls.style_a = StyleFactory(name="StyleHandlerA")
+        cls.style_b = StyleFactory(name="StyleHandlerB")
+        cls.style_other = StyleFactory(name="StyleHandlerOther")
+        cls.is_a = ItemStyleFactory(
+            item_instance=cls.instance,
+            style=cls.style_a,
+            attachment_quality_tier=cls.q,
+        )
+        cls.is_b = ItemStyleFactory(
+            item_instance=cls.instance,
+            style=cls.style_b,
+            attachment_quality_tier=cls.q,
+        )
+        cls.equipped = EquippedItemFactory(
+            character=cls.character,
+            item_instance=cls.instance,
+        )
+
+    def test_item_styles_for_returns_matching_style(self) -> None:
+        result = self.character.equipped_items.item_styles_for(self.style_a)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], self.is_a)
+
+    def test_item_styles_for_excludes_non_matching(self) -> None:
+        result = self.character.equipped_items.item_styles_for(self.style_other)
+        self.assertEqual(result, [])
+
+
 class CharacterCarriedItemsHandlerTests(TestCase):
     # NOTE: Per-test setUp (NOT setUpTestData) because ``obj.location = owner_obj``
     # below side-effects ``cls.character`` with an Evennia ``contents`` DbHolder

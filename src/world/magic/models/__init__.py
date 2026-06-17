@@ -96,6 +96,7 @@ from world.magic.models.motifs import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    MotifResonanceStyle,
 )
 from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig
 from world.magic.models.progression_milestone import MagicProgressionMilestone
@@ -223,6 +224,7 @@ __all__ = [
     "Motif",
     "MotifResonance",
     "MotifResonanceAssociation",
+    "MotifResonanceStyle",
     "PathRitualGrant",
     "PendingAlteration",
     # audere majora offer (#543, re-exported from world.magic.audere_majora)

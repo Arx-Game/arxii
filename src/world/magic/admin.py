@@ -25,6 +25,7 @@ from world.magic.models import (
     MishapPoolTier,
     Motif,
     MotifResonance,
+    MotifResonanceStyle,
     PoseEndorsement,
     Reincarnation,
     Resonance,
@@ -295,6 +296,12 @@ class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
     date_hierarchy = "performed_at"
 
 
+class MotifResonanceStyleInline(admin.TabularInline):
+    model = MotifResonanceStyle
+    extra = 1
+    autocomplete_fields = ["style"]
+
+
 class MotifResonanceInline(admin.TabularInline):
     model = MotifResonance
     extra = 0
@@ -305,6 +312,17 @@ class MotifAdmin(admin.ModelAdmin):
     list_display = ["__str__", "character"]
     search_fields = ["character__character__db_key", "description"]
     inlines = [MotifResonanceInline]
+
+
+@admin.register(MotifResonance)
+class MotifResonanceAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "motif", "resonance", "is_from_gift"]
+    list_filter = ["is_from_gift", "resonance__affinity"]
+    search_fields = ["motif__character__character__db_key", "resonance__name"]
+    list_select_related = ["motif", "resonance", "resonance__affinity"]
+    raw_id_fields = ["motif"]
+    autocomplete_fields = ["resonance"]
+    inlines = [MotifResonanceStyleInline]
 
 
 @admin.register(Facet)

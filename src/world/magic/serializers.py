@@ -32,6 +32,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    MotifResonanceStyle,
     PendingAlteration,
     PoseEndorsement,
     Resonance,
@@ -474,15 +475,34 @@ class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "facet_name", "facet_path"]
 
 
+class MotifResonanceStyleSerializer(serializers.ModelSerializer):
+    """Serializer for MotifResonanceStyle records."""
+
+    style_name = serializers.CharField(source="style.name", read_only=True)
+
+    class Meta:
+        model = MotifResonanceStyle
+        fields = ["id", "style", "style_name"]
+        read_only_fields = ["id", "style_name"]
+
+
 class MotifResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for MotifResonance records with nested facet assignments."""
+    """Serializer for MotifResonance records with nested facet and style assignments."""
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
     facet_assignments = MotifResonanceAssociationSerializer(many=True, read_only=True)
+    style_assignments = MotifResonanceStyleSerializer(many=True, read_only=True)
 
     class Meta:
         model = MotifResonance
-        fields = ["id", "resonance", "resonance_name", "is_from_gift", "facet_assignments"]
+        fields = [
+            "id",
+            "resonance",
+            "resonance_name",
+            "is_from_gift",
+            "facet_assignments",
+            "style_assignments",
+        ]
         read_only_fields = ["id", "resonance_name"]
 
 
