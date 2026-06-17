@@ -18,7 +18,11 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    EncounterScalingConfig,
     EscalationCurve,
+    OpponentTierTemplate,
+    RiskScalingModifier,
+    StakesLevelRequirement,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -335,3 +339,48 @@ class ClashConfigAdmin(admin.ModelAdmin):
 class EscalationCurveAdmin(admin.ModelAdmin):
     list_display = ("name", "start_round", "intensity_step", "max_escalation_level")
     search_fields = ("name",)
+
+
+# =============================================================================
+# Encounter scaling admin (#566)
+# =============================================================================
+
+
+@admin.register(OpponentTierTemplate)
+class OpponentTierTemplateAdmin(admin.ModelAdmin):
+    list_display = [
+        "tier",
+        "base_health",
+        "base_soak",
+        "base_probing_threshold",
+        "base_swarm_count",
+        "boss_phase_count",
+    ]
+    list_filter = ["tier"]
+
+
+@admin.register(RiskScalingModifier)
+class RiskScalingModifierAdmin(admin.ModelAdmin):
+    list_display = ["risk_level", "multiplier"]
+    list_filter = ["risk_level"]
+
+
+@admin.register(StakesLevelRequirement)
+class StakesLevelRequirementAdmin(admin.ModelAdmin):
+    list_display = [
+        "stakes_level",
+        "minimum_party_average_level",
+        "minimum_gm_trust_level",
+    ]
+    list_filter = ["stakes_level"]
+
+
+@admin.register(EncounterScalingConfig)
+class EncounterScalingConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "pk",
+        "baseline_party_size",
+        "per_extra_member_pct",
+        "per_avg_level_pct",
+        "updated_at",
+    ]
