@@ -11,6 +11,7 @@ from actions.definitions.communication import (
     WhisperAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
+from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
@@ -53,6 +54,7 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     LookAction(),
     LookAtItemAction(),
     InventoryAction(),
+    SearchAction(),
     SayAction(),
     PoseAction(),
     WhisperAction(),

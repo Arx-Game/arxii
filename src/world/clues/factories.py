@@ -2,7 +2,7 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.clues.constants import ClueTargetKind
-from world.clues.models import CharacterClue, Clue
+from world.clues.models import CharacterClue, Clue, RoomClue
 
 
 class ClueFactory(DjangoModelFactory):
@@ -24,3 +24,13 @@ class CharacterClueFactory(DjangoModelFactory):
 
     roster_entry = factory.SubFactory("world.roster.factories.RosterEntryFactory")
     clue = factory.SubFactory(ClueFactory)
+
+
+class RoomClueFactory(DjangoModelFactory):
+    class Meta:
+        model = RoomClue
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    clue = factory.SubFactory(ClueFactory)
+    detect_difficulty = 0
+    is_active = True

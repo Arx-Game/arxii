@@ -24,3 +24,8 @@ class ClueResolution(models.TextChoices):
 
     AUTOMATIC = "automatic", "Automatic (granted on acquisition)"
     RESEARCH = "research", "Research project"
+
+
+# The seeded CheckType the search action rolls (Perception + Investigation, #1145).
+# A name reference into staff-editable check data, resolved at action time.
+SEARCH_CHECK_TYPE_NAME = "Search"

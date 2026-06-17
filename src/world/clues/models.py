@@ -141,3 +141,40 @@ class ResearchProjectDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Research<{self.clue.name}> (project #{self.project_id})"
+
+
+class RoomClue(SharedMemoryModel):
+    """A clue hidden in a room, found via a Search check (#1154).
+
+    Mirrors ``room_features.Trap``: room-anchored, with an authored detect difficulty;
+    a room may hold several. The Search action rolls against ``detect_difficulty`` to
+    surface it; which clues are placed where and how hard they are is staff-editable
+    data (placeholder magnitudes deferred to a later author pass per #1143).
+    """
+
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="hidden_clues",
+    )
+    clue = models.ForeignKey(
+        Clue,
+        on_delete=models.CASCADE,
+        related_name="room_placements",
+    )
+    detect_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text="Search-check target difficulty to spot this clue here. Placeholder.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this clue is currently findable in the room.",
+    )
+
+    class Meta:
+        ordering = ["room_profile", "clue"]
+        verbose_name = "Room Clue"
+        verbose_name_plural = "Room Clues"
+
+    def __str__(self) -> str:
+        return f"{self.clue.name} hidden in {self.room_profile}"

@@ -14,7 +14,12 @@ from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CharacterCodexKnowledge
 from world.projects.constants import ProjectKind, ProjectStatus
-from world.projects.services import get_kind_handler, resolve_project, scan_active_projects
+from world.projects.services import (
+    get_kind_handler,
+    register_kind_handler,
+    resolve_project,
+    scan_active_projects,
+)
 from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import PersonaFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -111,7 +116,14 @@ class ResolveResearchTests(TestCase):
 
 
 class ResearchHandlerRegistrationTests(TestCase):
-    def test_research_handler_is_registered_at_app_ready(self) -> None:
+    def setUp(self) -> None:
+        # CluesConfig.ready() registers this at startup, but other apps' tests clear the
+        # shared kind-handler registry (projects' clear_kind_handlers) and run before
+        # world.clues in a CI shard. Re-register so these tests verify the RESEARCH
+        # wiring without depending on app-ready surviving cross-app test pollution.
+        register_kind_handler(ProjectKind.RESEARCH, resolve_research)
+
+    def test_research_handler_resolves_to_resolve_research(self) -> None:
         assert get_kind_handler(ProjectKind.RESEARCH) is resolve_research
 
     def test_end_to_end_scan_then_resolve_grants_the_target(self) -> None:

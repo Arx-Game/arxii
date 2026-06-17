@@ -142,6 +142,7 @@ class ActionRegistryTests(TestCase):
             "look",
             "look_at_item",
             "inventory",
+            "search",
             "say",
             "pose",
             "whisper",
