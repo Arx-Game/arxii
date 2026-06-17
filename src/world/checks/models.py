@@ -295,6 +295,22 @@ class ConsequenceEffect(SharedMemoryModel):
         default="",
         help_text="Override cell room description. Unset = the CaptivityConfig default.",
     )
+    capture_clue_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Override rescue-clue name at the capture site. Unset = CaptivityConfig default.",
+    )
+    capture_clue_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override rescue-clue description. Unset = the CaptivityConfig default.",
+    )
+    capture_clue_detect_difficulty = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override Search difficulty to spot the rescue clue. Unset = config default.",
+    )
 
     class Meta:
         ordering = ["execution_order"]

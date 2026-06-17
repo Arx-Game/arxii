@@ -439,18 +439,20 @@ def _apply_capture(
             skip_reason="Target has no CharacterSheet",
         )
 
-    # Per-capture override layered over the one CaptivityConfig default. Only the
-    # cell flavor is consumed here; the captive/rescue templates are resolved for
-    # the loop-granting slice that follows.
+    # Per-capture override layered over the one CaptivityConfig default — cell flavor,
+    # the captive's loop, the rescue mission, and the rescue-clue text (#931 Phase 4).
     setup = resolve_capture_setup(
         captive_template=effect.capture_captive_template,
         rescue_template=effect.capture_rescue_template,
         cell_name=effect.capture_cell_name,
         cell_description=effect.capture_cell_description,
+        clue_name=effect.capture_clue_name,
+        clue_description=effect.capture_clue_description,
+        clue_detect_difficulty=effect.capture_clue_detect_difficulty,
     )
 
     try:
-        capture_character(
+        captivity = capture_character(
             captive=sheet,
             captor_organization=effect.capture_captor_organization,
             # The captive's own location is the capture site they return to —
@@ -482,10 +484,48 @@ def _apply_capture(
 
         grant_captive_mission(setup.captive_template, target)
 
+    # Stamp the rescue mission and plant a discoverable rescue clue at the capture
+    # site, so allies who search there are handed the rescue (#931 Phase 4).
+    _setup_rescue_discovery(captivity, setup)
+
     return AppliedEffect(
         effect_type=EffectType.CAPTURE,
         description=f"Captured {target.db_key}",
         applied=True,
+    )
+
+
+def _setup_rescue_discovery(captivity: object, setup: object) -> None:
+    """Stamp the rescue mission on the captivity and plant its discovery clue (#931).
+
+    Skips when there is no rescue mission (nothing to discover), no authored clue text
+    (the GM declined the discoverable clue — the rescue can still be granted by other
+    means), or the capture site has no room profile to anchor the clue to.
+    """
+    if setup.rescue_template is None:
+        return
+    captivity.rescue_template = setup.rescue_template
+    captivity.save(update_fields=["rescue_template"])
+    if not setup.clue_name:
+        return
+    cell = captivity.cell
+    return_location = cell.return_location if cell is not None else None
+    if return_location is None:
+        return
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.clues.services import plant_rescue_clue  # noqa: PLC0415
+
+    try:
+        room_profile = return_location.room_profile
+    except RoomProfile.DoesNotExist:
+        return
+    plant_rescue_clue(
+        captivity,
+        room_profile,
+        name=setup.clue_name,
+        description=setup.clue_description,
+        detect_difficulty=setup.clue_detect_difficulty,
     )
 
 

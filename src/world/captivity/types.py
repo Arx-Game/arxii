@@ -24,3 +24,6 @@ class CaptureSetup:
     rescue_template: MissionTemplate | None
     cell_name: str
     cell_description: str
+    clue_name: str
+    clue_description: str
+    clue_detect_difficulty: int

@@ -137,3 +137,14 @@ class ClearRescueCluesTests(TestCase):
 
         assert not Clue.objects.filter(pk=clue_id).exists()
         assert not RoomClue.objects.filter(pk=placement.pk).exists()
+
+    def test_resolving_the_captivity_clears_the_planted_clue(self) -> None:
+        # The cleanup is wired into resolve_captivity — freeing the captive removes the
+        # discoverable rescue trail.
+        captivity = capture_character(captive=CharacterSheetFactory())
+        placement = plant_rescue_clue(captivity, RoomProfileFactory(), name="x", description="y")
+
+        resolve_captivity(captivity, status=CaptivityStatus.RESCUED)
+
+        assert not Clue.objects.filter(pk=placement.clue_id).exists()
+        assert not RoomClue.objects.filter(pk=placement.pk).exists()

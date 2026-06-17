@@ -154,6 +154,21 @@ class CaptivityConfig(SharedMemoryModel):
         default="",
         help_text="Default cell room description (player-visible — author in your voice).",
     )
+    clue_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Default rescue-clue name at the capture site (player-visible — your voice).",
+    )
+    clue_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Default rescue-clue description (player-visible — author in your voice).",
+    )
+    clue_detect_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text="Default Search-check difficulty to spot the rescue clue. Placeholder.",
+    )
 
     @classmethod
     def load(cls) -> CaptivityConfig:
