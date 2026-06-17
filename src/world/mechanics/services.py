@@ -6,6 +6,7 @@ Service layer for modifier aggregation, calculation, and management.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -322,6 +323,31 @@ def _thread_pull_effects_for(
     )
 
 
+def worn_quality_aggregate(rows: Iterable[object]) -> Decimal:
+    """Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.
+
+    Works for any row type that exposes ``item_instance`` (with an optional
+    ``quality_tier.stat_multiplier``) and ``attachment_quality_tier.stat_multiplier``
+    — including ``ItemFacet`` and ``ItemStyle`` rows. Returns Decimal(0) for an
+    empty iterable.
+
+    Decimal(str(...)) coercion guards against float stat_multiplier values from
+    factories or .values() queries; DecimalField normally returns Decimal, but
+    this is belt-and-suspenders consistent with the surrounding arithmetic.
+    """
+    total = Decimal(0)
+    for row in rows:
+        item = row.item_instance
+        item_mult = (
+            Decimal(str(item.quality_tier.stat_multiplier))
+            if item.quality_tier is not None
+            else Decimal(1)
+        )
+        attach_mult = Decimal(str(row.attachment_quality_tier.stat_multiplier))
+        total += item_mult * attach_mult
+    return total
+
+
 def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object) -> int:
     """Perception-relative outfit bonus vs. a society's current fashion (#513).
 
@@ -346,15 +372,9 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
         return 0
     match_value = Decimal(0)
     for facet in style.in_vogue_facets.all():
-        for item_facet in char.equipped_items.item_facets_for(facet):
-            item = item_facet.item_instance
-            item_mult = (
-                Decimal(str(item.quality_tier.stat_multiplier))
-                if item.quality_tier is not None
-                else Decimal(1)
-            )
-            attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
-            match_value += Decimal(FASHION_MATCH_BASE) * item_mult * attach_mult
+        match_value += Decimal(FASHION_MATCH_BASE) * worn_quality_aggregate(
+            char.equipped_items.item_facets_for(facet)
+        )
     return int(match_value * Decimal(str(bonus.weight)))
 
 
