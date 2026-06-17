@@ -1,1 +1,1 @@
-0005_clue_target_captivity_alter_clue_target_kind
+0006_cluetrigger

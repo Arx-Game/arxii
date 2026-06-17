@@ -197,3 +197,46 @@ class RoomClue(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.clue.name} hidden in {self.room_profile}"
+
+
+class ClueTrigger(SharedMemoryModel):
+    """A clue granted passively on entering a room — no search, just a precondition (#1160).
+
+    The trigger counterpart to ``RoomClue``: where a RoomClue is found by an active Search
+    check, a ClueTrigger fires on room entry for any eligible character who has not already
+    held it (the world reveals it because of who you are / where you are). A room may hold
+    several. Which clues trigger where, and the eligibility predicate, are staff-editable
+    data (placeholder magnitudes deferred to a later author pass per #1143).
+    """
+
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="clue_triggers",
+    )
+    clue = models.ForeignKey(
+        Clue,
+        on_delete=models.CASCADE,
+        related_name="trigger_placements",
+    )
+    eligibility_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Predicate precondition for the passive grant (identity / resonance / org, via "
+            "world.predicates). Empty {} = fires for anyone who enters. Same shape as "
+            "RoomClue.eligibility_rule."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this trigger currently fires on entry.",
+    )
+
+    class Meta:
+        ordering = ["room_profile", "clue"]
+        verbose_name = "Clue Trigger"
+        verbose_name_plural = "Clue Triggers"
+
+    def __str__(self) -> str:
+        return f"{self.clue.name} triggers in {self.room_profile}"

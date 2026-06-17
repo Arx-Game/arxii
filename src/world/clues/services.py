@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.clues.constants import ClueResolution, ClueTargetKind
-from world.clues.models import CharacterClue, Clue, RoomClue
+from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -222,3 +225,69 @@ def _roster_entry_for(character: ObjectDB) -> RosterEntry | None:
         return character.sheet_data.roster_entry
     except (AttributeError, ObjectDoesNotExist):
         return None
+
+
+def maybe_grant_clue_triggers(character: ObjectDB, room: ObjectDB) -> list[Clue]:
+    """Grant clues triggered passively by entering ``room`` (#1160).
+
+    For each active trigger in the room the character is eligible for (empty rule = anyone)
+    and has not already held, acquire the clue, resolve it (AUTOMATIC), and tell the player
+    via its authored description. Returns the clues granted. Best-effort entry point — called
+    from the movement hook, wrapped so a hiccup never breaks movement; the cheap "any
+    triggers here?" query short-circuits ordinary rooms.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.predicates.predicates import evaluate  # noqa: PLC0415
+
+    try:
+        room_profile = room.room_profile
+    except (AttributeError, RoomProfile.DoesNotExist):
+        return []
+    triggers = list(
+        ClueTrigger.objects.filter(room_profile=room_profile, is_active=True).select_related("clue")
+    )
+    if not triggers:
+        return []
+    roster_entry = _roster_entry_for(character)
+    if roster_entry is None:
+        return []
+    held_ids = set(
+        CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
+    )
+    context = None
+    granted: list[Clue] = []
+    for trigger in triggers:
+        clue = trigger.clue
+        if clue.pk in held_ids:
+            continue
+        if trigger.eligibility_rule:
+            if context is None:
+                context = _predicate_context(character)
+            if not evaluate(trigger.eligibility_rule, context):
+                continue
+        acquire_clue(roster_entry, clue)
+        if clue.resolution_mode == ClueResolution.AUTOMATIC:
+            grant_clue_target(clue, roster_entry)
+        _notify_clue_found(roster_entry, clue)
+        granted.append(clue)
+    return granted
+
+
+def _notify_clue_found(roster_entry: RosterEntry, clue: Clue) -> None:
+    """Tell the player a passive trigger revealed a clue (its authored description).
+
+    The clue is already granted before this runs, so a notification failure must not undo
+    the grant — but we log it rather than swallow it, so a real fault stays visible.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    try:
+        send_narrative_message(
+            recipients=[roster_entry.character_sheet],
+            body=clue.description,
+            category=NarrativeCategory.HAPPENSTANCE,
+            ooc_note=f"Surfaced by a clue trigger (clue #{clue.pk}).",
+        )
+    except Exception:
+        logger.exception("Failed to notify %s that clue #%s was found", roster_entry, clue.pk)

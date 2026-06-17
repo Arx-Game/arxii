@@ -9,6 +9,7 @@ creation commands.
 """
 
 import contextlib
+import logging
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -27,6 +28,8 @@ from world.magic.services.resonance_environment import (
     refresh_resonance_alignment,
 )
 from world.roster.models import RosterEntry
+
+logger = logging.getLogger(__name__)
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -352,6 +355,18 @@ class Character(ObjectParent, DefaultCharacter):
                 from world.societies.fame_reactions import maybe_emit_fame_reaction
 
                 maybe_emit_fame_reaction(self, self.location)
+
+            # Passive clue triggers (#1160): a room may reveal a clue to an eligible
+            # entrant — no search needed (who you are / where you are). This is an
+            # optional side-effect of moving, so a failure here must not break the
+            # move — but we log it rather than swallow it, so a real fault (e.g. a DB
+            # error) stays visible instead of vanishing silently.
+            try:
+                from world.clues.services import maybe_grant_clue_triggers
+
+                maybe_grant_clue_triggers(self, self.location)
+            except Exception:
+                logger.exception("Passive clue-trigger dispatch failed on room entry")
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
