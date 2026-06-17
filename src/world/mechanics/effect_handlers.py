@@ -528,6 +528,46 @@ def _apply_escape_captivity(
     )
 
 
+def _apply_rescue_captive(
+    _effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Free the run's ``rescue_target`` from captivity (#931 Phase 4 rescue).
+
+    The terminal effect of a rescue run's success route: it reaches the captive
+    through the resolving ``MissionInstance.rescue_target`` (carried on the
+    context), not the acting character — the rescuer frees someone else. Skips
+    gracefully off the mission path, on a non-rescue run, or when the target is
+    no longer held (already freed / escaped), so it never crashes a resolution.
+    The captive-side sibling is :data:`EffectType.ESCAPE_CAPTIVITY`.
+    """
+    from world.captivity.services import rescue_captive  # noqa: PLC0415
+
+    instance = context.mission_instance
+    captive = instance.rescue_target if instance is not None else None
+    if captive is None:
+        return AppliedEffect(
+            effect_type=EffectType.RESCUE_CAPTIVE,
+            description="No rescue target on this resolution",
+            applied=False,
+            skip_reason="No rescue_target in context",
+        )
+
+    if not rescue_captive(captive):
+        return AppliedEffect(
+            effect_type=EffectType.RESCUE_CAPTIVE,
+            description="Rescue target is not currently held",
+            applied=False,
+            skip_reason="Rescue target not held",
+        )
+
+    return AppliedEffect(
+        effect_type=EffectType.RESCUE_CAPTIVE,
+        description=f"Freed captive {captive.pk}",
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -545,4 +585,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.LEGEND_AWARD: _legend_award,
     EffectType.CAPTURE: _apply_capture,
     EffectType.ESCAPE_CAPTIVITY: _apply_escape_captivity,
+    EffectType.RESCUE_CAPTIVE: _apply_rescue_captive,
 }

@@ -569,7 +569,9 @@ def resolve_option(  # noqa: PLR0913
         next_node, candidate = _route_next_node(route)
 
     consequence = _select_route_consequence(route, result, candidate)
-    context = ResolutionContext(character=character)
+    # Carry the run so mission-aware effects (e.g. a rescue route's
+    # RESCUE_CAPTIVE) can reach run state like ``rescue_target``.
+    context = ResolutionContext(character=character, mission_instance=instance)
     apply_resolution(PendingResolution(result, consequence), context)
 
     is_terminal = False

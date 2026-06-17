@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from world.checks.models import CheckType, Consequence
     from world.mechanics.models import ChallengeInstance
+    from world.missions.models import MissionInstance
     from world.scenes.models import Persona, Scene
     from world.stories.models import Beat, Story
     from world.traits.models import CheckOutcome, CheckRank, ResultChart
@@ -65,10 +66,14 @@ class ResolutionContext:
     beat: Beat | None = None
     scene: Scene | None = None
     story: Story | None = None
+    # The run being resolved, when a mission route fires the consequence — lets
+    # mission-aware effects reach run state (e.g. a rescue route freeing the
+    # run's ``rescue_target``). None outside the mission-resolution path.
+    mission_instance: MissionInstance | None = None
 
     @property
     def location(self) -> ObjectDB:
-        return self.character.location  # type: ignore[return-value]
+        return self.character.location
 
     @property
     def display_label(self) -> str:
