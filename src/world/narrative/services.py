@@ -16,6 +16,7 @@ online sessions and persists a Gemit record for retroactive viewing.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -36,6 +37,8 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.stories.models import BeatCompletion, EpisodeResolution, Era, Story
+
+logger = logging.getLogger(__name__)
 
 
 def send_narrative_message(  # noqa: PLR0913
@@ -156,8 +159,8 @@ def broadcast_gemit(
 
         for session in SESSION_HANDLER.get_sessions():
             session.msg(text=(formatted, {}), type="gemit")
-    except Exception:  # noqa: BLE001, S110
-        pass
+    except Exception:
+        logger.exception("Failed to broadcast gemit %s to sessions", gemit.pk)
     return gemit
 
 
