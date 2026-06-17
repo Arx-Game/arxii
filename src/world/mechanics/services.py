@@ -431,6 +431,10 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
         match_value += Decimal(FASHION_MATCH_BASE) * worn_quality_aggregate(
             char.equipped_items.item_facets_for(facet)
         )
+    for s in style.in_vogue_styles.all():
+        match_value += Decimal(FASHION_MATCH_BASE) * worn_quality_aggregate(
+            char.equipped_items.item_styles_for(s)
+        )
     return int(match_value * Decimal(str(bonus.weight)))
 
 

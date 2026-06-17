@@ -1221,6 +1221,12 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Facets that are currently fashionable in this style.",
     )
+    in_vogue_styles = models.ManyToManyField(
+        "items.Style",
+        related_name="vogue_in",
+        blank=True,
+        help_text="Aesthetic styles (vocabulary words) that are currently fashionable.",
+    )
 
     objects = NaturalKeyManager()
 
