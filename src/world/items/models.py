@@ -1166,6 +1166,28 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class Style(NaturalKeyMixin, SharedMemoryModel):
+    """A staff-curated aesthetic vocabulary word (e.g. "Seductive", "Menacing", "Regal").
+
+    Phase A of the magical-aesthetic-axis (#546). Later phases tag items with
+    styles and bind them to resonances.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class FashionStyleBonus(SharedMemoryModel):
     """Maps a FashionStyle to a check-type ModifierTarget it flatters.
 

@@ -12,6 +12,7 @@ from world.items.models import (
     ItemTemplate,
     OwnershipEvent,
     QualityTier,
+    Style,
     TemplateInteraction,
     TemplateSlot,
 )
@@ -161,3 +162,9 @@ class FashionStyleAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     filter_horizontal = ["in_vogue_facets"]
     inlines = [FashionStyleBonusInline]
+
+
+@admin.register(Style)
+class StyleAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ["name"]

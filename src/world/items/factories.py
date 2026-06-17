@@ -22,6 +22,7 @@ from world.items.models import (
     Outfit,
     OutfitSlot,
     QualityTier,
+    Style,
     TemplateSlot,
     Trendsetter,
 )
@@ -170,6 +171,17 @@ class FashionStyleFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Fashion Style {n}")
+    description = ""
+
+
+class StyleFactory(factory.django.DjangoModelFactory):
+    """Factory for Style (aesthetic vocabulary, #546)."""
+
+    class Meta:
+        model = Style
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Style {n}")
     description = ""
 
 
