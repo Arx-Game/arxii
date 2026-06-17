@@ -287,6 +287,33 @@ Lore storage and character knowledge tracking.
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
+
+### Investigation & Discovery
+The mystery core loop: a clue points at something worth finding (codex entry, mission, or a
+held captive to rescue); players acquire clues by **searching** a room or via passive
+**triggers**, then resolve them automatically or through a collaborative **research project**.
+
+- **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE + a
+  per-kind FK; never exists without a target), `CharacterClue` (held-clue, roster-scoped),
+  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule`),
+  `ClueTrigger` (passive on-entry placement + `eligibility_rule`), `ResearchProjectDetails`
+  (the clue a `ProjectKind.RESEARCH` project researches toward)
+- **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
+  `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
+  (AUTOMATIC resolution — codex KNOWN / rescue mission), `maybe_grant_clue_triggers`
+  (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
+  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
+- **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
+  via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
+- **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
+  each placement (access layer; empty rule = open to anyone)
+- **Integrates with:** codex (codex-target grant via `add_progress`), missions
+  (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
+  clues planted on capture / cleared on resolution), predicates (eligibility), checks
+  (`perform_check`), actions (search), narrative (trigger notification), typeclasses
+  (`Character.at_post_move` trigger hook)
+- **Source:** `src/world/clues/`
+- **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
 ### Consent
 OOC visibility groups for player-controlled content sharing.
 
