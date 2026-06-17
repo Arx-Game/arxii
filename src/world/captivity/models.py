@@ -76,6 +76,17 @@ class Captivity(SharedMemoryModel):
         related_name="ransom_captivities",
         help_text="The one-shot demand contract surfaced on the captor-debtor's books.",
     )
+    rescue_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The rescue mission a discovered rescue clue grants (#931 Phase 4). Resolved"
+            " from the capture setup (override-then-default) and stamped at capture time."
+        ),
+    )
     captured_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(
         null=True,

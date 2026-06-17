@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
+    from world.captivity.models import Captivity
     from world.checks.models import CheckType
     from world.predicates.predicates import CharacterPredicateContext
     from world.roster.models import RosterEntry
@@ -62,12 +63,17 @@ def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:
 def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     """AUTOMATIC resolution — grant a clue's target to the character on the spot.
 
-    CODEX: the character learns the entry (KNOWN, firing the codex reactivity hook).
-    Other target kinds (mission/secret) are a documented extension point — rescue grants
-    its mission through the rescue flow, secrets are unbuilt.
+    - CODEX: the character learns the entry (KNOWN, firing the codex reactivity hook).
+    - RESCUE: the character is handed the rescue mission for the held captive.
+    Mission/secret target kinds are a documented extension point.
     """
-    if clue.target_kind != ClueTargetKind.CODEX:
-        return
+    if clue.target_kind == ClueTargetKind.CODEX:
+        _grant_codex_target(clue, roster_entry)
+    elif clue.target_kind == ClueTargetKind.RESCUE:
+        _grant_rescue_target(clue, roster_entry)
+
+
+def _grant_codex_target(clue: Clue, roster_entry: RosterEntry) -> None:
     entry = clue.target_codex_entry
     if entry is None:
         return
@@ -81,6 +87,64 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
         defaults={"status": CodexKnowledgeStatus.UNCOVERED},
     )
     knowledge.add_progress(entry.learn_threshold)
+
+
+def _grant_rescue_target(clue: Clue, roster_entry: RosterEntry) -> None:
+    """Hand the discoverer the rescue mission for the clue's still-held captive (#931).
+
+    No-op if the captivity is missing its rescue template, no longer held (already freed),
+    or the discoverer has no puppet — finding a stale rescue clue is harmless.
+    """
+    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+    from world.missions.services.run import grant_rescue_mission  # noqa: PLC0415
+
+    captivity = clue.target_captivity
+    if captivity is None or captivity.rescue_template is None:
+        return
+    if captivity.status != CaptivityStatus.HELD:
+        return
+    character = roster_entry.character_sheet.character
+    if character is None:
+        return
+    grant_rescue_mission(captivity.rescue_template, character, captivity.captive)
+
+
+def plant_rescue_clue(
+    captivity: Captivity,
+    room_profile: RoomProfile,
+    *,
+    name: str,
+    description: str,
+    detect_difficulty: int = 0,
+) -> RoomClue:
+    """Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).
+
+    Creates a RESCUE-target ``Clue`` pointing at the captivity and places it in the room,
+    so allies who search there and spot it are handed the rescue mission. The clue's text
+    is authored capture-setup content (the GM's voice, or a CaptivityConfig default).
+    AUTOMATIC by design — finding it grants the rescue at once.
+    """
+    clue = Clue.objects.create(
+        target_kind=ClueTargetKind.RESCUE,
+        target_captivity=captivity,
+        name=name,
+        description=description,
+        resolution_mode=ClueResolution.AUTOMATIC,
+    )
+    return RoomClue.objects.create(
+        room_profile=room_profile,
+        clue=clue,
+        detect_difficulty=detect_difficulty,
+    )
+
+
+def clear_rescue_clues(captivity: Captivity) -> None:
+    """Delete a captivity's rescue clues (and their placements) when it resolves (#931).
+
+    The RoomClue placements and any held CharacterClue rows cascade off the Clue, so a
+    freed captive leaves no stale rescue trail to discover.
+    """
+    Clue.objects.filter(target_captivity=captivity).delete()
 
 
 def search_room(
