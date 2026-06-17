@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("clues", "0001_initial"),
+        ("clues", "0002_researchprojectdetails"),
         ("evennia_extensions", "0002_roomprofile_tenant_persona"),
     ]
 
