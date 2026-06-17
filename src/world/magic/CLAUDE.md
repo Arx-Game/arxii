@@ -96,10 +96,34 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 - 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
 
 ### Motif System
-- `Motif` - Character-level magical aesthetic
+
+The Motif system is a **wired mechanical axis** — dressing in items whose styles match
+a character's Motif bindings buffs that resonance's magic through the modifier pipeline.
+
+- `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Hierarchical imagery/symbolism (Category > Subcategory > Specific)
-- `MotifResonanceAssociation` - Links resonances to facets in a motif
+- `MotifResonanceLink` - Abstract base for per-resonance attachments (shared
+  fields: `motif_resonance` FK, ordering meta). Two concrete subclasses:
+  - `MotifResonanceAssociation` - Links a resonance to a facet in the motif
+  - `MotifResonanceStyle` - Per-character style→resonance binding: each
+    `MotifResonance` can hold up to 3 `MotifResonanceStyle` rows (enforced by a
+    `CheckConstraint`). Each row binds one `Style` (from `world/items`, staff-curated
+    vocabulary model sibling to `Facet`/`FashionStyle`) to the resonance.
+    **Individualization core:** two characters can share the same `Style` name yet
+    bind it to different resonances — so "Seductive" means different magic for a
+    fire-resonant caster vs. a shadow-resonant caster.
+
+**Coherence walker (`passive_motif_style_bonuses` in `world/mechanics/services.py`):**
+Wired into `equipment_walk_total` → `get_modifier_total()`. For each `MotifResonanceStyle`
+binding on the character's motif, checks which equipped items carry that style
+(via `CharacterEquipmentHandler.item_styles_for`), aggregates their quality tiers via
+`worn_quality_aggregate`, and applies a coherence bonus to the bound resonance's
+`ModifierTarget`. The bonus magnitude and per-resonance cap come from the
+`AestheticAxisConfig` singleton (`world/mechanics`, lazy-created by `get_aesthetic_config()`).
+
+**Admin authoring surface:** Standalone `MotifResonanceAdmin` (in `world/magic/admin.py`)
+with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on `ItemInstance`.
 
 ### Thread System (Resonance Pivot Spec A)
 

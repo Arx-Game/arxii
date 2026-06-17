@@ -1346,15 +1346,23 @@ Cross-references:
 - Fashion-to-resonance integration (requires Items & Crafting systems —
   designed in `docs/architecture/items-fashion-mantles.md`,
   implementation phased across 4 PRs)
-- **Style / motif / aura magical-significance axis (post-Spec D, dedicated future spec).**
-  Resonance + facets cover *what* a character's magic is about; they don't cover
-  *vibe* — "seductive," "beguiling," "menacing," "regal," "feral." Existing
-  `Motif`/`MotifResonance`/`MotifResonanceAssociation` models in
-  `world/magic/models/motifs.py` are scaffolding without a coherent system.
-  Spec D's Section 13.3 has the design sub-questions that the future spec needs
-  to answer. **Important design intent:** flamboyant fashion (battle lingerie
-  on a Sword warrior, paladin getup, evil-sorceress robes) should be a *strong*
-  mechanical axis — this is intentional, not flavor garnish.
+- **Style / motif / aura magical-significance axis — epic #546.**
+  **Phase A shipped** (`#1150`): `Style` primitive (`world/items/models.py`,
+  staff-curated vocabulary model) + `ItemStyle` per-instance tag on `ItemInstance`
+  (capacity gated by `ItemTemplate.style_capacity`; handler accessor
+  `CharacterEquipmentHandler.item_styles_for`) + `MotifResonanceStyle`
+  per-character binding (up to 3 `Style` entries per `MotifResonance`, abstract
+  base `MotifResonanceLink` shared with refactored `MotifResonanceAssociation`) +
+  coherence walker `passive_motif_style_bonuses` wired into `equipment_walk_total`
+  → `get_modifier_total()`, tuned via `AestheticAxisConfig` singleton
+  (`world/mechanics`). Admin authoring surface included.
+  **Phase B** (#1151) — crafter style-adaptation surface + `FashionStyle`/`Style`
+  vogue unification — remains open.
+  **Phase C** (#1152) — perception payoff (social/scene bonuses for style coherence)
+  — remains open.
+  **Important design intent:** flamboyant fashion (battle lingerie on a Sword
+  warrior, paladin getup, evil-sorceress robes) should be a *strong* mechanical
+  axis — this is intentional, not flavor garnish.
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)
