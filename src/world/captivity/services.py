@@ -174,6 +174,12 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
         captive.lifecycle_state_at = timezone.now()
         captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
 
+        # The captive is freed — tear down any discoverable rescue clues (#931 Phase 4)
+        # so no stale rescue trail survives.
+        from world.clues.services import clear_rescue_clues  # noqa: PLC0415
+
+        clear_rescue_clues(captivity)
+
     # Relocate THIS captive ourselves — explicitly, before any teardown, and
     # whether or not they are puppeted. complete_instanced_room only moves
     # online occupants and would otherwise leave an offline freed captive in a
@@ -211,12 +217,15 @@ def rescue_captive(captive: CharacterSheet) -> bool:
     return True
 
 
-def resolve_capture_setup(
+def resolve_capture_setup(  # noqa: PLR0913 — keyword-only; each arg is a distinct setup fact
     *,
     captive_template: MissionTemplate | None = None,
     rescue_template: MissionTemplate | None = None,
     cell_name: str = "",
     cell_description: str = "",
+    clue_name: str = "",
+    clue_description: str = "",
+    clue_detect_difficulty: int | None = None,
 ) -> CaptureSetup:
     """Resolve one capture's loops + cell flavor: per-capture override, else default.
 
@@ -232,6 +241,13 @@ def resolve_capture_setup(
         rescue_template=rescue_template or config.rescue_template,
         cell_name=cell_name or config.cell_name,
         cell_description=cell_description or config.cell_description,
+        clue_name=clue_name or config.clue_name,
+        clue_description=clue_description or config.clue_description,
+        clue_detect_difficulty=(
+            clue_detect_difficulty
+            if clue_detect_difficulty is not None
+            else config.clue_detect_difficulty
+        ),
     )
 
 

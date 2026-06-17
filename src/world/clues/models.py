@@ -29,6 +29,7 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
     DISCRIMINATOR_MAP = {
         ClueTargetKind.CODEX: "target_codex_entry",
         ClueTargetKind.MISSION: "target_mission",
+        ClueTargetKind.RESCUE: "target_captivity",
     }
 
     target_kind = models.CharField(
@@ -51,6 +52,14 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="clues",
         help_text="The mission this clue points to (target_kind=MISSION).",
+    )
+    target_captivity = models.ForeignKey(
+        "captivity.Captivity",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="rescue_clues",
+        help_text="The captivity this clue points to freeing (target_kind=RESCUE, #931).",
     )
 
     name = models.CharField(

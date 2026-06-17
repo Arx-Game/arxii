@@ -13,6 +13,7 @@ class ClueTargetKind(models.TextChoices):
 
     CODEX = "codex", "Codex Entry"
     MISSION = "mission", "Mission"
+    RESCUE = "rescue", "Rescue (a held captive)"
 
 
 class ClueResolution(models.TextChoices):

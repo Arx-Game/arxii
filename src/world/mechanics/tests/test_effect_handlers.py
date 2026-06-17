@@ -250,6 +250,36 @@ class CaptureHandlerTests(TestCase):
         captivity = Captivity.objects.get(captive=sheet)
         assert captivity.cell.room.db_key == "The Blood Crypt"
 
+    def test_capture_plants_a_rescue_clue_at_the_capture_site(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.clues.constants import ClueTargetKind
+        from world.clues.models import RoomClue
+        from world.missions.factories import MissionTemplateFactory
+
+        room_profile = RoomProfileFactory()
+        character = CharacterFactory(db_key="rescue_clue_target")
+        sheet = CharacterSheetFactory(character=character)
+        character.move_to(room_profile.objectdb, quiet=True)
+        rescue_template = MissionTemplateFactory(name="rescue-clue-tmpl")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+            capture_rescue_template=rescue_template,
+            capture_clue_name="Signs of a struggle",
+            capture_clue_description="PLACEHOLDER",
+            capture_clue_detect_difficulty=2,
+        )
+
+        result = apply_effect(effect, ResolutionContext(character=character))
+
+        assert result.applied
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.rescue_template == rescue_template
+        placement = RoomClue.objects.get(room_profile=room_profile)
+        assert placement.clue.target_kind == ClueTargetKind.RESCUE
+        assert placement.clue.target_captivity == captivity
+        assert placement.detect_difficulty == 2
+
     def test_capture_grants_the_captive_their_loop(self) -> None:
         # With a captive template on the effect (override-then-default), the
         # captured character is handed their own escape + get-word-out run.

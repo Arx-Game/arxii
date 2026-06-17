@@ -76,6 +76,17 @@ class Captivity(SharedMemoryModel):
         related_name="ransom_captivities",
         help_text="The one-shot demand contract surfaced on the captor-debtor's books.",
     )
+    rescue_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The rescue mission a discovered rescue clue grants (#931 Phase 4). Resolved"
+            " from the capture setup (override-then-default) and stamped at capture time."
+        ),
+    )
     captured_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(
         null=True,
@@ -142,6 +153,21 @@ class CaptivityConfig(SharedMemoryModel):
         blank=True,
         default="",
         help_text="Default cell room description (player-visible — author in your voice).",
+    )
+    clue_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Default rescue-clue name at the capture site (player-visible — your voice).",
+    )
+    clue_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Default rescue-clue description (player-visible — author in your voice).",
+    )
+    clue_detect_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text="Default Search-check difficulty to spot the rescue clue. Placeholder.",
     )
 
     @classmethod
