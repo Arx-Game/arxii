@@ -103,13 +103,16 @@ a character's Motif bindings buffs that resonance's magic through the modifier p
 - `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Hierarchical imagery/symbolism (Category > Subcategory > Specific)
-- `MotifResonanceLink` - Abstract base for per-resonance attachments (shared
-  fields: `motif_resonance` FK, ordering meta). Two concrete subclasses:
+- `MotifResonanceLink` - Abstract base for per-resonance attachments. Declares
+  NO fields; each concrete subclass declares its own `motif_resonance` FK.
+  Provides `clean()`/`save()` cap-enforcement logic (Python-layer count check
+  against `MAX_PER_RESONANCE`; no DB constraint). Two concrete subclasses:
   - `MotifResonanceAssociation` - Links a resonance to a facet in the motif
   - `MotifResonanceStyle` - Per-character style→resonance binding: each
-    `MotifResonance` can hold up to 3 `MotifResonanceStyle` rows (enforced by a
-    `CheckConstraint`). Each row binds one `Style` (from `world/items`, staff-curated
-    vocabulary model sibling to `Facet`/`FashionStyle`) to the resonance.
+    `MotifResonance` can hold up to 3 `MotifResonanceStyle` rows (cap enforced
+    by `MotifResonanceLink.clean()`/`save()`, Python-layer). Each row binds one
+    `Style` (from `world/items`, staff-curated vocabulary model sibling to
+    `Facet`/`FashionStyle`) to the resonance.
     **Individualization core:** two characters can share the same `Style` name yet
     bind it to different resonances — so "Seductive" means different magic for a
     fire-resonant caster vs. a shadow-resonant caster.
