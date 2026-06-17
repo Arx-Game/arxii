@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -272,14 +274,20 @@ def maybe_grant_clue_triggers(character: ObjectDB, room: ObjectDB) -> list[Clue]
 
 
 def _notify_clue_found(roster_entry: RosterEntry, clue: Clue) -> None:
-    """Tell the player a passive trigger revealed a clue (its authored description)."""
+    """Tell the player a passive trigger revealed a clue (its authored description).
+
+    The clue is already granted before this runs, so a notification failure must not undo
+    the grant — but we log it rather than swallow it, so a real fault stays visible.
+    """
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    with contextlib.suppress(Exception):
+    try:
         send_narrative_message(
             recipients=[roster_entry.character_sheet],
             body=clue.description,
             category=NarrativeCategory.HAPPENSTANCE,
             ooc_note=f"Surfaced by a clue trigger (clue #{clue.pk}).",
         )
+    except Exception:
+        logger.exception("Failed to notify %s that clue #%s was found", roster_entry, clue.pk)
