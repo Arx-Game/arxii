@@ -301,6 +301,17 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
     scales with coverage (fraction of bound styles worn) × quality aggregate. When all
     bound styles are worn the ``full_combination_bonus`` multiplier is applied.
 
+    **Composition rule — style × facet coexistence:** An item that carries both an
+    ``ItemStyle`` and an ``ItemFacet`` contributes to this walker (style coherence)
+    AND to ``passive_facet_bonuses`` (facet resonance) simultaneously. The two walkers
+    are independent; their results are summed by ``equipment_walk_total``.
+
+    **Dilution-only rule — unbound styles are inert:** The walker iterates only the
+    character's ``MotifResonanceStyle`` bindings for ``target``'s resonance. A worn
+    ``ItemStyle`` that does not appear in those bindings is completely invisible to this
+    walker — it neither increases coverage nor applies any penalty. Characters may freely
+    wear items tagged with unrelated styles without degrading their coherence bonus.
+
     Args:
         sheet: CharacterSheet instance.
         target: The ModifierTarget to aggregate the style coherence bonus for.
