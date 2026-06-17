@@ -329,32 +329,38 @@ class Character(ObjectParent, DefaultCharacter):
             # to the destination may hand this character a mission. The cheap
             # "is this a trigger room?" query short-circuits for ordinary rooms.
             # Best-effort — an optional mission hook must never break movement.
-            with contextlib.suppress(Exception):
+            try:
                 from world.missions.services.trigger_dispatch import (
                     maybe_dispatch_on_enter,
                 )
 
                 maybe_dispatch_on_enter(self, self.location)
+            except Exception:
+                logger.exception("Mission trigger dispatch failed on room entry")
 
             # Dramatic traps (#1051): an armed trap the entrant has not yet
             # resolved runs its detection check on arrival. Same room-bound
             # rationale as mission dispatch — the cheap ``traps`` query short-
             # circuits ordinary rooms. Best-effort — never break movement.
-            with contextlib.suppress(Exception):
+            try:
                 from world.room_features.trap_services import (
                     check_room_traps_on_entry,
                 )
 
                 check_room_traps_on_entry(self, self.location)
+            except Exception:
+                logger.exception("Trap detection failed on room entry")
 
             # Fame reactions (#881): a room with authored FameReactionLine
             # rows may react to a notable arrival — bystanders see the
             # observer line, the arriver their own register. Optional
             # flavor; best-effort, never breaks movement.
-            with contextlib.suppress(Exception):
+            try:
                 from world.societies.fame_reactions import maybe_emit_fame_reaction
 
                 maybe_emit_fame_reaction(self, self.location)
+            except Exception:
+                logger.exception("Fame reaction failed on room entry")
 
             # Passive clue triggers (#1160): a room may reveal a clue to an eligible
             # entrant — no search needed (who you are / where you are). This is an

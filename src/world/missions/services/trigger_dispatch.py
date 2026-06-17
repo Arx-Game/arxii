@@ -18,7 +18,7 @@ room-bound giver), wrapped so a dispatch hiccup never breaks movement/look.
 
 from __future__ import annotations
 
-import contextlib
+import logging
 from typing import TYPE_CHECKING, cast
 
 from django.db.models import Q
@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 
     from typeclasses.characters import Character
     from world.missions.models import MissionTemplate
+
+logger = logging.getLogger(__name__)
 
 # Default re-offer cooldown when a drawn template carries no cooldown of its own.
 _DEFAULT_COOLDOWN = timezone.timedelta(hours=12)
@@ -146,10 +148,12 @@ def _write_cooldown(
 
 def _announce(character: ObjectDB, template: MissionTemplate) -> None:
     """Tell the player a mission hook found them (best-effort; never fatal)."""
-    with contextlib.suppress(Exception):
+    try:
         send_narrative_message(
             recipients=[character.sheet_data],
             body=f"Something here pulls you toward a task — {template.name}.",
             category=NarrativeCategory.HAPPENSTANCE,
             ooc_note=f"Surfaced by a trigger giver (template #{template.pk}).",
         )
+    except Exception:
+        logger.exception("Failed to announce mission %s to %s", template.pk, character)

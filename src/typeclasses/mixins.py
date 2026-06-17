@@ -1,4 +1,5 @@
 import contextlib
+import logging
 from typing import TYPE_CHECKING, Self, Union
 
 from django.utils.functional import cached_property
@@ -9,6 +10,8 @@ from flows.trigger_handler import TriggerHandler
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_GENDER = "neutral"
 
@@ -136,12 +139,14 @@ class ObjectParent:
         # bound to this object may hand the examiner a mission. The cheap
         # giver lookup short-circuits for ordinary objects. Best-effort — an
         # optional mission hook must never break a look.
-        with contextlib.suppress(Exception):
+        try:
             from world.missions.services.trigger_dispatch import (
                 maybe_dispatch_on_examine,
             )
 
             maybe_dispatch_on_examine(observer, self)
+        except Exception:
+            logger.exception("Mission dispatch failed on examine")
         return True
 
     def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:
@@ -183,7 +188,6 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
         display = obj.ranking_display
     except (AttributeError, RankingDisplay.DoesNotExist):
         return None
-    import contextlib
 
     # #981: gate the board on the looker's ACTIVE face (the telnet mirror of
     # RankingDisplayViewSet) so examining a board while wearing an alt's face is

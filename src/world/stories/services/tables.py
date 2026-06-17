@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
+import logging
 
 from django.db import transaction
 from django.utils import timezone
@@ -13,6 +13,8 @@ from world.gm.models import GMProfile, GMTable
 from world.stories.constants import StoryGMOfferStatus, StoryScope
 from world.stories.exceptions import StoryGMOfferError
 from world.stories.models import Story, StoryGMOffer
+
+logger = logging.getLogger(__name__)
 
 # Notification kind constants for _send_offer_notification — internal identifiers only.
 _KIND_CREATED = "created"
@@ -183,7 +185,7 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
     else:
         return  # Unknown kind — ignore.
 
-    with contextlib.suppress(Exception):  # notification is best-effort; don't block the offer
+    try:  # notification is best-effort; don't block the offer, but log a real failure
         send_narrative_message(
             recipients=[character_sheet],
             body=body,
@@ -191,3 +193,5 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
             sender_account=sender,
             related_story=story,
         )
+    except Exception:
+        logger.exception("Failed to send story-offer notification for story %s", story.pk)
