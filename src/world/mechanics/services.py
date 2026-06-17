@@ -18,7 +18,13 @@ from world.checks.services import chart_has_success_outcomes, preview_check_diff
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import EffectKind, TargetKind
-from world.magic.models import Resonance, TechniqueCapabilityGrant, ThreadPullEffect
+from world.magic.models import (
+    Motif,
+    MotifResonance,
+    Resonance,
+    TechniqueCapabilityGrant,
+    ThreadPullEffect,
+)
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
     CapabilitySourceType,
@@ -198,6 +204,7 @@ def equipment_walk_total(character: object, target: ModifierTarget) -> int:
         + covenant_role_bonus(character, target)
         + covenant_level_bonus(character, target)
         + passive_mantle_bonuses(character, target)
+        + passive_motif_style_bonuses(character, target)
     )
 
 
@@ -284,6 +291,55 @@ def passive_mantle_bonuses(sheet: object, target: ModifierTarget) -> int:
             base = effect.flat_bonus_amount or 0
             total += base * max(1, thread.level)
     return total
+
+
+def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Sum the coherence bonus from worn styles bound to the character's Motif (Spec D §5.3).
+
+    For each style binding in the character's MotifResonance for ``target``'s resonance,
+    check whether the character currently wears items carrying that style. The bonus
+    scales with coverage (fraction of bound styles worn) × quality aggregate. When all
+    bound styles are worn the ``full_combination_bonus`` multiplier is applied.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate the style coherence bonus for.
+
+    Returns:
+        Integer bonus (truncated), or 0 if no binding or no matching worn styles.
+    """
+    if target.target_resonance_id is None:
+        return 0
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "equipped_items"):
+        return 0
+    try:
+        motif = sheet.motif  # CharacterSheet OneToOne, related_name "motif"
+    except Motif.DoesNotExist:
+        # Reverse OneToOne raises DoesNotExist, NOT AttributeError — getattr default won't catch it.
+        return 0
+    try:
+        mr = motif.resonances.get(resonance_id=target.target_resonance_id)
+    except MotifResonance.DoesNotExist:
+        return 0
+    bound = list(mr.style_assignments.all())
+    config = get_aesthetic_config()
+    covered = 0
+    quality_aggregate = Decimal(0)
+    for binding in bound:
+        worn = char.equipped_items.item_styles_for(binding.style)
+        if worn:
+            covered += 1
+            quality_aggregate += worn_quality_aggregate(worn)
+    if not bound or covered == 0:
+        return 0
+    coverage = Decimal(covered) / Decimal(len(bound))
+    bonus = Decimal(config.base_magnitude) * coverage * quality_aggregate
+    if covered == len(bound):
+        bonus *= Decimal(str(config.full_combination_bonus))
+    return int(bonus)
 
 
 def _thread_pull_effects_for(
