@@ -59,6 +59,15 @@ class Action:
     # turn-costing and do not consult this flag. Spec: #520 §4.5.
     costs_turn: bool = False
 
+    # Declarative resource cost (#1154): charged by ``run()`` before ``execute()``.
+    # ``ap_cost`` spends Action Points — too few and the action fails without executing.
+    # ``fatigue_cost`` adds fatigue to ``fatigue_category``'s pool (uncapped). Defaults of
+    # 0 / None mean "free", so existing actions are unaffected; magnitudes are placeholder
+    # data tuned in a later author pass (#1143).
+    ap_cost: int = 0
+    fatigue_cost: int = 0
+    fatigue_category: str | None = None
+
     intent_event: str | None = None
     result_event: str | None = None
 
@@ -116,6 +125,36 @@ class Action:
             reasons=failures,
         )
 
+    def _charge_costs(self, actor: ObjectDB) -> ActionResult | None:
+        """Charge the action's declarative AP + fatigue cost (#1154).
+
+        Returns a failure ``ActionResult`` when the actor cannot afford the AP cost
+        (the action then does not execute); otherwise charges and returns ``None``.
+        Fatigue is uncapped, so it always applies once the AP cost is paid.
+        """
+        if self.ap_cost > 0:
+            from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+            pool = ActionPointPool.get_or_create_for_character(actor)
+            if not pool.spend(self.ap_cost):
+                return ActionResult(
+                    success=False,
+                    message="You don't have enough action points for that.",
+                )
+        if self.fatigue_cost > 0 and self.fatigue_category is not None:
+            from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+            from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+            from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+            try:
+                sheet = actor.sheet_data
+            except (AttributeError, ObjectDoesNotExist):
+                sheet = None
+            if sheet is not None:
+                apply_fatigue(sheet, self.fatigue_category, self.fatigue_cost, EffortLevel.MEDIUM)
+        return None
+
     def run(
         self,
         actor: ObjectDB,
@@ -158,6 +197,11 @@ class Action:
             enh.apply(context)
 
         # TODO: emit intent event and check for trigger interruption
+
+        # Charge the action's declarative AP + fatigue cost before executing (#1154).
+        cost_failure = self._charge_costs(actor)
+        if cost_failure is not None:
+            return cost_failure
 
         # Execute with potentially modified kwargs
         context.result = self.execute(actor, context=context, **context.kwargs)
