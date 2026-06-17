@@ -146,8 +146,8 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
         """Cold call: the handler does its single load, then renders.
 
         Counts the queries the handler runs to fetch all five equipped
-        items, their templates, quality tiers, item facets, and template
-        slots in one go — then the service runs zero further queries.
+        items, their templates, quality tiers, item facets, item styles, and
+        template slots in one go — then the service runs zero further queries.
         """
         # Use a fresh character so the handler is cold.
         cold_character = CharacterFactory(db_key="QCColdChar", location=self.room)
@@ -175,8 +175,9 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
 
         # Cold load: 1 query for EquippedItem (with select_related on
         # item_instance + template + quality_tier) + 1 prefetch for facets
-        # + 1 prefetch for template slots = 3.
-        with self.assertNumQueries(3):
+        # + 1 prefetch for item styles (#1150) + 1 prefetch for template
+        # slots = 4.
+        with self.assertNumQueries(4):
             result = visible_worn_items_for(cold_character)
         self.assertEqual(len(result), 1)
 

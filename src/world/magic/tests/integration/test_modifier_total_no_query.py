@@ -189,7 +189,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     def test_query_budget_after_handler_warm(self) -> None:
         """Pin get_modifier_total to BASELINE_QUERIES after character-side handlers are warm.
 
-        Documented query budget (5 total on first call):
+        Documented query budget (6 total on first call):
           Query 1: CharacterModifier.exists() — always fires in get_modifier_breakdown,
                    returns early because no CharacterModifier rows exist for this sheet.
           Query 2: ThreadPullEffect.filter(target_kind=FACET, resonance=..., tier=0, ...) —
@@ -205,6 +205,12 @@ class ModifierTotalQueryBudgetTests(TestCase):
                    covenant_level_bonus (#762) fires once per engaged member's
                    modifier-total call; returns None here (no authored row for this
                    target) so it contributes 0 to the result.
+          Query 6: CharacterSheet.motif reverse-OneToOne fetch —
+                   passive_motif_style_bonuses (#1150) resolves the character's Motif
+                   for the resonance-linked target. The reverse OneToOne is keyed on
+                   character_id, not PK, so the SharedMemoryModel identity map can't
+                   serve it; one query fires. This character has no Motif, so it raises
+                   DoesNotExist and contributes 0 to the result.
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -228,10 +234,11 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
-        # BASELINE = 5: CharacterModifier.exists + ThreadPullEffect.filter
+        # BASELINE = 6: CharacterModifier.exists + ThreadPullEffect.filter
         #               + CharacterClassLevel (current_level) + is_gear_compatible
         #               + CovenantLevelBonus.first() (covenant_level_bonus, #762)
-        baseline_queries = 5
+        #               + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
+        baseline_queries = 6
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)
 
@@ -243,10 +250,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.assertEqual(result, 5)
 
     def test_no_handler_warm_query_count_is_higher(self) -> None:
-        """Without warming, handler queries fire on top of the baseline 5.
+        """Without warming, handler queries fire on top of the baseline 6.
 
         This is the control test: demonstrate that warmup matters. After
-        invalidating the handler caches, we expect MORE than 5 queries because
+        invalidating the handler caches, we expect MORE than 6 queries because
         the handler walks (equipped_items, threads, covenant_roles) must fetch
         from the DB on first access.
 
@@ -263,7 +270,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 5
+        baseline_queries = 6
 
         # Capture actual count by running without constraint
         from django.db import connection
