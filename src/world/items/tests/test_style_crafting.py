@@ -1,14 +1,19 @@
-"""Tests for craft_attach_style service function (#1151)."""
+"""Tests for craft_attach_style service function and API endpoint (#1151)."""
 
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.exceptions import StyleAlreadyAttached, StyleCapacityExceeded
 from world.items.factories import (
     ItemInstanceFactory,
+    ItemStyleFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    StyleFactory,
+    wire_enchanting_crafting,
 )
 from world.traits.factories import CharacterTraitValueFactory
 
@@ -120,3 +125,138 @@ class CraftAttachStyleTests(TestCase):
                 item_instance=self.item,
                 style=self.style,
             )
+
+
+class ItemStyleCraftViewTests(TestCase):
+    """Tests for POST /api/items/item-styles/ endpoint (#1151)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.traits.models import Trait
+
+        wire_enchanting_crafting(base_difficulty=0)
+        cls.quality = QualityTierFactory(
+            name="StyleViewCommon", numeric_min=0, numeric_max=9999, sort_order=0
+        )
+
+        cls.owner = AccountFactory(username="style_view_owner")
+        cls.owner_char = CharacterFactory(db_key="style_view_owner_char")
+        cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
+        owner_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+        RosterTenureFactory(
+            roster_entry=owner_entry,
+            player_data=PlayerDataFactory(account=cls.owner),
+        )
+        CharacterTraitValueFactory(
+            character=cls.owner_char,
+            trait=Trait.objects.get(name="Enchanting"),
+            value=50,
+        )
+
+        cls.non_owner = AccountFactory(username="style_view_nonowner")
+        cls.non_owner_char = CharacterFactory(db_key="style_view_nonowner_char")
+        cls.non_owner_sheet = CharacterSheetFactory(character=cls.non_owner_char)
+        non_owner_entry = RosterEntryFactory(character_sheet=cls.non_owner_sheet)
+        RosterTenureFactory(
+            roster_entry=non_owner_entry,
+            player_data=PlayerDataFactory(account=cls.non_owner),
+        )
+
+        cls.template_cap2 = ItemTemplateFactory(name="StyleView Cap2 Template", style_capacity=2)
+        cls.template_cap1 = ItemTemplateFactory(name="StyleView Cap1 Template", style_capacity=1)
+        cls.template_cap0 = ItemTemplateFactory(name="StyleView Cap0 Template", style_capacity=0)
+
+        cls.item_owner = ItemInstanceFactory(
+            template=cls.template_cap2, holder_character_sheet=cls.owner_sheet
+        )
+        cls.item_other = ItemInstanceFactory(
+            template=cls.template_cap2, holder_character_sheet=cls.non_owner_sheet
+        )
+        cls.item_cap1 = ItemInstanceFactory(
+            template=cls.template_cap1, holder_character_sheet=cls.owner_sheet
+        )
+
+        cls.style_a = StyleFactory(name="ViewStyleA")
+        cls.style_b = StyleFactory(name="ViewStyleB")
+
+    def setUp(self) -> None:
+        from world.items.models import ItemInstance, ItemStyle
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.owner)
+        ItemStyle.flush_instance_cache()
+        ItemInstance.flush_instance_cache()
+
+    def test_post_create_calls_service(self) -> None:
+        """POST rolls the crafting check and (on success) attaches the style; returns 201."""
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.models import ItemStyle
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="StyleViewOk", success_level=2)):
+            response = self.client.post(
+                "/api/items/item-styles/",
+                {"item_instance": self.item_owner.pk, "style": self.style_a.pk},
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["attached"])
+        self.assertTrue(
+            ItemStyle.objects.filter(item_instance=self.item_owner, style=self.style_a).exists()
+        )
+
+    def test_post_failed_roll_returns_200_not_attached(self) -> None:
+        """POST that fails the crafting check returns 200 with attached=False."""
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="StyleViewBotch", success_level=-1)):
+            response = self.client.post(
+                "/api/items/item-styles/",
+                {"item_instance": self.item_owner.pk, "style": self.style_b.pk},
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["attached"])
+
+    def test_post_rejects_non_owner(self) -> None:
+        """Non-owner POST to attach a style to someone else's item is rejected with 403."""
+        self.client.force_authenticate(user=self.non_owner)
+        response = self.client.post(
+            "/api/items/item-styles/",
+            {"item_instance": self.item_owner.pk, "style": self.style_a.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_post_style_already_attached_returns_400(self) -> None:
+        """POST same style on same item a second time returns 400 with user_message."""
+        ItemStyleFactory(
+            item_instance=self.item_owner, style=self.style_a, attachment_quality_tier=self.quality
+        )
+        response = self.client.post(
+            "/api/items/item-styles/",
+            {"item_instance": self.item_owner.pk, "style": self.style_a.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("That style is already attached to this item.", str(response.data))
+
+    def test_post_capacity_exceeded_returns_400(self) -> None:
+        """POST a second style on a cap-1 item returns 400."""
+        ItemStyleFactory(
+            item_instance=self.item_cap1, style=self.style_a, attachment_quality_tier=self.quality
+        )
+        response = self.client.post(
+            "/api/items/item-styles/",
+            {"item_instance": self.item_cap1.pk, "style": self.style_b.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("This item has no remaining style slots.", str(response.data))
