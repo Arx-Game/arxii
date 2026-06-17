@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.clues.models import CharacterClue, Clue
+from world.clues.models import CharacterClue, Clue, RoomClue
 
 
 @admin.register(Clue)
@@ -23,3 +23,12 @@ class CharacterClueAdmin(admin.ModelAdmin):
     list_display = ["roster_entry", "clue", "found_at"]
     list_filter = ["clue__target_kind"]
     readonly_fields = ["found_at"]
+
+
+@admin.register(RoomClue)
+class RoomClueAdmin(admin.ModelAdmin):
+    """Authoring surface for placing clues in rooms (data, not code)."""
+
+    list_display = ["clue", "room_profile", "detect_difficulty", "is_active"]
+    list_filter = ["is_active", "clue__target_kind"]
+    search_fields = ["clue__name"]
