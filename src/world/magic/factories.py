@@ -2782,3 +2782,30 @@ def seed_magic_progression(prospect_paths=None):
     for path in paths:
         for key in gated_keys:
             PathCodexGrantFactory(path=path, entry=entries[key])
+
+
+# =============================================================================
+# Fury lever factories (Task 1 — #567)
+# =============================================================================
+
+
+class FuryTierFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.FuryTier"
+        django_get_or_create = ("name",)
+
+    name = "Unleashed"
+    depth = 2
+    control_penalty = 4
+    intensity_bonus = 5
+    base_check_difficulty = 10
+    lucid_grade_floor = 2
+    berserk_severity = 3
+
+
+class FuryConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.FuryConfig"
+        django_get_or_create = ("pk",)
+
+    pk = 1

@@ -299,3 +299,8 @@ class TechniqueReach(models.TextChoices):
     SAME = "same", "Same position"
     ADJACENT = "adjacent", "Adjacent position"
     ANY = "any", "Anywhere in room"
+
+
+class FuryCheckTrait(models.TextChoices):
+    COMPOSURE = "composure", "Composure"
+    WILLPOWER = "willpower", "Willpower"
