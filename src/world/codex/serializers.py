@@ -10,7 +10,6 @@ from rest_framework import serializers
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import (
     CodexCategory,
-    CodexClue,
     CodexEntry,
     CodexSubject,
 )
@@ -175,11 +174,3 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     def get_mechanics_content(self, obj: CodexEntry) -> str | None:
         """Return mechanics content only if public or KNOWN."""
         return obj.mechanics_content if self._can_see_content(obj) else None
-
-
-class CodexClueSerializer(serializers.ModelSerializer):
-    entry_name = serializers.CharField(source="entry.name", read_only=True)
-
-    class Meta:
-        model = CodexClue
-        fields = ["id", "name", "description", "research_value", "entry", "entry_name"]

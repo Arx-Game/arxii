@@ -3,10 +3,8 @@
 from django.contrib import admin
 
 from world.codex.models import (
-    CharacterClueKnowledge,
     CharacterCodexKnowledge,
     CodexCategory,
-    CodexClue,
     CodexEntry,
     CodexSubject,
     CodexTeachingOffer,
@@ -146,26 +144,6 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
         ),
         ("Timestamps", {"fields": ("created_at",), "classes": ["collapse"]}),
     )
-
-
-@admin.register(CodexClue)
-class CodexClueAdmin(admin.ModelAdmin):
-    """Admin interface for CodexClue."""
-
-    list_display = ["name", "entry", "research_value"]
-    list_filter = ["entry__subject__category"]
-    search_fields = ["name", "description", "entry__name"]
-    autocomplete_fields = ["entry"]
-
-
-@admin.register(CharacterClueKnowledge)
-class CharacterClueKnowledgeAdmin(admin.ModelAdmin):
-    """Admin interface for CharacterClueKnowledge (read-only debugging)."""
-
-    list_display = ["roster_entry", "clue", "found_at"]
-    list_filter = ["found_at"]
-    search_fields = ["roster_entry__character__db_key", "clue__name"]
-    readonly_fields = ["found_at"]
 
 
 @admin.register(CodexTeachingOffer)
