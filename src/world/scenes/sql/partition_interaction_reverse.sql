@@ -17,21 +17,22 @@ CREATE TABLE scenes_interaction (
     mode             varchar(20) NOT NULL,
     visibility       varchar(20) NOT NULL,
     pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
-    vote_count       integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
-    strain_committed integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
-    "timestamp"      timestamptz NOT NULL,
-    persona_id       bigint NOT NULL REFERENCES scenes_persona (id)
+    vote_count            integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
+    strain_committed      integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
+    fury_committed_id     bigint,
+    "timestamp"           timestamptz NOT NULL,
+    persona_id            bigint NOT NULL REFERENCES scenes_persona (id)
         ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,
-    scene_id         bigint REFERENCES scenes_scene (id)
+    scene_id              bigint REFERENCES scenes_scene (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
-    place_id         bigint REFERENCES scenes_place (id)
+    place_id              bigint REFERENCES scenes_place (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
 -- 3. Copy data — explicit column list (drift-checked vs. the CREATE TABLE above)
 INSERT INTO scenes_interaction
-    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id)
-    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id
+    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, fury_committed_id, "timestamp", persona_id, scene_id, place_id)
+    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, fury_committed_id, "timestamp", persona_id, scene_id, place_id
     FROM scenes_interaction_partitioned;
 
 -- 4. Drop partitioned table
