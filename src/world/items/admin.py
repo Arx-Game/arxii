@@ -9,6 +9,7 @@ from world.items.models import (
     FashionStyleBonus,
     InteractionType,
     ItemInstance,
+    ItemStyle,
     ItemTemplate,
     OwnershipEvent,
     QualityTier,
@@ -72,6 +73,12 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 
+class ItemStyleInline(admin.TabularInline):
+    model = ItemStyle
+    extra = 1
+    autocomplete_fields = ["style"]
+
+
 @admin.register(ItemInstance)
 class ItemInstanceAdmin(admin.ModelAdmin):
     list_display = [
@@ -101,6 +108,7 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter_persona_display",
         "image",
     ]
+    inlines = [ItemStyleInline]
 
 
 @admin.register(EquippedItem)
