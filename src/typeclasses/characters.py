@@ -353,6 +353,14 @@ class Character(ObjectParent, DefaultCharacter):
 
                 maybe_emit_fame_reaction(self, self.location)
 
+            # Passive clue triggers (#1160): a room may reveal a clue to an
+            # eligible entrant — no search needed (who you are / where you are).
+            # Same cheap room-bound query + best-effort rationale as above.
+            with contextlib.suppress(Exception):
+                from world.clues.services import maybe_grant_clue_triggers
+
+                maybe_grant_clue_triggers(self, self.location)
+
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
 
