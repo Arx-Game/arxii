@@ -170,6 +170,16 @@ class RoomClue(SharedMemoryModel):
         default=True,
         help_text="Whether this clue is currently findable in the room.",
     )
+    eligibility_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Predicate rule gating WHO may discover this placement (identity / org / "
+            "resonance / species, evaluated via world.predicates). Empty {} = open to "
+            "anyone — the default; add a rule to restrict. Same shape as "
+            "MissionTemplate.visibility_rule."
+        ),
+    )
 
     class Meta:
         ordering = ["room_profile", "clue"]
