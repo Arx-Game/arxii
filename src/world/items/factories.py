@@ -15,6 +15,7 @@ from world.items.models import (
     InteractionType,
     ItemFacet,
     ItemInstance,
+    ItemStyle,
     ItemTemplate,
     Mantle,
     MantleLevelClearance,
@@ -183,6 +184,18 @@ class StyleFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Style {n}")
     description = ""
+
+
+class ItemStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemStyle (#546)."""
+
+    class Meta:
+        model = ItemStyle
+        django_get_or_create = ("item_instance", "style")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    style = factory.SubFactory(StyleFactory)
+    attachment_quality_tier = factory.SubFactory(QualityTierFactory)
 
 
 class FashionStyleBonusFactory(factory.django.DjangoModelFactory):
