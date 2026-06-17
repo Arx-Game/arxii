@@ -24,6 +24,7 @@ from world.mechanics.constants import (
     DifficultyIndicator,
 )
 from world.mechanics.models import (
+    AestheticAxisConfig,
     Application,
     ChallengeApproach,
     ChallengeInstance,
@@ -50,6 +51,12 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.mechanics.engagement import CharacterEngagement
+
+
+def get_aesthetic_config() -> AestheticAxisConfig:
+    """Lazy-create and return the singleton aesthetic-axis config (pk=1)."""
+    config, _ = AestheticAxisConfig.objects.get_or_create(pk=1)
+    return config
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
