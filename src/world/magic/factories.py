@@ -56,6 +56,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    MotifResonanceStyle,
     PendingAlteration,
     Resonance,
     Restriction,
@@ -637,6 +638,16 @@ class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
     facet = factory.SubFactory(FacetFactory)
+
+
+class MotifResonanceStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonanceStyle — per-character style binding (#546)."""
+
+    class Meta:
+        model = MotifResonanceStyle
+
+    motif_resonance = factory.SubFactory(MotifResonanceFactory)
+    style = factory.SubFactory("world.items.factories.StyleFactory")
 
 
 # =============================================================================

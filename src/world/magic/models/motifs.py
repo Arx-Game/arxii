@@ -151,14 +151,54 @@ class MotifResonance(SharedMemoryModel):
         return f"{self.resonance.name} on {self.motif} {source}"
 
 
-class MotifResonanceAssociation(SharedMemoryModel):
+class MotifResonanceLink(SharedMemoryModel):
+    """Abstract base for models that cap the number of items linked to a MotifResonance.
+
+    Subclasses declare:
+    - A concrete ``motif_resonance`` FK (related_name differs per subclass).
+    - ``MAX_PER_RESONANCE`` class attribute (int) — the cap.
+    - ``CAP_ITEM_LABEL`` class attribute (str) — noun used in the error message.
+
+    ``clean()`` counts existing sibling rows (excluding self) and raises
+    ``ValidationError`` when the cap is reached. ``save()`` calls ``clean()``
+    before persisting.
+    """
+
+    MAX_PER_RESONANCE: int  # required class attribute on each concrete subclass
+    CAP_ITEM_LABEL: str = "items"  # overridden per subclass for user-facing message
+
+    class Meta:
+        abstract = True
+
+    def clean(self) -> None:
+        """Enforce the per-resonance cap."""
+        if self.motif_resonance_id:  # type: ignore[attr-defined]
+            current_count = (
+                type(self)
+                .objects.filter(motif_resonance=self.motif_resonance_id)  # type: ignore[attr-defined]
+                .exclude(pk=self.pk)
+                .count()
+            )
+            if current_count >= self.MAX_PER_RESONANCE:
+                msg = f"Maximum {self.MAX_PER_RESONANCE} {self.CAP_ITEM_LABEL} per resonance."
+                raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class MotifResonanceAssociation(MotifResonanceLink):
     """
     Links a motif resonance to a facet (hierarchical imagery/symbolism).
 
-    Maximum 5 facets per motif resonance (enforced in clean).
+    Maximum 5 facets per motif resonance (enforced via MotifResonanceLink).
     """
 
-    MAX_FACETS_PER_RESONANCE = 5
+    MAX_PER_RESONANCE = 5
+    CAP_ITEM_LABEL = "facets"
+    # Alias kept for any code that references the old constant name.
+    MAX_FACETS_PER_RESONANCE = MAX_PER_RESONANCE
 
     motif_resonance = models.ForeignKey(
         MotifResonance,
@@ -181,18 +221,35 @@ class MotifResonanceAssociation(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.facet.name} for {self.motif_resonance}"
 
-    def clean(self) -> None:
-        """Validate maximum facets per motif resonance."""
-        if self.motif_resonance_id:
-            current_count = (
-                MotifResonanceAssociation.objects.filter(motif_resonance=self.motif_resonance)
-                .exclude(pk=self.pk)
-                .count()
-            )
-            if current_count >= self.MAX_FACETS_PER_RESONANCE:
-                msg = f"Maximum {self.MAX_FACETS_PER_RESONANCE} facets per resonance."
-                raise ValidationError(msg)
 
-    def save(self, *args, **kwargs) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
+class MotifResonanceStyle(MotifResonanceLink):
+    """
+    Binds a Style to a MotifResonance, expressing character individualization.
+
+    Maximum 3 styles per motif resonance (enforced via MotifResonanceLink).
+    Two characters may bind the same Style to their own resonances independently.
+    """
+
+    MAX_PER_RESONANCE = 3
+    CAP_ITEM_LABEL = "styles"
+
+    motif_resonance = models.ForeignKey(
+        MotifResonance,
+        on_delete=models.CASCADE,
+        related_name="style_assignments",
+        help_text="The motif resonance this style belongs to.",
+    )
+    style = models.ForeignKey(
+        "items.Style",
+        on_delete=models.PROTECT,
+        related_name="motif_usages",
+        help_text="The aesthetic style.",
+    )
+
+    class Meta:
+        unique_together = ["motif_resonance", "style"]
+        verbose_name = "Motif Resonance Style"
+        verbose_name_plural = "Motif Resonance Styles"
+
+    def __str__(self) -> str:
+        return f"{self.style.name} for {self.motif_resonance}"
