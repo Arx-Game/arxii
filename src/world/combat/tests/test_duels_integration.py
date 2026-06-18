@@ -467,22 +467,38 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
         result = self._run_non_lethal()
         self.assertEqual(result.anima_cost.deficit, 0)
 
-    def test_non_lethal_cast_no_character_loss(self):
-        """Non-lethal soulfray: stage_consequence (character_loss) never fires."""
-        # First cast creates soulfray at severity 1.
+    def test_non_lethal_cast_severity_clamped_below_death_stage(self):
+        """Non-lethal soulfray: severity ceiling prevents reaching the death-risk stage.
+
+        With a single death-risk stage at severity_threshold=2, the ceiling is 1.
+        After the first cast the character sits at severity 1 (the ceiling).  A
+        second non-lethal cast hits the ``_nonlethal_bounded_advance`` short-circuit
+        (bounded=0) and returns immediately — the character never advances to the
+        death stage and ``stage_consequence`` is guaranteed None.
+
+        The ``_fire_stage_consequence_pool`` character_loss FILTER (which evaluates
+        the pool and strips ``character_loss`` entries before selection) is exercised
+        by the dedicated ``test_nonlethal_cap.py`` unit tests; this test covers the
+        upstream ceiling-clamp guard.
+        """
+        # First cast creates soulfray at severity 1 (the non-lethal ceiling).
         self._run_non_lethal()
         self.anima.refresh_from_db()
         self.anima.current = 0
         self.anima.save(update_fields=["current"])
 
-        # Second cast: would advance to death stage on lethal, but not here.
+        # Second cast: already at ceiling → _nonlethal_bounded_advance returns
+        # bounded=0 and short-circuits before the consequence pool is reached.
         result = self._run_non_lethal()
 
-        if result.soulfray_result is not None:
-            self.assertIsNone(
-                result.soulfray_result.stage_consequence,
-                "Non-lethal PvP cast must not fire a character_loss consequence",
-            )
+        # The soulfray result must exist (the condition was already created) and
+        # must carry no stage_consequence — the ceiling clamp guarantees this
+        # unconditionally (no conditional skip).
+        self.assertIsNotNone(result.soulfray_result)
+        self.assertIsNone(
+            result.soulfray_result.stage_consequence,
+            "Non-lethal PvP cast at severity ceiling must not fire any stage consequence",
+        )
 
 
 # ---------------------------------------------------------------------------
