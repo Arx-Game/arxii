@@ -61,6 +61,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
         thumbnail_url: '',
         thumbnail_media_url: null,
         current_position: null,
+        mirrors_participant_id: null,
       },
     ],
     current_round_actions: [],
@@ -75,6 +76,8 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     forced_escape: false,
     resolution_order: [],
     position_adjacency: [],
+    is_lethal: false,
+    duel_winner: null,
   };
 }
 

@@ -22,6 +22,7 @@ import {
   useJoinMutation,
   useLeaveMutation,
 } from './queries';
+import { DuelYieldControls, DuelAcknowledgeRiskBanner } from './duels/DuelChallengeControls';
 import { YourTurn } from './sections/YourTurn';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
@@ -161,6 +162,16 @@ export function CombatTurnPanel({
   const isOpenEncounter = encounter.encounter_type === 'open_encounter';
   const isBetweenRounds = encounter.status === 'between_rounds';
 
+  // Duel-specific flags — derived from encounter fields added in Task 13 (#568).
+  // Note: the `encounter.status === 'completed'` case is handled by the early return
+  // above, so after this point the encounter is guaranteed non-completed.
+  const isDuel = encounter.encounter_type === 'duel';
+  const isActiveDuel = isDuel && isParticipant;
+  // is_lethal is a readonly field on EncounterDetail (Task 13). Show the risk
+  // acknowledgement banner when the duel is lethal; it hides itself locally after
+  // the acknowledge_risk action dispatches successfully.
+  const showAcknowledgeRisk = isActiveDuel && encounter.is_lethal;
+
   // Audere active strip — the viewer's own participant row (matched by
   // character_sheet_id) carries the Audere condition in active_conditions while
   // the breakthrough is live. active_conditions entries are ConditionInstances
@@ -212,6 +223,15 @@ export function CombatTurnPanel({
           Audere
         </div>
       ) : null}
+
+      {/* Duel: lethal-risk acknowledgement banner — shown above all other duel controls
+          so the participant cannot miss it. Hides itself after dispatching acknowledge_risk.
+          Backend gap: acknowledgement state is not yet surfaced on EncounterDetail;
+          we show the banner whenever is_lethal is true and let the server gate actions. */}
+      <DuelAcknowledgeRiskBanner characterId={characterId} showBanner={showAcknowledgeRisk} />
+
+      {/* Duel: yield button — shown for active-duel participants; hides after yielding. */}
+      <DuelYieldControls characterId={characterId} isActiveDuel={isActiveDuel} />
 
       {/* Open Encounter join/leave — only between rounds */}
       {isOpenEncounter && isBetweenRounds && !isParticipant && (
