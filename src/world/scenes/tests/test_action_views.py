@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from actions.types import TargetType
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterStatus
@@ -17,10 +18,15 @@ from world.magic.factories import (
 )
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
-from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
+from world.scenes.action_models import (
+    SceneActionRequest,
+    SceneActionTarget,
+    SceneCastPullDeclaration,
+)
 from world.scenes.factories import (
     PlaceFactory,
     SceneActionRequestFactory,
+    SceneActionTargetFactory,
     SceneFactory,
 )
 from world.scenes.tests.cast_test_helpers import (
@@ -115,6 +121,245 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
+
+
+def _make_area_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = AREA."""
+    mock = MagicMock()
+    mock.target_type = TargetType.AREA
+    return mock
+
+
+def _make_single_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = SINGLE."""
+    mock = MagicMock()
+    mock.target_type = TargetType.SINGLE
+    return mock
+
+
+def _make_self_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = SELF."""
+    mock = MagicMock()
+    mock.target_type = TargetType.SELF
+    return mock
+
+
+def _make_filtered_group_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = FILTERED_GROUP."""
+    mock = MagicMock()
+    mock.target_type = TargetType.FILTERED_GROUP
+    return mock
+
+
+class MultiTargetDispatchTestCase(APITestCase):
+    """Tests for multi-target dispatch via target_persona_ids (#572 Task 4)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+        cls.target_account = AccountFactory()
+        cls.target_character = CharacterFactory()
+        cls.target_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.target_character
+        )
+        cls.target_player_data = PlayerDataFactory(account=cls.target_account)
+        cls.target_tenure = RosterTenureFactory(
+            player_data=cls.target_player_data,
+            roster_entry=cls.target_roster_entry,
+        )
+        cls.target_identity = CharacterSheetFactory(character=cls.target_character)
+        cls.target_persona = cls.target_identity.primary_persona
+
+        cls.extra_account = AccountFactory()
+        cls.extra_character = CharacterFactory()
+        cls.extra_roster_entry = RosterEntryFactory(character_sheet__character=cls.extra_character)
+        cls.extra_player_data = PlayerDataFactory(account=cls.extra_account)
+        cls.extra_tenure = RosterTenureFactory(
+            player_data=cls.extra_player_data,
+            roster_entry=cls.extra_roster_entry,
+        )
+        cls.extra_identity = CharacterSheetFactory(character=cls.extra_character)
+        cls.extra_persona = cls.extra_identity.primary_persona
+
+        cls.extra2_account = AccountFactory()
+        cls.extra2_character = CharacterFactory()
+        cls.extra2_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.extra2_character
+        )
+        cls.extra2_player_data = PlayerDataFactory(account=cls.extra2_account)
+        cls.extra2_tenure = RosterTenureFactory(
+            player_data=cls.extra2_player_data,
+            roster_entry=cls.extra2_roster_entry,
+        )
+        cls.extra2_identity = CharacterSheetFactory(character=cls.extra2_character)
+        cls.extra2_persona = cls.extra2_identity.primary_persona
+
+        cls.scene = SceneFactory()
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        self.url = reverse("sceneactionrequest-list")
+
+    @patch("world.scenes.action_services._auto_resolve_npc_targets")
+    @patch("world.scenes.action_views.get_action")
+    def test_area_action_with_three_ids_creates_primary_and_two_additional_rows(
+        self, mock_get_action: MagicMock, mock_auto_resolve: MagicMock
+    ) -> None:
+        """An AREA action with 3 ids creates 1 primary FK + 2 SceneActionTarget rows."""
+        mock_get_action.return_value = _make_area_action_mock()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [
+                self.target_persona.pk,
+                self.extra_persona.pk,
+                self.extra2_persona.pk,
+            ],
+            "action_key": "test_area_action",
+        }
+        before_count = SceneActionRequest.objects.count()
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+
+        # One new SceneActionRequest row
+        assert SceneActionRequest.objects.count() == before_count + 1
+        request_id = response.data["id"]
+        action_request = SceneActionRequest.objects.get(pk=request_id)
+
+        # Primary target is on the FK
+        assert action_request.target_persona_id == self.target_persona.pk
+
+        # Two additional SceneActionTarget rows
+        additional = SceneActionTarget.objects.filter(action_request=action_request)
+        assert additional.count() == 2
+        additional_ids = set(additional.values_list("target_persona_id", flat=True))
+        assert self.extra_persona.pk in additional_ids
+        assert self.extra2_persona.pk in additional_ids
+
+        # _auto_resolve_npc_targets called exactly once (multi-target path)
+        mock_auto_resolve.assert_called_once()
+
+    @patch("world.scenes.action_views.get_action")
+    def test_single_action_rejects_more_than_one_target_id(
+        self, mock_get_action: MagicMock
+    ) -> None:
+        """A SINGLE action with >1 target_persona_ids returns 400."""
+        mock_get_action.return_value = _make_single_action_mock()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [self.target_persona.pk, self.extra_persona.pk],
+            "action_key": "intimidate",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona_ids" in response.data
+
+    def test_disagreeing_target_persona_and_target_persona_ids_returns_400(self) -> None:
+        """Sending target_persona != target_persona_ids[0] returns 400 from the serializer."""
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.extra_persona.pk,
+            "target_persona_ids": [self.target_persona.pk],
+            "action_key": "intimidate",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona" in response.data
+
+    @patch("world.scenes.action_services._auto_resolve_npc_targets")
+    @patch("world.scenes.action_views.get_action")
+    def test_duplicate_ids_are_deduped(
+        self, mock_get_action: MagicMock, mock_auto_resolve: MagicMock
+    ) -> None:
+        """Duplicate ids in target_persona_ids are silently deduped; only unique targets created."""
+        mock_get_action.return_value = _make_area_action_mock()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [
+                self.target_persona.pk,
+                self.extra_persona.pk,
+                self.extra_persona.pk,  # duplicate
+            ],
+            "action_key": "test_area_action",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        request_id = response.data["id"]
+        action_request = SceneActionRequest.objects.get(pk=request_id)
+        # Primary = target_persona, additional = 1 row for extra_persona (deduped)
+        assert action_request.target_persona_id == self.target_persona.pk
+        additional = SceneActionTarget.objects.filter(action_request=action_request)
+        assert additional.count() == 1
+        assert additional.first().target_persona_id == self.extra_persona.pk
+
+    def test_existing_single_target_path_unchanged(self) -> None:
+        """Existing single-target dispatch (target_persona only) still works."""
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "intimidate",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["action_key"] == "intimidate"
+        assert response.data["status"] == ActionRequestStatus.PENDING
+
+    @patch("world.scenes.action_views.get_action")
+    def test_self_action_rejects_any_target_ids(self, mock_get_action: MagicMock) -> None:
+        """A SELF action with any target_persona_ids returns 400."""
+        mock_get_action.return_value = _make_self_action_mock()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [self.target_persona.pk],
+            "action_key": "self_action",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona_ids" in response.data
+
+    @patch("world.scenes.action_services._auto_resolve_npc_targets")
+    @patch("world.scenes.action_views.get_action")
+    def test_filtered_group_requires_at_least_one_id(
+        self, mock_get_action: MagicMock, mock_auto_resolve: MagicMock
+    ) -> None:
+        """A FILTERED_GROUP action with no ids returns 400; with a list it succeeds."""
+        mock_get_action.return_value = _make_filtered_group_action_mock()
+
+        # No ids → 400.
+        data_empty = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [],
+            "action_key": "group_action",
+        }
+        response_empty = self.client.post(self.url, data_empty, format="json")
+        assert response_empty.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona_ids" in response_empty.data
+
+        # Providing ids → 201.
+        data_with_ids = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [self.target_persona.pk, self.extra_persona.pk],
+            "action_key": "group_action",
+        }
+        response_ok = self.client.post(self.url, data_with_ids, format="json")
+        assert response_ok.status_code == status.HTTP_201_CREATED, response_ok.data
 
 
 class PlaceViewSetTestCase(APITestCase):
@@ -614,3 +859,153 @@ class CastableTechniquesEndpointTestCase(APITestCase):
         entry = next(t for t in response.data if t["id"] == technique.pk)
         for field in ("id", "name", "anima_cost", "tier", "intensity", "control", "hostile"):
             assert field in entry, f"Field {field!r} missing from castable-technique entry"
+
+
+class PerTargetRespondTestCase(APITestCase):
+    """Tests for per-target consent via POST /api/action-requests/{id}/respond/ (#572 Task 5)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # Initiator account + persona
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+        # Primary target account + persona
+        cls.target_account = AccountFactory()
+        cls.target_character = CharacterFactory()
+        cls.target_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.target_character
+        )
+        cls.target_player_data = PlayerDataFactory(account=cls.target_account)
+        cls.target_tenure = RosterTenureFactory(
+            player_data=cls.target_player_data,
+            roster_entry=cls.target_roster_entry,
+        )
+        cls.target_identity = CharacterSheetFactory(character=cls.target_character)
+        cls.target_persona = cls.target_identity.primary_persona
+
+        # Additional target account + persona
+        cls.extra_account = AccountFactory()
+        cls.extra_character = CharacterFactory()
+        cls.extra_roster_entry = RosterEntryFactory(character_sheet__character=cls.extra_character)
+        cls.extra_player_data = PlayerDataFactory(account=cls.extra_account)
+        cls.extra_tenure = RosterTenureFactory(
+            player_data=cls.extra_player_data,
+            roster_entry=cls.extra_roster_entry,
+        )
+        cls.extra_identity = CharacterSheetFactory(character=cls.extra_character)
+        cls.extra_persona = cls.extra_identity.primary_persona
+
+        cls.scene = SceneFactory()
+
+    def _make_request_with_additional(self) -> tuple:
+        """Create a SceneActionRequest + a SceneActionTarget row for extra_persona."""
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.persona,
+            target_persona=self.target_persona,
+            action_key="persuade",
+        )
+        action_target = SceneActionTargetFactory(
+            action_request=action_request,
+            target_persona=self.extra_persona,
+        )
+        return action_request, action_target
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_resolves_that_row(self, mock_respond: MagicMock) -> None:
+        """POSTing target_persona_id with accept calls respond_to_action_target on that row."""
+        mock_respond.return_value = _make_enhanced_result("persuade")
+        action_request, action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        mock_respond.assert_called_once_with(
+            action_target=action_target, decision=ConsentDecision.ACCEPT
+        )
+        # Response carries the row's id and action_request_id
+        assert response.data["action_target_id"] == action_target.pk
+        assert response.data["action_request_id"] == action_request.pk
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_primary_request_untouched(self, mock_respond: MagicMock) -> None:
+        """Responding to an additional target row leaves the primary request PENDING."""
+        mock_respond.return_value = None
+        action_request, _action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        self.client.post(
+            url,
+            {"decision": ConsentDecision.DENY, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        action_request.refresh_from_db()
+        assert action_request.status == ActionRequestStatus.PENDING
+
+    def test_unknown_target_persona_id_returns_404(self) -> None:
+        """A target_persona_id with no matching SceneActionTarget row → 404."""
+        action_request, _ = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": 999999},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_wrong_account_cannot_respond_for_another_persona_returns_403(self) -> None:
+        """Requester who does not control that persona → 403."""
+        action_request, _ = self._make_request_with_additional()
+        # target_account controls target_persona, NOT extra_persona
+        self.client.force_authenticate(user=self.target_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @patch("world.scenes.action_views.respond_to_action_request")
+    def test_absent_target_persona_id_uses_primary_path(self, mock_respond: MagicMock) -> None:
+        """Omitting target_persona_id falls through to the original primary-target branch."""
+        mock_respond.return_value = _make_enhanced_result("persuade")
+        action_request, _ = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.target_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        mock_respond.assert_called_once()
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_value_error_returns_400(self, mock_respond: MagicMock) -> None:
+        """A ValueError from respond_to_action_target (e.g. no action_template) returns 400."""
+        mock_respond.side_effect = ValueError("Cannot resolve action: no ActionTemplate set.")
+        action_request, _action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "Unable to process this action request."

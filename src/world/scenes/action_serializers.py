@@ -301,7 +301,10 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
 class SceneActionRequestCreateSerializer(serializers.Serializer):
     scene = serializers.IntegerField()
     initiator_persona = serializers.IntegerField()
-    target_persona = serializers.IntegerField()
+    target_persona = serializers.IntegerField(required=False)
+    target_persona_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, allow_empty=False
+    )
     action_key = serializers.CharField(max_length=100)
     difficulty_choice = serializers.CharField(max_length=20, required=False)
     technique_id = serializers.IntegerField(required=False, allow_null=True)
@@ -316,17 +319,35 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs: dict) -> dict:
-        """Cap strain_commitment by anima; cap fury by provocation cap.
+        """Normalize target fields into ``target_ids``; cap strain and fury.
 
-        Validation lives in the serializer (not the view) per the
-        validation-in-serializer rule; see ``_cap_strain_by_anima``.
+        ``target_persona_ids`` is authoritative when present (deduped, order
+        preserved).  When only ``target_persona`` is given it is wrapped into a
+        single-element list.  When both are sent, ``target_persona`` must equal
+        ``target_persona_ids[0]``.  The normalised list is written to
+        ``attrs["target_ids"]``; cardinality enforcement is the view's job.
+        Strain is capped by anima and fury by the provocation cap.
         """
+        ids = attrs.get("target_persona_ids")
+        primary = attrs.get("target_persona")
+        if ids:
+            deduped = list(dict.fromkeys(ids))  # preserve order, drop duplicates
+            if primary is not None and primary != deduped[0]:
+                raise serializers.ValidationError(
+                    {"target_persona": "Must equal target_persona_ids[0] when both are sent."}
+                )
+            attrs["target_ids"] = deduped
+        elif primary is not None:
+            attrs["target_ids"] = [primary]
+        else:
+            attrs["target_ids"] = []
         attrs = _cap_strain_by_anima(attrs)
         return _cap_fury_by_provocation(attrs)
 
 
 class ConsentResponseSerializer(serializers.Serializer):
     decision = serializers.ChoiceField(choices=ConsentDecision.choices)
+    target_persona_id = serializers.IntegerField(required=False)
 
 
 class StepResultSerializer(serializers.Serializer):

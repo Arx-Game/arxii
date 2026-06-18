@@ -7,6 +7,8 @@ from django.test import TestCase
 from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.models import KudosSourceCategory
 from world.scenes import action_services
 from world.scenes.action_constants import (
@@ -15,9 +17,21 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
+from world.scenes.action_models import SceneActionTarget
 from world.scenes.action_resolvers import _RESOLVER_REGISTRY, register_resolver
-from world.scenes.action_services import create_action_request, respond_to_action_request
-from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
+from world.scenes.action_services import (
+    _auto_resolve_npc_targets,
+    create_action_request,
+    respond_to_action_request,
+    respond_to_action_target,
+)
+from world.scenes.factories import (
+    PersonaFactory,
+    SceneActionRequestFactory,
+    SceneActionTargetFactory,
+    SceneFactory,
+)
+from world.scenes.models import InteractionTargetPersona
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -446,3 +460,401 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         assert request.snapshot_resonance is None
         assert request.snapshot_check_type is None
         assert request.snapshot_target_difficulty is None
+
+
+class TestRespondToActionTarget(TestCase):
+    """Tests for the per-additional-target consent + resolution service."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request_with_template(self) -> "SceneActionRequest":
+        """Build a SceneActionRequest that has an action_template set (needed to resolve)."""
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_accept_resolves_only_that_row(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accepting an action target resolves only that row; sibling stays PENDING."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        row = SceneActionTargetFactory(action_request=request)
+        other = SceneActionTargetFactory(action_request=request)
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        row.refresh_from_db()
+        other.refresh_from_db()
+
+        self.assertEqual(row.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(row.result_interaction)
+        self.assertEqual(other.status, ActionRequestStatus.PENDING)
+        self.assertIsNotNone(result)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_interaction_references_additional_target_persona(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """The result_interaction for an additional target names THAT target, not the primary.
+
+        Regression guard: _create_result_interaction previously always read
+        action_request.target_persona (the primary), so every additional-target
+        resolution silently created an interaction naming the WRONG persona.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        # request.target_persona is the PRIMARY target (set by the factory).
+        primary_persona = request.target_persona
+        # row.target_persona is the ADDITIONAL target — a distinct persona.
+        row = SceneActionTargetFactory(action_request=request)
+        additional_persona = row.target_persona
+        # Sanity: they must actually be different personas.
+        self.assertNotEqual(primary_persona.pk, additional_persona.pk)
+
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+        row.refresh_from_db()
+
+        self.assertIsNotNone(row.result_interaction)
+        interaction = row.result_interaction
+
+        # The InteractionTargetPersona through-table must point at the ADDITIONAL
+        # target, NOT the primary.
+        target_pks = list(
+            InteractionTargetPersona.objects.filter(interaction=interaction).values_list(
+                "persona_id", flat=True
+            )
+        )
+        self.assertIn(
+            additional_persona.pk,
+            target_pks,
+            "Additional-target persona must appear in InteractionTargetPersona",
+        )
+        self.assertNotIn(
+            primary_persona.pk,
+            target_pks,
+            "Primary persona must NOT appear in the additional-target's interaction",
+        )
+
+    def test_respond_to_action_target_deny_marks_denied_no_interaction(self) -> None:
+        """Denying an action target sets DENIED status and leaves result_interaction null."""
+        row = SceneActionTargetFactory()
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.DENY)
+
+        row.refresh_from_db()
+
+        self.assertEqual(row.status, ActionRequestStatus.DENIED)
+        self.assertIsNone(row.result_interaction)
+        self.assertIsNone(result)
+
+    def test_respond_to_action_target_non_pending_returns_none(self) -> None:
+        """Calling on a non-PENDING row is a no-op (idempotent guard)."""
+        row = SceneActionTargetFactory(status=ActionRequestStatus.RESOLVED)
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        self.assertIsNone(result)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_accept_sets_resolved_fields(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accept path writes status, resolved_at, resolved_difficulty on the row."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        row = SceneActionTargetFactory(action_request=request)
+
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        row.refresh_from_db()
+        self.assertEqual(row.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(row.resolved_at)
+        self.assertIsNotNone(row.resolved_difficulty)
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
+
+
+def _make_pc_persona():
+    """Create a Persona backed by a Character that has a db_account (a real player).
+
+    The result passes ``_persona_is_npc`` as False.  Mirrors the pattern used in
+    test_targeted_action_e2e.py: CharacterSheet → primary_persona + wired account.
+    """
+    account = AccountFactory()
+    character = CharacterFactory()
+    sheet = CharacterSheetFactory(character=character)
+    persona = sheet.primary_persona
+    # Wire the account to the character so _persona_is_npc returns False.
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    return persona, account
+
+
+def _make_npc_persona():
+    """Create a Persona whose character has no db_account (NPC).
+
+    ``PersonaFactory`` leaves the underlying character without db_account by
+    default, so the result passes ``_persona_is_npc`` as True.
+    """
+    return PersonaFactory()
+
+
+class MultiTargetE2ETests(TestCase):
+    """End-to-end service-layer test for multi-target dispatch (#572).
+
+    Exercises the multi-target service pipeline covering:
+    - One NPC additional target: auto-resolved at dispatch via ``_auto_resolve_npc_targets``.
+    - Three PC additional targets: start PENDING.
+    - PC-A accepts → RESOLVED with its own result_interaction naming PC-A.
+    - PC-B denies → DENIED, no interaction.
+    - PC-C (AFK) left PENDING; siblings resolve independently (non-blocking).
+
+    The primary FK target on the request is a dedicated persona; all four personas
+    under test are wired as ``SceneActionTarget`` additional-target rows so that
+    ``respond_to_action_target`` drives their individual resolution.
+
+    ``start_action_resolution`` is mocked (I/O stub), but every service function
+    that matters — ``_auto_resolve_npc_targets``, ``respond_to_action_target`` —
+    runs for real.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.primary_target = PersonaFactory()  # FK target; not under test here
+        cls.action_template = ActionTemplateFactory()
+
+        # NPC additional target — character has no db_account.
+        cls.npc_persona = _make_npc_persona()
+
+        # PC additional targets — characters have db_account.
+        cls.pc_a_persona, cls.pc_a_account = _make_pc_persona()
+        cls.pc_b_persona, cls.pc_b_account = _make_pc_persona()
+        cls.pc_c_persona, cls.pc_c_account = _make_pc_persona()
+
+        # The social_engagement category is seeded by a RunPython migration that
+        # the SQLite fast tier skips (#855).  Create it so kudos award doesn't crash.
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+    def setUp(self) -> None:
+        # Reset memoized category so tests don't share stale state across transactions.
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_action_request(self, mock_resolve: MagicMock) -> "SceneActionRequest":
+        """Build a multi-target request with 1 NPC + 3 PC additional target rows.
+
+        ``create_action_request`` does not accept an action_template (it is attached
+        by a separate pipeline step), but ``_auto_resolve_npc_targets`` calls
+        ``_resolve_action_against_persona`` which requires the template.  To exercise
+        the full service layer without modifying production code we:
+
+          1. Create the request via ``SceneActionRequestFactory`` with the template
+             already set (bypasses only the action_template wiring step, which has
+             its own unit tests).
+          2. Create ``SceneActionTarget`` rows for all four additional personas —
+             exactly what ``create_action_request`` does at line 200.
+          3. Call ``_auto_resolve_npc_targets`` directly — the same function
+             ``create_action_request`` calls at line 202.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.primary_target,
+            action_key="intimidate",
+            action_template=self.action_template,
+            status=ActionRequestStatus.PENDING,
+        )
+        for persona in [self.npc_persona, self.pc_a_persona, self.pc_b_persona, self.pc_c_persona]:
+            SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+        _auto_resolve_npc_targets(request)
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_npc_target_auto_resolves_at_dispatch(self, mock_resolve: MagicMock) -> None:
+        """NPC additional target is RESOLVED immediately; its interaction names the NPC."""
+        request = self._make_action_request(mock_resolve)
+
+        npc_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.npc_persona
+        )
+        self.assertEqual(
+            npc_row.status,
+            ActionRequestStatus.RESOLVED,
+            "NPC target must be auto-resolved at dispatch",
+        )
+        self.assertIsNotNone(npc_row.result_interaction)
+
+        # The interaction must name the NPC persona, not the primary FK target.
+        npc_interaction_targets = list(
+            InteractionTargetPersona.objects.filter(
+                interaction=npc_row.result_interaction
+            ).values_list("persona_id", flat=True)
+        )
+        self.assertIn(
+            self.npc_persona.pk,
+            npc_interaction_targets,
+            "NPC result_interaction must reference the NPC persona",
+        )
+        self.assertNotIn(
+            self.primary_target.pk,
+            npc_interaction_targets,
+            "Primary FK target must NOT appear in the NPC's interaction",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_pc_targets_start_pending(self, mock_resolve: MagicMock) -> None:
+        """PC additional targets are NOT auto-resolved; they start PENDING."""
+        request = self._make_action_request(mock_resolve)
+
+        for persona in [self.pc_a_persona, self.pc_b_persona, self.pc_c_persona]:
+            row = SceneActionTarget.objects.get(action_request=request, target_persona=persona)
+            self.assertEqual(row.status, ActionRequestStatus.PENDING)
+            self.assertIsNone(row.result_interaction)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_pc_a_accept_resolves_own_row_with_correct_persona(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """PC-A accepts → its row is RESOLVED; interaction names PC-A, not NPC or PC-B."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_action_request(mock_resolve)
+
+        pc_a_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_a_persona
+        )
+        self.assertEqual(pc_a_row.status, ActionRequestStatus.PENDING)
+
+        respond_to_action_target(action_target=pc_a_row, decision=ConsentDecision.ACCEPT)
+
+        pc_a_row.refresh_from_db()
+        self.assertEqual(pc_a_row.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(pc_a_row.result_interaction)
+
+        pc_a_targets = list(
+            InteractionTargetPersona.objects.filter(
+                interaction=pc_a_row.result_interaction
+            ).values_list("persona_id", flat=True)
+        )
+        self.assertIn(
+            self.pc_a_persona.pk,
+            pc_a_targets,
+            "PC-A result_interaction must reference PC-A",
+        )
+        self.assertNotIn(
+            self.npc_persona.pk,
+            pc_a_targets,
+            "NPC persona must NOT appear in PC-A's interaction",
+        )
+        self.assertNotIn(
+            self.pc_b_persona.pk,
+            pc_a_targets,
+            "PC-B must NOT appear in PC-A's interaction",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_pc_b_deny_marks_denied_no_interaction(self, mock_resolve: MagicMock) -> None:
+        """PC-B denies → its row is DENIED; no interaction; NPC and PC-C rows unaffected."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_action_request(mock_resolve)
+
+        pc_b_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_b_persona
+        )
+        result = respond_to_action_target(action_target=pc_b_row, decision=ConsentDecision.DENY)
+
+        pc_b_row.refresh_from_db()
+        self.assertEqual(pc_b_row.status, ActionRequestStatus.DENIED)
+        self.assertIsNone(pc_b_row.result_interaction)
+        self.assertIsNone(result)
+
+        # NPC row should be unaffected (RESOLVED from dispatch).
+        npc_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.npc_persona
+        )
+        self.assertEqual(npc_row.status, ActionRequestStatus.RESOLVED)
+
+        # PC-C is still PENDING.
+        pc_c_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_c_persona
+        )
+        self.assertEqual(pc_c_row.status, ActionRequestStatus.PENDING)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_afk_pc_stays_pending_non_blocking(self, mock_resolve: MagicMock) -> None:
+        """PC-C (AFK) remains PENDING after PC-A accepts and PC-B denies.
+
+        Validates non-blocking independence: sibling resolutions must not touch
+        the AFK row.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_action_request(mock_resolve)
+
+        pc_a_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_a_persona
+        )
+        pc_b_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_b_persona
+        )
+        pc_c_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.pc_c_persona
+        )
+
+        # Resolve both siblings without touching PC-C.
+        respond_to_action_target(action_target=pc_a_row, decision=ConsentDecision.ACCEPT)
+        respond_to_action_target(action_target=pc_b_row, decision=ConsentDecision.DENY)
+
+        # PC-C must still be PENDING.
+        pc_c_row.refresh_from_db()
+        self.assertEqual(
+            pc_c_row.status,
+            ActionRequestStatus.PENDING,
+            "AFK PC-C must remain PENDING after siblings resolve",
+        )
+        self.assertIsNone(pc_c_row.result_interaction)
+
+        # Verify sibling outcomes are intact.
+        pc_a_row.refresh_from_db()
+        self.assertEqual(pc_a_row.status, ActionRequestStatus.RESOLVED)
+        pc_b_row.refresh_from_db()
+        self.assertEqual(pc_b_row.status, ActionRequestStatus.DENIED)

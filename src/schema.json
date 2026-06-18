@@ -190,7 +190,16 @@ paths:
   /api/action-requests/{id}/respond/:
     post:
       operationId: action_requests_respond_create
-      description: Respond to a pending action request (accept/deny).
+      description: |-
+        Respond to a pending action request (accept/deny).
+
+        When ``target_persona_id`` is present in the payload the caller is
+        consenting on behalf of an additional-target row (SceneActionTarget).
+        The primary-request status is NOT checked in that branch — the primary
+        may already be RESOLVED/DENIED while additional rows are still PENDING.
+
+        When ``target_persona_id`` is absent, the existing primary-target path
+        is used unchanged.
       parameters:
       - in: path
         name: id

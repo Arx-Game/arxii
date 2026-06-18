@@ -719,6 +719,136 @@ describe('ActionPanel', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Multi-cardinality target confirm (#572)
+  // -------------------------------------------------------------------------
+
+  it('sends target_persona_ids array when multi-cardinality confirm fires', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Area Sweep',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'area',
+            filters: {
+              in_same_scene: true,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          },
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'area_sweep',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    vi.mocked(createActionRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Area Sweep')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /area sweep/i }));
+
+    // TargetPicker opens in multi mode — select both candidates, then confirm
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('checkbox', { name: /alice/i }));
+    await user.click(screen.getByRole('checkbox', { name: /bob/i }));
+
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          target_persona_ids: [100, 101],
+        })
+      );
+    });
+    // Single-target form must NOT be sent alongside multi-target
+    const call = vi.mocked(createActionRequest).mock.calls[0][1];
+    expect(call).not.toHaveProperty('target_persona_id');
+  });
+
+  it('sends target_persona_id (singular) when single-cardinality confirm fires', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Charm',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'single',
+            filters: {
+              in_same_scene: true,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          },
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'charm',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    vi.mocked(createActionRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Charm')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /charm/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    // Single-cardinality: clicking a candidate immediately confirms
+    await user.click(screen.getByText('Alice'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          target_persona_id: 100,
+        })
+      );
+    });
+    // Multi-target form must NOT be sent for a single-target confirm
+    const call = vi.mocked(createActionRequest).mock.calls[0][1];
+    expect(call).not.toHaveProperty('target_persona_ids');
+  });
+
+  // -------------------------------------------------------------------------
   // Thread-pull picker in the cast dialog (#854)
   // -------------------------------------------------------------------------
 

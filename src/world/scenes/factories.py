@@ -5,7 +5,7 @@ import factory.django as factory_django
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -217,3 +217,12 @@ class SceneRoundParticipantFactory(factory_django.DjangoModelFactory):
 
     scene_round = factory.SubFactory(SceneRoundFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+
+
+class SceneActionTargetFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneActionTarget
+
+    action_request = factory.SubFactory(SceneActionRequestFactory)
+    target_persona = factory.SubFactory(PersonaFactory)
+    status = ActionRequestStatus.PENDING

@@ -11,15 +11,18 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.registry import get_action
+from actions.types import TargetType
 from world.magic.exceptions import MagicError
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_filters import SceneActionRequestFilter
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_serializers import (
     CastableTechniqueSerializer,
     ConsentResponseSerializer,
@@ -28,7 +31,11 @@ from world.scenes.action_serializers import (
     SceneActionRequestSerializer,
     TechniqueCastCreateSerializer,
 )
-from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.action_services import (
+    create_action_request,
+    respond_to_action_request,
+    respond_to_action_target,
+)
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
@@ -77,7 +84,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -91,11 +98,29 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         scene_id = serializer.validated_data["scene"]
         initiator_persona_id = serializer.validated_data["initiator_persona"]
-        target_persona_id = serializer.validated_data["target_persona"]
         action_key = serializer.validated_data["action_key"]
+        target_ids: list[int] = serializer.validated_data["target_ids"]
         difficulty_choice = serializer.validated_data.get(
             "difficulty_choice", DifficultyChoice.NORMAL
         )
+
+        # Cardinality validation: enforce the action's target_type against the
+        # normalised target_ids list.  Unknown / unregistered actions default to
+        # SINGLE (conservative — avoids silent multi-target dispatch).
+        registered_action = get_action(action_key)
+        cardinality = (
+            registered_action.target_type if registered_action is not None else TargetType.SINGLE
+        )
+        if cardinality == TargetType.SINGLE and len(target_ids) > 1:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action targets a single persona."}
+            )
+        if cardinality in (TargetType.AREA, TargetType.FILTERED_GROUP) and not target_ids:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action requires at least one target."}
+            )
+        if cardinality == TargetType.SELF and target_ids:
+            raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
 
         try:
             scene = Scene.objects.get(pk=scene_id, is_active=True)
@@ -113,7 +138,11 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
 
-        target_persona = get_object_or_404(Persona, pk=target_persona_id)
+        primary_id = target_ids[0] if target_ids else None
+        target_persona = (
+            get_object_or_404(Persona, pk=primary_id) if primary_id is not None else None
+        )
+        additional = [get_object_or_404(Persona, pk=pk) for pk in target_ids[1:]]
 
         technique = None
         technique_id = serializer.validated_data.get("technique_id")
@@ -146,6 +175,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 strain_commitment=strain_commitment,
                 delivery=delivery,
                 delivery_receivers=delivery_receivers,
+                additional_target_personas=additional,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]
@@ -160,8 +190,17 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
-    def respond(self, request: Request, pk: int | None = None) -> Response:
-        """Respond to a pending action request (accept/deny)."""
+    def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
+        """Respond to a pending action request (accept/deny).
+
+        When ``target_persona_id`` is present in the payload the caller is
+        consenting on behalf of an additional-target row (SceneActionTarget).
+        The primary-request status is NOT checked in that branch — the primary
+        may already be RESOLVED/DENIED while additional rows are still PENDING.
+
+        When ``target_persona_id`` is absent, the existing primary-target path
+        is used unchanged.
+        """
         persona_ids = get_account_personas(request)
         if not persona_ids:
             return Response(
@@ -169,6 +208,46 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        consent_serializer = ConsentResponseSerializer(data=request.data)
+        consent_serializer.is_valid(raise_exception=True)
+        decision = consent_serializer.validated_data["decision"]
+        target_persona_id = consent_serializer.validated_data.get("target_persona_id")
+
+        if target_persona_id is not None:
+            # Per-target consent path: look up the additional-target row directly.
+            # Do not gate on the request's own status (primary may be terminal).
+            action_target = get_object_or_404(
+                SceneActionTarget,
+                action_request_id=pk,
+                target_persona_id=target_persona_id,
+            )
+            if action_target.target_persona_id not in persona_ids:
+                return Response(
+                    {"detail": "You do not control the targeted persona."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            try:
+                result = respond_to_action_target(action_target=action_target, decision=decision)
+            except ValueError:
+                return Response(
+                    {"detail": "Unable to process this action request."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            action_target.refresh_from_db()
+            response_data: dict = {
+                "action_target_id": action_target.pk,
+                "action_request_id": action_target.action_request_id,
+                "target_persona_id": action_target.target_persona_id,
+                "status": action_target.status,
+            }
+            if result is not None:
+                response_data["result"] = EnhancedSceneActionResultSerializer(
+                    result,
+                    context={"request": request, "action_request": action_target.action_request},
+                ).data
+            return Response(response_data)
+
+        # Primary-target path — unchanged.
         try:
             action_request = SceneActionRequest.objects.get(
                 pk=pk,
@@ -180,10 +259,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 {"detail": "Pending action request not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        consent_serializer = ConsentResponseSerializer(data=request.data)
-        consent_serializer.is_valid(raise_exception=True)
-        decision = consent_serializer.validated_data["decision"]
 
         try:
             result = respond_to_action_request(

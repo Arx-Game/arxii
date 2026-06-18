@@ -86,6 +86,54 @@ describe('actionQueries', () => {
         'Failed to perform action'
       );
     });
+
+    it('sends target_persona_ids array when multi-target body provided', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'pending' }));
+
+      await createActionRequest('42', { action_key: 'sweep', target_persona_ids: [3, 7, 11] });
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/action-requests/', {
+        method: 'POST',
+        body: JSON.stringify({
+          scene: 42,
+          action_key: 'sweep',
+          target_persona_ids: [3, 7, 11],
+        }),
+      });
+    });
+
+    it('omits target_persona_ids when array is empty', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'pending' }));
+
+      await createActionRequest('42', { action_key: 'sweep', target_persona_ids: [] });
+
+      const call = vi.mocked(apiFetch).mock.calls[0];
+      const body = JSON.parse((call[1] as { body: string }).body);
+      expect(body).not.toHaveProperty('target_persona_ids');
+    });
+  });
+
+  describe('respondToRequest', () => {
+    it('sends target_persona_id in body when provided (per-target consent)', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'resolved' }));
+
+      await respondToRequest('42', 7, { accept: true, target_persona_id: 55 });
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/action-requests/7/respond/', {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'accept', target_persona_id: 55 }),
+      });
+    });
+
+    it('omits target_persona_id when not provided', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'resolved' }));
+
+      await respondToRequest('42', 7, { accept: true });
+
+      const call = vi.mocked(apiFetch).mock.calls[0];
+      const body = JSON.parse((call[1] as { body: string }).body);
+      expect(body).not.toHaveProperty('target_persona_id');
+    });
   });
 
   describe('fetchPendingRequests', () => {

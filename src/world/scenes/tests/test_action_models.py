@@ -1,6 +1,7 @@
 """Tests for SceneActionRequest model."""
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -13,7 +14,11 @@ from world.magic.factories import (
     ThreadFactory,
 )
 from world.scenes.action_constants import ActionRequestStatus, CastPullTier, DifficultyChoice
-from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
+from world.scenes.action_models import (
+    SceneActionRequest,
+    SceneActionTarget,
+    SceneCastPullDeclaration,
+)
 from world.scenes.factories import (
     PersonaFactory,
     SceneActionRequestFactory,
@@ -244,3 +249,20 @@ class SceneCastPullDeclarationTests(TestCase):
             list(self.request.pull_declaration.threads.values_list("pk", flat=True)),
             [self.thread.pk],
         )
+
+
+class SceneActionTargetModelTests(TestCase):
+    def test_row_defaults_to_pending_and_links_request(self):
+        request = SceneActionRequestFactory()
+        persona = PersonaFactory()
+        row = SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+        self.assertEqual(row.status, ActionRequestStatus.PENDING)
+        self.assertIn(persona, set(request.target_personas.all()))
+        self.assertIn(row, set(request.additional_targets.all()))
+
+    def test_unique_per_request_and_persona(self):
+        request = SceneActionRequestFactory()
+        persona = PersonaFactory()
+        SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+        with self.assertRaises(IntegrityError):
+            SceneActionTarget.objects.create(action_request=request, target_persona=persona)

@@ -18,7 +18,7 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
@@ -109,7 +109,7 @@ def create_action_request(  # noqa: PLR0913
     *,
     scene: Scene,
     initiator_persona: Persona,
-    target_persona: Persona,
+    target_persona: Persona | None,
     action_key: str,
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
@@ -119,6 +119,7 @@ def create_action_request(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None = None,
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
+    additional_target_personas: list[Persona] | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -152,6 +153,10 @@ def create_action_request(  # noqa: PLR0913
             the template's default_delivery at resolution time.
         delivery_receivers: Explicit WHISPER audience. Empty/None = the
             action target alone.
+        additional_target_personas: Optional additional targets beyond the
+            primary (``target_persona``). Each persona gets a ``SceneActionTarget``
+            row. NPC additional targets are auto-resolved immediately (#572);
+            PC additional targets stay PENDING until they respond.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -197,6 +202,11 @@ def create_action_request(  # noqa: PLR0913
     )
     if delivery_receivers:
         request.delivery_receivers.set(delivery_receivers)
+    additional = additional_target_personas or []
+    for persona in additional:
+        SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+    if additional:  # multi-target only — single-target path unchanged
+        _auto_resolve_npc_targets(request)
     return request
 
 
@@ -296,17 +306,19 @@ def respond_to_action_request(
     return None
 
 
-def _resolve_standard_action(
+def _resolve_action_against_persona(
     action_request: SceneActionRequest,
-) -> EnhancedSceneActionResult:
-    """Resolve an enhanced or plain action request inside a transaction.
+    target_persona: Persona,
+) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
+    """Resolve ``action_request`` against ONE persona.
 
-    Covers the two non-cast branches of ``respond_to_action_request``:
-    - Plain action (no technique): ``start_action_resolution`` directly.
-    - Technique-enhanced action: ``_resolve_enhanced_action`` wrapping use_technique.
+    Status bookkeeping is the caller's job (request.status for the primary,
+    SceneActionTarget.status for additional targets), so this helper never
+    writes a status field.
 
-    Sets status=RESOLVED, resolved_at, resolved_difficulty, and result_interaction
-    on the request before returning.
+    Returns:
+        (result, result_interaction, difficulty) — difficulty is returned so
+        callers can persist ``resolved_difficulty`` without recomputing.
 
     Raises:
         ValueError: If the request has no action_template set.
@@ -314,75 +326,83 @@ def _resolve_standard_action(
     difficulty = DIFFICULTY_VALUES.get(
         action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
+    action_template = action_request.action_template
+    if action_template is None:
+        msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
+        raise ValueError(msg)
 
+    character = action_request.initiator_persona.character_sheet.character
+    target_character = target_persona.character_sheet.character
+    context = ResolutionContext(character=character, target=target_character)
+
+    if action_request.technique is not None:
+        result = _resolve_enhanced_action(
+            character=character,
+            technique=action_request.technique,
+            action_template=action_template,
+            action_key=action_request.action_key,
+            difficulty=difficulty,
+            context=context,
+            strain_commitment=action_request.strain_commitment,
+            fury_commitment=action_request.fury_commitment,
+            fury_anchor=action_request.fury_anchor,
+        )
+    else:
+        # Plain (non-technique) actions do not use the fury lever; fury is a
+        # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
+        # inside use_technique). The serializer rejects fury_commitment_id on
+        # plain actions, so fury_commitment is always None here.
+        action_resolution = start_action_resolution(
+            character=character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+        )
+        result = EnhancedSceneActionResult(
+            action_resolution=action_resolution,
+            action_key=action_request.action_key,
+            fury_committed=None,
+        )
+
+    result_interaction = _create_result_interaction(
+        action_request=action_request,
+        result=result,
+        strain_committed=action_request.strain_commitment,
+        target_persona=target_persona,
+        fury_committed=result.fury_committed,
+    )
+    return result, result_interaction, difficulty
+
+
+def _resolve_standard_action(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult:
+    """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
-        action_template = action_request.action_template
-        if action_template is None:
-            msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
-            raise ValueError(msg)
-
-        character = action_request.initiator_persona.character_sheet.character
-        target_character = action_request.target_persona.character_sheet.character
-        context = ResolutionContext(character=character, target=target_character)
-
-        if action_request.technique is not None:
-            result = _resolve_enhanced_action(
-                character=character,
-                technique=action_request.technique,
-                action_template=action_template,
-                action_key=action_request.action_key,
-                difficulty=difficulty,
-                context=context,
-                strain_commitment=action_request.strain_commitment,
-                fury_commitment=action_request.fury_commitment,
-                fury_anchor=action_request.fury_anchor,
-            )
-        else:
-            # Plain (non-technique) actions do not use the fury lever; fury is a
-            # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
-            # inside use_technique). The serializer rejects fury_commitment_id on
-            # plain actions, so fury_commitment is always None here.
-            action_resolution = start_action_resolution(
-                character=character,
-                template=action_template,
-                target_difficulty=difficulty,
-                context=context,
-            )
-            result = EnhancedSceneActionResult(
-                action_resolution=action_resolution,
-                action_key=action_request.action_key,
-                fury_committed=None,
-            )
-
+        result, result_interaction, difficulty = _resolve_action_against_persona(
+            action_request, action_request.target_persona
+        )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
         action_request.resolved_difficulty = difficulty
         action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
-
-        result_interaction = _create_result_interaction(
-            action_request=action_request,
-            result=result,
-            strain_committed=action_request.strain_commitment,
-            fury_committed=result.fury_committed,
-        )
         if result_interaction is not None:
             action_request.result_interaction = result_interaction
             action_request.save(update_fields=["result_interaction"])
-
     return result
 
 
-def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
-    """Award kudos to the target for accepting an action request.
+def _award_acceptance_kudos_for_persona(
+    action_request: SceneActionRequest,
+    persona: Persona,
+) -> None:
+    """Award kudos to ``persona`` for accepting an action request.
 
-    Skips the award when the target persona is absent (standalone casts allow
-    no-target) or when the target's character has no linked account (NPC personas
+    Skips when the persona's character has no linked account (NPC personas
     and established/temporary personas without an account are valid; the kudos
     award only applies to real player accounts).
     """
-    if action_request.target_persona is None:
-        return
-    target_character = action_request.target_persona.character_sheet.character
+    target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
         return
@@ -397,6 +417,81 @@ def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
         description=f"Engaged with action request from {initiator_name}",
         awarded_by=initiator_account,
     )
+
+
+def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
+    """Award kudos to the primary target for accepting an action request.
+
+    Skips the award when the target persona is absent (standalone casts allow
+    no-target). Delegates the per-persona kudos rule to
+    ``_award_acceptance_kudos_for_persona``.
+    """
+    if action_request.target_persona is None:
+        return
+    _award_acceptance_kudos_for_persona(action_request, action_request.target_persona)
+
+
+def _persona_is_npc(persona: Persona) -> bool:
+    """True when the persona has no controlling player account (NPC)."""
+    return persona.character_sheet.character.db_account is None
+
+
+def respond_to_action_target(
+    *,
+    action_target: SceneActionTarget,
+    decision: str,
+) -> EnhancedSceneActionResult | None:
+    """Consent + resolution for ONE additional target row. Never touches siblings.
+
+    Args:
+        action_target: The SceneActionTarget row to resolve.
+        decision: ConsentDecision value (ACCEPT or DENY).
+
+    Returns:
+        EnhancedSceneActionResult if accepted and resolved. None if denied, already
+        resolved, or any other non-PENDING/non-ACCEPT state.
+    """
+    if action_target.status != ActionRequestStatus.PENDING:
+        return None
+    if decision == ConsentDecision.DENY:
+        action_target.status = ActionRequestStatus.DENIED
+        action_target.resolved_at = timezone.now()
+        action_target.save(update_fields=["status", "resolved_at"])
+        return None
+    if decision == ConsentDecision.ACCEPT:
+        action_request = action_target.action_request
+        with transaction.atomic():
+            result, result_interaction, difficulty = _resolve_action_against_persona(
+                action_request, action_target.target_persona
+            )
+            action_target.status = ActionRequestStatus.RESOLVED
+            action_target.resolved_at = timezone.now()
+            action_target.resolved_difficulty = difficulty
+            action_target.result_interaction = result_interaction
+            action_target.save(
+                update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
+            )
+            _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
+            # Resolver invocation is intentionally omitted here: no multi-target resolvers
+            # exist yet (#572). When they do, wire get_resolver(action_key)(action_request, result)
+            # in this block analogous to respond_to_action_request.
+        return result
+    return None
+
+
+def _auto_resolve_npc_targets(action_request: SceneActionRequest) -> None:
+    """Resolve NPC targets immediately at dispatch; PC targets stay PENDING.
+
+    The primary target (if present and NPC) is resolved via
+    ``respond_to_action_request``; each NPC additional-target row is resolved
+    via ``respond_to_action_target``. PC targets are left in PENDING status.
+    """
+    primary = action_request.target_persona
+    if primary is not None and _persona_is_npc(primary):
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+    for row in action_request.additional_targets.filter(status=ActionRequestStatus.PENDING):
+        if _persona_is_npc(row.target_persona):
+            respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
 
 
 def _resolve_enhanced_action(  # noqa: PLR0913
@@ -560,6 +655,7 @@ def _create_result_interaction(
     action_request: SceneActionRequest,
     result: EnhancedSceneActionResult,
     strain_committed: int = 0,
+    target_persona: Persona | None = None,
     fury_committed: FuryTier | None = None,
 ) -> Interaction | None:
     """Create an interaction recording the result of a scene action.
@@ -569,6 +665,10 @@ def _create_result_interaction(
         result: The resolution outcome (including optional technique result).
         strain_committed: Strain the initiator actually committed; recorded on
             the resulting Interaction for canonical audit.
+        target_persona: Override the target persona for the interaction. When
+            None, falls back to ``action_request.target_persona`` (the primary
+            target). Pass explicitly when resolving an additional target so the
+            interaction names the correct persona rather than the primary one.
         fury_committed: Realized FuryTier post-resolution; recorded for audit.
     """
     main_result = result.action_resolution.main_result
@@ -577,9 +677,9 @@ def _create_result_interaction(
     status_word = "Success" if success else "Failure"
     outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
-    target_persona = action_request.target_persona
+    effective_target = target_persona or action_request.target_persona
 
-    if target_persona is None:
+    if effective_target is None:
         # Area action (e.g. a telling to the room): no target, optional pose
         # text echoed above the outcome.
         content = _area_outcome_content(
@@ -593,12 +693,12 @@ def _create_result_interaction(
         content = _targeted_outcome_content(
             action_request=action_request,
             result=result,
-            target_name=target_persona.name,
+            target_name=effective_target.name,
             status_word=status_word,
             outcome_name=outcome_name,
         )
-        receivers = [target_persona]
-        target_personas = [target_persona]
+        receivers = [effective_target]
+        target_personas = [effective_target]
 
     mode, place, interaction_receivers = _route_delivery(action_request, receivers)
 
