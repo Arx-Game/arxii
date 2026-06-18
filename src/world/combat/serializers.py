@@ -25,6 +25,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    DuelChallenge,
     EscalationCurve,
 )
 from world.conditions.serializers import ConditionInstanceSerializer
@@ -117,6 +118,11 @@ class OpponentSerializer(serializers.ModelSerializer):
     # applicable-pulls API consumes as ``target_object_id``. Plain FK column —
     # no query. Null for opponents with no backing ObjectDB.
     objectdb_id = serializers.IntegerField(read_only=True, allow_null=True)
+    # Duel mirror: FK PK column — no query. Non-null iff this opponent is a
+    # passive surface mirroring a PC participant (is_duel_mirror == True).
+    # The UI uses this to render the opponent as the opposing duelist rather
+    # than a generic NPC.
+    mirrors_participant_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = CombatOpponent
@@ -137,6 +143,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "thumbnail_url",
             "thumbnail_media_url",
             "current_position",
+            "mirrors_participant_id",
         ]
 
     def _is_gm_or_staff(self) -> bool:
@@ -613,6 +620,94 @@ class ClashStateSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
+# Duel-identity nested serializer
+# ---------------------------------------------------------------------------
+
+
+class DuelWinnerSerializer(serializers.Serializer):
+    """Lightweight identity for a duel winner (CharacterSheet id + character name).
+
+    Exposes only what the UI needs to label the victor — the CharacterSheet PK
+    and the character's display name (ObjectDB.db_key). Read-only; no FK queries
+    beyond the select_related on the encounter queryset.
+
+    Note: CharacterSheet's primary key is the ``character`` OneToOneField to
+    ObjectDB, so there is no ``.id`` attribute — we read ``.pk`` explicitly via
+    ``source="pk"``.
+    """
+
+    id = serializers.IntegerField(source="pk", read_only=True)
+    name = serializers.SerializerMethodField()
+
+    def get_name(self, obj: object) -> str:
+        """Return the character's display name (db_key).
+
+        ``obj`` is a CharacterSheet instance. ``character`` is a OneToOneField
+        to ObjectDB (select_related by the encounter queryset); db_key is a
+        plain column — no query.
+        """
+        # Import at runtime so spectacular can resolve the annotation
+        # without a NameError (see reference-typechecking-annotation-breaks-spectacular).
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        if isinstance(obj, CharacterSheet):
+            return obj.character.db_key
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# DuelChallenge serializer
+# ---------------------------------------------------------------------------
+
+
+class _DuelParticipantIdentitySerializer(serializers.Serializer):
+    """Compact identity for one side of a DuelChallenge (CharacterSheet id + name).
+
+    Note: CharacterSheet's primary key is the ``character`` OneToOneField, so
+    there is no ``.id`` attribute — ``source="pk"`` reads ``.pk`` explicitly.
+    """
+
+    id = serializers.IntegerField(source="pk", read_only=True)
+    name = serializers.SerializerMethodField()
+
+    def get_name(self, obj: object) -> str:
+        """Return the character's display name from CharacterSheet.character.db_key."""
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        if isinstance(obj, CharacterSheet):
+            return obj.character.db_key
+        return ""
+
+
+class DuelChallengeSerializer(serializers.ModelSerializer):
+    """Read serializer for the DuelChallenge pending-challenge inbox.
+
+    Exposes challenger/challenged identities (id + name), status, timestamps,
+    and the resulting_encounter FK PK. Intended for a player's incoming or
+    outgoing challenge list.
+
+    N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
+    "challenged_sheet__character")``.
+    """
+
+    challenger = _DuelParticipantIdentitySerializer(source="challenger_sheet", read_only=True)
+    challenged = _DuelParticipantIdentitySerializer(source="challenged_sheet", read_only=True)
+
+    class Meta:
+        model = DuelChallenge
+        fields = [
+            "id",
+            "challenger",
+            "challenged",
+            "status",
+            "created_at",
+            "resolved_at",
+            "resulting_encounter",
+        ]
+        read_only_fields = fields
+
+
+# ---------------------------------------------------------------------------
 # List and detail serializers
 # ---------------------------------------------------------------------------
 
@@ -694,6 +789,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         source="escalation_curve.tick_narration", read_only=True, default=None, allow_null=True
     )
     forced_escape = serializers.BooleanField(read_only=True)
+    # Duel fields — derived / FK; no additional queries when the viewset queryset
+    # uses select_related("duel_winner__character").
+    is_lethal = serializers.BooleanField(read_only=True)
+    duel_winner = DuelWinnerSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = CombatEncounter
@@ -725,6 +824,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "escalation_tick_narration",
             "forced_escape",
             "position_adjacency",
+            "is_lethal",
+            "duel_winner",
         ]
         extra_kwargs = {
             "outcome": {"read_only": True},

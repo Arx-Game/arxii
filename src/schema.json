@@ -25333,6 +25333,34 @@ components:
       description: |-
         * `menu` - Menu
         * `pool` - Pool
+    DuelWinner:
+      type: object
+      description: |-
+        Lightweight identity for a duel winner (CharacterSheet id + character name).
+
+        Exposes only what the UI needs to label the victor — the CharacterSheet PK
+        and the character's display name (ObjectDB.db_key). Read-only; no FK queries
+        beyond the select_related on the encounter queryset.
+
+        Note: CharacterSheet's primary key is the ``character`` OneToOneField to
+        ObjectDB, so there is no ``.id`` attribute — we read ``.pk`` explicitly via
+        ``source="pk"``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: |-
+            Return the character's display name (db_key).
+
+            ``obj`` is a CharacterSheet instance. ``character`` is a OneToOneField
+            to ObjectDB (select_related by the encounter queryset); db_key is a
+            plain column — no query.
+          readOnly: true
+      required:
+      - id
+      - name
     EffectRow:
       type: object
       properties:
@@ -25547,17 +25575,27 @@ components:
           items:
             $ref: '#/components/schemas/PositionAdjacencyItem'
           readOnly: true
+        is_lethal:
+          type: boolean
+          readOnly: true
+        duel_winner:
+          allOf:
+          - $ref: '#/components/schemas/DuelWinner'
+          readOnly: true
+          nullable: true
       required:
       - clashes
       - completed_at
       - created_at
       - current_round_actions
+      - duel_winner
       - escalation_curve_name
       - escalation_start_round
       - escalation_tick_narration
       - forced_escape
       - id
       - is_gm
+      - is_lethal
       - is_participant
       - opponents
       - outcome
@@ -25661,10 +25699,12 @@ components:
       enum:
       - party_combat
       - open_encounter
+      - duel
       type: string
       description: |-
         * `party_combat` - Party Combat
         * `open_encounter` - Open Encounter
+        * `duel` - Duel
     EpisodeCreate:
       type: object
       description: Serializer for creating episodes
@@ -30897,12 +30937,17 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        mirrors_participant_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - active_conditions
       - current_position
       - health
       - id
       - max_health
+      - mirrors_participant_id
       - name
       - objectdb_id
       - probing_threshold
