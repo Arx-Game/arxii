@@ -627,7 +627,7 @@ class AttackPreResolveCancellationTest(TestCase):
         mock_check = MagicMock()
         mock_check.success_level = 0  # miss → 0 damage
 
-        def fake_check(char, ct):
+        def fake_check(char, ct, **kwargs):
             return mock_check
 
         try:
@@ -661,7 +661,7 @@ class AttackPreResolveCancellationTest(TestCase):
         mock_check = MagicMock()
         mock_check.success_level = -2  # critical hit → should be big damage if not cancelled
 
-        def fake_check(char, ct):
+        def fake_check(char, ct, **kwargs):
             return mock_check
 
         resolve_npc_attack(action, participant, check_type, perform_check_fn=fake_check)
