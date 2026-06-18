@@ -4,9 +4,11 @@
  * Covers:
  * - Pending-challenge accept/decline prompt renders and dispatches correctly.
  * - Yield button visible only in an active duel (encounter_type==='duel').
- * - Challenge button renders for a co-located character (dispatches 'challenge').
  * - AcknowledgeRisk banner visible when is_lethal and no acknowledgement yet.
  * - No duel controls rendered when there is no pending challenge and no active duel.
+ *
+ * Note: the outgoing "challenge a co-located character" affordance (challenge button)
+ * is deferred to a follow-up and is not tested here.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -247,6 +249,17 @@ describe('DuelYieldControls — yield button', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Not in a duel');
+  });
+
+  it('yield button is disabled while a dispatch is pending', () => {
+    mockedUseDispatchPlayerAction.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: true,
+    });
+
+    render(<DuelYieldControls {...defaultYieldProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('duel-yield-btn')).toBeDisabled();
   });
 });
 
