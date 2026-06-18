@@ -176,6 +176,7 @@ class ActionRegistryTests(TestCase):
             "flirt",
             "perform",
             "entrance",
+            "restore_sense",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

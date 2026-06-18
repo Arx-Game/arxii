@@ -2871,3 +2871,79 @@ class _BerserkConditionTemplateFactory:
 
 
 BerserkConditionTemplateFactory = _BerserkConditionTemplateFactory()
+
+
+# =============================================================================
+# Restore-to-Sense action template factory (Task 9 — #567)
+# =============================================================================
+
+# Canonical action template name for the "talk a berserk ally down" social action.
+RESTORE_TO_SENSE_TEMPLATE_NAME = "Restore to Sense"
+
+
+class _RestoreToSenseActionTemplateFactory:
+    """Callable helper that seeds the "Restore to Sense" ActionTemplate per #567 §Task 9.
+
+    Not a DjangoModelFactory — this is a composition helper. Call
+    ``RestoreToSenseActionTemplateFactory(check_type=<CheckType>)`` to seed:
+      - ActionTemplate(name="Restore to Sense", category="social", check_type=check_type)
+      - ActionEnhancement(base_action_key="restore_sense", source_type=TECHNIQUE,
+          technique=<Technique>)
+      - RemoveConditionOnCheckConfig(enhancement=enh, check_type=check_type,
+          condition=BerserkConditionTemplate)
+
+    The ActionEnhancement source is an authored "Restore to Sense" Technique
+    so the DB constraint (exactly one source FK non-null) is satisfied.  The
+    enhancement is voluntary (is_involuntary=False) — RestoreSenseAction.execute()
+    queries by base_action_key and dispatches apply_effects explicitly.
+
+    Idempotent: uses get_or_create on ActionTemplate name, ActionEnhancement
+    variant_name, and RemoveConditionOnCheckConfig(enhancement, condition).
+    """
+
+    def __call__(self, *, check_type: object = None) -> object:
+        from actions.constants import EnhancementSourceType
+        from actions.factories import ActionTemplateFactory
+        from actions.models import ActionEnhancement
+        from actions.models.effect_configs import RemoveConditionOnCheckConfig
+        from world.checks.factories import CheckTypeFactory
+
+        berserk = BerserkConditionTemplateFactory()
+
+        if check_type is None:
+            check_type = CheckTypeFactory(name="Restore to Sense Check")
+
+        template = ActionTemplateFactory(
+            name=RESTORE_TO_SENSE_TEMPLATE_NAME,
+            check_type=check_type,
+            category="social",
+        )
+
+        # Authored Technique that serves as the enhancement source.
+        technique = TechniqueFactory(name="Restore to Sense Technique", damage_profile=False)
+
+        enh, _ = ActionEnhancement.objects.get_or_create(
+            base_action_key="restore_sense",
+            variant_name="Restore to Sense",
+            defaults={
+                "is_involuntary": False,
+                "source_type": EnhancementSourceType.TECHNIQUE,
+                "technique": technique,
+            },
+        )
+
+        RemoveConditionOnCheckConfig.objects.get_or_create(
+            enhancement=enh,
+            condition=berserk,
+            defaults={
+                "check_type": check_type,
+                "resistance_check_type": None,
+                "target_difficulty": None,
+                "execution_order": 0,
+            },
+        )
+
+        return template
+
+
+RestoreToSenseActionTemplateFactory = _RestoreToSenseActionTemplateFactory()

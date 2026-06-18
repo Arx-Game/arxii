@@ -44,6 +44,7 @@ from actions.definitions.social import (
     intimidate,
     perform,
     persuade,
+    restore_sense,
 )
 from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
@@ -88,6 +89,7 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     flirt,
     perform,
     entrance,
+    restore_sense,
 ]
 
 # Lookup by key
