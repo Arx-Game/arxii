@@ -399,6 +399,16 @@ class CombatOpponent(SharedMemoryModel):
         "at the number of acting PCs.",
     )
 
+    # === Duel fields (Task 2) ===
+    mirrors_participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="mirror_surface",
+        help_text="If set, this opponent is a passive duel mirror of that PC participant.",
+    )
+
     # === Clash fields (Task 1.5) ===
     barrier_strength = models.PositiveIntegerField(
         null=True,
@@ -473,6 +483,11 @@ class CombatOpponent(SharedMemoryModel):
                     )
                 }
             )
+
+    @property
+    def is_duel_mirror(self) -> bool:
+        """True when this opponent is a passive duel-mirror surface for a PC participant."""
+        return self.mirrors_participant_id is not None
 
     @property
     def health_percentage(self) -> float:

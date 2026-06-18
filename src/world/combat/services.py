@@ -1544,6 +1544,7 @@ def select_npc_actions(
             status=OpponentStatus.ACTIVE,
         )
         .exclude(threat_pool__isnull=True)
+        .exclude(mirrors_participant_id__isnull=False)
         .select_related("threat_pool")
     )
 
