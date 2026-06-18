@@ -522,6 +522,14 @@ class Interaction(SharedMemoryModel):
             "committed for this action. Populated for both clash and non-clash."
         ),
     )
+    fury_committed = models.ForeignKey(
+        "magic.FuryTier",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Post-resolution audit of the realized Fury tier (clash + non-clash).",
+    )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

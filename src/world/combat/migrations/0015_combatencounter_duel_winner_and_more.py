@@ -8,7 +8,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0007_remove_characteristicvalue_characteristic_and_more"),
-        ("combat", "0013_opponenttiertemplate_riskscalingmodifier_and_more"),
+        ("combat", "0014_clashcontributiondeclaration_fury_anchor_and_more"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 

@@ -99,11 +99,47 @@ What shipped:
   double-count)
 - **Scene-derived perceiving society** — `Area.dominant_society` FK +
   `societies_for_scene(scene)` (permissive: all societies sharing the area's realm,
-  unless the area names one); combat takes the **max** `fashion_outfit_bonus` across
-  relevant societies; `ModifierSourceKind.FASHION` provenance value
+  unless the area names one); the seam takes the **max** `fashion_outfit_bonus` across
+  relevant societies; `ModifierSourceKind.FASHION` provenance value. (The engine
+  shipped here; the **combat consumers that actually supply `scene=` were wired in
+  #750** — see the section below. Until then fashion was always 0 in combat and
+  defense bypassed the seam entirely.)
 - **Integration test** — craft → wear → combat for a mantle-bearing item, end-to-end
   through the real services (clearance → gated weave → equip → `collect_check_modifiers`)
 - **Typed exception** — `MantleNotClearedError` in `world.magic.exceptions`
+
+## Combat passes the scene-derived perceiving society (DONE, #750)
+
+Spec D PR4 built the engine (`societies_for_scene`, `Area.dominant_society`, the
+`max`-across-societies fold in `_character_and_equipment_contributions`, and a
+`scene=` parameter on `collect_check_modifiers`) but the **combat consumers never
+supplied a `scene`**, so the fashion bonus was always 0 in combat and defense
+never used the modifier seam at all. #750 closes that consumer-side gap:
+
+- **Every participant combat check derives its perceiving society from scene
+  context** — offense, penetration, flee, and environmental checks pass
+  `scene=encounter.scene`; the clash contribution passes `scene=clash.encounter.scene`
+  (`world/combat/services.py`, `world/combat/clash.py`). No signature/plumbing
+  changes — each site reads the scene from its in-scope encounter/clash.
+- **Defense now joins the seam (the headline).** `resolve_npc_attack` previously
+  rolled the defender's check with **zero modifiers**; it now routes through
+  `collect_check_modifiers(participant.character_sheet, check_type,
+  scene=participant.encounter.scene)` and feeds `extra_modifiers` into the roll.
+  Fashion **and** covenant-role/equipment-walk **and** persistent
+  `CharacterModifier`s **and** conditions now all reach defense — so a character
+  whose attire matches the perceiving society's vogue is genuinely harder to
+  hit/kill (durability from vibe).
+- **Capability vs. content:** the bonus is nonzero only where a defensive
+  `CheckType` has a scoped `modifier_target` with authored `FashionStyleBonus`
+  rows. The wiring ships the capability; an integration fixture
+  (`combat/tests/test_defense.py::DefensiveFashionWiringTests`) proves the path
+  end-to-end. Broad authoring is seed content.
+- **Threads already cut damage post-defense** (`apply_damage_reduction_from_threads`),
+  so durability-from-investment now spans threads (damage reduction) +
+  fashion/covenant (defensive check bonus).
+
+Follow-ups filed: covenant-role gating whether a character benefits from armor
+soak; thread defensive-magnitude tuning.
 
 ## Item Interaction Service Functions — Use / Consume Charges (DONE, #509)
 

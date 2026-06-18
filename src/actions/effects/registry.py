@@ -9,10 +9,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from actions.effects.conditions import handle_condition_on_check
+from actions.effects.conditions import handle_condition_on_check, handle_remove_condition_on_check
 from actions.effects.kwargs import handle_modify_kwargs
 from actions.effects.modifiers import handle_add_modifier
-from actions.models import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
+from actions.models import (
+    AddModifierConfig,
+    ConditionOnCheckConfig,
+    ModifyKwargsConfig,
+    RemoveConditionOnCheckConfig,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,6 +31,7 @@ _HANDLER_REGISTRY: dict[type, Callable[[Any, Any], None]] = {
     ModifyKwargsConfig: handle_modify_kwargs,
     AddModifierConfig: handle_add_modifier,
     ConditionOnCheckConfig: handle_condition_on_check,
+    RemoveConditionOnCheckConfig: handle_remove_condition_on_check,
 }
 
 # Related manager names on ActionEnhancement for each config model.
@@ -33,6 +39,7 @@ _CONFIG_RELATED_NAMES: list[str] = [
     "modifykwargsconfig_configs",
     "addmodifierconfig_configs",
     "conditiononcheckconfig_configs",
+    "removeconditiononcheckconfig_configs",
 ]
 
 

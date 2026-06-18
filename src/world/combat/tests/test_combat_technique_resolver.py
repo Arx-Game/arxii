@@ -169,6 +169,37 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
         # so extra_modifiers == 5 with no separate additive term.
         self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], 5)
 
+    def test_offense_passes_encounter_scene(self) -> None:
+        """The offense roll hands the encounter's scene to collect_check_modifiers,
+        so the perceiving society (and thus the fashion bonus) is derived from
+        scene context (#750)."""
+        from world.checks import services as checks_services
+        from world.scenes.factories import SceneFactory
+
+        resolver = _build_resolver()
+        scene = SceneFactory()
+        resolver.participant.encounter.scene = scene
+        resolver.participant.encounter.save(update_fields=["scene"])
+
+        captured: dict = {}
+        real_collect = checks_services.collect_check_modifiers
+
+        def _spy_collect(sheet, check_type, **kwargs):
+            captured["scene"] = kwargs.get("scene")
+            return real_collect(sheet, check_type, **kwargs)
+
+        with (
+            patch("world.combat.services.perform_check") as mock_perform,
+            patch(
+                "world.combat.services.collect_check_modifiers",
+                side_effect=_spy_collect,
+            ),
+        ):
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolver._roll_check()
+
+        self.assertEqual(captured["scene"], scene)
+
 
 class CombatTechniqueResolverApplyDamageTests(TestCase):
     @classmethod
