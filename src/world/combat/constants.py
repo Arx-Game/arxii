@@ -23,6 +23,7 @@ class EncounterType(models.TextChoices):
 
     PARTY_COMBAT = "party_combat", "Party Combat"
     OPEN_ENCOUNTER = "open_encounter", "Open Encounter"
+    DUEL = "duel", "Duel"
 
 
 class EncounterStatus(models.TextChoices):
@@ -92,6 +93,17 @@ class CombatManeuver(models.TextChoices):
 
     FLEE = "flee", "Flee"
     COVER = "cover", "Cover"
+    YIELD = "yield", "Yield"
+
+
+class DuelChallengeStatus(models.TextChoices):
+    """Lifecycle of a PC-vs-PC duel challenge."""
+
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+    EXPIRED = "expired", "Expired"
 
 
 DEFAULT_PACE_TIMER_MINUTES: int = 10

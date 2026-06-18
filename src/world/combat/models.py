@@ -137,6 +137,11 @@ class CombatEncounter(SharedMemoryModel):
 
         return EncounterCombatHandler(self)
 
+    @cached_property
+    def is_lethal(self) -> bool:
+        """Lethal iff the encounter's risk level is LETHAL. Derived, never stored."""
+        return self.risk_level == RiskLevel.LETHAL
+
     def __str__(self) -> str:
         return (
             f"{self.get_encounter_type_display()} "
