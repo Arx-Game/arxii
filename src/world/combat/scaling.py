@@ -4,7 +4,7 @@ This module provides:
 - ``PartyProfile`` / ``compute_party_profile`` — level-only party snapshot (Task 2).
 - ``PhaseSpec`` / ``OpponentStatBlock`` / ``compute_opponent_stat_block`` — scaling
   formula that produces a frozen stat budget for a given tier + encounter (Task 3).
-- ``get_encounter_scaling_config`` — self-seeding singleton accessor (Task 3).
+- ``get_encounter_scaling_config`` — singleton accessor, creates pk=1 on first use (Task 3).
 
 The invariant: difficulty scales on party size + average primary character level
 ONLY — never on "threads" (relationships, covenants, facets, fashion, magical
@@ -133,20 +133,29 @@ class OpponentStatBlock:
 
 
 def get_encounter_scaling_config() -> EncounterScalingConfig:
-    """Return the EncounterScalingConfig singleton (pk=1), self-seeding on first use.
+    """Return the EncounterScalingConfig singleton (pk=1), creating it on first use.
 
-    On a fresh DB the row may be absent — this function seeds all four scaling
-    tables (via ``seed_scaling_defaults()``) rather than crashing, then returns
-    the singleton. Mirrors the idiom of ``get_flee_config`` in services.py but
-    with self-seeding because scaling config has no FK dependencies.
+    On a fresh DB the row may be absent — this function creates ONLY the singleton
+    using the authored defaults from constants.  It does NOT touch the lookup tables
+    (OpponentTierTemplate, RiskScalingModifier, StakesLevelRequirement); those are
+    seeded separately by ``seed_scaling_defaults()`` and must not be reset here
+    because a config accessor must not clobber staff-tuned rows.
     """
-    from world.combat.factories import seed_scaling_defaults  # noqa: PLC0415
+    from world.combat.constants import (  # noqa: PLC0415
+        SCALING_CONFIG_BASELINE_PARTY_SIZE,
+        SCALING_CONFIG_PER_AVG_LEVEL_PCT,
+        SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
+    )
 
-    try:
-        return EncounterScalingConfig.objects.get(pk=1)
-    except EncounterScalingConfig.DoesNotExist:
-        seed_scaling_defaults()
-        return EncounterScalingConfig.objects.get(pk=1)
+    config, _ = EncounterScalingConfig.objects.get_or_create(
+        pk=1,
+        defaults={
+            "baseline_party_size": SCALING_CONFIG_BASELINE_PARTY_SIZE,
+            "per_extra_member_pct": Decimal(SCALING_CONFIG_PER_EXTRA_MEMBER_PCT),
+            "per_avg_level_pct": Decimal(SCALING_CONFIG_PER_AVG_LEVEL_PCT),
+        },
+    )
+    return config
 
 
 def _scale_optional(base: int | None, multiplier: Decimal) -> int | None:

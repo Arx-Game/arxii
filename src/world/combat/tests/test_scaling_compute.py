@@ -52,7 +52,7 @@ def _add_participants(encounter, count: int, level: int):
 
 
 class GetEncounterScalingConfigSelfSeedTest(TestCase):
-    """get_encounter_scaling_config() self-seeds pk=1 on first use."""
+    """get_encounter_scaling_config() creates pk=1 on first use; does not seed lookup tables."""
 
     def test_returns_config_when_absent(self):
         """Should create the singleton if the table is empty."""
@@ -74,6 +74,21 @@ class GetEncounterScalingConfigSelfSeedTest(TestCase):
         get_encounter_scaling_config()
         get_encounter_scaling_config()
         self.assertEqual(EncounterScalingConfig.objects.count(), 1)
+
+    def test_does_not_seed_lookup_tables(self):
+        """Accessor must NOT touch OpponentTierTemplate or RiskScalingModifier.
+
+        The old implementation called seed_scaling_defaults() as a side effect,
+        which would silently reset staff-tuned template/risk/stakes rows.
+        This test verifies the side effect is gone.
+        """
+        from world.combat.models import OpponentTierTemplate, RiskScalingModifier
+
+        self.assertEqual(OpponentTierTemplate.objects.count(), 0)
+        self.assertEqual(RiskScalingModifier.objects.count(), 0)
+        get_encounter_scaling_config()
+        self.assertEqual(OpponentTierTemplate.objects.count(), 0)
+        self.assertEqual(RiskScalingModifier.objects.count(), 0)
 
 
 class TierDifferentiationTest(TestCase):
@@ -229,6 +244,27 @@ class InvariantThreadsIrrelevantTest(TestCase):
         block_plain = compute_opponent_stat_block(OpponentTier.ELITE, self.encounter_plain)
         block_threaded = compute_opponent_stat_block(OpponentTier.ELITE, self.encounter_threaded)
         self.assertEqual(block_plain, block_threaded)
+
+    def test_expected_values_for_known_config(self):
+        """Pin exact computed values for ELITE at MODERATE risk, party_size=3, avg_level=4.
+
+        Formula (seeded defaults):
+            baseline_party_size = 4, per_extra_member_pct = 0.15, per_avg_level_pct = 0.05
+            extra_members = max(0, 3 - 4) = 0
+            party_mult = 1 + 0.15 * 0 + 0.05 * 4.0 = 1.20
+            risk_mult = 1.00  (MODERATE)
+            max_health = round(80 * 1.00 * 1.20) = 96
+            soak_value = round(3 * 1.00) = 3
+
+        Pinning these integers catches formula drift that relational ordering tests
+        would miss (e.g. scaling both up equally would preserve ordering but break
+        the budget).
+        """
+        block = compute_opponent_stat_block(
+            OpponentTier.ELITE, self.encounter_plain, party_size=3, avg_level=4.0
+        )
+        self.assertEqual(block.max_health, 96)
+        self.assertEqual(block.soak_value, 3)
 
 
 class BossPhaseGenerationTest(TestCase):
