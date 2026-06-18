@@ -148,6 +148,8 @@ export function ActionPanel({ sceneId }: Props) {
     mutationFn: (params: {
       action_key: string;
       target_persona_id?: number;
+      /** Multi-target dispatch (#572). */
+      target_persona_ids?: number[];
       technique_id?: number;
       strain_commitment?: number;
     }) => createActionRequest(sceneId, params),
@@ -183,14 +185,24 @@ export function ActionPanel({ sceneId }: Props) {
 
   function commitAction(
     action: PlayerAction,
-    extras: { target_persona_id?: number; technique_id?: number } = {}
+    extras: {
+      target_persona_id?: number;
+      /** Multi-target dispatch (#572). */
+      target_persona_ids?: number[];
+      technique_id?: number;
+    } = {}
   ) {
     const key = stableId(action);
     const strain = strainByAction[key];
     performAction.mutate({
       action_key: action.ref.registry_key ?? action.display_name,
       technique_id: extras.technique_id ?? action.ref.technique_id ?? undefined,
-      target_persona_id: extras.target_persona_id,
+      ...(extras.target_persona_id !== undefined
+        ? { target_persona_id: extras.target_persona_id }
+        : {}),
+      ...(extras.target_persona_ids !== undefined
+        ? { target_persona_ids: extras.target_persona_ids }
+        : {}),
       strain_commitment: strain && strain > 0 ? strain : undefined,
     });
   }
@@ -239,10 +251,10 @@ export function ActionPanel({ sceneId }: Props) {
 
   function handleTargetConfirm(ids: number[]) {
     if (!targetingAction || ids.length === 0) return;
-    // The non-clash backend currently accepts a single target_persona; with
-    // multi-cardinality specs we send the first id.  When the backend grows
-    // multi-target support this path will fan out to a separate endpoint.
-    commitAction(targetingAction, { target_persona_id: ids[0] });
+    commitAction(
+      targetingAction,
+      ids.length === 1 ? { target_persona_id: ids[0] } : { target_persona_ids: ids }
+    );
     setTargetingAction(null);
   }
 

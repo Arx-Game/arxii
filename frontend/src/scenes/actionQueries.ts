@@ -32,7 +32,10 @@ export async function createActionRequest(
   sceneId: string,
   body: {
     action_key: string;
+    /** Single-target dispatch — mutually exclusive with target_persona_ids. */
     target_persona_id?: number;
+    /** Multi-target dispatch (#572) — mutually exclusive with target_persona_id. */
+    target_persona_ids?: number[];
     technique_id?: number;
     initiator_persona?: number;
     strain_commitment?: number;
@@ -43,7 +46,8 @@ export async function createActionRequest(
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
-  //   scene (int), target_persona (int), action_key (str), technique_id? (int),
+  //   scene (int), target_persona (int) OR target_persona_ids (int[]),
+  //   action_key (str), technique_id? (int),
   //   strain_commitment? (int, validated against anima at resolution time).
   const requestBody: Record<string, unknown> = {
     scene: Number(sceneId),
@@ -51,6 +55,9 @@ export async function createActionRequest(
   };
   if (body.target_persona_id !== undefined) {
     requestBody.target_persona = body.target_persona_id;
+  }
+  if (body.target_persona_ids !== undefined && body.target_persona_ids.length > 0) {
+    requestBody.target_persona_ids = body.target_persona_ids;
   }
   if (body.technique_id !== undefined) {
     requestBody.technique_id = body.technique_id;
@@ -84,14 +91,27 @@ export async function fetchPendingRequests(sceneId: string): Promise<{ results: 
 export async function respondToRequest(
   _sceneId: string,
   requestId: number,
-  body: { accept: boolean; difficulty?: string }
+  body: {
+    accept: boolean;
+    difficulty?: string;
+    /**
+     * Per-target consent (#572): when responding to a multi-target action
+     * request on behalf of a specific additional target, include that target's
+     * persona id so the backend can record per-target acceptance.
+     */
+    target_persona_id?: number;
+  }
 ): Promise<ActionRequestResponse> {
   // Backend ConsentResponseSerializer expects: { decision: "accept" | "deny" }
   // Map the frontend { accept, difficulty } shape to the backend shape.
   const decision = body.accept ? 'accept' : 'deny';
+  const requestBody: Record<string, unknown> = { decision };
+  if (body.target_persona_id !== undefined) {
+    requestBody.target_persona_id = body.target_persona_id;
+  }
   const res = await apiFetch(`/api/action-requests/${requestId}/respond/`, {
     method: 'POST',
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify(requestBody),
   });
   if (!res.ok) throw new Error('Failed to respond to action request');
   return res.json();
