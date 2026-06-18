@@ -5,7 +5,8 @@ export interface InboxItem {
     | 'bug_report'
     | 'player_report'
     | 'character_application'
-    | 'gm_application';
+    | 'gm_application'
+    | 'system_error';
   source_pk: number;
   title: string;
   reporter_summary: string;
@@ -72,6 +73,24 @@ export interface PlayerReport {
   status: string;
 }
 
+// System error report detail from /api/player_submissions/system-errors/{id}/
+// Auto-captured runtime error (#1164) — system-authored, so the only writable field
+// is `status`; everything else is captured at report time.
+export interface SystemErrorReport {
+  id: number;
+  signature: string;
+  label: string;
+  exception_type: string;
+  message: string;
+  traceback: string;
+  actor_persona: number | null;
+  actor_persona_name: string | null;
+  occurrence_count: number;
+  first_seen: string;
+  last_seen: string;
+  status: string;
+}
+
 // Account history response from /api/staff_inbox/accounts/{id}/history/
 export interface AccountHistoryCategory {
   items: InboxItem[];
@@ -113,4 +132,5 @@ export type SubmissionCategory =
   | 'bug_report'
   | 'player_report'
   | 'character_application'
-  | 'gm_application';
+  | 'gm_application'
+  | 'system_error';

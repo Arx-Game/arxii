@@ -14,8 +14,14 @@ from world.player_submissions.filters import (
     BugReportFilter,
     PlayerFeedbackFilter,
     PlayerReportFilter,
+    SystemErrorReportFilter,
 )
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 from world.player_submissions.serializers import (
     BugReportCreateSerializer,
     BugReportDetailSerializer,
@@ -23,6 +29,7 @@ from world.player_submissions.serializers import (
     PlayerFeedbackDetailSerializer,
     PlayerReportCreateSerializer,
     PlayerReportDetailSerializer,
+    SystemErrorReportDetailSerializer,
 )
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -116,6 +123,28 @@ class BugReportViewSet(
             reporter_account=self.request.user,
             location_id=location_id,
         )
+
+
+class SystemErrorReportViewSet(
+    _SubmissionViewSetMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    GenericViewSet,
+):
+    """Staff triage of auto-captured runtime errors (#1164).
+
+    No create action — the system authors these via ``services.report_error``. Staff list,
+    inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+    Admin-only on every action (the mixin grants create to authenticated users, but there
+    is no create action here, so all actions resolve to IsAdminUser).
+    """
+
+    queryset = SystemErrorReport.objects.select_related(
+        "actor_persona__character_sheet__character",
+    ).order_by("-last_seen")
+    filterset_class = SystemErrorReportFilter
+    serializer_class = SystemErrorReportDetailSerializer
 
 
 class PlayerReportViewSet(

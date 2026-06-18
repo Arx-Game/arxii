@@ -14,7 +14,12 @@ from django.urls import reverse
 from world.gm.constants import GMApplicationStatus
 from world.gm.models import GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 from world.roster.models.applications import RosterApplication
 from world.roster.models.choices import ApplicationStatus
 from world.staff_inbox.types import InboxItem
@@ -82,6 +87,24 @@ def _report_to_item(obj: PlayerReport) -> InboxItem:
         status=obj.status,
         detail_url=reverse(
             "player_submissions:player-report-detail",
+            args=[obj.pk],
+        ),
+    )
+
+
+def _system_error_to_item(obj: SystemErrorReport) -> InboxItem:
+    # System-authored (#1164): no reporter account/persona to summarise — the "reporter"
+    # is the system, so the summary carries the running occurrence count (the triage signal)
+    # and the originating context label instead. Sorted by last_seen (most recent recurrence).
+    return InboxItem(
+        source_type=SubmissionCategory.SYSTEM_ERROR,
+        source_pk=obj.pk,
+        title=f"Error: {obj.exception_type} in {obj.label}",
+        reporter_summary=f"System · seen ×{obj.occurrence_count}",
+        created_at=obj.last_seen,
+        status=obj.status,
+        detail_url=reverse(
+            "player_submissions:system-error-detail",
             args=[obj.pk],
         ),
     )
@@ -163,6 +186,12 @@ def get_staff_inbox(
             "reported_persona__character_sheet__character",
         )
         items.extend(_report_to_item(pr) for pr in report_qs)
+
+    if _include(SubmissionCategory.SYSTEM_ERROR):
+        error_qs = SystemErrorReport.objects.filter(
+            status=SubmissionStatus.OPEN,
+        ).select_related("actor_persona__character_sheet__character")
+        items.extend(_system_error_to_item(err) for err in error_qs)
 
     if _include(SubmissionCategory.CHARACTER_APPLICATION):
         application_qs = RosterApplication.objects.filter(

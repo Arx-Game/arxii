@@ -16430,6 +16430,158 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlayerReportDetail'
           description: ''
+  /api/player-submissions/system-errors/:
+    get:
+      operationId: player_submissions_system_errors_list
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: query
+        name: exception_type
+        schema:
+          type: string
+      - in: query
+        name: last_seen_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: last_seen_before
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - dismissed
+          - open
+          - reviewed
+        description: |-
+          * `open` - Open
+          * `reviewed` - Reviewed
+          * `dismissed` - Dismissed
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSystemErrorReportDetailList'
+          description: ''
+  /api/player-submissions/system-errors/{id}/:
+    get:
+      operationId: player_submissions_system_errors_retrieve
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
+    put:
+      operationId: player_submissions_system_errors_update
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemErrorReportDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
+    patch:
+      operationId: player_submissions_system_errors_partial_update
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSystemErrorReportDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
   /api/player-trust/:
     get:
       operationId: player_trust_list
@@ -33516,6 +33668,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryParticipation'
+    PaginatedSystemErrorReportDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemErrorReportDetail'
     PaginatedTableBulletinPostList:
       type: object
       required:
@@ -35245,6 +35420,17 @@ components:
           description: Story owner has explicitly trusted this player for this story
         is_active:
           type: boolean
+    PatchedSystemErrorReportDetailRequest:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
     PatchedTechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -40266,6 +40452,83 @@ components:
         * `cups` - Cups
         * `wands` - Wands
         * `coins` - Coins
+    SystemErrorReportDetail:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        signature:
+          type: string
+          readOnly: true
+          description: Dedup hash (exception type + originating in-app frame).
+        label:
+          type: string
+          readOnly: true
+          description: Where it happened (the hook / context label).
+        exception_type:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+          description: The exception's message.
+        traceback:
+          type: string
+          readOnly: true
+          description: Full formatted traceback of the first occurrence.
+        actor_persona:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The persona acting when first captured, if any.
+        actor_persona_name:
+          type: string
+          nullable: true
+          description: The acting persona's name, or ``None`` — actor_persona is nullable.
+          readOnly: true
+        occurrence_count:
+          type: integer
+          readOnly: true
+        first_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+      required:
+      - actor_persona
+      - actor_persona_name
+      - exception_type
+      - first_seen
+      - id
+      - label
+      - last_seen
+      - message
+      - occurrence_count
+      - signature
+      - traceback
+    SystemErrorReportDetailRequest:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
     TableBulletinPost:
       type: object
       description: |-

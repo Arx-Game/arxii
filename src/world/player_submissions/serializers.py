@@ -5,7 +5,12 @@ from __future__ import annotations
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 from world.scenes.models import Persona
 
 _NO_ROSTER_ENTRY = "This persona's character has no roster entry."
@@ -220,3 +225,47 @@ class PlayerReportDetailSerializer(serializers.ModelSerializer):
             "reported_account",
             "created_at",
         ]
+
+
+class SystemErrorReportDetailSerializer(serializers.ModelSerializer):
+    """Staff read + status-update view of an auto-captured error (#1164).
+
+    Everything is read-only except ``status`` — the report is system-authored, so staff
+    only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+    same serializer drives retrieve and update, matching the BugReport pattern.
+    """
+
+    actor_persona_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SystemErrorReport
+        fields = [
+            "id",
+            "signature",
+            "label",
+            "exception_type",
+            "message",
+            "traceback",
+            "actor_persona",
+            "actor_persona_name",
+            "occurrence_count",
+            "first_seen",
+            "last_seen",
+            "status",
+        ]
+        read_only_fields = [
+            "id",
+            "signature",
+            "label",
+            "exception_type",
+            "message",
+            "traceback",
+            "actor_persona",
+            "occurrence_count",
+            "first_seen",
+            "last_seen",
+        ]
+
+    def get_actor_persona_name(self, obj: SystemErrorReport) -> str | None:
+        """The acting persona's name, or ``None`` — actor_persona is nullable."""
+        return obj.actor_persona.name if obj.actor_persona_id is not None else None

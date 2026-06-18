@@ -80,6 +80,8 @@ import { StaffBugReportsPage } from './staff/pages/StaffBugReportsPage';
 import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage';
 import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
 import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
+import { StaffSystemErrorsPage } from './staff/pages/StaffSystemErrorsPage';
+import { StaffSystemErrorDetailPage } from './staff/pages/StaffSystemErrorDetailPage';
 import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { StaffGMApplicationsPage } from './staff/pages/StaffGMApplicationsPage';
 import { StaffGMApplicationDetailPage } from './staff/pages/StaffGMApplicationDetailPage';
@@ -491,6 +493,22 @@ function App() {
           element={
             <StaffRoute>
               <StaffPlayerReportDetailPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/system-errors"
+          element={
+            <StaffRoute>
+              <StaffSystemErrorsPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/system-errors/:id"
+          element={
+            <StaffRoute>
+              <StaffSystemErrorDetailPage />
             </StaffRoute>
           }
         />

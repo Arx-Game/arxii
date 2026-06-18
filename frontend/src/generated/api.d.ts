@@ -9791,6 +9791,70 @@ export interface paths {
     patch: operations['player_submissions_player_reports_partial_update'];
     trace?: never;
   };
+  '/api/player-submissions/system-errors/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of auto-captured runtime errors (#1164).
+     *
+     *     No create action — the system authors these via ``services.report_error``. Staff list,
+     *     inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+     *     Admin-only on every action (the mixin grants create to authenticated users, but there
+     *     is no create action here, so all actions resolve to IsAdminUser).
+     */
+    get: operations['player_submissions_system_errors_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/system-errors/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of auto-captured runtime errors (#1164).
+     *
+     *     No create action — the system authors these via ``services.report_error``. Staff list,
+     *     inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+     *     Admin-only on every action (the mixin grants create to authenticated users, but there
+     *     is no create action here, so all actions resolve to IsAdminUser).
+     */
+    get: operations['player_submissions_system_errors_retrieve'];
+    /**
+     * @description Staff triage of auto-captured runtime errors (#1164).
+     *
+     *     No create action — the system authors these via ``services.report_error``. Staff list,
+     *     inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+     *     Admin-only on every action (the mixin grants create to authenticated users, but there
+     *     is no create action here, so all actions resolve to IsAdminUser).
+     */
+    put: operations['player_submissions_system_errors_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff triage of auto-captured runtime errors (#1164).
+     *
+     *     No create action — the system authors these via ``services.report_error``. Staff list,
+     *     inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+     *     Admin-only on every action (the mixin grants create to authenticated users, but there
+     *     is no create action here, so all actions resolve to IsAdminUser).
+     */
+    patch: operations['player_submissions_system_errors_partial_update'];
+    trace?: never;
+  };
   '/api/player-trust/': {
     parameters: {
       query?: never;
@@ -18672,6 +18736,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryParticipation'][];
     };
+    PaginatedSystemErrorReportDetailList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SystemErrorReportDetail'][];
+    };
     PaginatedTableBulletinPostList: {
       /** @example 123 */
       count: number;
@@ -19703,6 +19782,16 @@ export interface components {
       /** @description Story owner has explicitly trusted this player for this story */
       trusted_by_owner?: boolean;
       is_active?: boolean;
+    };
+    /**
+     * @description Staff read + status-update view of an auto-captured error (#1164).
+     *
+     *     Everything is read-only except ``status`` — the report is system-authored, so staff
+     *     only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+     *     same serializer drives retrieve and update, matching the BugReport pattern.
+     */
+    PatchedSystemErrorReportDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     PatchedTechniqueRequest: {
@@ -22159,6 +22248,45 @@ export interface components {
      * @enum {string}
      */
     SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
+    /**
+     * @description Staff read + status-update view of an auto-captured error (#1164).
+     *
+     *     Everything is read-only except ``status`` — the report is system-authored, so staff
+     *     only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+     *     same serializer drives retrieve and update, matching the BugReport pattern.
+     */
+    SystemErrorReportDetail: {
+      readonly id: number;
+      /** @description Dedup hash (exception type + originating in-app frame). */
+      readonly signature: string;
+      /** @description Where it happened (the hook / context label). */
+      readonly label: string;
+      readonly exception_type: string;
+      /** @description The exception's message. */
+      readonly message: string;
+      /** @description Full formatted traceback of the first occurrence. */
+      readonly traceback: string;
+      /** @description The persona acting when first captured, if any. */
+      readonly actor_persona: number | null;
+      /** @description The acting persona's name, or ``None`` — actor_persona is nullable. */
+      readonly actor_persona_name: string | null;
+      readonly occurrence_count: number;
+      /** Format: date-time */
+      readonly first_seen: string;
+      /** Format: date-time */
+      readonly last_seen: string;
+      status?: components['schemas']['StatusD66Enum'];
+    };
+    /**
+     * @description Staff read + status-update view of an auto-captured error (#1164).
+     *
+     *     Everything is read-only except ``status`` — the report is system-authored, so staff
+     *     only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+     *     same serializer drives retrieve and update, matching the BugReport pattern.
+     */
+    SystemErrorReportDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+    };
     /**
      * @description Read serializer for TableBulletinPost — includes nested reply list.
      *
@@ -37135,6 +37263,113 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_system_errors_list: {
+    parameters: {
+      query?: {
+        exception_type?: string;
+        last_seen_after?: string;
+        last_seen_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSystemErrorReportDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_system_errors_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this System Error Report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SystemErrorReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_system_errors_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this System Error Report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SystemErrorReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SystemErrorReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_system_errors_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this System Error Report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedSystemErrorReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SystemErrorReportDetail'];
         };
       };
     };
