@@ -38,6 +38,7 @@ import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActi
 import { useEncounterForScene } from '@/combat/queries';
 import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
 import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
+import { DuelChallengeControls } from '@/combat/duels/DuelChallengeControls';
 
 // ---------------------------------------------------------------------------
 // CombatScenePage
@@ -225,11 +226,26 @@ export function CombatScenePage() {
               characterSheetId={characterSheetId}
             />
           ) : (
-            <div
-              className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
-              data-testid="combat-no-encounter"
-            >
-              No active combat in this scene.
+            <div className="flex flex-col gap-3">
+              {/* Duel challenge accept/decline prompt — shown when there is no active encounter
+                  yet but a pending duel challenge exists.
+                  Backend gap (#568): no /api/combat/duel-challenges/ list endpoint exists yet;
+                  hasPendingIncomingChallenge is always false until that endpoint ships and
+                  a hook populates this prop. The dispatch path (accept / decline) is wired
+                  and functional; only the availability signal is missing. */}
+              {isActive && characterId > 0 && (
+                <DuelChallengeControls
+                  characterId={characterId}
+                  hasPendingIncomingChallenge={false}
+                  challengerName={null}
+                />
+              )}
+              <div
+                className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
+                data-testid="combat-no-encounter"
+              >
+                No active combat in this scene.
+              </div>
             </div>
           )}
         </div>

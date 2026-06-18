@@ -28,6 +28,7 @@ from world.combat.constants import (
     ClashStatus,
     CombatManeuver,
     ComboLearningMethod,
+    DuelChallengeStatus,
     EncounterOutcome,
     EncounterStatus,
     EncounterType,
@@ -128,6 +129,14 @@ class CombatEncounter(SharedMemoryModel):
         related_name="encounters",
         help_text="Authored escalation ramp; null = this encounter does not escalate (#872).",
     )
+    duel_winner = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duels_won",
+        help_text="Recorded duel victor; null while ongoing or for an abandoned/mutual stop.",
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":
@@ -140,6 +149,11 @@ class CombatEncounter(SharedMemoryModel):
         from world.combat.handlers import EncounterCombatHandler  # noqa: PLC0415
 
         return EncounterCombatHandler(self)
+
+    @cached_property
+    def is_lethal(self) -> bool:
+        """Lethal iff the encounter's risk level is LETHAL. Derived, never stored."""
+        return self.risk_level == RiskLevel.LETHAL
 
     def __str__(self) -> str:
         return (
@@ -398,6 +412,16 @@ class CombatOpponent(SharedMemoryModel):
         "at the number of acting PCs.",
     )
 
+    # === Duel fields (Task 2) ===
+    mirrors_participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="mirror_surface",
+        help_text="If set, this opponent is a passive duel mirror of that PC participant.",
+    )
+
     # === Clash fields (Task 1.5) ===
     barrier_strength = models.PositiveIntegerField(
         null=True,
@@ -472,6 +496,11 @@ class CombatOpponent(SharedMemoryModel):
                     )
                 }
             )
+
+    @property
+    def is_duel_mirror(self) -> bool:
+        """True when this opponent is a passive duel-mirror surface for a PC participant."""
+        return self.mirrors_participant_id is not None
 
     @property
     def health_percentage(self) -> float:
@@ -2112,3 +2141,70 @@ class EscalationCurve(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+# =============================================================================
+# DuelChallenge model (Task 4) — PC-vs-PC duel handshake
+# =============================================================================
+
+
+class DuelChallenge(SharedMemoryModel):
+    """A PC-vs-PC duel challenge handshake record.
+
+    Created when a challenger issues a duel request. Tracks the lifecycle
+    from PENDING (awaiting response) through ACCEPTED/DECLINED/WITHDRAWN/EXPIRED.
+    The partial unique constraint ensures at most one PENDING challenge exists
+    per (challenger_sheet, challenged_sheet) pair at any time.
+    """
+
+    challenger_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="duel_challenges_issued",
+        help_text="The PC who issued the challenge.",
+    )
+    challenged_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="duel_challenges_received",
+        help_text="The PC who was challenged.",
+    )
+    room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="duel_challenges",
+        null=True,
+        blank=True,
+        help_text="Room where the duel was challenged.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=DuelChallengeStatus.choices,
+        default=DuelChallengeStatus.PENDING,
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resulting_encounter = models.ForeignKey(
+        COMBAT_ENCOUNTER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duel_challenge",
+        help_text="The CombatEncounter opened when the challenge was accepted.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenger_sheet", "challenged_sheet"],
+                condition=Q(status=DuelChallengeStatus.PENDING),
+                name="unique_pending_duel_challenge_per_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"DuelChallenge({self.challenger_sheet_id} → {self.challenged_sheet_id} "
+            f"[{self.status}])"
+        )

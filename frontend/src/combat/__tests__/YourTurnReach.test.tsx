@@ -267,6 +267,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 10, name: 'North Gate' }, // same as actor
         },
         {
@@ -284,6 +285,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 20, name: 'South Gate' }, // different from actor
         },
       ],
@@ -367,6 +369,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 10, name: 'North Gate' },
         },
         {
@@ -384,6 +387,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 20, name: 'South Gate' },
         },
       ],
@@ -494,6 +498,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 10, name: 'North Gate' },
         },
         {
@@ -511,6 +516,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 30, name: 'Far Wall' }, // disconnected position
         },
       ],
@@ -619,6 +625,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           active_conditions: [],
           thumbnail_url: null,
           thumbnail_media_url: null,
+          mirrors_participant_id: null,
           current_position: { id: 30, name: 'Far Wall' },
         },
       ],

@@ -149,7 +149,9 @@ class CombatEncounterViewSet(ModelViewSet):
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
         from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
 
-        return CombatEncounter.objects.select_related("scene", "room").prefetch_related(
+        return CombatEncounter.objects.select_related(
+            "scene", "room", "duel_winner__character"
+        ).prefetch_related(
             Prefetch(
                 "room__positions",
                 queryset=Position.objects.order_by("pk").prefetch_related(

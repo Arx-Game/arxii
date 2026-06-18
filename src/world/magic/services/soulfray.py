@@ -12,6 +12,71 @@ if TYPE_CHECKING:
 
     from actions.models.action_templates import ConsequencePool
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionStage
+    from world.mechanics.types import AppliedEffect
+
+
+def nonlethal_severity_ceiling() -> int | None:
+    """Highest Soulfray severity that does NOT reach a death-risk stage.
+
+    A death-risk stage is one whose ``consequence_pool`` carries a
+    ``character_loss`` consequence. The ceiling is ``(lowest such threshold) - 1``
+    so a non-lethal cast can never accumulate enough severity to land on (or past)
+    a stage that can kill. Returns ``None`` when no death-risk stage exists, meaning
+    severity needs no bound.
+    """
+    from world.checks.models import Consequence  # noqa: PLC0415
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+
+    death_pool_ids = set(
+        Consequence.objects.filter(
+            character_loss=True,
+            pool_entries__pool__condition_stages__condition__name=SOULFRAY_CONDITION_NAME,
+        ).values_list("pool_entries__pool_id", flat=True)
+    )
+    if not death_pool_ids:
+        return None
+
+    lowest = (
+        ConditionStage.objects.filter(
+            condition__name=SOULFRAY_CONDITION_NAME,
+            consequence_pool_id__in=death_pool_ids,
+            severity_threshold__isnull=False,
+        )
+        .order_by("severity_threshold")
+        .values_list("severity_threshold", flat=True)
+        .first()
+    )
+    if lowest is None:
+        return None
+    return max(lowest - 1, 0)
+
+
+def _nonlethal_bounded_advance(
+    severity_to_add: int,
+    soulfray_instance: object | None,
+) -> tuple[int, SoulfrayResult | None]:
+    """Bound a non-lethal severity advance below the death-risk ceiling.
+
+    Returns ``(bounded_severity, short_circuit)``. ``short_circuit`` is a
+    no-severity-added :class:`SoulfrayResult` when the caster is already at/above the
+    safe ceiling (the cast must add nothing); otherwise it is ``None`` and the caller
+    proceeds with ``bounded_severity``. When no death-risk stage exists the advance is
+    returned unchanged.
+    """
+    ceiling = nonlethal_severity_ceiling()
+    if ceiling is None:
+        return severity_to_add, None
+    existing = soulfray_instance.severity if soulfray_instance is not None else 0
+    bounded = min(severity_to_add, max(ceiling - existing, 0))
+    if bounded > 0:
+        return bounded, None
+    # Already at/above the safe ceiling — preserve the current stage name, add nothing.
+    stage_name = None
+    if soulfray_instance is not None and soulfray_instance.current_stage:
+        stage_name = soulfray_instance.current_stage.name
+    return 0, SoulfrayResult(severity_added=0, stage_name=stage_name, stage_advanced=False)
 
 
 def calculate_soulfray_severity(
@@ -19,8 +84,16 @@ def calculate_soulfray_severity(
     max_anima: int,
     deficit: int,
     config: SoulfrayConfig,
+    *,
+    lethal: bool = True,
 ) -> int:
-    """Compute Soulfray severity contribution from post-deduction anima state."""
+    """Compute Soulfray severity contribution from post-deduction anima state.
+
+    ``lethal`` defaults to ``True`` so existing callers are unaffected. In a
+    NON-LETHAL encounter (``lethal=False``) the returned severity is bounded below
+    the first death-risk Soulfray stage (see ``nonlethal_severity_ceiling``), so a
+    cast can never accumulate into stages that can kill.
+    """
     from decimal import Decimal  # noqa: PLC0415
     from math import ceil  # noqa: PLC0415
 
@@ -38,6 +111,11 @@ def calculate_soulfray_severity(
 
     if deficit > 0:
         severity += ceil(config.deficit_scale * deficit)
+
+    if not lethal:
+        ceiling = nonlethal_severity_ceiling()
+        if ceiling is not None:
+            severity = min(severity, ceiling)
 
     return severity
 
@@ -99,16 +177,10 @@ def _handle_soulfray_accumulation(
     soulfray_severity: int,
     soulfray_config: SoulfrayConfig,
     technique_check_result: CheckResult | None,
+    lethal: bool = True,
 ) -> SoulfrayResult:
     """Handle Soulfray severity accumulation, stage advancement, and consequence pool."""
-    from world.checks.consequence_resolution import (  # noqa: PLC0415
-        apply_resolution,
-        select_consequence_from_result,
-    )
-    from world.checks.services import perform_check  # noqa: PLC0415
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.conditions.models import (  # noqa: PLC0415
-        ConditionCheckModifier,
         ConditionInstance,
         ConditionTemplate,
     )
@@ -117,7 +189,6 @@ def _handle_soulfray_accumulation(
         apply_condition,
     )
     from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
-    from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
 
     # Find or create Soulfray condition
     soulfray_instance = (
@@ -128,6 +199,16 @@ def _handle_soulfray_accumulation(
         .select_related("current_stage")
         .first()
     )
+
+    # Non-lethal: bound the CUMULATIVE severity below the first death-risk stage so a
+    # non-lethal cast can never advance into (or past) a stage that can kill. The
+    # per-cast severity clamp alone is insufficient because advancement accumulates.
+    if not lethal:
+        soulfray_severity, short_circuit = _nonlethal_bounded_advance(
+            soulfray_severity, soulfray_instance
+        )
+        if short_circuit is not None:
+            return short_circuit
 
     if soulfray_instance is None:
         soulfray_template = ConditionTemplate.objects.get(
@@ -155,55 +236,14 @@ def _handle_soulfray_accumulation(
     soulfray_instance.refresh_from_db()
 
     # Fire stage consequence pool if present
-    resilience_check = None
-    stage_consequence = None
     current_stage = soulfray_instance.current_stage
-
-    if current_stage and current_stage.consequence_pool_id:
-        from actions.services import get_effective_consequences  # noqa: PLC0415
-
-        consequences = get_effective_consequences(
-            current_stage.consequence_pool,
-        )
-        if consequences:
-            # 1. Stage penalty via ConditionCheckModifier
-            stage_modifier = 0
-            stage_check_mod = ConditionCheckModifier.objects.filter(
-                stage=current_stage,
-                check_type=soulfray_config.resilience_check_type,
-            ).first()
-            if stage_check_mod:
-                stage_modifier = stage_check_mod.modifier_value
-
-            # 2. Technique outcome modifier (botch = penalty, crit = bonus)
-            outcome_modifier = 0
-            if technique_check_result and technique_check_result.outcome:
-                outcome_mod = TechniqueOutcomeModifier.objects.filter(
-                    outcome=technique_check_result.outcome,
-                ).first()
-                if outcome_mod:
-                    outcome_modifier = outcome_mod.modifier_value
-
-            total_modifier = stage_modifier + outcome_modifier
-
-            # Perform resilience check
-            resilience_check = perform_check(
-                character=character,
-                check_type=soulfray_config.resilience_check_type,
-                target_difficulty=soulfray_config.base_check_difficulty,
-                extra_modifiers=total_modifier,
-            )
-
-            # Select and apply consequence
-            pending = select_consequence_from_result(
-                character,
-                resilience_check,
-                consequences,
-            )
-            context = ResolutionContext(character=character)
-            applied = apply_resolution(pending, context)
-            if applied:
-                stage_consequence = applied[0]
+    resilience_check, stage_consequence = _fire_stage_consequence_pool(
+        character=character,
+        current_stage=current_stage,
+        soulfray_config=soulfray_config,
+        technique_check_result=technique_check_result,
+        lethal=lethal,
+    )
 
     return SoulfrayResult(
         severity_added=soulfray_severity,
@@ -212,6 +252,72 @@ def _handle_soulfray_accumulation(
         resilience_check=resilience_check,
         stage_consequence=stage_consequence,
     )
+
+
+def _fire_stage_consequence_pool(
+    *,
+    character: ObjectDB,
+    current_stage: ConditionStage | None,
+    soulfray_config: SoulfrayConfig,
+    technique_check_result: CheckResult | None,
+    lethal: bool,
+) -> tuple[CheckResult | None, AppliedEffect | None]:
+    """Fire a Soulfray stage's consequence pool, returning ``(resilience_check, applied)``.
+
+    When ``lethal`` is False, ``character_loss`` consequences are filtered out of the
+    pool before selection, so a non-lethal cast can never roll a death consequence.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        select_consequence_from_result,
+    )
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+    from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
+
+    if not current_stage or not current_stage.consequence_pool_id:
+        return None, None
+
+    from actions.services import get_effective_consequences  # noqa: PLC0415
+
+    consequences = get_effective_consequences(current_stage.consequence_pool)
+    if not lethal:
+        # Non-lethal: a cast can never roll a character_loss consequence.
+        consequences = [wc for wc in consequences if not wc.character_loss]
+    if not consequences:
+        return None, None
+
+    # 1. Stage penalty via ConditionCheckModifier
+    stage_modifier = 0
+    stage_check_mod = ConditionCheckModifier.objects.filter(
+        stage=current_stage,
+        check_type=soulfray_config.resilience_check_type,
+    ).first()
+    if stage_check_mod:
+        stage_modifier = stage_check_mod.modifier_value
+
+    # 2. Technique outcome modifier (botch = penalty, crit = bonus)
+    outcome_modifier = 0
+    if technique_check_result and technique_check_result.outcome:
+        outcome_mod = TechniqueOutcomeModifier.objects.filter(
+            outcome=technique_check_result.outcome,
+        ).first()
+        if outcome_mod:
+            outcome_modifier = outcome_mod.modifier_value
+
+    # Perform resilience check
+    resilience_check = perform_check(
+        character=character,
+        check_type=soulfray_config.resilience_check_type,
+        target_difficulty=soulfray_config.base_check_difficulty,
+        extra_modifiers=stage_modifier + outcome_modifier,
+    )
+
+    # Select and apply consequence
+    pending = select_consequence_from_result(character, resilience_check, consequences)
+    applied = apply_resolution(pending, ResolutionContext(character=character))
+    return resilience_check, (applied[0] if applied else None)
 
 
 def _resolve_mishap(

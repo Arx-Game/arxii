@@ -22,18 +22,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
+def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = True) -> int:
     """Deduct anima from character, returning the overburn deficit.
 
     Uses select_for_update inside transaction.atomic for race-condition
     safety, following the ActionPointPool.spend() pattern.
     Returns 0 if no overburn, positive int if life force is drawn.
+
+    ``lethal`` defaults to ``True`` so existing callers are unaffected. In a
+    NON-LETHAL encounter (``lethal=False``) the effective cost is clamped to the
+    caster's currently available anima, so the deduction never draws life force
+    past zero and the returned deficit is always ``0`` (no overburn).
     """
     if effective_cost <= 0:
         return 0
 
     with transaction.atomic():
         anima = CharacterAnima.objects.select_for_update().get(character=character)
+        if not lethal:
+            # Non-lethal: never spend past available anima — no life-force draw.
+            effective_cost = min(effective_cost, anima.current)
         deficit = max(effective_cost - anima.current, 0)
         anima.current = max(anima.current - effective_cost, 0)
         anima.save(update_fields=["current"])

@@ -752,6 +752,7 @@ def resolve_combat_technique(
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
         targets=targets,
+        lethal=encounter.is_lethal,
     )
 
     return _build_combat_result(technique_use_result, resolver)
@@ -1179,6 +1180,12 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
         msg = "Cannot begin declaration phase: no active opponents in encounter."
         raise ValueError(msg)
 
+    # Belt-and-suspenders: reject a lethal PvP duel before declaration advances.
+    if enc.encounter_type == EncounterType.DUEL:
+        from world.combat.duels import assert_duel_lethality_valid  # noqa: PLC0415
+
+        assert_duel_lethality_valid(enc)
+
     enc.round_number += 1
     enc.status = EncounterStatus.DECLARING
     enc.round_started_at = timezone.now()
@@ -1430,6 +1437,21 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
+    # Lethal-duel risk-acknowledgement gate (#568 Task 12b). A PC placed into a
+    # lethal DUEL by create_lethal_duel is deliberately not auto-acknowledged, and
+    # the #777 outsider gate does not cover an already-active participant — so block
+    # declaration until an EncounterRiskAcknowledgement exists. Scoped to DUEL only:
+    # lethal party-combat PCs self-join via join_encounter (which records an ack),
+    # and GM-placed party-combat PCs (add_participant, no ack) must not be blocked.
+    if encounter.encounter_type == EncounterType.DUEL and encounter.is_lethal:
+        has_ack = EncounterRiskAcknowledgement.objects.filter(
+            encounter=encounter,
+            character_sheet=participant.character_sheet,
+        ).exists()
+        if not has_ack:
+            msg = "You must acknowledge the lethal risk of this duel before acting."
+            raise ValueError(msg)
+
     # Passive slot validation (only when a focused category is declared)
     _validate_passive_slot(
         focused_category,
@@ -1626,6 +1648,7 @@ def select_npc_actions(
             status=OpponentStatus.ACTIVE,
         )
         .exclude(threat_pool__isnull=True)
+        .exclude(mirrors_participant_id__isnull=False)
         .select_related("threat_pool")
     )
 
@@ -2876,6 +2899,20 @@ def _resolve_pc_action(
     if action.maneuver == CombatManeuver.FLEE:
         return _resolve_flee(participant, action)
 
+    # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
+    # _resolve_duel_completion is a no-op afterwards because the encounter is now
+    # COMPLETED (yield_duel routes through complete_encounter).
+    # Guard: only valid in a DUEL encounter — a YIELD in any other encounter type
+    # is a no-op (treated like a passives-only round, same as COVER).
+    if (
+        action.maneuver == CombatManeuver.YIELD
+        and participant.encounter.encounter_type == EncounterType.DUEL
+    ):
+        from world.combat.duels import yield_duel  # noqa: PLC0415
+
+        yield_duel(participant)
+        return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     technique = action.focused_action
@@ -3988,7 +4025,26 @@ def resolve_round(
     result.phase_transitions = _check_boss_transitions(encounter)
 
     # --- Check encounter completion ---
-    if _check_encounter_completion(encounter):
+    # A DUEL may have already been completed mid-round by a YIELD maneuver
+    # (yield_duel routes through complete_encounter). Re-fetch status to avoid
+    # double-completing or flipping a COMPLETED duel back to BETWEEN_ROUNDS.
+    enc.refresh_from_db(fields=["status"])
+    if enc.status == EncounterStatus.COMPLETED:
+        result.encounter_completed = True
+    elif enc.encounter_type == EncounterType.DUEL:
+        # Duels have their own end conditions (mirror DEFEATED → winner; lethal
+        # opponent DEFEATED / PC down). resolve_duel_end completes via the shared
+        # seam and returns the encounter, or None if the duel is still ongoing.
+        from world.combat.duels import resolve_duel_end  # noqa: PLC0415
+
+        enc.round_started_at = None
+        enc.save(update_fields=["round_started_at"])
+        if resolve_duel_end(enc) is not None:
+            result.encounter_completed = True
+        else:
+            enc.status = EncounterStatus.BETWEEN_ROUNDS
+            enc.save(update_fields=["status"])
+    elif _check_encounter_completion(encounter):
         result.encounter_completed = True
         enc.round_started_at = None
         enc.save(update_fields=["round_started_at"])

@@ -515,9 +515,46 @@ encounter, and the cast-seed entry path survives repeat targeting:
 - Fixed rounds, victory point tracking, mass participant handling
 - Risk/reward action choices per round
 
-### Duels (future — separate system)
-- Normally non-lethal PC vs PC sparring with pose integration
-- Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
+### Duels (SHIPPED — Phase 1, 2026-06-18)
+
+**Status: SHIPPED**
+**Plan:** `docs/superpowers/plans/2026-06-18-duels-phase-1.md` (ephemeral)
+**Issue:** #568 — `EncounterType.DUEL` over the existing combat engine.
+
+Duels are built by reuse, not a parallel engine. Two **structural** paths:
+
+- **Non-lethal PC-vs-PC sparring** — the comic-book convention. Each duelist is a
+  `CombatParticipant` (declares actions) *and* is mirrored by a passive ephemeral
+  `CombatOpponent` (`mirrors_participant`) that the other attacks — reusing the shipped
+  PC-as-opponent wrapping (`cast_seed.py`). Damage only ever lands on the mirror surface,
+  so **real `CharacterVitals` are never touched: a PC can never kill or injure another PC**
+  (a hard invariant, enforced at creation). Ends at mirror `DEFEATED` or `YIELD`.
+- **Lethal PC-vs-significant-NPC** — the only mode where a PC's real vitals are at stake.
+  Existing 1-v-1 party-combat path with `risk_level=LETHAL`; the PC must acknowledge the
+  risk before declaring (the explicit risk surface).
+
+**Backend shipped (`world/combat/`):** `EncounterType.DUEL`, `CombatManeuver.YIELD`,
+`DuelChallengeStatus`, `CombatEncounter.is_lethal` (derived) + `duel_winner` FK,
+`CombatOpponent.mirrors_participant` (passive, excluded from NPC action selection),
+`DuelChallenge` model; duel services in `combat/duels.py` (`create_pvp_duel`,
+`create_lethal_duel`, `resolve_duel_end`, `yield_duel`, challenge accept/decline/withdraw,
+`assert_duel_lethality_valid`); YIELD maneuver + lethal-duel acknowledge-before-declare
+guard wired into `resolve_round`/`declare_action`; duel-state serializers.
+
+**Non-lethal cap (`world/magic/`):** a single `lethal` flag threaded through
+`use_technique` → `deduct_anima`/soulfray so a non-lethal duel draws no overburn deficit,
+clamps soulfray below any death-risk stage, and never fires a `character_loss` consequence.
+
+**Web-first actions:** `challenge` (social-consent-gated) / `accept` / `decline` /
+`withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
+(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch.
+
+**Still open (tracked):**
+- `GET /api/combat/duel-challenges/` inbox endpoint — the incoming-challenge accept/decline
+  prompt is wired but stubbed off until it (or a WebSocket push) ships.
+- Outgoing "challenge a co-located character" scene-UI affordance (the `challenge` action is
+  wired; only the convenience UI entry point is deferred).
+- Sheet-driven symmetric NPC duellist (the lethal variant reuses the threat-pool opponent).
 
 ### Unified Combat UI (SHIPPED — 2026-05-24)
 

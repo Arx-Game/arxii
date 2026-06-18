@@ -82,6 +82,8 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     forced_escape: false,
     resolution_order: [],
     position_adjacency: [],
+    is_lethal: false,
+    duel_winner: null,
   };
 }
 

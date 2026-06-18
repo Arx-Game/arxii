@@ -14511,6 +14511,28 @@ export interface components {
      * @enum {string}
      */
     DrawModeEnum: 'menu' | 'pool';
+    /**
+     * @description Lightweight identity for a duel winner (CharacterSheet id + character name).
+     *
+     *     Exposes only what the UI needs to label the victor — the CharacterSheet PK
+     *     and the character's display name (ObjectDB.db_key). Read-only; no FK queries
+     *     beyond the select_related on the encounter queryset.
+     *
+     *     Note: CharacterSheet's primary key is the ``character`` OneToOneField to
+     *     ObjectDB, so there is no ``.id`` attribute — we read ``.pk`` explicitly via
+     *     ``source="pk"``.
+     */
+    DuelWinner: {
+      readonly id: number;
+      /**
+       * @description Return the character's display name (db_key).
+       *
+       *     ``obj`` is a CharacterSheet instance. ``character`` is a OneToOneField
+       *     to ObjectDB (select_related by the encounter queryset); db_key is a
+       *     plain column — no query.
+       */
+      readonly name: string;
+    };
     EffectRow: {
       kind: string;
       label: string;
@@ -14624,6 +14646,8 @@ export interface components {
       readonly escalation_tick_narration: string | null;
       readonly forced_escape: boolean;
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
+      readonly is_lethal: boolean;
+      readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
@@ -14674,9 +14698,10 @@ export interface components {
     /**
      * @description * `party_combat` - Party Combat
      *     * `open_encounter` - Open Encounter
+     *     * `duel` - Duel
      * @enum {string}
      */
-    EncounterTypeEnum: 'party_combat' | 'open_encounter';
+    EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
     /** @description Serializer for creating episodes */
     EpisodeCreate: {
       chapter: number;
@@ -17262,6 +17287,7 @@ export interface components {
        */
       readonly thumbnail_media_url: string | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly mirrors_participant_id: number | null;
     };
     /**
      * @description Read-only response serializer for the opponent-defaults preview endpoint.
