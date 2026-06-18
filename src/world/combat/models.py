@@ -25,6 +25,7 @@ from world.combat.constants import (
     ClashStatus,
     CombatManeuver,
     ComboLearningMethod,
+    DuelChallengeStatus,
     EncounterOutcome,
     EncounterStatus,
     EncounterType,
@@ -1993,3 +1994,70 @@ class EscalationCurve(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+# =============================================================================
+# DuelChallenge model (Task 4) — PC-vs-PC duel handshake
+# =============================================================================
+
+
+class DuelChallenge(SharedMemoryModel):
+    """A PC-vs-PC duel challenge handshake record.
+
+    Created when a challenger issues a duel request. Tracks the lifecycle
+    from PENDING (awaiting response) through ACCEPTED/DECLINED/WITHDRAWN/EXPIRED.
+    The partial unique constraint ensures at most one PENDING challenge exists
+    per (challenger_sheet, challenged_sheet) pair at any time.
+    """
+
+    challenger_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="duel_challenges_issued",
+        help_text="The PC who issued the challenge.",
+    )
+    challenged_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="duel_challenges_received",
+        help_text="The PC who was challenged.",
+    )
+    room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="duel_challenges",
+        null=True,
+        blank=True,
+        help_text="Room where the duel was challenged.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=DuelChallengeStatus.choices,
+        default=DuelChallengeStatus.PENDING,
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resulting_encounter = models.ForeignKey(
+        COMBAT_ENCOUNTER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duel_challenge",
+        help_text="The CombatEncounter opened when the challenge was accepted.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenger_sheet", "challenged_sheet"],
+                condition=Q(status=DuelChallengeStatus.PENDING),
+                name="unique_pending_duel_challenge_per_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"DuelChallenge({self.challenger_sheet_id} → {self.challenged_sheet_id} "
+            f"[{self.status}])"
+        )

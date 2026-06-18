@@ -9,6 +9,7 @@ from world.combat.constants import (
     ClashActionSlot,
     ClashFlavor,
     ComboLearningMethod,
+    DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
     LockPcRole,
@@ -34,6 +35,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    DuelChallenge,
     EncounterAftermathRule,
     EscalationCurve,
     StrainConfig,
@@ -687,6 +689,29 @@ def wire_flee_modifier_target():
         target_check_type=wire_flee_check_type(),
         is_active=True,
     )
+
+
+class DuelChallengeFactory(factory_django.DjangoModelFactory):
+    """Factory for DuelChallenge.
+
+    Creates a PENDING duel challenge between two fresh CharacterSheets.
+    Override challenger_sheet/challenged_sheet to test uniqueness constraints.
+    The room FK mirrors CombatEncounterFactory's lazy_attribute pattern —
+    creates a Room ObjectDB only when needed; pass room=None to omit it.
+    """
+
+    class Meta:
+        model = DuelChallenge
+
+    challenger_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    challenged_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    status = DuelChallengeStatus.PENDING
+
+    @factory.lazy_attribute
+    def room(self) -> object:
+        from evennia import create_object
+
+        return create_object("typeclasses.rooms.Room", key="Duel Challenge Room", nohome=True)
 
 
 class EscalationCurveFactory(factory_django.DjangoModelFactory):

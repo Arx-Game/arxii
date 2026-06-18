@@ -1,4 +1,5 @@
-from django.test import TestCase
+from django.db import IntegrityError
+from django.test import TestCase, tag
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
@@ -12,6 +13,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    DuelChallengeFactory,
 )
 from world.combat.services import select_npc_actions
 
@@ -54,3 +56,61 @@ class DuelMirrorOpponentTests(TestCase):
         self.assertTrue(mirror.is_duel_mirror)
         actions = select_npc_actions(enc)
         self.assertNotIn(mirror.id, [a.opponent_id for a in actions])
+
+
+class DuelChallengeModelTests(TestCase):
+    def test_default_status_is_pending(self):
+        challenge = DuelChallengeFactory()
+        self.assertEqual(challenge.status, DuelChallengeStatus.PENDING)
+
+    def test_resolved_at_and_resulting_encounter_default_to_null(self):
+        challenge = DuelChallengeFactory()
+        self.assertIsNone(challenge.resolved_at)
+        self.assertIsNone(challenge.resulting_encounter)
+
+    def test_created_at_is_set(self):
+        challenge = DuelChallengeFactory()
+        self.assertIsNotNone(challenge.created_at)
+
+    def test_challenger_and_challenged_related_names(self):
+        challenger = CharacterSheetFactory()
+        challenged = CharacterSheetFactory()
+        challenge = DuelChallengeFactory(
+            challenger_sheet=challenger,
+            challenged_sheet=challenged,
+        )
+        self.assertIn(challenge, list(challenger.duel_challenges_issued.all()))
+        self.assertIn(challenge, list(challenged.duel_challenges_received.all()))
+
+    def test_resulting_encounter_related_name(self):
+        encounter = CombatEncounterFactory()
+        challenge = DuelChallengeFactory(resulting_encounter=encounter)
+        self.assertEqual(encounter.duel_challenge.get(), challenge)
+
+    @tag("postgres")
+    def test_one_pending_challenge_per_pair(self):
+        c = DuelChallengeFactory()
+        with self.assertRaises(IntegrityError):
+            DuelChallengeFactory(
+                challenger_sheet=c.challenger_sheet,
+                challenged_sheet=c.challenged_sheet,
+            )
+
+    def test_non_pending_allows_second_row(self):
+        """A resolved challenge should not block a new PENDING one."""
+        from world.combat.models import DuelChallenge
+
+        c = DuelChallengeFactory(status=DuelChallengeStatus.DECLINED)
+        # A second challenge between the same pair in PENDING status must succeed.
+        new = DuelChallengeFactory(
+            challenger_sheet=c.challenger_sheet,
+            challenged_sheet=c.challenged_sheet,
+        )
+        self.assertEqual(new.status, DuelChallengeStatus.PENDING)
+        self.assertEqual(
+            DuelChallenge.objects.filter(
+                challenger_sheet=c.challenger_sheet,
+                challenged_sheet=c.challenged_sheet,
+            ).count(),
+            2,
+        )
