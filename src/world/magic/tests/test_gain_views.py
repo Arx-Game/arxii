@@ -320,6 +320,170 @@ class ResonanceGrantListTests(APITestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class StylePresentationEndorsementViewTests(APITestCase):
+    """POST /api/magic/style-presentation-endorsements/ — eligible → 201; ineligible → 400."""
+
+    def _build_scenario(self, *, private_scene: bool = False):
+        """Build endorser (with tenure/account), endorsee with worn-style, public or private scene.
+
+        Returns (endorser_sheet, endorsee_sheet, scene, resonance, endorser_account).
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.constants import BodyRegion, EquipmentLayer
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemStyleFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            StyleFactory,
+            TemplateSlotFactory,
+        )
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            MotifFactory,
+            MotifResonanceFactory,
+            MotifResonanceStyleFactory,
+            ResonanceFactory,
+        )
+        from world.magic.services.gain import account_for_sheet
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.constants import ScenePrivacyMode
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        endorser_tenure = RosterTenureFactory()
+        endorser_sheet = endorser_tenure.roster_entry.character_sheet
+        endorser_account = account_for_sheet(endorser_sheet)
+
+        endorsee_sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
+
+        # Wire up a MotifResonanceStyle binding + equipped item for the endorsee.
+        style = StyleFactory()
+        motif = MotifFactory(character=endorsee_sheet)
+        mr = MotifResonanceFactory(motif=motif, resonance=resonance)
+        MotifResonanceStyleFactory(motif_resonance=mr, style=style)
+
+        quality = QualityTierFactory(name=f"SPEVQual{style.pk}", stat_multiplier="1.00")
+        template = ItemTemplateFactory(name=f"SPEVItem{style.pk}")
+        TemplateSlotFactory(
+            template=template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        item = ItemInstanceFactory(template=template, quality_tier=quality)
+        ItemStyleFactory(item_instance=item, style=style, attachment_quality_tier=quality)
+        char = endorsee_sheet.character
+        EquippedItemFactory(
+            character=char,
+            item_instance=item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        char.equipped_items.invalidate()
+
+        privacy = ScenePrivacyMode.PRIVATE if private_scene else ScenePrivacyMode.PUBLIC
+        scene = SceneFactory(privacy_mode=privacy)
+        if private_scene and endorser_account is not None:
+            SceneParticipationFactory(scene=scene, account=endorser_account)
+
+        return endorser_sheet, endorsee_sheet, scene, resonance, endorser_account
+
+    def test_create_happy_path_returns_201_and_fires_grant(self) -> None:
+        from world.magic.models import CharacterResonance, StylePresentationEndorsement
+
+        _endorser, endorsee, scene, resonance, account = self._build_scenario()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.post(
+            "/api/magic/style-presentation-endorsements/",
+            data={"endorsee_sheet": endorsee.pk, "scene": scene.pk, "resonance": resonance.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(StylePresentationEndorsement.objects.count(), 1)
+        cr = CharacterResonance.objects.get(character_sheet=endorsee, resonance=resonance)
+        self.assertGreater(cr.balance, 0)
+
+    def test_create_ineligible_private_non_participant_returns_400(self) -> None:
+        """Private scene non-participant → 400 with validation detail."""
+        _endorser, endorsee, _scene, resonance, account = self._build_scenario(private_scene=False)
+        # Make the scene private without adding endorser as participant.
+        from world.scenes.constants import ScenePrivacyMode
+        from world.scenes.factories import SceneFactory
+
+        private_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PRIVATE)
+        self.client.force_authenticate(user=account)
+
+        response = self.client.post(
+            "/api/magic/style-presentation-endorsements/",
+            data={
+                "endorsee_sheet": endorsee.pk,
+                "scene": private_scene.pk,
+                "resonance": resonance.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.json())
+
+    def test_create_resonance_not_bound_to_worn_style_returns_400(self) -> None:
+        """Endorsee doesn't wear any item bound to the resonance → 400."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.services.gain import account_for_sheet
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.constants import ScenePrivacyMode
+        from world.scenes.factories import SceneFactory
+
+        endorser_tenure = RosterTenureFactory()
+        endorser_sheet = endorser_tenure.roster_entry.character_sheet
+        account = account_for_sheet(endorser_sheet)
+
+        endorsee_sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
+        # No MotifResonanceStyle binding → ineligible.
+
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        self.client.force_authenticate(user=account)
+
+        response = self.client.post(
+            "/api/magic/style-presentation-endorsements/",
+            data={
+                "endorsee_sheet": endorsee_sheet.pk,
+                "scene": scene.pk,
+                "resonance": resonance.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_delete_not_supported(self) -> None:
+        """StylePresentationEndorsement is immutable — DELETE returns 405."""
+        from world.magic.services.gain import create_style_presentation_endorsement
+
+        endorser, endorsee, scene, resonance, account = self._build_scenario()
+        endorsement = create_style_presentation_endorsement(endorser, endorsee, scene, resonance)
+        self.client.force_authenticate(user=account)
+
+        response = self.client.delete(
+            f"/api/magic/style-presentation-endorsements/{endorsement.pk}/"
+        )
+        self.assertEqual(response.status_code, 405)
+
+    def test_unauthenticated_returns_401_or_403(self) -> None:
+        _endorser, endorsee, scene, resonance, _ = self._build_scenario()
+
+        response = self.client.post(
+            "/api/magic/style-presentation-endorsements/",
+            data={"endorsee_sheet": endorsee.pk, "scene": scene.pk, "resonance": resonance.pk},
+            format="json",
+        )
+        self.assertIn(response.status_code, (401, 403))
+
+
 class StaffGrantActionTests(TestCase):
     def test_action_writes_ledger_row(self) -> None:
         from django.contrib.admin.sites import AdminSite
