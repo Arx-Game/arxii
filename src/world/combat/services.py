@@ -1097,6 +1097,12 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
         msg = "Cannot begin declaration phase: no active opponents in encounter."
         raise ValueError(msg)
 
+    # Belt-and-suspenders: reject a lethal PvP duel before declaration advances.
+    if enc.encounter_type == EncounterType.DUEL:
+        from world.combat.duels import assert_duel_lethality_valid  # noqa: PLC0415
+
+        assert_duel_lethality_valid(enc)
+
     enc.round_number += 1
     enc.status = EncounterStatus.DECLARING
     enc.round_started_at = timezone.now()

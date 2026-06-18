@@ -9,6 +9,7 @@ from world.combat.constants import (
     EncounterType,
     RiskLevel,
 )
+from world.combat.duels import assert_duel_lethality_valid
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -114,3 +115,33 @@ class DuelChallengeModelTests(TestCase):
             ).count(),
             2,
         )
+
+
+class DuelLethalityInvariantTests(TestCase):
+    """assert_duel_lethality_valid enforces: DUEL + 2 participants + LETHAL = forbidden."""
+
+    def _make_duel_enc(self, *, risk_level: str = RiskLevel.MODERATE) -> object:
+        return CombatEncounterFactory(encounter_type=EncounterType.DUEL, risk_level=risk_level)
+
+    def test_lethal_duel_with_two_participants_raises(self):
+        """DUEL + LETHAL + 2 participants → ValueError."""
+        enc = self._make_duel_enc(risk_level=RiskLevel.LETHAL)
+        CombatParticipantFactory(encounter=enc)
+        CombatParticipantFactory(encounter=enc)
+        with self.assertRaises(ValueError):
+            assert_duel_lethality_valid(enc)
+
+    def test_lethal_duel_with_one_participant_does_not_raise(self):
+        """DUEL + LETHAL + 1 participant (PC-vs-NPC) is valid."""
+        enc = self._make_duel_enc(risk_level=RiskLevel.LETHAL)
+        CombatParticipantFactory(encounter=enc)
+        # Must not raise.
+        assert_duel_lethality_valid(enc)
+
+    def test_non_lethal_pvp_duel_does_not_raise(self):
+        """DUEL + MODERATE + 2 participants is valid (normal spar)."""
+        enc = self._make_duel_enc(risk_level=RiskLevel.MODERATE)
+        CombatParticipantFactory(encounter=enc)
+        CombatParticipantFactory(encounter=enc)
+        # Must not raise.
+        assert_duel_lethality_valid(enc)

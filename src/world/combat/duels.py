@@ -40,6 +40,28 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 
+_PVP_PARTICIPANT_COUNT = 2  # two PC participants = PvP
+
+
+def assert_duel_lethality_valid(encounter: CombatEncounter) -> None:
+    """Raise ValueError if a DUEL encounter has two PC participants and is lethal.
+
+    Enforces the hard invariant: PC-vs-PC duels can never be lethal.
+    Called as a belt-and-suspenders guard in the begin-declaration path for DUEL
+    encounters, catching any construction path that bypasses ``create_pvp_duel``.
+
+    Args:
+        encounter: The CombatEncounter to validate.
+
+    Raises:
+        ValueError: If ``encounter.is_lethal`` and the encounter has two or more
+            PC participants (``CombatParticipant`` rows).
+    """
+    if encounter.is_lethal and encounter.participants.count() >= _PVP_PARTICIPANT_COUNT:
+        msg = "A DUEL encounter with two PC participants cannot be lethal."
+        raise ValueError(msg)
+
+
 def _make_mirror(enc: CombatEncounter, participant: CombatParticipant) -> CombatOpponent:
     """Create a passive mirror opponent surface for a PC participant.
 
