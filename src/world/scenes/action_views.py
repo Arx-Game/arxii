@@ -11,11 +11,14 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.registry import get_action
+from actions.types import TargetType
 from world.magic.exceptions import MagicError
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_filters import SceneActionRequestFilter
@@ -77,7 +80,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -91,11 +94,29 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         scene_id = serializer.validated_data["scene"]
         initiator_persona_id = serializer.validated_data["initiator_persona"]
-        target_persona_id = serializer.validated_data["target_persona"]
         action_key = serializer.validated_data["action_key"]
+        target_ids: list[int] = serializer.validated_data["target_ids"]
         difficulty_choice = serializer.validated_data.get(
             "difficulty_choice", DifficultyChoice.NORMAL
         )
+
+        # Cardinality validation: enforce the action's target_type against the
+        # normalised target_ids list.  Unknown / unregistered actions default to
+        # SINGLE (conservative — avoids silent multi-target dispatch).
+        registered_action = get_action(action_key)
+        cardinality = (
+            registered_action.target_type if registered_action is not None else TargetType.SINGLE
+        )
+        if cardinality == TargetType.SINGLE and len(target_ids) > 1:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action targets a single persona."}
+            )
+        if cardinality in (TargetType.AREA, TargetType.FILTERED_GROUP) and not target_ids:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action requires at least one target."}
+            )
+        if cardinality == TargetType.SELF and target_ids:
+            raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
 
         try:
             scene = Scene.objects.get(pk=scene_id, is_active=True)
@@ -113,7 +134,11 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
 
-        target_persona = get_object_or_404(Persona, pk=target_persona_id)
+        primary_id = target_ids[0] if target_ids else None
+        target_persona = (
+            get_object_or_404(Persona, pk=primary_id) if primary_id is not None else None
+        )
+        additional = [get_object_or_404(Persona, pk=pk) for pk in target_ids[1:]]
 
         technique = None
         technique_id = serializer.validated_data.get("technique_id")
@@ -146,6 +171,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 strain_commitment=strain_commitment,
                 delivery=delivery,
                 delivery_receivers=delivery_receivers,
+                additional_target_personas=additional,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]

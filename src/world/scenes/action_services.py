@@ -108,7 +108,7 @@ def create_action_request(  # noqa: PLR0913
     *,
     scene: Scene,
     initiator_persona: Persona,
-    target_persona: Persona,
+    target_persona: Persona | None,
     action_key: str,
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
@@ -116,6 +116,7 @@ def create_action_request(  # noqa: PLR0913
     strain_commitment: int = 0,
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
+    additional_target_personas: list[Persona] | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -147,6 +148,10 @@ def create_action_request(  # noqa: PLR0913
             the template's default_delivery at resolution time.
         delivery_receivers: Explicit WHISPER audience. Empty/None = the
             action target alone.
+        additional_target_personas: Optional additional targets beyond the
+            primary (``target_persona``). Each persona gets a ``SceneActionTarget``
+            row. NPC additional targets are auto-resolved immediately (#572);
+            PC additional targets stay PENDING until they respond.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -190,6 +195,11 @@ def create_action_request(  # noqa: PLR0913
     )
     if delivery_receivers:
         request.delivery_receivers.set(delivery_receivers)
+    additional = additional_target_personas or []
+    for persona in additional:
+        SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+    if additional:  # multi-target only — single-target path unchanged
+        _auto_resolve_npc_targets(request)
     return request
 
 
