@@ -1,8 +1,13 @@
 # Power Derivation Pipeline (#524 → #639 / Direction B)
 
 **Status:** fully built and wired (Issues #524–#639).
-**Companion docs:** `docs/architecture/power-intensity-research.md` (landscape + candidate
-directions), `docs/architecture/power-intensity-research-critique.md`.
+**Companion docs:** `docs/architecture/technique-use-pipeline.md` (How Magic Works — the
+end-to-end cast lifecycle this pipeline sits inside), `docs/architecture/power-intensity-research.md`
+(landscape + candidate directions), `docs/architecture/power-intensity-research-critique.md`.
+
+This doc is the **authoritative reference for power derivation**: the stages, the
+penetration contest, and how the ledger is surfaced. For the wider cast lifecycle
+(entry paths, intensity-vs-power costs/risks, narration) read the companion above.
 
 ---
 
@@ -40,24 +45,79 @@ Caster-side calculations always read `stats.intensity`; world-side calculations 
 (`LedgerOp`: `ADD / MULTIPLY / SET`), an `amount`, and a running total. `ledger.total`
 is the effective power (floored at 0).
 
-### 3.1 Stage ordering (build order inside `_derive_power`)
+### 3.1 Stage ordering — the three assembly phases
+
+Power is assembled in **three phases**, in this exact execution order. Phases 1
+and 2 run on every cast; phase 3 runs only on the combat path. The `CLAMP` floor
+(≥ 0) is appended *implicitly* by every `PowerLedgerBuilder.build()` whenever the
+running total has gone negative — it is never invoked as a separate step.
+
+```mermaid
+flowchart TD
+    subgraph P1["Phase 1 · _derive_power (every cast)"]
+        direction TB
+        BASE["1 · BASE — SET to channeled intensity<br/>(stats.intensity + clash power_intensity_bonus)"]
+        MULT["2 · MULTIPLIER — ×(1 + Σ%/100), single aggregate"]
+        FLAT["3 · FLAT_MODIFIER — ADD per source"]
+        TERM["4 · TERM — ADD per provider (level, aura, thread)"]
+        ENV["5 · ENVIRONMENT — ADD iff ALIGNED AMPLIFY"]
+        BASE --> MULT --> FLAT --> TERM --> ENV
+    end
+    ENV --> C1{{"CLAMP ≥ 0 (implicit in build)"}}
+    C1 --> EMIT["emit TECHNIQUE_PRE_CAST (mutable payload)"]
+    subgraph P2["Phase 2 · pre-cast reactive (in use_technique)"]
+        direction TB
+        EMIT --> REACT["6 · REACTIVE — ADD signed delta<br/>iff a MODIFY_PAYLOAD hook edited payload.power"]
+    end
+    REACT --> BR{combat path?}
+    BR -- "no (scene / clash)" --> OUT["effective power = ledger.total"]
+    subgraph P3["Phase 3 · CombatTechniqueResolver (combat only)"]
+        direction TB
+        PULL["7 · COMBAT_PULL — ADD INTENSITY_BUMP pulls"]
+        PEN["8 · PENETRATION — vs ward (see §4)"]
+        PULL --> PEN
+    end
+    BR -- yes --> PULL
+    PEN --> C2{{"CLAMP ≥ 0 (implicit in build)"}}
+    C2 --> OUT
+```
+
+**Phase 1 — `_derive_power` (every cast), build order:**
 
 | # | Stage | Source | How applied |
 |---|-------|--------|-------------|
-| 1 | **BASE** | `stats.intensity` from `get_runtime_technique_stats` (identity + process modifiers, Audere intensity, tier penalty, social safety) | `SET` to channeled intensity |
+| 1 | **BASE** | The channeled intensity passed in: `stats.intensity` from `get_runtime_technique_stats` (identity + process modifiers, Audere intensity, tier penalty, social safety) plus the clash `power_intensity_bonus` (`strain_to_intensity` — power-only, never anima) | `SET` to channeled intensity |
 | 2 | **MULTIPLIER** | `power_multiplier` `ModifierTarget` via `get_modifier_breakdown` + `get_condition_modifier_breakdown`. Immunity-blocked sources excluded. | Single aggregate `×(1 + Σ%/100)` applied to BASE only — one `multiply` call, never per-source, to avoid repeated rounding drift |
 | 3 | **FLAT_MODIFIER** | Per-source additive power modifiers via `get_modifier_breakdown` (immunity-blocked excluded) + per-condition rows via `get_condition_modifier_breakdown` | `ADD` per non-zero source |
-| 4 | **TERM** | `get_power_term_providers()` — level, aura, and thread all live (#768) | `ADD` per provider |
+| 4 | **TERM** | `get_power_term_providers()` — `level`, `aura`, and `thread` all live (#768), applied in registry order | `ADD` per provider |
 | 5 | **ENVIRONMENT** | Cast-time `evaluate_resonance_environment` AMPLIFY magnitude only | `ADD` if `kind == AMPLIFY and magnitude > 0` |
 
-Then, in the combat resolver (`CombatTechniqueResolver.__call__`):
+`_derive_power` returns `builder.clamp_floor().build()`, so a `CLAMP` entry is
+appended at the end of phase 1 if the running total is already negative.
+
+**Phase 2 — pre-cast reactive (in `use_technique`, after the `TECHNIQUE_PRE_CAST` emit):**
 
 | # | Stage | Source | How applied |
 |---|-------|--------|-------------|
-| 6 | **COMBAT_PULL** | INTENSITY_BUMP pulls via `_sum_intensity_bump_pulls` | `ADD` |
-| 7 | **PENETRATION** | `get_penetration_factor(pen_result.success_level)` from the authored `PenetrationOutcomeFactor` ladder (see §4) | `SET 0` (bounce), `SET total` (clean penetration), or `multiply` by `(factor−1)×100` pct |
-| — | **REACTIVE** | A pre-cast `MODIFY_PAYLOAD` edit to `payload.power` (appended after the emit, outside `_derive_power`) | `ADD` delta between hook output and seed ledger total |
-| — | **CLAMP** | Floor at 0 | `SET 0` if total < 0 |
+| 6 | **REACTIVE** | A pre-cast `MODIFY_PAYLOAD` trigger edit to `payload.power`, reconciled by `_reconcile_precast_ledger` after the event is emitted and **before** the resolver runs | `ADD` signed delta between the hook-edited `payload.power` and the seed ledger total (only when a hook changed it) |
+
+On the non-combat (scene) and clash paths, `ledger.total` after phase 2 *is* the
+effective power — phase 3 does not run.
+
+**Phase 3 — combat resolver (`CombatTechniqueResolver.__call__`, combat path only):**
+
+| # | Stage | Source | How applied |
+|---|-------|--------|-------------|
+| 7 | **COMBAT_PULL** | INTENSITY_BUMP pulls via `_sum_intensity_bump_pulls` | `ADD` |
+| 8 | **PENETRATION** | `get_penetration_factor(pen_result.success_level)` from the authored `PenetrationOutcomeFactor` ladder (see §4) | `SET 0` (bounce), `SET total` (clean penetration), or `multiply` by `(factor−1)×100` pct |
+
+The resolver's `build()` re-applies the `CLAMP` floor, so a ward or pull that
+drives power negative still resolves to 0.
+
+> **Execution order, exactly:** `BASE → MULTIPLIER → FLAT_MODIFIER → TERM →
+> ENVIRONMENT → [CLAMP] → [REACTIVE] → COMBAT_PULL → PENETRATION → [CLAMP]`.
+> `REACTIVE` lands *before* `COMBAT_PULL`/`PENETRATION` because it is reconciled in
+> `use_technique` before the combat resolver receives the ledger.
 
 ### 3.2 Stacking model
 
@@ -83,9 +143,10 @@ Only AMPLIFY (ALIGNED diagonal) adds power here. Double-count guards:
 
 ### 3.4 REACTIVE entry
 
-After `TECHNIQUE_PRE_CAST` is emitted, `use_technique` reads `pre_payload.power`. If a trigger
-edited it via `MODIFY_PAYLOAD`, the signed delta is appended as a `REACTIVE` entry so the ledger
-stays internally consistent (`ledger.total == effective_power`). The ledger's floor (≥0) then
+After `TECHNIQUE_PRE_CAST` is emitted, `_reconcile_precast_ledger` reads `pre_payload.power`. If a
+trigger edited it via `MODIFY_PAYLOAD`, the signed delta is appended as a `REACTIVE` entry so the
+ledger stays internally consistent (`ledger.total == effective_power`). This happens **before** the
+combat resolver runs (phase 2, ahead of `COMBAT_PULL`/`PENETRATION`). The ledger's floor (≥0) then
 becomes the canonical `effective_power`, ensuring a ward-driven 0 is honoured even if the hook
 pushed power negative.
 
@@ -102,6 +163,25 @@ via `get_penetration_factor(success_level)` (`world/conditions/services.py`). Th
 queryset of `PenetrationOutcomeFactor` rows ordered by `min_success_level`; the highest
 matching row's `factor` is returned (default `Decimal("1.00")` when no row matches — an
 unauthored ladder must never accidentally zero out a working).
+
+```mermaid
+flowchart TD
+    START{"focused opponent has<br/>barrier_strength &gt; 0?"}
+    START -- no --> NOPEN["no PENETRATION entry<br/>power unchanged"]
+    START -- yes --> CHECK["perform_check vs barrier_strength<br/>(difficulty = ward, + pen modifiers)"]
+    CHECK --> FACTOR["get_penetration_factor(success_level)<br/>highest matching PenetrationOutcomeFactor row<br/>(default 1.00)"]
+    FACTOR --> F0["factor = 0<br/>PENETRATION SET 0 · bounced=True<br/>damage + conditions short-circuit"]
+    FACTOR --> F1["factor = 1.00<br/>PENETRATION SET total<br/>clean penetration · power unchanged"]
+    FACTOR --> FP["0 &lt; factor &lt; 1<br/>PENETRATION ×(factor−1)·100%<br/>partial · power reduced"]
+    FACTOR --> FO["factor &gt; 1<br/>PENETRATION ×(factor−1)·100%<br/>overpenetration · power amplified"]
+    F1 --> SOAK["downstream: apply_damage_to_opponent<br/>soaks damage-type resistance once"]
+    FP --> SOAK
+    FO --> SOAK
+    NOPEN --> SOAK
+```
+
+`barrier_strength` is the **ward gate** only; damage-type **resistance/soak** is a
+separate, downstream step (see "No double-counting" below). The two never interact.
 
 **Outcomes by factor value:**
 
@@ -143,9 +223,12 @@ The ledger rides the event payloads throughout the pipeline:
 This is caster- and staff-gated on the action-outcome panel — the same ledger data,
 surfaced through the clash contribution's interaction record.
 
-Combat narration reads the ledger via `_power_outcome_clause(power_ledger)` in
-`world/combat/interaction_services.py`, which folds a concise ward/environment outcome clause
-into the `render_action_outcome_narration` line:
+Narration reads the ledger via `power_outcome_clause(power_ledger)` in
+`world/magic/narration.py` (composed from the `_penetration_clause` and
+`_environment_clause` helpers there). `render_action_outcome_narration`
+(`world/combat/interaction_services.py`) calls it to fold a concise ward/environment
+outcome clause into the combat outcome line; `render_cast_outcome_narration`
+(`world/magic/narration.py`) does the same for non-combat scene casts:
 
 - Full bounce → `"— the ward turns it aside"`
 - Partial penetration → `"— the ward bleeds off much of its force"`
@@ -162,12 +245,13 @@ into the `render_action_outcome_narration` line:
 |--------|--------|
 | `PowerLedger`, `PowerLedgerEntry`, `PowerLedgerBuilder` | `world/magic/types/power_ledger.py` |
 | `PowerStage`, `LedgerOp` | `world/magic/constants.py` |
-| `_derive_power` | `world/magic/services/techniques.py` |
+| `_derive_power`, `_reconcile_precast_ledger`, `use_technique` | `world/magic/services/techniques.py` |
 | `get_modifier_breakdown` | `world/mechanics/services.py` |
 | `get_condition_modifier_breakdown` | `world/conditions/services.py` |
 | `get_penetration_factor`, `PenetrationOutcomeFactor` | `world/conditions/services.py`, `world/conditions/models.py` |
-| `CombatTechniqueResolver._apply_penetration` | `world/combat/services.py` |
-| `_power_outcome_clause`, `render_action_outcome_narration` | `world/combat/interaction_services.py` |
+| `CombatTechniqueResolver` (`__call__`, `_apply_penetration`) | `world/combat/services.py` |
+| `power_outcome_clause`, `_penetration_clause`, `_environment_clause`, `render_cast_outcome_narration` | `world/magic/narration.py` |
+| `render_action_outcome_narration` | `world/combat/interaction_services.py` |
 | `evaluate_resonance_environment` | `world/magic/services/resonance_environment.py` |
 | `strain_to_intensity`, `outcome_to_delta` | `world/combat/clash.py` |
 | `ClashConfig` (power-formula knobs: `power_scale`, `botch_backfire_fraction`) | `world/combat/models.py` |
@@ -185,3 +269,7 @@ into the `render_action_outcome_narration` line:
   MULTIPLIER/FLAT/TERM/ENVIRONMENT/REACTIVE stages; introduced the penetration-vs-resistance
   contest and the `PenetrationOutcomeFactor` ladder; wired the ledger through combat resolution
   and narration; evaluate-once environment guard.
+- **#769** — added the mermaid diagrams (assembly phases + penetration contest); corrected the
+  §3.1 stage table to the as-built execution order (`REACTIVE` lands before `COMBAT_PULL`, not
+  after `PENETRATION`); fixed the narration symbol references (`power_outcome_clause` lives in
+  `world/magic/narration.py`, not `interaction_services.py`).

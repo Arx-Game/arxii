@@ -104,7 +104,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
 - **Source:** `src/world/magic/`
-- **Details:** [magic.md](magic.md)
+- **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
+  [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
+  penetration contest: [power-derivation.md](../architecture/power-derivation.md)
 
 ### Traits
 Character statistics and dice rolling mechanics.
