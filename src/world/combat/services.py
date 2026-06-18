@@ -268,6 +268,7 @@ class CombatTechniqueResolver:
         breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
+            scene=self.participant.encounter.scene,
             extra_contributions=extra_contributions,
         )
         extra_modifiers = breakdown.total
@@ -491,6 +492,7 @@ class CombatTechniqueResolver:
         pen_breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             pen_check_type,
+            scene=self.participant.encounter.scene,
         )
         pen_result = perform_check(
             caster,
@@ -2565,7 +2567,23 @@ def resolve_npc_attack(
                 ),
             )
 
-    result: CheckResult = perform_check_fn(character, check_type)
+    # Route the defensive check through the shared modifier seam so it honors
+    # every character-side source — fashion (perception-relative, scene-derived),
+    # covenant-role / equipment-walk, persistent CharacterModifiers, and
+    # conditions — exactly as the offense roll does (#750, #512). The perceiving
+    # society is derived from the encounter's scene; ``collect_check_modifiers``
+    # self-limits (a fashion bonus only lands when ``check_type`` has a scoped
+    # modifier_target and the scene's society has a matching in-vogue style).
+    breakdown = collect_check_modifiers(
+        participant.character_sheet,
+        check_type,
+        scene=participant.encounter.scene,
+    )
+    result: CheckResult = perform_check_fn(
+        character,
+        check_type,
+        extra_modifiers=breakdown.total,
+    )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
     base_damage = opponent_action.threat_entry.base_damage
@@ -2756,6 +2774,7 @@ def _resolve_flee(
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         config.check_type,
+        scene=encounter.scene,
         extra_contributions=extra_contributions,
     )
 
@@ -3418,7 +3437,7 @@ def _apply_aftermath_rules(
     for participant in affected:
         sheet = participant.character_sheet
         character = sheet.character
-        breakdown = collect_check_modifiers(sheet, rule.check_type)
+        breakdown = collect_check_modifiers(sheet, rule.check_type, scene=encounter.scene)
         pending = select_consequence(
             character,
             rule.check_type,

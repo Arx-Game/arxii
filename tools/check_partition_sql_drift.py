@@ -37,6 +37,26 @@ SRC_DIR = PROJECT_ROOT / "src"
 FORWARD_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_forward.sql"
 REVERSE_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_reverse.sql"
 
+# Columns that live on the current Interaction model but MUST NOT appear in the
+# partition SQL, because they are added AFTER the partition migration runs.
+#
+# The partition SQL (scenes/0004) rewrites scenes_interaction from scratch by
+# renaming the existing table to _old, CREATE-ing a partitioned replacement, and
+# copying rows via INSERT ... SELECT ... FROM scenes_interaction_old. That SQL is
+# a frozen snapshot of the schema AS OF migration 0004 — only columns that exist
+# on scenes_interaction_old at that point may be referenced.
+#
+# `fury_committed_id` is a FK to magic.FuryTier, which is only created in
+# magic/0033. It therefore CANNOT be a pre-partition column; it is added later by
+# scenes/0024 as a plain AddField. On Postgres, ALTER TABLE ... ADD COLUMN on a
+# partitioned table cascades to every partition, so the column is correctly
+# present after 0024 — just intentionally absent from the partition SQL.
+#
+# These columns are subtracted from the model-column set before comparing to the
+# SQL, so the hook still catches drift for every OTHER column. Adding an entry
+# here is a deliberate "this column is post-partition by construction" assertion.
+POST_PARTITION_COLUMNS = {"fury_committed_id"}
+
 
 def _setup_django() -> None:
     """Configure Django so we can import models — mirrors check_migrations.py."""
@@ -113,7 +133,10 @@ def _columns_from_insert(sql_text: str) -> set[str]:
 
 def main() -> int:
     _setup_django()
-    model_columns = _interaction_columns_from_model()
+    # Exclude columns that are intentionally post-partition (see
+    # POST_PARTITION_COLUMNS) so the SQL — a snapshot as of the partition
+    # migration — isn't required to list them.
+    model_columns = _interaction_columns_from_model() - POST_PARTITION_COLUMNS
 
     issues: list[str] = []
 

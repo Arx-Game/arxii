@@ -38,12 +38,17 @@ CREATE TABLE scenes_interaction (
     mode             varchar(20) NOT NULL,
     visibility       varchar(20) NOT NULL,
     pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
-    vote_count       integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
-    strain_committed integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
-    "timestamp"      timestamptz NOT NULL,
-    persona_id       bigint NOT NULL,
-    scene_id         bigint,
-    place_id         bigint,
+    vote_count            integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
+    strain_committed      integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
+    -- NOTE: fury_committed_id is intentionally absent here. It is a FK to
+    -- magic.FuryTier, which only exists after magic/0033, so it cannot be a
+    -- pre-partition column. It is added post-partition by scenes/0024 as a plain
+    -- AddField -- on Postgres, ALTER TABLE ADD COLUMN cascades to all partitions.
+    -- See POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py
+    "timestamp"           timestamptz NOT NULL,
+    persona_id            bigint NOT NULL,
+    scene_id              bigint,
+    place_id              bigint,
     PRIMARY KEY (id, "timestamp")
 ) PARTITION BY RANGE ("timestamp");
 

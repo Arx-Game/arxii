@@ -128,3 +128,50 @@ class ConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition} via {self.check_type}"
+
+
+class RemoveConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
+    """Remove a condition from the target, gated by a check roll.
+
+    The mirror of ConditionOnCheckConfig — instead of applying a condition on
+    success, this removes one. Used for actions like "Restore to Sense" that
+    clear a Berserk state when the actor wins a check against the target.
+
+    Difficulty resolution:
+    - If resistance_check_type is set and the target has traits, compute
+      difficulty from the target's weighted trait points.
+    - If target_difficulty is set, use it as a fixed fallback (NPCs, missions).
+    - If both are set, resistance_check_type takes precedence for real characters.
+    """
+
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Attacker's check type (weighted trait combination).",
+    )
+    resistance_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Defender's resistance check type. Null = use target_difficulty.",
+    )
+    target_difficulty = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Fixed difficulty fallback for NPCs/missions.",
+    )
+    condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Condition to remove on successful check.",
+    )
+
+    class Meta(BaseEffectConfig.Meta):
+        pass
+
+    def __str__(self) -> str:
+        return f"remove {self.condition} via {self.check_type}"

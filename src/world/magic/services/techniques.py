@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from evennia_extensions.models import RoomProfile
@@ -695,6 +696,7 @@ def use_technique(  # noqa: PLR0913
     applicable_threads: Sequence[ApplicableThread] | None = None,
     cast_pull: CastPullDeclaration | None = None,
     power_intensity_bonus: int = 0,
+    control_penalty: int = 0,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -708,6 +710,12 @@ def use_technique(  # noqa: PLR0913
     cast's effective power without changing the anima the caster pays. Defaults to
     ``0`` so every existing caller is unaffected. Negative values are clamped to 0.
 
+    ``control_penalty`` is subtracted from the runtime control stat immediately after
+    ``get_runtime_technique_stats`` computes it, floored at 0. The lowered control
+    flows into both ``calculate_effective_anima_cost`` (raises effective cost) and
+    ``_resolve_control_mishap`` (increases mishap likelihood). Defaults to ``0`` so
+    all existing callers are unaffected.
+
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
     - TECHNIQUE_CAST (post-resolve, frozen)
@@ -717,6 +725,8 @@ def use_technique(  # noqa: PLR0913
 
     # Step 1: Calculate runtime stats
     stats = get_runtime_technique_stats(technique, character)
+    if control_penalty:
+        stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
     # Step 2: Calculate effective anima cost
     anima = CharacterAnima.objects.get(character=character)

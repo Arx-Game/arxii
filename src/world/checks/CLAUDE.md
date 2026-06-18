@@ -34,6 +34,20 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 3. Extra modifiers from caller (goals, magic, combat, conditions)
 4. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
 
+## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
+
+Central aggregator (`services.py`) that gathers condition / rollmod / scene /
+equipment / CHARACTER / equipment-walk / **fashion** contributions into one
+`ModifierBreakdown`. Pass `scene=` to enable the **perception-relative fashion
+bonus**: `_character_and_equipment_contributions` resolves the perceiving
+societies via `world.areas.services.societies_for_scene(scene)`
+(`Area.dominant_society`, else all societies sharing the realm) and takes the
+**max** `fashion_outfit_bonus` across them. Society-blind callers pass no
+`scene` and are unaffected. Combat funnels every participant check (offense,
+penetration, flee, environmental, clash, **and defense** via `resolve_npc_attack`)
+through this seam with `scene=encounter.scene`, so fashion/covenant/conditions
+apply uniformly to attack and defense (#750/#512).
+
 ## Integration Points
 
 - **Traits app**: Uses PointConversionRange, CheckRank, ResultChart, CheckOutcome

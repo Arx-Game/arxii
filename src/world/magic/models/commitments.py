@@ -16,6 +16,22 @@ class CommittingDeclaration(models.Model):
             "Bounded by available anima at resolution time."
         ),
     )
+    fury_commitment = models.ForeignKey(
+        "magic.FuryTier",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Declared Fury tier for this action (null = no fury).",
+    )
+    fury_anchor = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Harmed entity the rage answers to; bond strength caps the tier.",
+    )
 
     class Meta:
         abstract = True

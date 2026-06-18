@@ -243,6 +243,7 @@ def commit_to_clash(  # noqa: PLR0913
     breakdown = collect_check_modifiers(
         character_sheet,
         check_type,
+        scene=clash.encounter.scene,
         extra_contributions=extra_contributions,
     )
     check_extra_modifiers = breakdown.total

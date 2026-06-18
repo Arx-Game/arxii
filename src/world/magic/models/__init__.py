@@ -73,6 +73,7 @@ from world.magic.models.endorsement import (
     SceneEntryEndorsement,
     StylePresentationEndorsement,
 )
+from world.magic.models.fury import FuryConfig, FuryTier
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
     CharacterGift,
@@ -208,6 +209,9 @@ __all__ = [
     "EntryFlourishRecord",
     "Facet",
     "FacetManager",
+    # fury lever
+    "FuryConfig",
+    "FuryTier",
     "Gift",
     "GiftManager",
     # rituals
