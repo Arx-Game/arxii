@@ -338,24 +338,20 @@ def _resolve_standard_action(
                 fury_anchor=action_request.fury_anchor,
             )
         else:
-            from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
-
-            fury_res = run_fury_for_action(
-                character=character,
-                fury_commitment=action_request.fury_commitment,
-                fury_anchor=action_request.fury_anchor,
-            )
+            # Plain (non-technique) actions do not use the fury lever; fury is a
+            # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
+            # inside use_technique). The serializer rejects fury_commitment_id on
+            # plain actions, so fury_commitment is always None here.
             action_resolution = start_action_resolution(
                 character=character,
                 template=action_template,
                 target_difficulty=difficulty,
                 context=context,
-                extra_modifiers=fury_res.intensity_bonus if fury_res else 0,
             )
             result = EnhancedSceneActionResult(
                 action_resolution=action_resolution,
                 action_key=action_request.action_key,
-                fury_committed=fury_res.realized_tier if fury_res else None,
+                fury_committed=None,
             )
 
         action_request.status = ActionRequestStatus.RESOLVED

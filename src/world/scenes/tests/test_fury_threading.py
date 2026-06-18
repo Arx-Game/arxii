@@ -150,10 +150,12 @@ class SerializerFuryCapRejectionTests(TestCase):
             SceneActionRequestCreateSerializer,
         )
 
-        # No relationship → provocation_cap = 0 → any tier is rejected
+        # No relationship → provocation_cap = 0 → any tier is rejected.
+        # technique_id provided so validation reaches the cap check.
         initiator = PersonaFactory()
         anchor = PersonaFactory()
         tier = FuryTierFactory(name="HighTierNoBond", depth=3)
+        technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
             data={
@@ -161,6 +163,7 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "initiator_persona": initiator.pk,
                 "target_persona": anchor.pk,
                 "action_key": "intimidate",
+                "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
                 "fury_anchor_id": anchor.character_sheet.pk,
             }
@@ -176,6 +179,7 @@ class SerializerFuryCapRejectionTests(TestCase):
         _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
             tier_depth=2, bond_tier_number=2
         )
+        technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
             data={
@@ -183,11 +187,39 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "initiator_persona": initiator.pk,
                 "target_persona": anchor.pk,
                 "action_key": "intimidate",
+                "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
                 "fury_anchor_id": anchor.character_sheet.pk,
             }
         )
         self.assertTrue(ser.is_valid(), msg=ser.errors)
+
+    def test_fury_on_plain_action_rejected(self) -> None:
+        """fury_commitment_id on a plain action (no technique_id) is rejected."""
+        from rest_framework.exceptions import ValidationError
+
+        from world.scenes.action_serializers import (
+            SceneActionRequestCreateSerializer,
+        )
+
+        _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
+            tier_depth=2, bond_tier_number=2
+        )
+
+        ser = SceneActionRequestCreateSerializer(
+            data={
+                "scene": _scene.pk,
+                "initiator_persona": initiator.pk,
+                "target_persona": anchor.pk,
+                "action_key": "intimidate",
+                # No technique_id — plain action
+                "fury_commitment_id": tier.pk,
+                "fury_anchor_id": anchor.character_sheet.pk,
+            }
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            ser.is_valid(raise_exception=True)
+        self.assertIn("fury_commitment_id", ctx.exception.detail)
 
     def test_fury_anchor_required_when_commitment_declared(self) -> None:
         from rest_framework.exceptions import ValidationError
@@ -199,6 +231,7 @@ class SerializerFuryCapRejectionTests(TestCase):
         initiator = PersonaFactory()
         anchor = PersonaFactory()
         tier = FuryTierFactory(name="NeedsAnchorTier", depth=1)
+        technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
             data={
@@ -206,6 +239,7 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "initiator_persona": initiator.pk,
                 "target_persona": anchor.pk,
                 "action_key": "intimidate",
+                "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
                 # fury_anchor_id omitted
             }
@@ -237,6 +271,7 @@ class SerializerBerserkBlockTests(TestCase):
         _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
             tier_depth=2, bond_tier_number=2
         )
+        technique = TechniqueFactory(damage_profile=False)
 
         # Plant a Berserk ConditionInstance directly (avoids DISTINCT ON in apply_condition).
         ConditionInstanceFactory(
@@ -251,6 +286,7 @@ class SerializerBerserkBlockTests(TestCase):
                 "initiator_persona": initiator.pk,
                 "target_persona": anchor.pk,
                 "action_key": "intimidate",
+                "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
                 "fury_anchor_id": anchor.character_sheet.pk,
             }

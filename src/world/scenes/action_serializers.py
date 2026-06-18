@@ -24,6 +24,14 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
     if not fury_commitment_id:
         return attrs
 
+    # Fury is a technique-cast-only lever: reject if no technique is declared.
+    # (SceneActionRequestCreateSerializer exposes technique_id; TechniqueCastCreateSerializer
+    # always has technique_id — so the guard is the same for both callers.)
+    if not attrs.get("technique_id"):
+        raise serializers.ValidationError(
+            {"fury_commitment_id": "Fury can only be declared on technique-enhanced actions."}
+        )
+
     fury_anchor_id = attrs.get("fury_anchor_id")
     if not fury_anchor_id:
         raise serializers.ValidationError(
