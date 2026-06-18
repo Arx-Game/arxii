@@ -35,6 +35,10 @@ def complete_story(*, story: Story) -> Story:
     story.status = StoryStatus.COMPLETED
     story.completed_at = timezone.now()
     story.save(update_fields=["status", "completed_at"])
+    # is_active=True is the operational form of "active and not yet terminal":
+    # set_progress_status keeps is_active False ⟺ COMPLETED/FORECLOSED, so this
+    # filter already excludes genuinely-completed runs (preserved truthfully) and
+    # already-foreclosed ones. Do NOT add a separate .exclude(status=COMPLETED).
     for model in _PROGRESS_MODELS:
         for progress in model.objects.filter(story=story, is_active=True):
             set_progress_status(progress, ProgressStatus.FORECLOSED)
