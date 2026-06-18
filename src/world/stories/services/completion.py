@@ -38,4 +38,26 @@ def complete_story(*, story: Story) -> Story:
     for model in _PROGRESS_MODELS:
         for progress in model.objects.filter(story=story, is_active=True):
             set_progress_status(progress, ProgressStatus.FORECLOSED)
+    _dissolve_linked_campaigns(story)
     return story
+
+
+def _dissolve_linked_campaigns(story: Story) -> None:
+    """Dissolve every still-active CAMPAIGN covenant this story's conclusion ends.
+
+    Reuses the existing dissolve_covenant path (ends memberships + clears
+    engagement). STANDING covenants are filtered out by battle_binding and so
+    persist through their own stand-down lifecycle. Lazy imports keep the
+    stories -> covenants dependency one-directional.
+    """
+    from world.covenants.constants import BattleBinding  # noqa: PLC0415
+    from world.covenants.models import Covenant  # noqa: PLC0415
+    from world.covenants.services import dissolve_covenant  # noqa: PLC0415
+
+    campaigns = Covenant.objects.filter(
+        campaign_story=story,
+        battle_binding=BattleBinding.CAMPAIGN,
+        dissolved_at__isnull=True,
+    )
+    for covenant in campaigns:
+        dissolve_covenant(covenant=covenant)
