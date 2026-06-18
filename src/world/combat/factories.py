@@ -749,6 +749,55 @@ class PvpDuelFactory:
         return create_pvp_duel(challenger_sheet, challenged_sheet, room, risk_level=risk_level)
 
 
+class LethalDuelFactory:
+    """Compose a lethal PC-vs-significant-NPC duel encounter in one call.
+
+    Not a DjangoModelFactory (the setup is a service, not a single model).
+    Wraps ``create_lethal_duel``; creates a fresh ThreatPool when none is
+    supplied so callers can omit ``opponent_kwargs`` entirely.
+
+    Usage::
+
+        duel = LethalDuelFactory.create(pc_sheet=sheet, room=room)
+        # duel is a CombatEncounter with risk_level=LETHAL in DECLARING status.
+
+        # Custom NPC stats:
+        pool = ThreatPoolFactory()
+        duel = LethalDuelFactory.create(
+            pc_sheet=sheet,
+            room=room,
+            opponent_kwargs={"name": "The Champion", "max_health": 300, "threat_pool": pool},
+            tier=OpponentTier.BOSS,
+        )
+    """
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        pc_sheet: object | None = None,
+        room: object | None = None,
+        opponent_kwargs: dict | None = None,
+        tier: str = OpponentTier.ELITE,
+    ) -> CombatEncounter:
+        from evennia import create_object
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.duels import create_lethal_duel
+
+        if pc_sheet is None:
+            pc_sheet = CharacterSheetFactory()
+        if room is None:
+            room = create_object("typeclasses.rooms.Room", key="Lethal Duel Room", nohome=True)
+        if opponent_kwargs is None:
+            opponent_kwargs = {
+                "name": "Dueling Master",
+                "max_health": 200,
+                "threat_pool": ThreatPoolFactory(),
+            }
+        return create_lethal_duel(pc_sheet, opponent_kwargs, room, tier=tier)
+
+
 class EscalationCurveFactory(factory_django.DjangoModelFactory):
     """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
 

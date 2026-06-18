@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
-from world.combat.constants import EncounterStatus, EncounterType, RiskLevel
+from world.combat.constants import EncounterStatus, EncounterType, OpponentTier, RiskLevel
 from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
 from world.combat.services import acknowledge_encounter_risk, add_opponent, add_participant
 
@@ -92,5 +92,69 @@ def create_pvp_duel(
 
     acknowledge_encounter_risk(enc, challenger_sheet)
     acknowledge_encounter_risk(enc, challenged_sheet)
+
+    return enc
+
+
+# Tiers that represent significant NPCs and are valid for a lethal duel.
+_SIGNIFICANT_NPC_TIERS: frozenset[str] = frozenset(
+    {OpponentTier.ELITE, OpponentTier.BOSS, OpponentTier.HERO_KILLER}
+)
+
+
+@transaction.atomic
+def create_lethal_duel(
+    pc_sheet: CharacterSheet,
+    opponent_kwargs: dict,
+    room: ObjectDB,
+    *,
+    tier: str = OpponentTier.ELITE,
+) -> CombatEncounter:
+    """Set up a lethal PC-vs-significant-NPC duel encounter.
+
+    Creates a DUEL encounter with ``risk_level=LETHAL``, one PC participant,
+    and one real (non-mirror) CombatOpponent of the given significant-NPC tier
+    with its own threat pool.
+
+    The PC must acknowledge the lethal risk via the #777 gate before acting —
+    this function does NOT call ``acknowledge_encounter_risk``.
+
+    Args:
+        pc_sheet: The sheet of the PC entering the lethal duel.
+        opponent_kwargs: Keyword arguments forwarded to ``add_opponent`` (must
+            include at minimum ``name``, ``max_health``, and ``threat_pool``).
+            The ``tier`` key, if present, is ignored in favour of the explicit
+            ``tier`` parameter.
+        room: The ObjectDB room where the encounter takes place.
+        tier: Opponent tier; must be ELITE, BOSS, or HERO_KILLER. Defaults to
+            ELITE.
+
+    Returns:
+        The newly created CombatEncounter in DECLARING status.
+
+    Raises:
+        ValueError: If ``tier`` is not a significant-NPC tier
+            (ELITE / BOSS / HERO_KILLER).
+    """
+    if tier not in _SIGNIFICANT_NPC_TIERS:
+        msg = (
+            f"create_lethal_duel requires a significant NPC tier (significant NPC only);"
+            f" got {tier!r}."
+        )
+        raise ValueError(msg)
+
+    enc = CombatEncounter.objects.create(
+        encounter_type=EncounterType.DUEL,
+        room=room,
+        risk_level=RiskLevel.LETHAL,
+        status=EncounterStatus.DECLARING,
+    )
+
+    add_participant(enc, pc_sheet)
+
+    # Forward caller-supplied kwargs, forcing the validated tier value.
+    kwargs = dict(opponent_kwargs)
+    kwargs["tier"] = tier
+    add_opponent(enc, **kwargs)
 
     return enc
