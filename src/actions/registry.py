@@ -12,6 +12,7 @@ from actions.definitions.communication import (
 )
 from actions.definitions.duels import (
     AcceptChallengeAction,
+    AcknowledgeRiskAction,
     ChallengeAction,
     DeclineChallengeAction,
     WithdrawChallengeAction,
@@ -94,6 +95,7 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     DeclineChallengeAction(),
     WithdrawChallengeAction(),
     YieldAction(),
+    AcknowledgeRiskAction(),
     intimidate,
     persuade,
     deceive,

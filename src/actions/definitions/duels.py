@@ -415,5 +415,63 @@ class YieldAction(Action):
         )
 
 
-# Module-level singleton — registered in actions/registry.py
+@dataclass
+class AcknowledgeRiskAction(Action):
+    """Acknowledge the lethal risk of an active duel before acting (#568 Task 12b).
+
+    A PC placed into a lethal DUEL by ``create_lethal_duel`` is not auto-acknowledged,
+    and ``declare_action`` blocks them until an ``EncounterRiskAcknowledgement`` exists.
+    This self-action records that acknowledgement via ``acknowledge_encounter_risk``.
+
+    Finds the actor's active DUEL participant; fails cleanly when there is none or the
+    duel is not lethal (a non-lethal duel needs no acknowledgement).
+    """
+
+    key: str = "acknowledge_risk"
+    name: str = "Acknowledge Risk"
+    icon: str = "alert-triangle"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        actor_sheet = _sheet(actor)
+        if actor_sheet is None:
+            return ActionResult(
+                success=False,
+                message="You must be a real character to acknowledge a duel's risk.",
+            )
+
+        participant = _active_duel_participant(actor)
+        if participant is None:
+            return ActionResult(
+                success=False,
+                message="You are not in a duel.",
+            )
+
+        encounter = participant.encounter
+        if not encounter.is_lethal:
+            return ActionResult(
+                success=False,
+                message="This duel is not lethal; there is no risk to acknowledge.",
+            )
+
+        from world.combat.services import acknowledge_encounter_risk  # noqa: PLC0415
+
+        acknowledge_encounter_risk(encounter, actor_sheet)
+
+        return ActionResult(
+            success=True,
+            message="You acknowledge the lethal risk of this duel.",
+            data={"encounter_id": encounter.pk},
+        )
+
+
+# Module-level singletons — registered in actions/registry.py
 yield_action = YieldAction()
+acknowledge_risk = AcknowledgeRiskAction()

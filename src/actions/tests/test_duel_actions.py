@@ -485,3 +485,71 @@ class YieldActionNoSheetTests(django.test.TestCase):
         result = get_action("yield").run(self.actor)
 
         self.assertFalse(result.success)
+
+
+class AcknowledgeRiskActionTests(django.test.TestCase):
+    """acknowledge_risk action: records the lethal-duel risk ack, unblocking declaration."""
+
+    def setUp(self) -> None:
+        from world.combat.duels import create_lethal_duel
+        from world.combat.factories import ThreatPoolFactory
+        from world.combat.models import CombatParticipant
+
+        self.room = _make_room("LethalAckArena")
+        self.actor, self.actor_sheet = _make_pc("LethalDueler", self.room)
+        self.encounter = create_lethal_duel(
+            self.actor_sheet,
+            {"name": "Champion", "max_health": 200, "threat_pool": ThreatPoolFactory()},
+            self.room,
+        )
+        self.participant = CombatParticipant.objects.get(
+            encounter=self.encounter, character_sheet=self.actor_sheet
+        )
+
+    def test_acknowledge_records_ack_row(self) -> None:
+        from actions.registry import get_action
+        from world.combat.models import EncounterRiskAcknowledgement
+
+        result = get_action("acknowledge_risk").run(self.actor)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.assertTrue(
+            EncounterRiskAcknowledgement.objects.filter(
+                encounter=self.encounter, character_sheet=self.actor_sheet
+            ).exists()
+        )
+
+    def test_acknowledge_unblocks_declaration(self) -> None:
+        from actions.registry import get_action
+        from world.combat.services import declare_action
+        from world.fatigue.constants import EffortLevel
+        from world.vitals.models import CharacterVitals
+
+        CharacterVitals.objects.create(character_sheet=self.actor_sheet, health=100, max_health=100)
+        # Before acknowledging, declare_action is blocked.
+        with self.assertRaises(ValueError):
+            declare_action(self.participant, effort_level=EffortLevel.MEDIUM)
+
+        result = get_action("acknowledge_risk").run(self.actor)
+        self.assertTrue(result.success, msg=result.message)
+
+        # After acknowledging, declaration succeeds.
+        action = declare_action(self.participant, effort_level=EffortLevel.MEDIUM)
+        self.assertIsNotNone(action)
+
+    def test_acknowledge_not_in_duel_fails_cleanly(self) -> None:
+        from actions.registry import get_action
+
+        loner, _ = _make_pc("NoDuelAck", self.room)
+        result = get_action("acknowledge_risk").run(loner)
+
+        self.assertFalse(result.success)
+        self.assertIn("not in a duel", result.message.lower())
+
+    def test_acknowledge_no_sheet_fails_cleanly(self) -> None:
+        from actions.registry import get_action
+
+        actor = CharacterFactory(db_key="NoSheetAck", location=self.room)
+        result = get_action("acknowledge_risk").run(actor)
+
+        self.assertFalse(result.success)

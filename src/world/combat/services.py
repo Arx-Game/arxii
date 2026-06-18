@@ -1355,6 +1355,21 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
+    # Lethal-duel risk-acknowledgement gate (#568 Task 12b). A PC placed into a
+    # lethal DUEL by create_lethal_duel is deliberately not auto-acknowledged, and
+    # the #777 outsider gate does not cover an already-active participant — so block
+    # declaration until an EncounterRiskAcknowledgement exists. Scoped to DUEL only:
+    # lethal party-combat PCs self-join via join_encounter (which records an ack),
+    # and GM-placed party-combat PCs (add_participant, no ack) must not be blocked.
+    if encounter.encounter_type == EncounterType.DUEL and encounter.is_lethal:
+        has_ack = EncounterRiskAcknowledgement.objects.filter(
+            encounter=encounter,
+            character_sheet=participant.character_sheet,
+        ).exists()
+        if not has_ack:
+            msg = "You must acknowledge the lethal risk of this duel before acting."
+            raise ValueError(msg)
+
     # Passive slot validation (only when a focused category is declared)
     _validate_passive_slot(
         focused_category,
