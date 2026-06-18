@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema_field
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
@@ -1019,6 +1020,27 @@ class OpponentStatBlockSerializer(serializers.Serializer):
     phases = PhaseSpecSerializer(many=True)
 
 
+class OpponentDefaultsResponseSerializer(serializers.Serializer):
+    """Read-only response serializer for the opponent-defaults preview endpoint.
+
+    Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+    stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+    drf-spectacular emits the correct component instead of inferring the
+    viewset's default ``EncounterDetail`` schema.
+    """
+
+    max_health = serializers.IntegerField()
+    soak_value = serializers.IntegerField()
+    probing_threshold = serializers.IntegerField(allow_null=True)
+    swarm_count = serializers.IntegerField(allow_null=True)
+    body_toughness = serializers.IntegerField(allow_null=True)
+    bodies_per_attack = serializers.IntegerField(allow_null=True)
+    barrier_strength = serializers.IntegerField(allow_null=True)
+    phases = PhaseSpecSerializer(many=True)
+    stakes_ok = serializers.BooleanField()
+    stakes_message = serializers.CharField(allow_blank=True)
+
+
 class AddOpponentSerializer(serializers.Serializer):
     """Write serializer for adding an opponent to an encounter.
 
@@ -1043,10 +1065,6 @@ class AddOpponentSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict) -> dict:
         """Run stakes requirement gate for the encounter + requesting user."""
-        from typing import cast as _cast  # noqa: PLC0415
-
-        from evennia.accounts.models import AccountDB  # noqa: PLC0415
-
         from world.combat.scaling import (  # noqa: PLC0415
             StakesRequirementError,
             validate_stakes_requirement,
@@ -1056,7 +1074,7 @@ class AddOpponentSerializer(serializers.Serializer):
         request = self.context.get("request")
         if encounter is not None and request is not None:
             try:
-                validate_stakes_requirement(encounter, _cast(AccountDB, request.user))
+                validate_stakes_requirement(encounter, cast(AccountDB, request.user))
             except StakesRequirementError as exc:
                 raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
         return attrs

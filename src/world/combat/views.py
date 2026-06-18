@@ -9,6 +9,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import status
 from rest_framework.decorators import action
@@ -45,6 +46,7 @@ from world.combat.serializers import (
     EncounterDetailSerializer,
     EncounterListSerializer,
     JoinEncounterSerializer,
+    OpponentDefaultsResponseSerializer,
     OpponentStatBlockSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
@@ -335,6 +337,12 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter.opponents_cached.append(new_opponent)
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("tier", str, OpenApiParameter.QUERY, required=True),
+        ],
+        responses=OpponentDefaultsResponseSerializer,
+    )
     @action(
         detail=True,
         methods=[HTTPMethod.GET],
@@ -362,6 +370,9 @@ class CombatEncounterViewSet(ModelViewSet):
             validate_stakes_requirement,
         )
 
+        # Resolve the object first so non-GMs get 403 before tier validation.
+        encounter = self.get_object()
+
         tier = request.query_params.get("tier")  # noqa: USE_FILTERSET
         valid_tiers = {choice[0] for choice in OpponentTier.choices}
         if not tier or tier not in valid_tiers:
@@ -369,8 +380,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"tier": f"Must be one of: {', '.join(sorted(valid_tiers))}."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        encounter = self.get_object()
         block = compute_opponent_stat_block(tier, encounter)
 
         stakes_ok: bool

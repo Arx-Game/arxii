@@ -3467,6 +3467,11 @@ paths:
           type: integer
         description: A unique integer value identifying this combat encounter.
         required: true
+      - in: query
+        name: tier
+        schema:
+          type: string
+        required: true
       tags:
       - combat
       security:
@@ -3476,7 +3481,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EncounterDetail'
+                $ref: '#/components/schemas/OpponentDefaultsResponse'
           description: ''
   /api/combat/{id}/pause/:
     post:
@@ -30945,6 +30950,54 @@ components:
       - thumbnail_media_url
       - thumbnail_url
       - tier
+    OpponentDefaultsResponse:
+      type: object
+      description: |-
+        Read-only response serializer for the opponent-defaults preview endpoint.
+
+        Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+        stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+        drf-spectacular emits the correct component instead of inferring the
+        viewset's default ``EncounterDetail`` schema.
+      properties:
+        max_health:
+          type: integer
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+        swarm_count:
+          type: integer
+          nullable: true
+        body_toughness:
+          type: integer
+          nullable: true
+        bodies_per_attack:
+          type: integer
+          nullable: true
+        barrier_strength:
+          type: integer
+          nullable: true
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhaseSpec'
+        stakes_ok:
+          type: boolean
+        stakes_message:
+          type: string
+      required:
+      - barrier_strength
+      - bodies_per_attack
+      - body_toughness
+      - max_health
+      - phases
+      - probing_threshold
+      - soak_value
+      - stakes_message
+      - stakes_ok
+      - swarm_count
     OpponentRequest:
       type: object
       description: |-
@@ -35852,6 +35905,27 @@ components:
         * `day` - Day
         * `dusk` - Dusk
         * `night` - Night
+    PhaseSpec:
+      type: object
+      description: Read-only serializer for a single PhaseSpec dataclass (boss phase
+        budget).
+      properties:
+        phase_number:
+          type: integer
+        health_trigger_percentage:
+          type: number
+          format: double
+          nullable: true
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+      required:
+      - health_trigger_percentage
+      - phase_number
+      - probing_threshold
+      - soak_value
     Place:
       type: object
       properties:

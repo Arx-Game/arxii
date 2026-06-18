@@ -351,9 +351,8 @@ class AddOpponentStakesGateBlocksTest(AddOpponentStakesValidationTestBase):
             },
             format="json",
         )
-        # Error should be in non_field_errors or a named field
-        error_text = str(response.data)
-        self.assertTrue(error_text)  # non-empty error response
+        self.assertIn("non_field_errors", response.data)
+        self.assertTrue(response.data["non_field_errors"])
 
 
 class AddOpponentStakesQualifyingTest(AddOpponentStakesValidationTestBase):

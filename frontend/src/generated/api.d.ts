@@ -17111,6 +17111,26 @@ export interface components {
       readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
+     * @description Read-only response serializer for the opponent-defaults preview endpoint.
+     *
+     *     Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+     *     stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+     *     drf-spectacular emits the correct component instead of inferring the
+     *     viewset's default ``EncounterDetail`` schema.
+     */
+    OpponentDefaultsResponse: {
+      max_health: number;
+      soak_value: number;
+      probing_threshold: number | null;
+      swarm_count: number | null;
+      body_toughness: number | null;
+      bodies_per_attack: number | null;
+      barrier_strength: number | null;
+      phases: components['schemas']['PhaseSpec'][];
+      stakes_ok: boolean;
+      stakes_message: string;
+    };
+    /**
      * @description Read serializer for combat opponents.
      *
      *     Soak value and probing threshold are GM-only — players discover
@@ -20023,6 +20043,14 @@ export interface components {
      * @enum {string}
      */
     PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
+    /** @description Read-only serializer for a single PhaseSpec dataclass (boss phase budget). */
+    PhaseSpec: {
+      phase_number: number;
+      /** Format: double */
+      health_trigger_percentage: number | null;
+      soak_value: number;
+      probing_threshold: number | null;
+    };
     Place: {
       readonly id: number;
       name: string;
@@ -25969,7 +25997,9 @@ export interface operations {
   };
   combat_opponent_defaults_retrieve: {
     parameters: {
-      query?: never;
+      query: {
+        tier: string;
+      };
       header?: never;
       path: {
         /** @description A unique integer value identifying this combat encounter. */
@@ -25984,7 +26014,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EncounterDetail'];
+          'application/json': components['schemas']['OpponentDefaultsResponse'];
         };
       };
     };
